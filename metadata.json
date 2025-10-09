@@ -1,0 +1,5 @@
+{
+  "name": "EduSync School Information System",
+  "description": "A modern school information system for managing students, courses, and grades, with offline capabilities and AI-powered performance reports. This application provides a seamless interface for educators to track academic progress, manage records, and gain insights into student performance.",
+  "requestFramePermissions": []
+}
