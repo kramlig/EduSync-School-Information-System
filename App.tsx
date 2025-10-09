@@ -8,6 +8,7 @@ import StudentList from './components/StudentList';
 import LearningAreaList from './components/CourseList';
 import GradesView from './components/GradesView';
 import CoreValuesView from './components/CoreValuesView';
+import AttendanceView from './components/AttendanceView';
 import { useSchoolData } from './hooks/useSchoolData';
 
 const App: React.FC = () => {
@@ -25,6 +26,8 @@ const App: React.FC = () => {
         return <GradesView schoolData={schoolData} />;
       case 'coreValues':
         return <CoreValuesView schoolData={schoolData} />;
+      case 'attendance':
+        return <AttendanceView schoolData={schoolData} />;
       case 'dashboard':
       default:
         return <Dashboard schoolData={schoolData} />;

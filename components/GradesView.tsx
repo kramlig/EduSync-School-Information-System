@@ -4,7 +4,8 @@ import { SchoolDataHook } from '../hooks/useSchoolData';
 import { generateStudentReport } from '../services/geminiService';
 import Modal from './Modal';
 import Spinner from './Spinner';
-import { ChevronDownIcon, ChevronRightIcon } from './icons';
+import { ChevronDownIcon, ChevronRightIcon, PrinterIcon } from './icons';
+import PrintableReport from './PrintableReport';
 
 interface GradesViewProps {
   schoolData: SchoolDataHook;
@@ -88,10 +89,9 @@ const MapehGradeModal: React.FC<{
 // Sub-component for displaying a student's grades
 const StudentGradeDetails: React.FC<{
   student: Student,
-  learningAreas: LearningArea[],
-  grades: Grade[],
-  updateGrade: SchoolDataHook['updateGrade'],
-}> = ({ student, learningAreas, grades, updateGrade }) => {
+  schoolData: SchoolDataHook,
+}> = ({ student, schoolData }) => {
+  const { learningAreas, grades, updateGrade } = schoolData;
   const [mapehModalState, setMapehModalState] = useState<{ isOpen: boolean, quarter?: 'q1'|'q2'|'q3'|'q4', la?: LearningArea }>({ isOpen: false });
 
   const gradeMap = useMemo(() => {
@@ -123,12 +123,12 @@ const StudentGradeDetails: React.FC<{
           </tr>
         </thead>
         <tbody className="text-sm">
-          {learningAreas.map(la => {
+          {learningAreas.map((la, laIndex) => {
             const currentGrade = gradeMap.get(la.id);
             return (
               <tr key={la.id} className="border-b border-slate-200 dark:border-slate-700">
                 <td className="py-3 px-3 font-medium text-slate-900 dark:text-white">{la.name}</td>
-                {(['q1', 'q2', 'q3', 'q4'] as const).map(q => {
+                {(['q1', 'q2', 'q3', 'q4'] as const).map((q, qIndex) => {
                   if (la.isComposite) {
                     const quarterAvg = calculateQuarterAverage(currentGrade?.[q]);
                     return (
@@ -150,13 +150,14 @@ const StudentGradeDetails: React.FC<{
                         max="100"
                         value={(currentGrade?.[q] as number) ?? ''}
                         onChange={(e) => handleGradeChange(la.id, q, e.target.value)}
+                        tabIndex={(qIndex * learningAreas.length) + laIndex + 1}
                         className="w-full p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center"
                       />
                     </td>
                   );
                 })}
                 <td className="py-2 px-3 text-center font-bold">
-                  {currentGrade?.finalGrade !== undefined ? <span className={getGradeColor(currentGrade.finalGrade)}>{currentGrade.finalGrade}%</span> : '-'}
+                  {currentGrade?.finalGrade !== undefined ? <span className={getGradeColor(currentGrade.finalGrade)}>{currentGrade.finalGrade}</span> : '-'}
                 </td>
                 <td className="py-2 px-3 text-center">
                   {currentGrade?.remarks && <span className={`px-2 py-1 text-xs font-bold rounded-full ${getRemarksColor(currentGrade.remarks)}`}>{currentGrade.remarks}</span>}
@@ -183,14 +184,15 @@ const StudentGradeDetails: React.FC<{
 
 
 const GradesView: React.FC<GradesViewProps> = ({ schoolData }) => {
-  const { students, learningAreas, grades, updateGrade } = schoolData;
+  const { students, grades, learningAreas } = schoolData;
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportContent, setReportContent] = useState('');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const [selectedStudentForReport, setSelectedStudentForReport] = useState<Student | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const toggleStudentExpansion = (studentId: string) => {
     setExpandedStudents(prev => {
@@ -205,12 +207,17 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData }) => {
   };
 
   const handleGenerateReport = async (student: Student) => {
-    setSelectedStudentForReport(student);
+    setSelectedStudent(student);
     setIsReportModalOpen(true);
     setIsGeneratingReport(true);
     const report = await generateStudentReport(student, grades, learningAreas);
     setReportContent(report);
     setIsGeneratingReport(false);
+  };
+
+  const handlePrintReport = (student: Student) => {
+    setSelectedStudent(student);
+    setIsPrintModalOpen(true);
   };
   
   const filteredStudents = students.filter(student =>
@@ -252,13 +259,19 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData }) => {
                     {student.name}
                   </td>
                   <td className="px-5 py-4 text-sm">
-                    <button onClick={(e) => { e.stopPropagation(); handleGenerateReport(student); }} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-semibold text-xs">Generate Report</button>
+                    <div className="flex items-center space-x-4">
+                       <button onClick={(e) => { e.stopPropagation(); handleGenerateReport(student); }} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-semibold text-xs">Generate Report</button>
+                       <button onClick={(e) => { e.stopPropagation(); handlePrintReport(student); }} className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold text-xs">
+                         <PrinterIcon />
+                         <span className="ml-1">Print Report</span>
+                       </button>
+                    </div>
                   </td>
                 </tr>
                 {expandedStudents.has(student.id) && (
                   <tr>
                     <td colSpan={3} className="p-0">
-                      <StudentGradeDetails student={student} learningAreas={learningAreas} grades={grades} updateGrade={updateGrade} />
+                      <StudentGradeDetails student={student} schoolData={schoolData} />
                     </td>
                   </tr>
                 )}
@@ -268,7 +281,7 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData }) => {
         </table>
       </div>
 
-      <Modal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} title={`Performance Report for ${selectedStudentForReport?.name}`}>
+      <Modal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} title={`Performance Report for ${selectedStudent?.name}`}>
         {isGeneratingReport ? (
           <div className="flex flex-col items-center justify-center h-48">
             <Spinner />
@@ -283,6 +296,12 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData }) => {
           </div>
         )}
       </Modal>
+
+      {selectedStudent && (
+        <Modal isOpen={isPrintModalOpen} onClose={() => setIsPrintModalOpen(false)} title={`Printable Report for ${selectedStudent.name}`} size="7xl" printable={true}>
+          <PrintableReport student={selectedStudent} schoolData={schoolData} />
+        </Modal>
+      )}
     </div>
   );
 };

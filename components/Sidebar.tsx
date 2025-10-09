@@ -1,7 +1,7 @@
 
 import React from 'react';
 import type { ViewType } from '../types';
-import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon } from './icons';
+import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon, CalendarDaysIcon } from './icons';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -15,6 +15,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
     { id: 'learningAreas', label: 'Learning Areas', icon: <BookOpenIcon /> },
     { id: 'grades', label: 'Grades', icon: <ClipboardDocumentListIcon /> },
     { id: 'coreValues', label: 'Core Values', icon: <HeartIcon /> },
+    { id: 'attendance', label: 'Attendance', icon: <CalendarDaysIcon /> },
   ];
 
   return (
