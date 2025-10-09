@@ -1,7 +1,7 @@
 
 import React from 'react';
 import type { ViewType } from '../types';
-import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon } from './icons';
+import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon } from './icons';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -12,8 +12,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon /> },
     { id: 'students', label: 'Students', icon: <AcademicCapIcon /> },
-    { id: 'courses', label: 'Courses', icon: <BookOpenIcon /> },
+    { id: 'learningAreas', label: 'Learning Areas', icon: <BookOpenIcon /> },
     { id: 'grades', label: 'Grades', icon: <ClipboardDocumentListIcon /> },
+    { id: 'coreValues', label: 'Core Values', icon: <HeartIcon /> },
   ];
 
   return (
