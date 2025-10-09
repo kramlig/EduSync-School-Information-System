@@ -5,8 +5,9 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import StudentList from './components/StudentList';
-import CourseList from './components/CourseList';
+import LearningAreaList from './components/CourseList';
 import GradesView from './components/GradesView';
+import CoreValuesView from './components/CoreValuesView';
 import { useSchoolData } from './hooks/useSchoolData';
 
 const App: React.FC = () => {
@@ -18,10 +19,12 @@ const App: React.FC = () => {
     switch (view) {
       case 'students':
         return <StudentList schoolData={schoolData} />;
-      case 'courses':
-        return <CourseList schoolData={schoolData} />;
+      case 'learningAreas':
+        return <LearningAreaList schoolData={schoolData} />;
       case 'grades':
         return <GradesView schoolData={schoolData} />;
+      case 'coreValues':
+        return <CoreValuesView schoolData={schoolData} />;
       case 'dashboard':
       default:
         return <Dashboard schoolData={schoolData} />;

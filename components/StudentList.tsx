@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import Modal from './Modal';
@@ -12,6 +11,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentEmail, setNewStudentEmail] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handleAddStudent = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +27,11 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData }) => {
     }
   };
 
+  const filteredStudents = students.filter(student =>
+    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    student.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -39,6 +44,16 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData }) => {
         </button>
       </div>
       
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="Search by name or email..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
+        />
+      </div>
+
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-hidden">
         <table className="min-w-full leading-normal">
           <thead>
@@ -49,7 +64,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData }) => {
             </tr>
           </thead>
           <tbody>
-            {students.map((student) => (
+            {filteredStudents.map((student) => (
               <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
                   <p className="text-slate-900 dark:text-white whitespace-no-wrap">{student.name}</p>
