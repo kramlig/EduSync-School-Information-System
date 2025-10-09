@@ -1,17 +1,28 @@
 import React, { useState, useMemo } from 'react';
 import { SchoolDataHook, MONTHLY_SCHOOL_DAYS_CONFIG } from '../hooks/useSchoolData';
+import type { AuthUser } from '../types';
 
 interface AttendanceViewProps {
   schoolData: SchoolDataHook;
+  authUser: AuthUser;
 }
 
-const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData }) => {
-  const { students, attendanceRecords, updateAttendance } = schoolData;
+const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, authUser }) => {
+  const { students, attendanceRecords, updateAttendance, sections } = schoolData;
   const [searchQuery, setSearchQuery] = useState('');
 
   const months = Object.keys(MONTHLY_SCHOOL_DAYS_CONFIG);
+  
+  const visibleStudents = useMemo(() => {
+    if (authUser.role === 'admin') {
+      return students;
+    }
+    const teacherSection = sections.find(s => s.adviserId === authUser.id);
+    if (!teacherSection) return [];
+    return students.filter(s => s.sectionId === teacherSection.id);
+  }, [students, sections, authUser]);
 
-  const filteredStudents = students.filter(student =>
+  const filteredStudents = visibleStudents.filter(student =>
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     student.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -36,6 +47,8 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData }) => {
       { present: 0, absent: 0 }
     );
   };
+  
+  const totalStudents = filteredStudents.length;
 
   return (
     <div>
@@ -74,13 +87,13 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredStudents.map(student => {
+            {filteredStudents.map((student, studentIndex) => {
               const studentRecord = attendanceRecords.find(r => r.studentId === student.id);
               const totals = calculateTotals(student.id);
               return (
               <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                 <td className="px-3 py-3 border-b border-slate-200 dark:border-slate-700 font-medium text-slate-900 dark:text-white whitespace-no-wrap sticky left-0 bg-white dark:bg-slate-800 z-10">{student.name}</td>
-                {months.map(month => (
+                {months.map((month, monthIndex) => (
                   <React.Fragment key={month}>
                     <td className="p-1 border-b border-slate-200 dark:border-slate-700">
                       <input 
@@ -88,6 +101,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData }) => {
                         min="0"
                         value={studentRecord?.monthlyData[month]?.present ?? ''}
                         onChange={e => handleAttendanceChange(student.id, month, 'present', e.target.value)}
+                        tabIndex={(monthIndex * 2 * totalStudents) + studentIndex + 1}
                         className="w-12 p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center"
                        />
                     </td>
@@ -97,6 +111,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData }) => {
                         min="0"
                         value={studentRecord?.monthlyData[month]?.absent ?? ''}
                         onChange={e => handleAttendanceChange(student.id, month, 'absent', e.target.value)}
+                        tabIndex={(monthIndex * 2 * totalStudents) + totalStudents + studentIndex + 1}
                         className="w-12 p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center"
                       />
                     </td>

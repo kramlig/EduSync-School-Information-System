@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { Student, Grade, LearningArea, SubGradeRecord } from '../types';
+import type { Student, Grade, LearningArea, SubGradeRecord, AuthUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { generateStudentReport } from '../services/geminiService';
 import Modal from './Modal';
@@ -9,6 +9,7 @@ import PrintableReport from './PrintableReport';
 
 interface GradesViewProps {
   schoolData: SchoolDataHook;
+  authUser: AuthUser;
 }
 
 const getGradeColor = (gradeValue: number) => {
@@ -183,8 +184,8 @@ const StudentGradeDetails: React.FC<{
 };
 
 
-const GradesView: React.FC<GradesViewProps> = ({ schoolData }) => {
-  const { students, grades, learningAreas } = schoolData;
+const GradesView: React.FC<GradesViewProps> = ({ schoolData, authUser }) => {
+  const { students, grades, learningAreas, sections } = schoolData;
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -193,6 +194,15 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData }) => {
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+
+  const visibleStudents = useMemo(() => {
+    if (authUser.role === 'admin') {
+      return students;
+    }
+    const teacherSection = sections.find(s => s.adviserId === authUser.id);
+    if (!teacherSection) return [];
+    return students.filter(s => s.sectionId === teacherSection.id);
+  }, [students, sections, authUser]);
 
   const toggleStudentExpansion = (studentId: string) => {
     setExpandedStudents(prev => {
@@ -220,7 +230,7 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData }) => {
     setIsPrintModalOpen(true);
   };
   
-  const filteredStudents = students.filter(student =>
+  const filteredStudents = visibleStudents.filter(student =>
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     student.email.toLowerCase().includes(searchQuery.toLowerCase())
   );

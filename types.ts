@@ -8,14 +8,39 @@ export interface Student {
   // New Fields
   dateOfBirth?: string;
   sex?: 'Male' | 'Female';
-  gradeLevel?: number;
-  section?: string;
   schoolYear?: string;
   lrn?: string; // Learner Reference Number
+  sectionId?: string; // Link to a Section/Class
+}
+
+export interface TeacherAssignment {
+  gradeLevel: number;
+  learningAreaId: string;
+}
+
+export interface Teacher {
+  id: string;
+  name: string;
+  email: string;
+  contactNumber?: string;
+  assignments?: TeacherAssignment[];
+  // Auth Fields
+  role: 'admin' | 'teacher';
+  password?: string;
+}
+
+export type AuthUser = Omit<Teacher, 'password' | 'assignments' | 'contactNumber'>;
+
+
+export interface Section {
+  id: string;
+  gradeLevel: number;
+  name: string; // e.g., "A", "B", "Acacia"
+  adviserId?: string;
 }
 
 export interface LearningArea {
-  id: string;
+  id:string;
   name: string;
   credits: number;
   isComposite?: boolean; // To identify subjects like MAPEH
@@ -68,4 +93,4 @@ export interface AttendanceRecord {
 }
 
 
-export type ViewType = 'dashboard' | 'students' | 'learningAreas' | 'grades' | 'coreValues' | 'attendance';
+export type ViewType = 'dashboard' | 'students' | 'learningAreas' | 'grades' | 'coreValues' | 'attendance' | 'teachers' | 'sections';

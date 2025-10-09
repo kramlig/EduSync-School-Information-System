@@ -1,11 +1,5 @@
 import { useState, useEffect, useCallback, SetStateAction } from 'react';
-import type { Student, LearningArea, Grade, SubGradeRecord, CoreValue, CoreValueGrade, CoreValueMarking, AttendanceRecord } from '../types';
-
-const MOCK_STUDENTS: Student[] = [
-  { id: 's1', name: 'Alice Johnson', email: 'alice.j@school.edu', enrollmentDate: '2023-09-01', lrn: '123456789012', dateOfBirth: '2015-06-15', sex: 'Female', gradeLevel: 3, section: 'A', schoolYear: '2023-2024' },
-  { id: 's2', name: 'Bob Williams', email: 'bob.w@school.edu', enrollmentDate: '2023-09-01', lrn: '210987654321', dateOfBirth: '2015-03-22', sex: 'Male', gradeLevel: 3, section: 'A', schoolYear: '2023-2024' },
-  { id: 's3', name: 'Charlie Brown', email: 'charlie.b@school.edu', enrollmentDate: '2023-09-01', lrn: '345678901234', dateOfBirth: '2015-09-01', sex: 'Male', gradeLevel: 3, section: 'B', schoolYear: '2023-2024' },
-];
+import type { Student, LearningArea, Grade, SubGradeRecord, CoreValue, CoreValueGrade, CoreValueMarking, AttendanceRecord, Teacher, Section, TeacherAssignment, AuthUser } from '../types';
 
 const MOCK_LEARNING_AREAS: LearningArea[] = [
   { id: 'la1', name: 'Mother Tongue Based (MTB)', credits: 3 },
@@ -14,13 +8,33 @@ const MOCK_LEARNING_AREAS: LearningArea[] = [
   { id: 'la4', name: 'Math', credits: 4 },
   { id: 'la5', name: 'Araling Panlipunan (AP)', credits: 4 },
   { id: 'la6', name: 'Edukasyon sa Pagpapakatao (EsP)', credits: 2 },
-  { 
-    id: 'la7', 
-    name: 'MAPEH', 
-    credits: 4, 
-    isComposite: true, 
-    subSubjects: ['Music', 'Arts', 'PE', 'Health'] 
-  },
+  { id: 'la7', name: 'MAPEH', credits: 4, isComposite: true, subSubjects: ['Music', 'Arts', 'PE', 'Health']},
+  { id: 'la8', name: 'Science', credits: 4 },
+];
+
+const MOCK_TEACHERS: Teacher[] = [
+  { id: 't0', name: 'Admin User', email: 'admin@school.edu', role: 'admin', password: 'admin123' },
+  { id: 't1', name: 'Ms. Eleanor Vance', email: 'e.vance@school.edu', contactNumber: '555-0101', role: 'teacher', password: 'teacher123', assignments: [
+    { gradeLevel: 3, learningAreaId: 'la2' },
+    { gradeLevel: 3, learningAreaId: 'la3' },
+    { gradeLevel: 4, learningAreaId: 'la3' },
+  ] },
+  { id: 't2', name: 'Mr. David Chen', email: 'd.chen@school.edu', contactNumber: '555-0102', role: 'teacher', password: 'teacher123', assignments: [
+    { gradeLevel: 3, learningAreaId: 'la4' },
+    { gradeLevel: 3, learningAreaId: 'la8' },
+    { gradeLevel: 3, learningAreaId: 'la7' },
+  ] },
+];
+
+const MOCK_SECTIONS: Section[] = [
+  { id: 'sec1', gradeLevel: 3, name: 'A', adviserId: 't1' },
+  { id: 'sec2', gradeLevel: 3, name: 'B', adviserId: 't2' },
+];
+
+const MOCK_STUDENTS: Student[] = [
+  { id: 's1', name: 'Alice Johnson', email: 'alice.j@school.edu', enrollmentDate: '2023-09-01', lrn: '123456789012', dateOfBirth: '2015-06-15', sex: 'Female', schoolYear: '2023-2024', sectionId: 'sec1' },
+  { id: 's2', name: 'Bob Williams', email: 'bob.w@school.edu', enrollmentDate: '2023-09-01', lrn: '210987654321', dateOfBirth: '2015-03-22', sex: 'Male', schoolYear: '2023-2024', sectionId: 'sec1' },
+  { id: 's3', name: 'Charlie Brown', email: 'charlie.b@school.edu', enrollmentDate: '2023-09-01', lrn: '345678901234', dateOfBirth: '2015-09-01', sex: 'Male', schoolYear: '2023-2024', sectionId: 'sec2' },
 ];
 
 const MOCK_GRADES: Grade[] = [
@@ -30,20 +44,8 @@ const MOCK_GRADES: Grade[] = [
   { id: 'g-s1-la4', studentId: 's1', learningAreaId: 'la4', q1: 95, q2: 93, q3: 96, q4: 94, finalGrade: 95, remarks: 'Passed' },
   { id: 'g-s1-la5', studentId: 's1', learningAreaId: 'la5', q1: 88, q2: 89, q3: 92, q4: 90, finalGrade: 90, remarks: 'Passed' },
   { id: 'g-s1-la6', studentId: 's1', learningAreaId: 'la6', q1: 91, q2: 92, q3: 93, q4: 94, finalGrade: 93, remarks: 'Passed' },
-  { 
-    id: 'g-s1-la7', 
-    studentId: 's1', 
-    learningAreaId: 'la7',
-    q1: { 'Music': 90, 'Arts': 85, 'PE': 92, 'Health': 88 }, // Avg: 89
-    q2: { 'Music': 92, 'Arts': 88, 'PE': 94, 'Health': 90 }, // Avg: 91
-    q3: { 'Music': 88, 'Arts': 90, 'PE': 91, 'Health': 89 }, // Avg: 90
-    q4: { 'Music': 94, 'Arts': 91, 'PE': 93, 'Health': 92 }, // Avg: 93
-    finalGrade: 91,
-    remarks: 'Passed'
-  },
+  { id: 'g-s1-la7', studentId: 's1', learningAreaId: 'la7', q1: { 'Music': 90, 'Arts': 85, 'PE': 92, 'Health': 88 }, q2: { 'Music': 92, 'Arts': 88, 'PE': 94, 'Health': 90 }, q3: { 'Music': 88, 'Arts': 90, 'PE': 91, 'Health': 89 }, q4: { 'Music': 94, 'Arts': 91, 'PE': 93, 'Health': 92 }, finalGrade: 91, remarks: 'Passed' },
   { id: 'g-s2-la1', studentId: 's2', learningAreaId: 'la1', q1: 74, q2: 70, q3: 78, q4: 75, finalGrade: 74, remarks: 'Failed' },
-  { id: 'g-s2-la3', studentId: 's2', learningAreaId: 'la3', q1: 95, q2: 96, q3: 92, finalGrade: 94, remarks: 'Passed' },
-  { id: 'g-s3-la4', studentId: 's3', learningAreaId: 'la4', q1: 68, q2: 72, finalGrade: 70, remarks: 'Failed' },
 ];
 
 const MOCK_CORE_VALUES: CoreValue[] = [
@@ -54,8 +56,7 @@ const MOCK_CORE_VALUES: CoreValue[] = [
 ];
 
 const MOCK_CORE_VALUE_GRADES: CoreValueGrade[] = [
-  { id: 'cvg-s1-cv1', studentId: 's1', coreValueId: 'cv1', q1: { "Expresses one's spiritual beliefs while respecting the spiritual beliefs of others": 'AO', "Shows adherence to ethical principles by upholding truth": 'SO' }, q2: { "Expresses one's spiritual beliefs while respecting the spiritual beliefs of others": 'AO', "Shows adherence to ethical principles by upholding truth": 'AO' }, q3: { "Expresses one's spiritual beliefs while respecting the spiritual beliefs of others": 'AO', "Shows adherence to ethical principles by upholding truth": 'AO' }, q4: { "Expresses one's spiritual beliefs while respecting the spiritual beliefs of others": 'AO', "Shows adherence to ethical principles by upholding truth": 'AO' } },
-  { id: 'cvg-s1-cv2', studentId: 's1', coreValueId: 'cv2', q1: { "Is sensitive to individual, social, and cultural differences": 'SO', "Demonstrates contributions toward solidarity": 'AO' }, q2: { "Is sensitive to individual, social, and cultural differences": 'AO', "Demonstrates contributions toward solidarity": 'AO' } }
+  { id: 'cvg-s1-cv1', studentId: 's1', coreValueId: 'cv1', q1: { "Expresses one's spiritual beliefs while respecting the spiritual beliefs of others": 'AO', "Shows adherence to ethical principles by upholding truth": 'SO' } },
 ];
 
 export const MONTHLY_SCHOOL_DAYS_CONFIG: Record<string, number> = {
@@ -64,15 +65,8 @@ export const MONTHLY_SCHOOL_DAYS_CONFIG: Record<string, number> = {
 };
 
 const MOCK_ATTENDANCE_RECORDS: AttendanceRecord[] = [
-    { studentId: 's1', monthlyData: {
-        'Jun': { present: 21, absent: 0 },
-        'Jul': { present: 20, absent: 2 },
-        'Aug': { present: 23, absent: 0 },
-    }},
-     { studentId: 's2', monthlyData: {
-        'Jun': { present: 19, absent: 2 },
-        'Jul': { present: 22, absent: 0 },
-    }},
+    { studentId: 's1', monthlyData: { 'Jun': { present: 21, absent: 0 }, 'Jul': { present: 20, absent: 2 }}},
+    { studentId: 's2', monthlyData: { 'Jun': { present: 19, absent: 2 }, 'Jul': { present: 22, absent: 0 }}},
 ];
 
 const useLocalStorage = <T,>(key: string, initialValue: T): [T, (value: SetStateAction<T>) => void] => {
@@ -98,11 +92,22 @@ export const useSchoolData = (isOnline: boolean) => {
   const [coreValues] = useLocalStorage<CoreValue[]>('coreValues', MOCK_CORE_VALUES);
   const [coreValueGrades, setCoreValueGrades] = useLocalStorage<CoreValueGrade[]>('coreValueGrades', MOCK_CORE_VALUE_GRADES);
   const [attendanceRecords, setAttendanceRecords] = useLocalStorage<AttendanceRecord[]>('attendance', MOCK_ATTENDANCE_RECORDS);
+  const [teachers, setTeachers] = useLocalStorage<Teacher[]>('teachers', MOCK_TEACHERS);
+  const [sections, setSections] = useLocalStorage<Section[]>('sections', MOCK_SECTIONS);
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     if (isOnline) { setIsSyncing(true); const timer = setTimeout(() => { console.log("Data synced with server."); setIsSyncing(false); }, 1500); return () => clearTimeout(timer); }
   }, [isOnline]);
+
+  const login = useCallback(async (email: string, password: string): Promise<AuthUser | null> => {
+    const user = teachers.find(t => t.email.toLowerCase() === email.toLowerCase());
+    if (user && user.password === password) {
+      const { password: _, ...authUser } = user;
+      return authUser;
+    }
+    return null;
+  }, [teachers]);
 
   const addStudent = useCallback((student: Omit<Student, 'id' | 'enrollmentDate'>) => {
     const newStudent: Student = { ...student, id: `s${Date.now()}`, enrollmentDate: new Date().toISOString().split('T')[0] };
@@ -110,10 +115,20 @@ export const useSchoolData = (isOnline: boolean) => {
   }, [setStudents]);
 
   const addLearningArea = useCallback((learningArea: Omit<LearningArea, 'id'>) => {
-    let newLearningArea: LearningArea = { ...learningArea, id: `c${Date.now()}` };
+    let newLearningArea: LearningArea = { ...learningArea, id: `la${Date.now()}` };
     if (learningArea.name.toUpperCase() === 'MAPEH') { newLearningArea = { ...newLearningArea, isComposite: true, subSubjects: ['Music', 'Arts', 'PE', 'Health'], }; }
     setLearningAreas(prev => [...prev, newLearningArea]);
   }, [setLearningAreas]);
+
+  const addTeacher = useCallback((teacher: Omit<Teacher, 'id'>) => {
+    const newTeacher: Teacher = { ...teacher, id: `t${Date.now()}` };
+    setTeachers(prev => [...prev, newTeacher]);
+  }, [setTeachers]);
+  
+  const addSection = useCallback((section: Omit<Section, 'id'>) => {
+    const newSection: Section = { ...section, id: `sec${Date.now()}` };
+    setSections(prev => [...prev, newSection]);
+  }, [setSections]);
 
   const updateGrade = useCallback((studentId: string, learningAreaId: string, quarter: 'q1'|'q2'|'q3'|'q4', gradeValue: number|undefined, subSubject?: string) => {
     setGrades(prev => {
@@ -141,20 +156,14 @@ export const useSchoolData = (isOnline: boolean) => {
     setAttendanceRecords(prev => {
         const newRecords = [...prev];
         let recordIndex = newRecords.findIndex(r => r.studentId === studentId);
-        if (recordIndex === -1) {
-            newRecords.push({ studentId, monthlyData: {} });
-            recordIndex = newRecords.length - 1;
-        }
-        const updatedRecord = { ...newRecords[recordIndex] };
-        const monthData = updatedRecord.monthlyData[month] ?? { present: 0, absent: 0 };
-        const newMonthData = { ...monthData, [type]: value };
-        updatedRecord.monthlyData = { ...updatedRecord.monthlyData, [month]: newMonthData };
-        newRecords[recordIndex] = updatedRecord;
-        return newRecords;
+        if (recordIndex === -1) { newRecords.push({ studentId, monthlyData: {} }); recordIndex = newRecords.length - 1; }
+        const updatedRecord = { ...newRecords[recordIndex] }; const monthData = updatedRecord.monthlyData[month] ?? { present: 0, absent: 0 };
+        const newMonthData = { ...monthData, [type]: value }; updatedRecord.monthlyData = { ...updatedRecord.monthlyData, [month]: newMonthData };
+        newRecords[recordIndex] = updatedRecord; return newRecords;
     });
   }, [setAttendanceRecords]);
 
-  return { students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, addStudent, addLearningArea, updateGrade, updateCoreValueGrade, updateAttendance, isSyncing, loading: false, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG };
+  return { students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, sections, login, addStudent, addLearningArea, addTeacher, addSection, updateGrade, updateCoreValueGrade, updateAttendance, isSyncing, loading: false, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG };
 };
 
 export type SchoolDataHook = ReturnType<typeof useSchoolData>;
