@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { Student, Grade, SubGradeRecord, CoreValueGrade, AttendanceRecord } from '../types';
+import type { Student, Grade, SubGradeRecord, CoreValueGrade, AttendanceRecord, Section } from '../types';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
 import { PrinterIcon } from './icons';
 
@@ -37,11 +37,14 @@ const Th: React.FC<{ children?: React.ReactNode; className?: string, colSpan?: n
 );
 
 const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }) => {
-  const { grades, learningAreas, coreValues, coreValueGrades, attendanceRecords, monthlySchoolDaysConfig } = schoolData;
+  const { grades, learningAreas, coreValues, coreValueGrades, attendanceRecords, monthlySchoolDaysConfig, teachers, sections } = schoolData;
   
   const studentGrades = useMemo(() => new Map(grades.filter(g => g.studentId === student.id).map(g => [g.learningAreaId, g])), [grades, student.id]);
   const studentCoreValues = useMemo(() => new Map(coreValueGrades.filter(g => g.studentId === student.id).map(g => [g.coreValueId, g])), [coreValueGrades, student.id]);
   const studentAttendance = useMemo(() => attendanceRecords.find(r => r.studentId === student.id), [attendanceRecords, student.id]);
+  const section = useMemo(() => sections.find(s => s.id === student.sectionId), [sections, student.sectionId]);
+  const adviser = useMemo(() => teachers.find(t => t.id === section?.adviserId), [teachers, section]);
+
   const generalAverage = useMemo(() => {
     const finalGrades = Array.from(studentGrades.values()).map(g => g.finalGrade).filter((g): g is number => typeof g === 'number');
     if (finalGrades.length === 0) return null;
@@ -50,8 +53,8 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
   }, [studentGrades]);
 
   const months = Object.keys(monthlySchoolDaysConfig);
-
-  return (
+  const depedLogoBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAAgAElEQVR4nOy9d7AlV33ff8+5t6/X9Tru+2466UwnTp06jRyJg01cYiCSgEACSRgCJIQQgiBIkEAEEiABEiCB+IQQQoLEJEiQIMlExE1iYhMncWLHdJ3OdDrd7/v+et+fe8/5/lFVVXV1dXf1VF3X9T5ePHp1dXVVvec8z9n/2v7b//Nf/wP2vCCAAAIggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCAgn/nz5w8EEEAAAQTkK86dOzdAAAEEEEAABIAACCCAAIIAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAACCCCAAAIIIIAAAggggAAC-i-y5uCqGAAAAABJRU5ErkJggg==";
+return (
     <div className="text-black bg-white font-serif">
       <div className="flex justify-end mb-4 print:hidden">
         <button onClick={() => window.print()} className="flex items-center bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"><PrinterIcon /><span className="ml-2">Print</span></button>
@@ -103,15 +106,20 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
              </div>
              {/* Right side */}
              <div className="text-xs">
-                <div className="text-center">
-                    <p className="font-bold">DepEd FORM 138</p>
-                    <p>Republic of the Philippines</p>
-                    <p>Department of Education</p>
-                    <p>Region XI</p>
-                    <p>Division of the City of Mati</p>
-                    <p>Governor Generoso North District</p>
-                    <p className="font-bold text-sm mt-1">ENRIQUE URENCIA ELEMENTARY SCHOOL</p>
-                </div>
+                 <div className="flex justify-between items-start">
+                    <div className="text-center">
+                        <p className="font-bold">DepEd FORM 138</p>
+                        <p>Republic of the Philippines</p>
+                        <p>Department of Education</p>
+                        <p>Region XI</p>
+                        <p>Division of the City of Mati</p>
+                        <p>Governor Generoso North District</p>
+                        <p className="font-bold text-sm mt-1">ENRIQUE URENCIA ELEMENTARY SCHOOL</p>
+                    </div>
+                    <div className="w-20 h-20 flex items-center justify-center">
+                        <img src={depedLogoBase64} alt="DepEd Logo" className="w-20 h-20 object-contain" />
+                    </div>
+                 </div>
                 <div className="mt-4 space-y-1">
                   <div className="flex"><span className="w-16">Name:</span> <span className="flex-1 border-b border-black">{student.name}</span></div>
                   <div className="grid grid-cols-2">
@@ -119,8 +127,8 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
                     <div className="flex"><span className="w-16">Sex:</span> <span className="flex-1 border-b border-black">{student.sex}</span></div>
                   </div>
                   <div className="grid grid-cols-2">
-                    <div className="flex"><span className="w-16">Grade:</span> <span className="flex-1 border-b border-black">{student.gradeLevel}</span></div>
-                    <div className="flex"><span className="w-16">Section:</span> <span className="flex-1 border-b border-black">{student.section}</span></div>
+                    <div className="flex"><span className="w-16">Grade:</span> <span className="flex-1 border-b border-black">{section?.gradeLevel}</span></div>
+                    <div className="flex"><span className="w-16">Section:</span> <span className="flex-1 border-b border-black">{section?.name}</span></div>
                   </div>
                   <div className="grid grid-cols-2">
                     <div className="flex"><span className="w-16">SchoolYear:</span> <span className="flex-1 border-b border-black">{student.schoolYear}</span></div>
@@ -132,7 +140,7 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
                     <p className="text-justify indent-4">This report card shows the ability and progress your child has made in the different learning areas as well as his/her core values. The school welcomes you should you desire to know more about your child's progress.</p>
                     <div className="grid grid-cols-2 gap-4 mt-8">
                        <div className="text-center"><div className="border-b border-black w-4/5 mx-auto"></div><p>Principal</p></div>
-                       <div className="text-center"><div className="border-b border-black w-4/5 mx-auto"></div><p>Teacher</p></div>
+                       <div className="text-center"><div className="border-b border-black w-4/5 mx-auto font-bold text-[11px] pt-1">{adviser?.name}</div><p>Teacher</p></div>
                     </div>
                 </div>
                 <div className="mt-4 border border-black p-2">

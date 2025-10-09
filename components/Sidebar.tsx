@@ -1,25 +1,29 @@
-
 import React from 'react';
-import type { ViewType } from '../types';
-import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon, CalendarDaysIcon } from './icons';
+import type { ViewType, AuthUser } from '../types';
+import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon, CalendarDaysIcon, BriefcaseIcon, UsersIcon } from './icons';
 
 interface SidebarProps {
   currentView: ViewType;
   setView: (view: ViewType) => void;
+  authUser: AuthUser;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
-  const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon /> },
-    { id: 'students', label: 'Students', icon: <AcademicCapIcon /> },
-    { id: 'learningAreas', label: 'Learning Areas', icon: <BookOpenIcon /> },
-    { id: 'grades', label: 'Grades', icon: <ClipboardDocumentListIcon /> },
-    { id: 'coreValues', label: 'Core Values', icon: <HeartIcon /> },
-    { id: 'attendance', label: 'Attendance', icon: <CalendarDaysIcon /> },
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, authUser }) => {
+  const allNavItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon />, roles: ['admin', 'teacher'] },
+    { id: 'students', label: 'Students', icon: <AcademicCapIcon />, roles: ['admin', 'teacher'] },
+    { id: 'teachers', label: 'Teachers', icon: <BriefcaseIcon />, roles: ['admin'] },
+    { id: 'sections', label: 'Classes', icon: <UsersIcon />, roles: ['admin'] },
+    { id: 'learningAreas', label: 'Learning Areas', icon: <BookOpenIcon />, roles: ['admin'] },
+    { id: 'grades', label: 'Grades', icon: <ClipboardDocumentListIcon />, roles: ['admin', 'teacher'] },
+    { id: 'coreValues', label: 'Core Values', icon: <HeartIcon />, roles: ['admin', 'teacher'] },
+    { id: 'attendance', label: 'Attendance', icon: <CalendarDaysIcon />, roles: ['admin', 'teacher'] },
   ];
+  
+  const navItems = allNavItems.filter(item => item.roles.includes(authUser.role));
 
   return (
-    <nav className="w-16 md:w-64 bg-slate-800 dark:bg-slate-950 text-white flex flex-col">
+    <nav className="w-16 md:w-64 bg-slate-800 dark:bg-slate-950 text-white flex flex-col print:hidden">
       <div className="flex items-center justify-center md:justify-start md:pl-6 h-16 border-b border-slate-700">
         <ChartPieIcon />
         <span className="hidden md:inline ml-3 text-lg font-bold">EduSync</span>

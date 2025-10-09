@@ -1,18 +1,31 @@
-
-import React from 'react';
+import React, { useMemo } from 'react';
 import Card from './Card';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { AcademicCapIcon, BookOpenIcon, StarIcon } from './icons';
+import type { AuthUser } from '../types';
 
 interface DashboardProps {
   schoolData: SchoolDataHook;
+  authUser: AuthUser;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ schoolData }) => {
-  const { students, learningAreas, grades, isSyncing } = schoolData;
+const Dashboard: React.FC<DashboardProps> = ({ schoolData, authUser }) => {
+  const { students, learningAreas, grades, sections, isSyncing } = schoolData;
 
-  // FIX: Property 'grade' does not exist on type 'Grade'. Use 'finalGrade' instead and filter out grades without one.
-  const gradesWithFinal = grades.filter(g => typeof g.finalGrade === 'number');
+  const visibleStudents = useMemo(() => {
+    if (authUser.role === 'admin') {
+      return students;
+    }
+    const teacherSection = sections.find(s => s.adviserId === authUser.id);
+    if (!teacherSection) return [];
+    return students.filter(s => s.sectionId === teacherSection.id);
+  }, [students, sections, authUser]);
+
+  const visibleStudentIds = useMemo(() => new Set(visibleStudents.map(s => s.id)), [visibleStudents]);
+
+  const filteredGrades = useMemo(() => grades.filter(g => visibleStudentIds.has(g.studentId)), [grades, visibleStudentIds]);
+
+  const gradesWithFinal = filteredGrades.filter(g => typeof g.finalGrade === 'number');
   const averageGrade = gradesWithFinal.length > 0
     ? (gradesWithFinal.reduce((acc, g) => acc + g.finalGrade!, 0) / gradesWithFinal.length).toFixed(1)
     : 'N/A';
@@ -26,9 +39,9 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData }) => {
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card title="Total Students" value={students.length.toString()} icon={<AcademicCapIcon />} />
+        <Card title="Total Students" value={visibleStudents.length.toString()} icon={<AcademicCapIcon />} />
         <Card title="Total Learning Areas" value={learningAreas.length.toString()} icon={<BookOpenIcon />} />
-        <Card title="Average Grade" value={`${averageGrade}%`} icon={<StarIcon />} />
+        <Card title="Class Average Grade" value={`${averageGrade}%`} icon={<StarIcon />} />
       </div>
       <div className="mt-8 bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
         <h2 className="text-xl font-semibold mb-4">Welcome to EduSync</h2>

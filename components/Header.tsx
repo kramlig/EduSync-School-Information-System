@@ -1,21 +1,25 @@
-
 import React from 'react';
 import { WifiIcon, WifiSlashIcon } from './icons';
+import type { AuthUser } from '../types';
 
 interface HeaderProps {
   isOnline: boolean;
   setIsOnline: (isOnline: boolean) => void;
+  authUser: AuthUser;
+  onLogout: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ isOnline, setIsOnline }) => {
+const Header: React.FC<HeaderProps> = ({ isOnline, setIsOnline, authUser, onLogout }) => {
   return (
-    <header className="flex items-center justify-between h-16 px-6 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-      <div className="text-xl font-semibold text-slate-800 dark:text-white">School Information System</div>
+    <header className="flex items-center justify-between h-16 px-6 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 print:hidden">
+      <div className="flex items-center">
+        <div className="text-xl font-semibold text-slate-800 dark:text-white">EduSync</div>
+        <div className="hidden md:block ml-6 text-sm text-slate-500 dark:text-slate-400">Welcome, <span className="font-semibold text-slate-700 dark:text-slate-200">{authUser.name}</span> (<span className="capitalize">{authUser.role}</span>)</div>
+      </div>
       <div className="flex items-center space-x-4">
-        <span className={`text-sm font-medium ${isOnline ? 'text-green-600' : 'text-amber-500'}`}>
-          {isOnline ? 'Online' : 'Offline Mode'}
-        </span>
-        <label htmlFor="online-toggle" className="relative inline-flex items-center cursor-pointer">
+        <button onClick={onLogout} className="text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400">Logout</button>
+        <div className="h-6 w-px bg-slate-200 dark:bg-slate-600"></div>
+        <label htmlFor="online-toggle" className="relative inline-flex items-center cursor-pointer" title="Toggle Offline Mode">
           <input 
             type="checkbox" 
             id="online-toggle" 

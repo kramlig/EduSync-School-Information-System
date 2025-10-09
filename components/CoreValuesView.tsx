@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import type { Student, CoreValue, CoreValueGrade, CoreValueMarking } from '../types';
+import type { Student, CoreValue, CoreValueGrade, CoreValueMarking, AuthUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { ChevronDownIcon, ChevronRightIcon } from './icons';
 
 interface CoreValuesViewProps {
   schoolData: SchoolDataHook;
+  authUser: AuthUser;
 }
 
 const MARKING_OPTIONS: { value: CoreValueMarking; label: string }[] = [
@@ -49,6 +50,9 @@ const StudentCoreValueDetails: React.FC<{
     updateCoreValueGrade(student.id, cvId, quarter, behavior, value as CoreValueMarking | '');
   };
 
+  const totalBehaviors = useMemo(() => coreValues.reduce((sum, cv) => sum + cv.behaviors.length, 0), [coreValues]);
+  let behaviorCounter = 0;
+
   return (
     <div className="overflow-x-auto bg-slate-50 dark:bg-slate-800/50 p-4">
       <table className="min-w-full table-fixed">
@@ -71,14 +75,17 @@ const StudentCoreValueDetails: React.FC<{
               </tr>
               {cv.behaviors.map(behavior => {
                 const currentGrade = gradeMap.get(cv.id);
+                const currentBehaviorIndex = behaviorCounter;
+                behaviorCounter++;
                 return (
                    <tr key={behavior} className="border-b border-slate-200 dark:border-slate-700">
                      <td className="py-3 px-3 text-sm text-slate-700 dark:text-slate-300">{behavior}</td>
-                     {(['q1', 'q2', 'q3', 'q4'] as const).map(q => (
+                     {(['q1', 'q2', 'q3', 'q4'] as const).map((q, qIndex) => (
                        <td key={q} className="py-2 px-3">
                          <select
                            value={currentGrade?.[q]?.[behavior] ?? ''}
                            onChange={(e) => handleMarkingChange(cv.id, q, behavior, e.target.value)}
+                           tabIndex={(qIndex * totalBehaviors) + currentBehaviorIndex + 1}
                            className={`w-full p-1.5 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center text-sm font-semibold focus:ring-indigo-500 focus:border-indigo-500 ${getMarkingColor(currentGrade?.[q]?.[behavior] as CoreValueMarking)}`}
                          >
                             <option value="">-</option>
@@ -100,11 +107,20 @@ const StudentCoreValueDetails: React.FC<{
 };
 
 
-const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData }) => {
-  const { students, coreValues, coreValueGrades, updateCoreValueGrade } = schoolData;
+const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, authUser }) => {
+  const { students, coreValues, coreValueGrades, updateCoreValueGrade, sections } = schoolData;
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   
+  const visibleStudents = useMemo(() => {
+    if (authUser.role === 'admin') {
+      return students;
+    }
+    const teacherSection = sections.find(s => s.adviserId === authUser.id);
+    if (!teacherSection) return [];
+    return students.filter(s => s.sectionId === teacherSection.id);
+  }, [students, sections, authUser]);
+
   const toggleStudentExpansion = (studentId: string) => {
     setExpandedStudents(prev => {
       const newSet = new Set(prev);
@@ -117,7 +133,7 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData }) => {
     });
   };
 
-  const filteredStudents = students.filter(student =>
+  const filteredStudents = visibleStudents.filter(student =>
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     student.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
