@@ -5,6 +5,13 @@ export interface Student {
   name: string;
   email: string;
   enrollmentDate: string;
+  // New Fields
+  dateOfBirth?: string;
+  sex?: 'Male' | 'Female';
+  gradeLevel?: number;
+  section?: string;
+  schoolYear?: string;
+  lrn?: string; // Learner Reference Number
 }
 
 export interface LearningArea {
@@ -35,8 +42,6 @@ export interface Grade {
   remarks?: 'Passed' | 'Failed';
 }
 
-// --- New Core Values Types ---
-
 export interface CoreValue {
   id: string;
   name: string;
@@ -56,4 +61,11 @@ export interface CoreValueGrade {
   q4?: Record<string, CoreValueMarking>;
 }
 
-export type ViewType = 'dashboard' | 'students' | 'learningAreas' | 'grades' | 'coreValues';
+export interface AttendanceRecord {
+    studentId: string;
+    // e.g. { 'Jun': { present: 20, absent: 1 } }
+    monthlyData: Record<string, { present: number; absent: number }>; 
+}
+
+
+export type ViewType = 'dashboard' | 'students' | 'learningAreas' | 'grades' | 'coreValues' | 'attendance';

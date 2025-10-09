@@ -1,57 +1,68 @@
 import React, { useState } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
+import type { Student } from '../types';
 import Modal from './Modal';
+import { UserCircleIcon } from './icons';
 
 interface StudentListProps {
   schoolData: SchoolDataHook;
 }
 
+const calculateAge = (dateOfBirth?: string): number | string => {
+  if (!dateOfBirth) return 'N/A';
+  const birthDate = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
 const StudentList: React.FC<StudentListProps> = ({ schoolData }) => {
   const { students, addStudent } = schoolData;
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newStudentName, setNewStudentName] = useState('');
-  const [newStudentEmail, setNewStudentEmail] = useState('');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  
+  const [newStudent, setNewStudent] = useState<Omit<Student, 'id' | 'enrollmentDate'>>({ name: '', email: '' });
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setNewStudent(prev => ({ ...prev, [name]: value }));
+  };
 
   const handleAddStudent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newStudentName && newStudentEmail) {
-      addStudent({ 
-        name: newStudentName, 
-        email: newStudentEmail,
-        enrollmentDate: new Date().toISOString().split('T')[0]
-      });
-      setNewStudentName('');
-      setNewStudentEmail('');
-      setIsModalOpen(false);
+    if (newStudent.name && newStudent.email) {
+      addStudent(newStudent);
+      setNewStudent({ name: '', email: '' });
+      setIsAddModalOpen(false);
     }
   };
+  
+  const handleViewProfile = (student: Student) => {
+    setSelectedStudent(student);
+    setIsViewModalOpen(true);
+  }
 
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchQuery.toLowerCase())
+    student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    student.lrn?.includes(searchQuery)
   );
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Students</h1>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          Add Student
-        </button>
+        <button onClick={() => setIsAddModalOpen(true)} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Add Student</button>
       </div>
       
       <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Search by name or email..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
-        />
+        <input type="text" placeholder="Search by name, email, or LRN..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"/>
       </div>
 
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-hidden">
@@ -59,21 +70,21 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData }) => {
           <thead>
             <tr>
               <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Name</th>
-              <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Email</th>
-              <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Enrollment Date</th>
+              <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">LRN</th>
+              <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Grade & Section</th>
+              <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredStudents.map((student) => (
               <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm"><p className="text-slate-900 dark:text-white whitespace-no-wrap">{student.name}</p></td>
+                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm"><p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{student.lrn ?? 'N/A'}</p></td>
+                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm"><p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{student.gradeLevel && student.section ? `Grade ${student.gradeLevel} - ${student.section}` : 'N/A'}</p></td>
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                  <p className="text-slate-900 dark:text-white whitespace-no-wrap">{student.name}</p>
-                </td>
-                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                  <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{student.email}</p>
-                </td>
-                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                  <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{student.enrollmentDate}</p>
+                  <button onClick={() => handleViewProfile(student)} className="flex items-center text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-semibold text-xs">
+                    <UserCircleIcon /><span className="ml-1">View Profile</span>
+                  </button>
                 </td>
               </tr>
             ))}
@@ -81,36 +92,36 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData }) => {
         </table>
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add New Student">
-        <form onSubmit={handleAddStudent}>
-          <div className="mb-4">
-            <label htmlFor="studentName" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Student Name</label>
-            <input
-              type="text"
-              id="studentName"
-              value={newStudentName}
-              onChange={(e) => setNewStudentName(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
-              required
-            />
-          </div>
-          <div className="mb-6">
-            <label htmlFor="studentEmail" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Email</label>
-            <input
-              type="email"
-              id="studentEmail"
-              value={newStudentEmail}
-              onChange={(e) => setNewStudentEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
-              required
-            />
-          </div>
-          <div className="flex justify-end space-x-2">
-             <button type="button" onClick={() => setIsModalOpen(false)} className="bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">Cancel</button>
-             <button type="submit" className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Add Student</button>
-          </div>
+      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add New Student" size="2xl">
+        <form onSubmit={handleAddStudent} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Form fields */}
+          <div className="md:col-span-2"><label htmlFor="name" className="block text-sm font-medium">Full Name</label><input type="text" name="name" id="name" value={newStudent.name} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500" required /></div>
+          <div className="md:col-span-2"><label htmlFor="email" className="block text-sm font-medium">Email Address</label><input type="email" name="email" id="email" value={newStudent.email} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500" required /></div>
+          <div><label htmlFor="lrn" className="block text-sm font-medium">LRN</label><input type="text" name="lrn" id="lrn" value={newStudent.lrn ?? ''} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500" /></div>
+          <div><label htmlFor="dateOfBirth" className="block text-sm font-medium">Date of Birth</label><input type="date" name="dateOfBirth" id="dateOfBirth" value={newStudent.dateOfBirth ?? ''} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500" /></div>
+          <div><label htmlFor="sex" className="block text-sm font-medium">Sex</label><select name="sex" id="sex" value={newStudent.sex ?? ''} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500"><option value="">Select...</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
+          <div><label htmlFor="gradeLevel" className="block text-sm font-medium">Grade Level</label><input type="number" name="gradeLevel" id="gradeLevel" value={newStudent.gradeLevel ?? ''} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500" /></div>
+          <div><label htmlFor="section" className="block text-sm font-medium">Section</label><input type="text" name="section" id="section" value={newStudent.section ?? ''} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500" /></div>
+          <div><label htmlFor="schoolYear" className="block text-sm font-medium">School Year (e.g., 2023-2024)</label><input type="text" name="schoolYear" id="schoolYear" value={newStudent.schoolYear ?? ''} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500" /></div>
+          <div className="md:col-span-2 flex justify-end space-x-2 mt-4"><button type="button" onClick={() => setIsAddModalOpen(false)} className="bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">Cancel</button><button type="submit" className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Add Student</button></div>
         </form>
       </Modal>
+
+       {selectedStudent && (
+        <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Student Profile" size="lg">
+           <div className="space-y-3">
+            <div className="flex justify-between"><span className="font-semibold text-slate-500">Name:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.name}</span></div>
+            <div className="flex justify-between"><span className="font-semibold text-slate-500">Email:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.email}</span></div>
+            <div className="flex justify-between"><span className="font-semibold text-slate-500">LRN:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.lrn ?? 'N/A'}</span></div>
+            <div className="flex justify-between"><span className="font-semibold text-slate-500">Age:</span> <span className="text-slate-800 dark:text-slate-200">{calculateAge(selectedStudent.dateOfBirth)}</span></div>
+            <div className="flex justify-between"><span className="font-semibold text-slate-500">Sex:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.sex ?? 'N/A'}</span></div>
+            <div className="flex justify-between"><span className="font-semibold text-slate-500">Grade & Section:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.gradeLevel && selectedStudent.section ? `Grade ${selectedStudent.gradeLevel} - ${selectedStudent.section}` : 'N/A'}</span></div>
+            <div className="flex justify-between"><span className="font-semibold text-slate-500">School Year:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.schoolYear ?? 'N/A'}</span></div>
+            <div className="flex justify-between"><span className="font-semibold text-slate-500">Enrollment Date:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.enrollmentDate}</span></div>
+          </div>
+          <div className="flex justify-end mt-6"><button onClick={() => setIsViewModalOpen(false)} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Close</button></div>
+        </Modal>
+      )}
     </div>
   );
 };
