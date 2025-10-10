@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, SetStateAction } from 'react';
-import type { Student, LearningArea, Grade, SubGradeRecord, CoreValue, CoreValueGrade, CoreValueMarking, AttendanceRecord, Teacher, Section, TeacherAssignment, AuthUser, SchoolSettings, SubstituteAssignment } from '../types';
+import type { Student, LearningArea, Grade, SubGradeRecord, CoreValue, CoreValueGrade, CoreValueMarking, AttendanceRecord, Teacher, Section, TeacherAssignment, AuthUser, SchoolSettings, SubstituteAssignment, ClassSchedule } from '../types';
 
 const MOCK_LEARNING_AREAS: LearningArea[] = [
   { id: 'la1', name: 'Mother Tongue Based (MTB)', credits: 3 },
@@ -79,6 +79,15 @@ const MOCK_SETTINGS: SchoolSettings = {
 
 const MOCK_SUBSTITUTE_ASSIGNMENTS: SubstituteAssignment[] = [];
 
+const MOCK_SCHEDULES: ClassSchedule[] = [
+  { id: 'cs1', title: 'Math', type: 'academic', scope: 'section', sectionId: 'sec1', learningAreaId: 'la4', teacherId: 't2', dayOfWeek: 'Monday', startTime: '08:00', endTime: '09:00' },
+  { id: 'cs2', title: 'English', type: 'academic', scope: 'section', sectionId: 'sec1', learningAreaId: 'la3', teacherId: 't1', dayOfWeek: 'Monday', startTime: '09:00', endTime: '10:00' },
+  { id: 'cs3', title: 'Science', type: 'academic', scope: 'section', sectionId: 'sec2', learningAreaId: 'la8', teacherId: 't2', dayOfWeek: 'Tuesday', startTime: '10:00', endTime: '11:30' },
+  { id: 'cs4', title: 'Recess', type: 'extracurricular', scope: 'gradeLevel', gradeLevel: 3, dayOfWeek: 'Monday', startTime: '10:00', endTime: '10:30' },
+  { id: 'cs5', title: 'Flag Ceremony', type: 'extracurricular', scope: 'all', dayOfWeek: 'Monday', startTime: '07:30', endTime: '08:00' },
+];
+
+
 const useLocalStorage = <T,>(key: string, initialValue: T): [T, (value: SetStateAction<T>) => void] => {
   const [storedValue, setStoredValue] = useState<T>(() => {
     try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : initialValue; } catch (error) { console.error(error); return initialValue; }
@@ -106,6 +115,7 @@ export const useSchoolData = (isOnline: boolean) => {
   const [sections, setSections] = useLocalStorage<Section[]>('sections', MOCK_SECTIONS);
   const [settings, setSettings] = useLocalStorage<SchoolSettings>('settings', MOCK_SETTINGS);
   const [substituteAssignments, setSubstituteAssignments] = useLocalStorage<SubstituteAssignment[]>('substituteAssignments', MOCK_SUBSTITUTE_ASSIGNMENTS);
+  const [classSchedules, setClassSchedules] = useLocalStorage<ClassSchedule[]>('classSchedules', MOCK_SCHEDULES);
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
@@ -245,7 +255,72 @@ export const useSchoolData = (isOnline: boolean) => {
     setSettings(newSettings);
   }, [setSettings]);
 
-  return { students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, sections, settings, substituteAssignments, login, addStudent, updateStudent, deleteStudent, addLearningArea, deleteLearningArea, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, updateGrade, updateCoreValueGrade, updateAttendance, updateSettings, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, isSyncing, loading: false, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG };
+  const checkScheduleConflict = (newSchedule: Omit<ClassSchedule, 'id'>, existingSchedules: ClassSchedule[], scheduleIdToIgnore?: string): string | null => {
+    const { startTime: newStart, endTime: newEnd, dayOfWeek, type, scope, sectionId, gradeLevel, teacherId } = newSchedule;
+    const newScheduleSection = sections.find(s => s.id === sectionId);
+
+    for (const existing of existingSchedules) {
+        if (scheduleIdToIgnore && existing.id === scheduleIdToIgnore) continue;
+        if (existing.dayOfWeek !== dayOfWeek) continue;
+
+        // Check for time overlap: (StartA < EndB) and (StartB < EndA)
+        if (newStart < existing.endTime && existing.startTime < newEnd) {
+            // Teacher conflict (only for academic classes)
+            if (type === 'academic' && existing.type === 'academic' && teacherId && existing.teacherId === teacherId) {
+                const teacher = teachers.find(t => t.id === teacherId);
+                return `Conflict: ${teacher?.name || 'Teacher'} is already scheduled at this time.`;
+            }
+
+            const existingSection = sections.find(s => s.id === existing.sectionId);
+
+            // Scope conflicts
+            if (scope === 'all' || existing.scope === 'all') return `Conflict: A school-wide event is scheduled at this time.`;
+            
+            if (scope === 'gradeLevel' && existing.scope === 'gradeLevel' && gradeLevel === existing.gradeLevel) {
+                 return `Conflict: An event for Grade ${gradeLevel} is already scheduled.`;
+            }
+            
+            if (scope === 'section' && existing.scope === 'section' && sectionId === existing.sectionId) {
+                 const section = sections.find(s => s.id === sectionId);
+                 return `Conflict: Section ${section?.name || ''} already has an event scheduled.`;
+            }
+
+            if (scope === 'gradeLevel' && existing.scope === 'section' && existingSection && gradeLevel === existingSection.gradeLevel) {
+                 return `Conflict: Section ${existingSection.name} (Grade ${gradeLevel}) has a class, which conflicts with the grade-level event.`;
+            }
+
+            if (scope === 'section' && existing.scope === 'gradeLevel' && newScheduleSection && newScheduleSection.gradeLevel === existing.gradeLevel) {
+                 return `Conflict: A grade-level event for Grade ${newScheduleSection.gradeLevel} is scheduled, which conflicts with this section's class.`;
+            }
+        }
+    }
+    return null;
+  };
+
+  const addSchedule = useCallback((schedule: Omit<ClassSchedule, 'id'>): { success: boolean, message?: string } => {
+    const conflict = checkScheduleConflict(schedule, classSchedules);
+    if (conflict) {
+        return { success: false, message: conflict };
+    }
+    const newSchedule: ClassSchedule = { ...schedule, id: `cs${Date.now()}` };
+    setClassSchedules(prev => [...prev, newSchedule]);
+    return { success: true };
+  }, [classSchedules, setClassSchedules, teachers, sections]);
+
+  const updateSchedule = useCallback((updatedSchedule: ClassSchedule): { success: boolean, message?: string } => {
+    const conflict = checkScheduleConflict(updatedSchedule, classSchedules, updatedSchedule.id);
+    if (conflict) {
+        return { success: false, message: conflict };
+    }
+    setClassSchedules(prev => prev.map(s => s.id === updatedSchedule.id ? updatedSchedule : s));
+    return { success: true };
+  }, [classSchedules, setClassSchedules, teachers, sections]);
+
+  const deleteSchedule = useCallback((scheduleId: string) => {
+    setClassSchedules(prev => prev.filter(s => s.id !== scheduleId));
+  }, [setClassSchedules]);
+
+  return { students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, sections, settings, substituteAssignments, classSchedules, login, addStudent, updateStudent, deleteStudent, addLearningArea, deleteLearningArea, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, updateGrade, updateCoreValueGrade, updateAttendance, updateSettings, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addSchedule, updateSchedule, deleteSchedule, isSyncing, loading: false, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG };
 };
 
 export type SchoolDataHook = ReturnType<typeof useSchoolData>;

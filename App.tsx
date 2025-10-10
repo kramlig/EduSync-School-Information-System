@@ -6,12 +6,15 @@ import Dashboard from './components/Dashboard';
 import StudentList from './components/StudentList';
 import LearningAreaList from './components/CourseList';
 import GradesView from './components/GradesView';
+import GradebookView from './components/GradebookView';
 import CoreValuesView from './components/CoreValuesView';
+import CoreValuesGradebookView from './components/CoreValuesGradebookView';
 import AttendanceView from './components/AttendanceView';
 import TeacherList from './components/TeacherList';
 import SectionsView from './components/SectionsView';
 import SubstituteView from './components/SubstituteView';
 import SettingsView from './components/SettingsView';
+import SchedulerView from './components/SchedulerView';
 import { useSchoolData } from './hooks/useSchoolData';
 import LoginScreen from './components/LoginScreen';
 
@@ -41,8 +44,12 @@ const App: React.FC = () => {
         return <LearningAreaList schoolData={schoolData} authUser={authUser} />;
       case 'grades':
         return <GradesView schoolData={schoolData} authUser={authUser} />;
+      case 'gradebook':
+        return <GradebookView schoolData={schoolData} authUser={authUser} />;
       case 'coreValues':
         return <CoreValuesView schoolData={schoolData} authUser={authUser} />;
+      case 'coreValuesGradebook':
+        return <CoreValuesGradebookView schoolData={schoolData} authUser={authUser} />;
       case 'attendance':
         return <AttendanceView schoolData={schoolData} authUser={authUser} />;
       case 'teachers':
@@ -51,6 +58,8 @@ const App: React.FC = () => {
         return <SectionsView schoolData={schoolData} authUser={authUser} />;
       case 'substitutes':
         return <SubstituteView schoolData={schoolData} />;
+      case 'scheduler':
+        return <SchedulerView schoolData={schoolData} authUser={authUser} />;
       case 'settings':
         return <SettingsView schoolData={schoolData} />;
       case 'dashboard':
