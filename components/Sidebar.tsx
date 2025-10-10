@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ViewType, AuthUser } from '../types';
-import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon, CalendarDaysIcon, BriefcaseIcon, UsersIcon, CogIcon, ClipboardUserIcon } from './icons';
+import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon, CalendarDaysIcon, BriefcaseIcon, UsersIcon, CogIcon, ClipboardUserIcon, CalendarIcon, TableCellsIcon, ClipboardCheckIcon } from './icons';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -14,10 +14,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, authUser }) => 
     { id: 'students', label: 'Students', icon: <AcademicCapIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'teachers', label: 'Teachers', icon: <BriefcaseIcon />, roles: ['admin', 'registrar'] },
     { id: 'sections', label: 'Classes', icon: <UsersIcon />, roles: ['admin', 'registrar'] },
+    { id: 'scheduler', label: 'Scheduler', icon: <CalendarIcon />, roles: ['admin', 'principal', 'registrar'] },
     { id: 'substitutes', label: 'Substitutes', icon: <ClipboardUserIcon />, roles: ['admin', 'registrar'] },
     { id: 'learningAreas', label: 'Learning Areas', icon: <BookOpenIcon />, roles: ['admin'] },
     { id: 'grades', label: 'Grades', icon: <ClipboardDocumentListIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
+    { id: 'gradebook', label: 'Gradebook', icon: <TableCellsIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'coreValues', label: 'Core Values', icon: <HeartIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
+    { id: 'coreValuesGradebook', label: 'Core Values Gradebook', icon: <ClipboardCheckIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'attendance', label: 'Attendance', icon: <CalendarDaysIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'settings', label: 'Settings', icon: <CogIcon />, roles: ['admin'] },
   ];

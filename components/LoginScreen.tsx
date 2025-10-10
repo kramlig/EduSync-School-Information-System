@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import type { AuthUser } from '../types';
-import { ChartPieIcon } from './icons';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 
 interface LoginScreenProps {
@@ -37,9 +36,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginFn }) => {
     <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900">
       <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-slate-800 rounded-2xl shadow-lg">
         <div className="text-center">
-            <div className="flex items-center justify-center mb-4 text-slate-800 dark:text-white">
-                <ChartPieIcon />
-                <h1 className="ml-3 text-3xl font-bold">EduSync</h1>
+            <div className="flex flex-col items-center justify-center mb-4 text-slate-800 dark:text-white">
+                <img src="https://depedph.com/wp-content/uploads/2024/01/deped-logo-symbol-philippines-1024x1024.png" alt="School Logo" className="w-48 h-48 mb-3" />
+                <h1 className="text-3xl font-bold">EduSync</h1>
             </div>
             <p className="text-slate-500 dark:text-slate-400">Sign in to access the School Information System</p>
         </div>

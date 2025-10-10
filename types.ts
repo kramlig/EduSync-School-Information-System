@@ -1,3 +1,4 @@
+export type ViewType = 'dashboard' | 'students' | 'learningAreas' | 'grades' | 'coreValues' | 'attendance' | 'teachers' | 'sections' | 'settings' | 'substitutes' | 'scheduler' | 'gradebook' | 'coreValuesGradebook';
 import type { SetStateAction } from 'react';
 
 export interface Student {
@@ -96,4 +97,19 @@ export interface SubstituteAssignment {
   endDate: string;
 }
 
-export type ViewType = 'dashboard' | 'students' | 'learningAreas' | 'grades' | 'coreValues' | 'attendance' | 'teachers' | 'sections' | 'settings' | 'substitutes';
+export interface ClassSchedule {
+  id: string;
+  title: string;
+  type: 'academic' | 'extracurricular';
+  dayOfWeek: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
+  startTime: string; // "HH:mm" format
+  endTime: string;   // "HH:mm" format
+  
+  scope: 'section' | 'gradeLevel' | 'all';
+  
+  // Optional fields that depend on the type
+  sectionId?: string;
+  learningAreaId?: string;
+  teacherId?: string;
+  gradeLevel?: number;
+}
