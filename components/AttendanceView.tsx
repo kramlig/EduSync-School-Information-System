@@ -8,19 +8,35 @@ interface AttendanceViewProps {
 }
 
 const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, authUser }) => {
-  const { students, attendanceRecords, updateAttendance, sections } = schoolData;
+  const { students, attendanceRecords, updateAttendance, sections, substituteAssignments } = schoolData;
   const [searchQuery, setSearchQuery] = useState('');
+  const isReadOnly = authUser.role === 'principal';
 
   const months = Object.keys(MONTHLY_SCHOOL_DAYS_CONFIG);
   
   const visibleStudents = useMemo(() => {
-    if (authUser.role === 'admin') {
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
       return students;
     }
-    const teacherSection = sections.find(s => s.adviserId === authUser.id);
-    if (!teacherSection) return [];
-    return students.filter(s => s.sectionId === teacherSection.id);
-  }, [students, sections, authUser]);
+    
+    const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
+    const today = new Date().toISOString().split('T')[0];
+    const activeSubAssignments = substituteAssignments.filter(sub => 
+      sub.teacherId === authUser.id &&
+      today >= sub.startDate &&
+      today <= sub.endDate
+    );
+
+    const authorizedSectionIds = new Set<string>();
+    if (teacherAdviserSection) {
+      authorizedSectionIds.add(teacherAdviserSection.id);
+    }
+    activeSubAssignments.forEach(sub => authorizedSectionIds.add(sub.sectionId));
+    
+    if (authorizedSectionIds.size === 0) return [];
+    
+    return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
+  }, [students, sections, substituteAssignments, authUser]);
 
   const filteredStudents = visibleStudents.filter(student =>
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -34,16 +50,18 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, authUser })
     }
   };
 
-  const calculateTotals = (studentId: string) => {
+  const calculateTotals = (studentId: string): { present: number, absent: number } => {
     const record = attendanceRecords.find(r => r.studentId === studentId);
     if (!record) return { present: 0, absent: 0 };
 
     return Object.values(record.monthlyData).reduce(
-      (totals, monthData) => {
+      (totals: { present: number; absent: number }, monthData: { present: number; absent: number }) => {
         totals.present += monthData.present || 0;
         totals.absent += monthData.absent || 0;
         return totals;
       },
+      // FIX: The `reduce` function's initial value was an empty object, causing a type mismatch.
+      // It is now correctly initialized with `{ present: 0, absent: 0 }` to match the accumulator's type.
       { present: 0, absent: 0 }
     );
   };
@@ -102,7 +120,8 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, authUser })
                         value={studentRecord?.monthlyData[month]?.present ?? ''}
                         onChange={e => handleAttendanceChange(student.id, month, 'present', e.target.value)}
                         tabIndex={(monthIndex * 2 * totalStudents) + studentIndex + 1}
-                        className="w-12 p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center"
+                        disabled={isReadOnly}
+                        className="w-12 p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center disabled:bg-slate-100 dark:disabled:bg-slate-700/50"
                        />
                     </td>
                      <td className="p-1 border-b border-slate-200 dark:border-slate-700">
@@ -112,7 +131,8 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, authUser })
                         value={studentRecord?.monthlyData[month]?.absent ?? ''}
                         onChange={e => handleAttendanceChange(student.id, month, 'absent', e.target.value)}
                         tabIndex={(monthIndex * 2 * totalStudents) + totalStudents + studentIndex + 1}
-                        className="w-12 p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center"
+                        disabled={isReadOnly}
+                        className="w-12 p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center disabled:bg-slate-100 dark:disabled:bg-slate-700/50"
                       />
                     </td>
                   </React.Fragment>

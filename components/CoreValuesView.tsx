@@ -31,7 +31,8 @@ const StudentCoreValueDetails: React.FC<{
   coreValues: CoreValue[];
   coreValueGrades: CoreValueGrade[];
   updateCoreValueGrade: SchoolDataHook['updateCoreValueGrade'];
-}> = ({ student, coreValues, coreValueGrades, updateCoreValueGrade }) => {
+  isReadOnly: boolean;
+}> = ({ student, coreValues, coreValueGrades, updateCoreValueGrade, isReadOnly }) => {
 
   const gradeMap = useMemo(() => {
     const map = new Map<string, CoreValueGrade>();
@@ -86,7 +87,8 @@ const StudentCoreValueDetails: React.FC<{
                            value={currentGrade?.[q]?.[behavior] ?? ''}
                            onChange={(e) => handleMarkingChange(cv.id, q, behavior, e.target.value)}
                            tabIndex={(qIndex * totalBehaviors) + currentBehaviorIndex + 1}
-                           className={`w-full p-1.5 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center text-sm font-semibold focus:ring-indigo-500 focus:border-indigo-500 ${getMarkingColor(currentGrade?.[q]?.[behavior] as CoreValueMarking)}`}
+                           disabled={isReadOnly}
+                           className={`w-full p-1.5 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center text-sm font-semibold focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100 dark:disabled:bg-slate-700/50 ${getMarkingColor(currentGrade?.[q]?.[behavior] as CoreValueMarking)}`}
                          >
                             <option value="">-</option>
                             {MARKING_OPTIONS.map(opt => (
@@ -108,18 +110,34 @@ const StudentCoreValueDetails: React.FC<{
 
 
 const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, authUser }) => {
-  const { students, coreValues, coreValueGrades, updateCoreValueGrade, sections } = schoolData;
+  const { students, coreValues, coreValueGrades, updateCoreValueGrade, sections, substituteAssignments } = schoolData;
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const isReadOnly = authUser.role === 'principal';
   
   const visibleStudents = useMemo(() => {
-    if (authUser.role === 'admin') {
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
       return students;
     }
-    const teacherSection = sections.find(s => s.adviserId === authUser.id);
-    if (!teacherSection) return [];
-    return students.filter(s => s.sectionId === teacherSection.id);
-  }, [students, sections, authUser]);
+    
+    const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
+    const today = new Date().toISOString().split('T')[0];
+    const activeSubAssignments = substituteAssignments.filter(sub => 
+      sub.teacherId === authUser.id &&
+      today >= sub.startDate &&
+      today <= sub.endDate
+    );
+
+    const authorizedSectionIds = new Set<string>();
+    if (teacherAdviserSection) {
+      authorizedSectionIds.add(teacherAdviserSection.id);
+    }
+    activeSubAssignments.forEach(sub => authorizedSectionIds.add(sub.sectionId));
+    
+    if (authorizedSectionIds.size === 0) return [];
+    
+    return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
+  }, [students, sections, substituteAssignments, authUser]);
 
   const toggleStudentExpansion = (studentId: string) => {
     setExpandedStudents(prev => {
@@ -152,7 +170,7 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, authUser })
         />
       </div>
 
-      <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
         <table className="min-w-full leading-normal">
           <thead className="bg-slate-100 dark:bg-slate-900">
             <tr>
@@ -174,7 +192,7 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, authUser })
                 {expandedStudents.has(student.id) && (
                   <tr>
                     <td colSpan={2} className="p-0">
-                      <StudentCoreValueDetails student={student} coreValues={coreValues} coreValueGrades={coreValueGrades} updateCoreValueGrade={updateCoreValueGrade} />
+                      <StudentCoreValueDetails student={student} coreValues={coreValues} coreValueGrades={coreValueGrades} updateCoreValueGrade={updateCoreValueGrade} isReadOnly={isReadOnly} />
                     </td>
                   </tr>
                 )}

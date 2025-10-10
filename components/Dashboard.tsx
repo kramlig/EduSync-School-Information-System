@@ -10,16 +10,33 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ schoolData, authUser }) => {
-  const { students, learningAreas, grades, sections, isSyncing } = schoolData;
+  const { students, learningAreas, grades, sections, substituteAssignments, isSyncing } = schoolData;
 
   const visibleStudents = useMemo(() => {
-    if (authUser.role === 'admin') {
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
       return students;
     }
-    const teacherSection = sections.find(s => s.adviserId === authUser.id);
-    if (!teacherSection) return [];
-    return students.filter(s => s.sectionId === teacherSection.id);
-  }, [students, sections, authUser]);
+    
+    // For teachers, find their assigned class and any active substitute assignments
+    const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
+    const today = new Date().toISOString().split('T')[0];
+    const activeSubAssignments = substituteAssignments.filter(sub => 
+      sub.teacherId === authUser.id &&
+      today >= sub.startDate &&
+      today <= sub.endDate
+    );
+
+    const authorizedSectionIds = new Set<string>();
+    if (teacherAdviserSection) {
+      authorizedSectionIds.add(teacherAdviserSection.id);
+    }
+    activeSubAssignments.forEach(sub => authorizedSectionIds.add(sub.sectionId));
+    
+    if (authorizedSectionIds.size === 0) return [];
+    
+    return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
+  }, [students, sections, substituteAssignments, authUser]);
+
 
   const visibleStudentIds = useMemo(() => new Set(visibleStudents.map(s => s.id)), [visibleStudents]);
 

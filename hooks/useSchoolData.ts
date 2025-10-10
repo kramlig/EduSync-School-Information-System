@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, SetStateAction } from 'react';
-import type { Student, LearningArea, Grade, SubGradeRecord, CoreValue, CoreValueGrade, CoreValueMarking, AttendanceRecord, Teacher, Section, TeacherAssignment, AuthUser } from '../types';
+import type { Student, LearningArea, Grade, SubGradeRecord, CoreValue, CoreValueGrade, CoreValueMarking, AttendanceRecord, Teacher, Section, TeacherAssignment, AuthUser, SchoolSettings, SubstituteAssignment } from '../types';
 
 const MOCK_LEARNING_AREAS: LearningArea[] = [
   { id: 'la1', name: 'Mother Tongue Based (MTB)', credits: 3 },
@@ -19,7 +19,7 @@ const MOCK_TEACHERS: Teacher[] = [
     { gradeLevel: 3, learningAreaId: 'la3' },
     { gradeLevel: 4, learningAreaId: 'la3' },
   ] },
-  { id: 't2', name: 'Mr. David Chen', email: 'd.chen@school.edu', contactNumber: '555-0102', role: 'teacher', password: 'teacher123', assignments: [
+  { id: 't2', name: 'Mr. David Chen', email: 'd.chen@school.edu', contactNumber: '555-0102', role: 'principal', password: 'teacher123', assignments: [
     { gradeLevel: 3, learningAreaId: 'la4' },
     { gradeLevel: 3, learningAreaId: 'la8' },
     { gradeLevel: 3, learningAreaId: 'la7' },
@@ -32,9 +32,9 @@ const MOCK_SECTIONS: Section[] = [
 ];
 
 const MOCK_STUDENTS: Student[] = [
-  { id: 's1', name: 'Alice Johnson', email: 'alice.j@school.edu', enrollmentDate: '2023-09-01', lrn: '123456789012', dateOfBirth: '2015-06-15', sex: 'Female', schoolYear: '2023-2024', sectionId: 'sec1' },
-  { id: 's2', name: 'Bob Williams', email: 'bob.w@school.edu', enrollmentDate: '2023-09-01', lrn: '210987654321', dateOfBirth: '2015-03-22', sex: 'Male', schoolYear: '2023-2024', sectionId: 'sec1' },
-  { id: 's3', name: 'Charlie Brown', email: 'charlie.b@school.edu', enrollmentDate: '2023-09-01', lrn: '345678901234', dateOfBirth: '2015-09-01', sex: 'Male', schoolYear: '2023-2024', sectionId: 'sec2' },
+  { id: 's1', name: 'Alice Johnson', email: 'alice.j@school.edu', enrollmentDate: '2023-09-01', lrn: '123456789012', dateOfBirth: '2015-06-15', sex: 'Female', sectionId: 'sec1' },
+  { id: 's2', name: 'Bob Williams', email: 'bob.w@school.edu', enrollmentDate: '2023-09-01', lrn: '210987654321', dateOfBirth: '2015-03-22', sex: 'Male', sectionId: 'sec1' },
+  { id: 's3', name: 'Charlie Brown', email: 'charlie.b@school.edu', enrollmentDate: '2023-09-01', lrn: '345678901234', dateOfBirth: '2015-09-01', sex: 'Male', sectionId: 'sec2' },
 ];
 
 const MOCK_GRADES: Grade[] = [
@@ -69,6 +69,16 @@ const MOCK_ATTENDANCE_RECORDS: AttendanceRecord[] = [
     { studentId: 's2', monthlyData: { 'Jun': { present: 19, absent: 2 }, 'Jul': { present: 22, absent: 0 }}},
 ];
 
+const MOCK_SETTINGS: SchoolSettings = {
+    schoolName: 'ENRIQUE URENCIA ELEMENTARY SCHOOL',
+    region: 'Region XI',
+    division: 'Division of the City of Mati',
+    district: 'Governor Generoso North District',
+    schoolYear: '2023-2024'
+};
+
+const MOCK_SUBSTITUTE_ASSIGNMENTS: SubstituteAssignment[] = [];
+
 const useLocalStorage = <T,>(key: string, initialValue: T): [T, (value: SetStateAction<T>) => void] => {
   const [storedValue, setStoredValue] = useState<T>(() => {
     try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : initialValue; } catch (error) { console.error(error); return initialValue; }
@@ -94,6 +104,8 @@ export const useSchoolData = (isOnline: boolean) => {
   const [attendanceRecords, setAttendanceRecords] = useLocalStorage<AttendanceRecord[]>('attendance', MOCK_ATTENDANCE_RECORDS);
   const [teachers, setTeachers] = useLocalStorage<Teacher[]>('teachers', MOCK_TEACHERS);
   const [sections, setSections] = useLocalStorage<Section[]>('sections', MOCK_SECTIONS);
+  const [settings, setSettings] = useLocalStorage<SchoolSettings>('settings', MOCK_SETTINGS);
+  const [substituteAssignments, setSubstituteAssignments] = useLocalStorage<SubstituteAssignment[]>('substituteAssignments', MOCK_SUBSTITUTE_ASSIGNMENTS);
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
@@ -109,10 +121,25 @@ export const useSchoolData = (isOnline: boolean) => {
     return null;
   }, [teachers]);
 
-  const addStudent = useCallback((student: Omit<Student, 'id' | 'enrollmentDate'>) => {
+  const addStudent = useCallback((student: Omit<Student, 'id' | 'enrollmentDate'>): { success: boolean; message?: string } => {
+    if (student.lrn && !/^\d{12}$/.test(student.lrn)) {
+      return { success: false, message: 'Invalid LRN. The LRN must be a 12-digit number.' };
+    }
     const newStudent: Student = { ...student, id: `s${Date.now()}`, enrollmentDate: new Date().toISOString().split('T')[0] };
     setStudents(prev => [...prev, newStudent]);
+    return { success: true };
   }, [setStudents]);
+  
+  const updateStudent = useCallback((updatedStudent: Student) => {
+    setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
+  }, [setStudents]);
+
+  const deleteStudent = useCallback((studentId: string) => {
+    setStudents(prev => prev.filter(s => s.id !== studentId));
+    setGrades(prev => prev.filter(g => g.studentId !== studentId));
+    setCoreValueGrades(prev => prev.filter(cvg => cvg.studentId !== studentId));
+    setAttendanceRecords(prev => prev.filter(ar => ar.studentId !== studentId));
+  }, [setStudents, setGrades, setCoreValueGrades, setAttendanceRecords]);
 
   const addLearningArea = useCallback((learningArea: Omit<LearningArea, 'id'>) => {
     let newLearningArea: LearningArea = { ...learningArea, id: `la${Date.now()}` };
@@ -120,15 +147,66 @@ export const useSchoolData = (isOnline: boolean) => {
     setLearningAreas(prev => [...prev, newLearningArea]);
   }, [setLearningAreas]);
 
+  const deleteLearningArea = useCallback((learningAreaId: string) => {
+    setLearningAreas(prev => prev.filter(la => la.id !== learningAreaId));
+    setGrades(prev => prev.filter(g => g.learningAreaId !== learningAreaId));
+  }, [setLearningAreas, setGrades]);
+
   const addTeacher = useCallback((teacher: Omit<Teacher, 'id'>) => {
-    const newTeacher: Teacher = { ...teacher, id: `t${Date.now()}` };
-    setTeachers(prev => [...prev, newTeacher]);
+    const newTeacher: Teacher = { ...teacher, id: `t${Date.now()}`, password: 'teacher123' }; // Default password for new teachers
+    setTeachers(prev => {
+        let newTeachers = [...prev];
+        if (newTeacher.role === 'principal') {
+            newTeachers = newTeachers.map(t => t.role === 'principal' ? { ...t, role: 'teacher' } : t);
+        }
+        return [...newTeachers, newTeacher];
+    });
   }, [setTeachers]);
+
+  const updateTeacher = useCallback((updatedTeacher: Teacher) => {
+    setTeachers(prev => {
+        let newTeachers = prev.map(t => t.id === updatedTeacher.id ? updatedTeacher : t);
+        if (updatedTeacher.role === 'principal') {
+            newTeachers = newTeachers.map(t => (t.role === 'principal' && t.id !== updatedTeacher.id) ? { ...t, role: 'teacher' } : t);
+        }
+        return newTeachers;
+    });
+  }, [setTeachers]);
+  
+  const deleteTeacher = useCallback((teacherId: string) => {
+      setTeachers(prev => prev.filter(t => t.id !== teacherId));
+      setSections(prev => prev.map(s => s.adviserId === teacherId ? {...s, adviserId: undefined} : s));
+      setSubstituteAssignments(prev => prev.filter(sub => sub.teacherId !== teacherId));
+  }, [setTeachers, setSections, setSubstituteAssignments]);
   
   const addSection = useCallback((section: Omit<Section, 'id'>) => {
     const newSection: Section = { ...section, id: `sec${Date.now()}` };
     setSections(prev => [...prev, newSection]);
   }, [setSections]);
+  
+  const updateSection = useCallback((updatedSection: Section) => {
+    setSections(prev => prev.map(s => s.id === updatedSection.id ? updatedSection : s));
+  }, [setSections]);
+
+  const deleteSection = useCallback((sectionId: string) => {
+    setSections(prev => prev.filter(s => s.id !== sectionId));
+    setStudents(prev => prev.map(s => s.sectionId === sectionId ? {...s, sectionId: undefined} : s));
+    setSubstituteAssignments(prev => prev.filter(sub => sub.sectionId !== sectionId));
+  }, [setSections, setStudents, setSubstituteAssignments]);
+
+  const addSubstituteAssignment = useCallback((assignment: Omit<SubstituteAssignment, 'id'>) => {
+    const newAssignment: SubstituteAssignment = { ...assignment, id: `sub${Date.now()}` };
+    setSubstituteAssignments(prev => [...prev, newAssignment]);
+  }, [setSubstituteAssignments]);
+
+  const updateSubstituteAssignment = useCallback((updatedAssignment: SubstituteAssignment) => {
+    setSubstituteAssignments(prev => prev.map(sub => sub.id === updatedAssignment.id ? updatedAssignment : sub));
+  }, [setSubstituteAssignments]);
+
+  const deleteSubstituteAssignment = useCallback((assignmentId: string) => {
+    setSubstituteAssignments(prev => prev.filter(sub => sub.id !== assignmentId));
+  }, [setSubstituteAssignments]);
+
 
   const updateGrade = useCallback((studentId: string, learningAreaId: string, quarter: 'q1'|'q2'|'q3'|'q4', gradeValue: number|undefined, subSubject?: string) => {
     setGrades(prev => {
@@ -163,7 +241,11 @@ export const useSchoolData = (isOnline: boolean) => {
     });
   }, [setAttendanceRecords]);
 
-  return { students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, sections, login, addStudent, addLearningArea, addTeacher, addSection, updateGrade, updateCoreValueGrade, updateAttendance, isSyncing, loading: false, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG };
+  const updateSettings = useCallback((newSettings: SchoolSettings) => {
+    setSettings(newSettings);
+  }, [setSettings]);
+
+  return { students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, sections, settings, substituteAssignments, login, addStudent, updateStudent, deleteStudent, addLearningArea, deleteLearningArea, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, updateGrade, updateCoreValueGrade, updateAttendance, updateSettings, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, isSyncing, loading: false, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG };
 };
 
 export type SchoolDataHook = ReturnType<typeof useSchoolData>;

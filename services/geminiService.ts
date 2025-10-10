@@ -82,6 +82,7 @@ export const generateStudentReport = async (
   `;
 
   try {
+    // FIX: Use `contents` property for the prompt and access `.text` directly on the response, as per API guidelines.
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,

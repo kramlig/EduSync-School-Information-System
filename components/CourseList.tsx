@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import Modal from './Modal';
 import type { LearningArea, AuthUser } from '../types';
+import { TrashIcon } from './icons';
 
 interface LearningAreaListProps {
   schoolData: SchoolDataHook;
@@ -9,8 +10,10 @@ interface LearningAreaListProps {
 }
 
 const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, authUser }) => {
-  const { learningAreas, addLearningArea } = schoolData;
+  const { learningAreas, addLearningArea, deleteLearningArea } = schoolData;
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [areaToDelete, setAreaToDelete] = useState<LearningArea | null>(null);
   const [newLearningArea, setNewLearningArea] = useState<Omit<LearningArea, 'id'>>({ name: '', credits: 3 });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -25,6 +28,19 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, authUse
       addLearningArea(newLearningArea);
       setNewLearningArea({ name: '', credits: 3 });
       setIsModalOpen(false);
+    }
+  };
+  
+  const handleDeleteClick = (area: LearningArea) => {
+    setAreaToDelete(area);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (areaToDelete) {
+      deleteLearningArea(areaToDelete.id);
+      setIsDeleteModalOpen(false);
+      setAreaToDelete(null);
     }
   };
 
@@ -42,12 +58,13 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, authUse
         )}
       </div>
       
-      <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
         <table className="min-w-full leading-normal">
           <thead>
             <tr>
               <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Learning Area Name</th>
               <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Credits</th>
+              {authUser.role === 'admin' && <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -59,6 +76,13 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, authUse
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
                   <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{learningArea.credits}</p>
                 </td>
+                {authUser.role === 'admin' && (
+                    <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
+                        <button onClick={() => handleDeleteClick(learningArea)} className="flex items-center text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-semibold text-xs">
+                            <TrashIcon /><span className="ml-1">Delete</span>
+                        </button>
+                    </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -90,6 +114,14 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, authUse
              <button type="submit" className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Add Learning Area</button>
           </div>
         </form>
+      </Modal>
+
+      <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="Confirm Deletion">
+        <p>Are you sure you want to delete the learning area <span className="font-bold">{areaToDelete?.name}</span>? This will also delete all associated grades for all students. This action cannot be undone.</p>
+        <div className="flex justify-end space-x-2 mt-6">
+            <button onClick={() => setIsDeleteModalOpen(false)} className="bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">Cancel</button>
+            <button onClick={confirmDelete} className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors">Delete Learning Area</button>
+        </div>
       </Modal>
     </div>
   );

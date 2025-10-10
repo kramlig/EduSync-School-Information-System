@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ViewType, AuthUser } from '../types';
-import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon, CalendarDaysIcon, BriefcaseIcon, UsersIcon } from './icons';
+import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon, CalendarDaysIcon, BriefcaseIcon, UsersIcon, CogIcon, ClipboardUserIcon } from './icons';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -10,14 +10,16 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, authUser }) => {
   const allNavItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon />, roles: ['admin', 'teacher'] },
-    { id: 'students', label: 'Students', icon: <AcademicCapIcon />, roles: ['admin', 'teacher'] },
-    { id: 'teachers', label: 'Teachers', icon: <BriefcaseIcon />, roles: ['admin'] },
-    { id: 'sections', label: 'Classes', icon: <UsersIcon />, roles: ['admin'] },
+    { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
+    { id: 'students', label: 'Students', icon: <AcademicCapIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
+    { id: 'teachers', label: 'Teachers', icon: <BriefcaseIcon />, roles: ['admin', 'registrar'] },
+    { id: 'sections', label: 'Classes', icon: <UsersIcon />, roles: ['admin', 'registrar'] },
+    { id: 'substitutes', label: 'Substitutes', icon: <ClipboardUserIcon />, roles: ['admin', 'registrar'] },
     { id: 'learningAreas', label: 'Learning Areas', icon: <BookOpenIcon />, roles: ['admin'] },
-    { id: 'grades', label: 'Grades', icon: <ClipboardDocumentListIcon />, roles: ['admin', 'teacher'] },
-    { id: 'coreValues', label: 'Core Values', icon: <HeartIcon />, roles: ['admin', 'teacher'] },
-    { id: 'attendance', label: 'Attendance', icon: <CalendarDaysIcon />, roles: ['admin', 'teacher'] },
+    { id: 'grades', label: 'Grades', icon: <ClipboardDocumentListIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
+    { id: 'coreValues', label: 'Core Values', icon: <HeartIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
+    { id: 'attendance', label: 'Attendance', icon: <CalendarDaysIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
+    { id: 'settings', label: 'Settings', icon: <CogIcon />, roles: ['admin'] },
   ];
   
   const navItems = allNavItems.filter(item => item.roles.includes(authUser.role));
