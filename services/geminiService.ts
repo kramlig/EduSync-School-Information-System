@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import type { Student, LearningArea, Grade, SubGradeRecord } from '../types';
 
 if (!process.env.API_KEY) {
@@ -82,7 +82,6 @@ export const generateStudentReport = async (
   `;
 
   try {
-    // FIX: Use `contents` property for the prompt and access `.text` directly on the response, as per API guidelines.
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
@@ -92,4 +91,69 @@ export const generateStudentReport = async (
     console.error("Error generating student report:", error);
     return "There was an error generating the report. Please check the API configuration and try again.";
   }
+};
+
+
+export type GeneratedLessonPlan = {
+    title: string;
+    objectives: string[];
+    activities: string[];
+    materials: string[];
+    assessment: string[];
+};
+
+export const generateLessonPlan = async (
+    topic: string,
+    gradeLevel: number,
+    objectives: string
+): Promise<GeneratedLessonPlan> => {
+    if (!process.env.API_KEY) {
+      throw new Error("AI features are disabled. API key is missing.");
+    }
+    
+    const prompt = `
+      You are an expert instructional designer creating a lesson plan for an elementary school teacher.
+
+      Instructions:
+      1.  Create a concise and engaging title for the lesson.
+      2.  Based on the user's objectives, generate 2-3 clear, measurable learning objectives.
+      3.  Design 3-4 varied and age-appropriate learning activities. Include a mix of direct instruction, group work, and hands-on activities.
+      4.  List 3-5 necessary materials for the lesson. Be specific (e.g., "Crayons (red, blue, yellow)", not just "Art supplies").
+      5.  Create 2-3 assessment questions or tasks to check for student understanding.
+      6.  Ensure the entire plan is suitable for the specified grade level.
+      7.  Return the output ONLY in the specified JSON format.
+
+      Lesson Details:
+      -   Topic: ${topic}
+      -   Grade Level: ${gradeLevel}
+      -   Teacher's Core Objectives: ${objectives}
+    `;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING, description: "The lesson plan title." },
+                        objectives: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of learning objectives." },
+                        activities: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of learning activities." },
+                        materials: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of required materials." },
+                        assessment: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of assessment questions or tasks." },
+                    },
+                    required: ["title", "objectives", "activities", "materials", "assessment"]
+                },
+            },
+        });
+
+        const jsonStr = response.text.trim();
+        return JSON.parse(jsonStr) as GeneratedLessonPlan;
+
+    } catch (error) {
+        console.error("Error generating lesson plan:", error);
+        throw new Error("There was an error generating the lesson plan. Please try again.");
+    }
 };

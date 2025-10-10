@@ -1,5 +1,4 @@
-export type ViewType = 'dashboard' | 'students' | 'learningAreas' | 'grades' | 'coreValues' | 'attendance' | 'teachers' | 'sections' | 'settings' | 'substitutes' | 'scheduler' | 'gradebook' | 'coreValuesGradebook' | 'assignments';
-import type { SetStateAction } from 'react';
+export type ViewType = 'dashboard' | 'students' | 'learningAreas' | 'grades' | 'coreValues' | 'attendance' | 'teachers' | 'sections' | 'settings' | 'substitutes' | 'scheduler' | 'gradebook' | 'coreValuesGradebook' | 'assignments' | 'lessonPlans' | 'announcements' | 'parents';
 
 export interface Student {
   id: string;
@@ -30,10 +29,17 @@ export interface Teacher {
   password?: string;
 }
 
-// FIX: Updated AuthUser to Omit only 'password' from Teacher.
-// The previous type omitted 'assignments' and 'contactNumber', which are present on the user
-// object after login and are required by some components.
 export type AuthUser = Omit<Teacher, 'password'>;
+
+export interface Parent {
+    id: string;
+    name: string;
+    email: string;
+    password?: string;
+    studentIds: string[];
+}
+
+export type ParentUser = Omit<Parent, 'password'>;
 
 export interface Section {
   id: string;
@@ -134,4 +140,34 @@ export interface StudentAssignmentGrade {
   assignmentId: string;
   studentId: string;
   score: number | null;
+}
+
+export interface LessonResource {
+  name: string;
+  url: string;
+}
+
+export interface LessonPlan {
+  id: string;
+  sectionId: string;
+  learningAreaId: string;
+  date: string; // YYYY-MM-DD
+  title: string;
+  objectives: string[];
+  activities: string[];
+  materials: string[];
+  assessment: string[];
+  resources: LessonResource[];
+  assignmentIds: string[];
+}
+
+export type AnnouncementTarget = 'all' | 'staff' | 'parents' | 'students';
+
+export interface Announcement {
+    id: string;
+    title: string;
+    content: string;
+    authorId: string;
+    date: string; // YYYY-MM-DD
+    target: AnnouncementTarget;
 }

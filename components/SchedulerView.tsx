@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { AuthUser, StudentUser, ClassSchedule, Section, Teacher, LearningArea } from '../types';
+import type { AuthUser, StudentUser, ClassSchedule, Section, ParentUser } from '../types';
 import Modal from './Modal';
 import { TrashIcon } from './icons';
 
@@ -34,9 +34,8 @@ const timeToMinutes = (time: string) => {
 
 const getWeekDates = (date: Date): Date[] => {
     const startOfWeek = new Date(date);
-    // Adjust to Monday
-    const day = startOfWeek.getDay(); // Sunday - 0, Monday - 1, ...
-    const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+    const day = startOfWeek.getDay();
+    const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
     startOfWeek.setDate(diff);
 
     const weekDates: Date[] = [];
@@ -49,15 +48,19 @@ const getWeekDates = (date: Date): Date[] => {
 };
 
 
-const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: AuthUser | StudentUser, type: 'staff' | 'student' }; }> = ({ schoolData, session }) => {
-    const { classSchedules, sections, teachers, learningAreas, addSchedule, updateSchedule, deleteSchedule } = schoolData;
+const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' }; forceStudentId?: string; }> = ({ schoolData, session, forceStudentId }) => {
+    const { classSchedules, sections, teachers, learningAreas, students, addSchedule, updateSchedule, deleteSchedule } = schoolData;
     const isStudentView = session.type === 'student';
+    const isParentView = session.type === 'parent';
     
-    const initialViewType = isStudentView ? 'section' : 'section';
-    const initialSelectedId = isStudentView ? (session.user as StudentUser).sectionId : (sections[0]?.id || null);
+    const getInitialSectionId = () => {
+        if (isStudentView) return (session.user as StudentUser).sectionId;
+        if (isParentView) return students.find(s => s.id === forceStudentId)?.sectionId;
+        return sections[0]?.id || null;
+    };
 
-    const [viewType, setViewType] = useState<'section' | 'teacher'>(initialViewType);
-    const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId || null);
+    const [viewType, setViewType] = useState<'section' | 'teacher'>('section');
+    const [selectedId, setSelectedId] = useState<string | null>(getInitialSectionId());
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalData, setModalData] = useState<Partial<ClassSchedule> & { isEditing?: boolean }>({});
@@ -69,12 +72,18 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
     const weekDates = useMemo(() => getWeekDates(currentDate), [currentDate]);
 
+    useEffect(() => {
+        if (isParentView) {
+            const childSectionId = students.find(s => s.id === forceStudentId)?.sectionId;
+            setSelectedId(childSectionId || null);
+        }
+    }, [forceStudentId, students, isParentView]);
+
     const filteredSchedules = useMemo(() => {
         if (!selectedId) return [];
         if (viewType === 'teacher') {
             return classSchedules.filter(s => s.teacherId === selectedId);
         }
-        // For section view
         const selectedSection = sections.find(s => s.id === selectedId);
         if (!selectedSection) return [];
         
@@ -87,7 +96,7 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     }, [classSchedules, selectedId, viewType, sections]);
     
     const handleCellClick = (day: string, time: string) => {
-        if (isStudentView) return;
+        if (isStudentView || isParentView) return;
         setModalError(null);
         const startTime = time;
         const endTime = `${String(Number(time.split(':')[0]) + 1).padStart(2, '0')}:00`;
@@ -99,16 +108,13 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
             scope: 'section',
         };
         if (viewType === 'section') initialData.sectionId = selectedId!;
-        if (viewType === 'teacher') {
-            initialData.teacherId = selectedId!;
-            // Teachers can only add academic classes for themselves.
-        }
+        if (viewType === 'teacher') initialData.teacherId = selectedId!;
         setModalData(initialData);
         setIsModalOpen(true);
     };
 
     const handleScheduleClick = (schedule: ClassSchedule) => {
-        if (isStudentView) return;
+        if (isStudentView || isParentView) return;
         setModalError(null);
         setModalData({ ...schedule, isEditing: true });
         setIsModalOpen(true);
@@ -118,12 +124,8 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
         e.preventDefault();
         
         const dataToSave: Omit<ClassSchedule, 'id'> = {
-            title: modalData.title!,
-            type: modalData.type!,
-            scope: modalData.scope!,
-            dayOfWeek: modalData.dayOfWeek!,
-            startTime: modalData.startTime!,
-            endTime: modalData.endTime!,
+            title: modalData.title!, type: modalData.type!, scope: modalData.scope!,
+            dayOfWeek: modalData.dayOfWeek!, startTime: modalData.startTime!, endTime: modalData.endTime!,
             sectionId: modalData.scope === 'section' ? modalData.sectionId : undefined,
             gradeLevel: modalData.scope === 'gradeLevel' ? modalData.gradeLevel : undefined,
             learningAreaId: modalData.type === 'academic' ? modalData.learningAreaId : undefined,
@@ -131,48 +133,29 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
         };
         
         if (!dataToSave.title || (dataToSave.type === 'academic' && (!dataToSave.learningAreaId || !dataToSave.teacherId || !dataToSave.sectionId))) {
-            setModalError('Please fill all required fields for the selected event type.');
-            return;
+            setModalError('Please fill all required fields for the selected event type.'); return;
         }
-
         if (dataToSave.startTime >= dataToSave.endTime) {
-            setModalError('End time must be after start time.');
-            return;
+            setModalError('End time must be after start time.'); return;
         }
         
-        let result;
-        if (modalData.isEditing) {
-            result = updateSchedule({ ...dataToSave, id: modalData.id! } as ClassSchedule);
-        } else {
-            result = addSchedule(dataToSave);
-        }
-        
-        if (result.success) {
-            setIsModalOpen(false);
-        } else {
-            setModalError(result.message || 'An unknown error occurred.');
-        }
+        let result = modalData.isEditing ? updateSchedule({ ...dataToSave, id: modalData.id! } as ClassSchedule) : addSchedule(dataToSave);
+        if (result.success) setIsModalOpen(false); else setModalError(result.message || 'An unknown error occurred.');
     };
     
     const handleModalDelete = () => {
-        if (modalData.isEditing && modalData.id) {
-            deleteSchedule(modalData.id);
-            setIsModalOpen(false);
-        }
+        if (modalData.isEditing && modalData.id) { deleteSchedule(modalData.id); setIsModalOpen(false); }
     };
 
     const options = useMemo(() => viewType === 'section' ? sections : teachers, [viewType, sections, teachers]);
     const gradeLevels = useMemo(() => Array.from(new Set(sections.map(s => s.gradeLevel))).sort(), [sections]);
     
     useEffect(() => {
-        if (isStudentView) return;
+        if (isStudentView || isParentView) return;
         const currentSelectionExists = options.some(o => o.id === selectedId);
-        if (!currentSelectionExists && options.length > 0) {
-            setSelectedId(options[0].id);
-        } else if (options.length === 0) {
-            setSelectedId(null);
-        }
-    }, [options, selectedId, isStudentView]);
+        if (!currentSelectionExists && options.length > 0) setSelectedId(options[0].id);
+        else if (options.length === 0) setSelectedId(null);
+    }, [options, selectedId, isStudentView, isParentView]);
     
     useEffect(() => {
         if (modalData.type === 'academic' && modalData.learningAreaId) {
@@ -181,12 +164,14 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
         }
     }, [modalData.type, modalData.learningAreaId, learningAreas]);
 
+    const currentStudent = students.find(s => s.id === forceStudentId);
+    const title = isStudentView ? 'My Class Schedule' : isParentView ? `Schedule for ${currentStudent?.name}` : 'Class Scheduler';
 
     return (
         <div>
-            <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{isStudentView ? 'My Class Schedule' : 'Class Scheduler'}</h1>
+            <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
             <div className="flex flex-wrap items-center gap-4 mb-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm">
-                {!isStudentView && (
+                {!(isStudentView || isParentView) && (
                     <>
                         <div className="flex items-center space-x-2">
                             <label className="font-semibold">View by:</label>
@@ -205,61 +190,41 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                 )}
                  <div className="flex items-center space-x-2">
                     <label htmlFor="date-picker" className="font-semibold">Week of:</label>
-                    <input
-                        type="date"
-                        id="date-picker"
-                        value={currentDate.toISOString().split('T')[0]}
-                        onChange={e => setCurrentDate(new Date(e.target.value))}
-                        className="input-style"
-                    />
+                    <input type="date" id="date-picker" value={currentDate.toISOString().split('T')[0]} onChange={e => setCurrentDate(new Date(e.target.value))} className="input-style"/>
                 </div>
             </div>
 
             <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg p-4 relative grid grid-cols-[auto_1fr] text-sm" style={{gridTemplateRows: `auto repeat(${timeSlots.length}, minmax(60px, 1fr))`}}>
-                {/* Corner */}
                 <div className="sticky top-0 z-10"></div>
-                {/* Days Header */}
                 <div className="col-start-2 grid grid-cols-5 sticky top-0 bg-white dark:bg-slate-800 z-10">
                     {weekDates.map((date, index) => (
                        <div key={days[index]} className="text-center font-bold p-2 border-b border-slate-200 dark:border-slate-700">
                            <div>{days[index]}</div>
-                           <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
-                               {date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                           </div>
+                           <div className="text-xs font-normal text-slate-500 dark:text-slate-400">{date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
                         </div>
                     ))}
                 </div>
-                {/* Time Slots & Grid */}
                 {timeSlots.map((time, index) => (
                     <React.Fragment key={time}>
                         <div className="pr-2 text-right text-xs text-slate-500 dark:text-slate-400 row-start-auto" style={{ gridRow: index + 2 }}>{time}</div>
                         <div className="col-start-2 grid grid-cols-5 border-t border-slate-200 dark:border-slate-700">
                            {weekDates.map((_date, dayIndex) => (
-                               <div key={`${days[dayIndex]}-${time}`} onClick={() => handleCellClick(days[dayIndex], time)} className={`border-l border-slate-200 dark:border-slate-700 h-full ${!isStudentView && 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}></div>
+                               <div key={`${days[dayIndex]}-${time}`} onClick={() => handleCellClick(days[dayIndex], time)} className={`border-l border-slate-200 dark:border-slate-700 h-full ${!(isStudentView || isParentView) && 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}></div>
                            ))}
                         </div>
                     </React.Fragment>
                 ))}
                 
-                {/* Rendered Schedules */}
                 {filteredSchedules.map(schedule => {
-                    const startMinutes = timeToMinutes(schedule.startTime);
-                    const endMinutes = timeToMinutes(schedule.endTime);
-                    const durationMinutes = endMinutes - startMinutes;
-                    
-                    const dayIndex = days.indexOf(schedule.dayOfWeek);
-                    if (dayIndex === -1) return null;
-                    
-                    const topOffset = (startMinutes - timeToMinutes(timeSlots[0])) / 60;
-                    const height = durationMinutes / 60;
-                    
-                    const section = sections.find(s => s.id === schedule.sectionId);
-                    const teacher = teachers.find(t => t.id === schedule.teacherId);
+                    const startMinutes = timeToMinutes(schedule.startTime); const endMinutes = timeToMinutes(schedule.endTime); const durationMinutes = endMinutes - startMinutes;
+                    const dayIndex = days.indexOf(schedule.dayOfWeek); if (dayIndex === -1) return null;
+                    const topOffset = (startMinutes - timeToMinutes(timeSlots[0])) / 60; const height = durationMinutes / 60;
+                    const section = sections.find(s => s.id === schedule.sectionId); const teacher = teachers.find(t => t.id === schedule.teacherId);
                     
                     return (
                         <div key={schedule.id}
                             onClick={() => handleScheduleClick(schedule)}
-                            className={`absolute p-2 rounded-lg border ${!isStudentView && 'cursor-pointer'} overflow-hidden ${getScheduleColor(schedule)}`}
+                            className={`absolute p-2 rounded-lg border ${!(isStudentView || isParentView) && 'cursor-pointer'} overflow-hidden ${getScheduleColor(schedule)}`}
                             style={{
                                 top: `calc(2.5rem + (${topOffset} / ${timeSlots.length}) * (100% - 2.5rem))`,
                                 left: `calc(4rem + (${dayIndex} / 5) * (100% - 4rem))`,

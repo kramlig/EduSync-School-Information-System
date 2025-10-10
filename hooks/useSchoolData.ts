@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, SetStateAction } from 'react';
-import type { Student, LearningArea, Grade, SubGradeRecord, CoreValue, CoreValueGrade, CoreValueMarking, AttendanceRecord, Teacher, Section, TeacherAssignment, AuthUser, SchoolSettings, SubstituteAssignment, ClassSchedule, StudentUser, Assignment, StudentAssignmentGrade } from '../types';
+import type { Student, LearningArea, Grade, SubGradeRecord, CoreValue, CoreValueGrade, CoreValueMarking, AttendanceRecord, Teacher, Section, TeacherAssignment, AuthUser, SchoolSettings, SubstituteAssignment, ClassSchedule, StudentUser, Assignment, StudentAssignmentGrade, LessonPlan, Parent, ParentUser, Announcement } from '../types';
 
 const MOCK_LEARNING_AREAS: LearningArea[] = [
   { id: 'la1', name: 'Mother Tongue Based (MTB)', credits: 3 },
@@ -37,6 +37,12 @@ const MOCK_STUDENTS: Student[] = [
   { id: 's7', name: 'George Lee', email: 'george.l@school.edu', enrollmentDate: '2023-09-01', lrn: '789012345678', dateOfBirth: '2014-04-05', sex: 'Male', sectionId: 'sec4', password: 'student123' },
 ];
 
+const MOCK_PARENTS: Parent[] = [
+    { id: 'p1', name: 'Sarah Johnson', email: 's.johnson@family.com', password: 'parent123', studentIds: ['s1'] },
+    { id: 'p2', name: 'Michael Williams', email: 'm.williams@family.com', password: 'parent123', studentIds: ['s2'] },
+    { id: 'p3', name: 'Linda Brown', email: 'l.brown@family.com', password: 'parent123', studentIds: ['s3', 's5'] }, // Parent with two children
+];
+
 const MOCK_CORE_VALUES: CoreValue[] = [
   { id: 'cv1', name: 'Maka-Diyos', behaviors: ["Expresses one's spiritual beliefs while respecting the spiritual beliefs of others", "Shows adherence to ethical principles by upholding truth"] },
   { id: 'cv2', name: 'Makatao', behaviors: ["Is sensitive to individual, social, and cultural differences", "Demonstrates contributions toward solidarity"] },
@@ -67,6 +73,22 @@ const MOCK_SCHEDULES: ClassSchedule[] = [
   { id: 'cs5', title: 'Flag Ceremony', type: 'extracurricular', scope: 'all', dayOfWeek: 'Monday', startTime: '07:30', endTime: '08:00' },
   { id: 'cs6', title: 'AP', type: 'academic', scope: 'section', sectionId: 'sec3', learningAreaId: 'la5', teacherId: 't3', dayOfWeek: 'Wednesday', startTime: '09:00', endTime: '10:00' },
   { id: 'cs7', title: 'Lunch', type: 'extracurricular', scope: 'all', dayOfWeek: 'Friday', startTime: '12:00', endTime: '13:00' },
+];
+
+const MOCK_ASSIGNMENTS: Assignment[] = [
+    { id: 'as1', sectionId: 'sec1', learningAreaId: 'la4', title: 'Q1 - Addition Worksheet', description: 'Complete the worksheet on two-digit addition.', totalPoints: 20, dueDate: '2023-09-30' },
+    { id: 'as2', sectionId: 'sec1', learningAreaId: 'la3', title: 'Q1 - Book Report: "Charlotte\'s Web"', description: 'Write a one-page summary and review.', totalPoints: 50, dueDate: '2023-10-15' },
+    { id: 'as3', sectionId: 'sec2', learningAreaId: 'la8', title: 'Q2 - Plant Growth Experiment', description: 'Observe and record plant growth over two weeks.', totalPoints: 100, dueDate: '2023-11-20' },
+];
+
+const MOCK_LESSON_PLANS: LessonPlan[] = [
+    { id: 'lp1', sectionId: 'sec1', learningAreaId: 'la4', date: '2023-09-25', title: 'Introduction to Two-Digit Addition', objectives: ['Understand place value', 'Add two-digit numbers without regrouping'], activities: ['Whiteboard examples', 'Worksheet practice'], materials: ['Whiteboard', 'Markers', 'Worksheet A'], assessment: ['Check worksheet for accuracy'], resources: [], assignmentIds: ['as1'] },
+    { id: 'lp2', sectionId: 'sec1', learningAreaId: 'la3', date: '2023-10-02', title: 'Discussing "Charlotte\'s Web"', objectives: ['Identify main characters', 'Summarize the plot'], activities: ['Class discussion', 'Begin book report draft'], materials: ['Copy of "Charlotte\'s Web"'], assessment: ['Oral questioning on plot points'], resources: [{name: 'Book summary online', url: 'http://example.com'}], assignmentIds: ['as2'] },
+];
+
+const MOCK_ANNOUNCEMENTS: Announcement[] = [
+    { id: 'an1', title: 'Parent-Teacher Conference', content: 'The Q2 Parent-Teacher Conference will be held on December 15th. Please schedule an appointment with your child\'s adviser.', authorId: 't2', date: '2023-11-28', target: 'parents' },
+    { id: 'an2', title: 'School Holiday: National Heroes Day', content: 'There will be no classes on November 30th in observance of National Heroes Day.', authorId: 't2', date: '2023-11-25', target: 'all' },
 ];
 
 // Data Generation
@@ -125,12 +147,6 @@ const MOCK_ATTENDANCE_RECORDS: AttendanceRecord[] = MOCK_STUDENTS.map(student =>
   return record;
 });
 
-const MOCK_ASSIGNMENTS: Assignment[] = [
-    { id: 'as1', sectionId: 'sec1', learningAreaId: 'la4', title: 'Q1 - Addition Worksheet', description: 'Complete the worksheet on two-digit addition.', totalPoints: 20, dueDate: '2023-09-30' },
-    { id: 'as2', sectionId: 'sec1', learningAreaId: 'la3', title: 'Q1 - Book Report: "Charlotte\'s Web"', description: 'Write a one-page summary and review.', totalPoints: 50, dueDate: '2023-10-15' },
-    { id: 'as3', sectionId: 'sec2', learningAreaId: 'la8', title: 'Q2 - Plant Growth Experiment', description: 'Observe and record plant growth over two weeks.', totalPoints: 100, dueDate: '2023-11-20' },
-];
-
 const MOCK_STUDENT_ASSIGNMENT_GRADES: StudentAssignmentGrade[] = MOCK_STUDENTS
     .filter(s => s.sectionId === 'sec1')
     .flatMap(student => [
@@ -163,33 +179,41 @@ export const useSchoolData = (isOnline: boolean) => {
   const [coreValueGrades, setCoreValueGrades] = useLocalStorage<CoreValueGrade[]>('coreValueGrades', MOCK_CORE_VALUE_GRADES);
   const [attendanceRecords, setAttendanceRecords] = useLocalStorage<AttendanceRecord[]>('attendance', MOCK_ATTENDANCE_RECORDS);
   const [teachers, setTeachers] = useLocalStorage<Teacher[]>('teachers', MOCK_TEACHERS);
+  const [parents, setParents] = useLocalStorage<Parent[]>('parents', MOCK_PARENTS);
   const [sections, setSections] = useLocalStorage<Section[]>('sections', MOCK_SECTIONS);
   const [settings, setSettings] = useLocalStorage<SchoolSettings>('settings', MOCK_SETTINGS);
   const [substituteAssignments, setSubstituteAssignments] = useLocalStorage<SubstituteAssignment[]>('substituteAssignments', MOCK_SUBSTITUTE_ASSIGNMENTS);
   const [classSchedules, setClassSchedules] = useLocalStorage<ClassSchedule[]>('classSchedules', MOCK_SCHEDULES);
   const [assignments, setAssignments] = useLocalStorage<Assignment[]>('assignments', MOCK_ASSIGNMENTS);
   const [studentAssignmentGrades, setStudentAssignmentGrades] = useLocalStorage<StudentAssignmentGrade[]>('studentAssignmentGrades', MOCK_STUDENT_ASSIGNMENT_GRADES);
+  const [lessonPlans, setLessonPlans] = useLocalStorage<LessonPlan[]>('lessonPlans', MOCK_LESSON_PLANS);
+  const [announcements, setAnnouncements] = useLocalStorage<Announcement[]>('announcements', MOCK_ANNOUNCEMENTS);
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     if (isOnline) { setIsSyncing(true); const timer = setTimeout(() => { console.log("Data synced with server."); setIsSyncing(false); }, 1500); return () => clearTimeout(timer); }
   }, [isOnline]);
 
-  const login = useCallback(async (email: string, password: string, type: 'staff' | 'student'): Promise<{ user: AuthUser | StudentUser; type: 'staff' | 'student' } | null> => {
+  const login = useCallback(async (email: string, password: string, type: 'staff' | 'student' | 'parent'): Promise<{ user: AuthUser | StudentUser | ParentUser; type: 'staff' | 'student' | 'parent' } | null> => {
     const lowerEmail = email.toLowerCase();
     if (type === 'staff') {
         const user = teachers.find(t => t.email.toLowerCase() === lowerEmail);
         if (user && user.password === password) {
             const { password: _, ...authUser } = user; return { user: authUser, type: 'staff' };
         }
-    } else {
+    } else if (type === 'student') {
         const user = students.find(s => s.email.toLowerCase() === lowerEmail);
         if (user && user.password === password) {
             const { password: _, ...studentUser } = user; return { user: studentUser, type: 'student' };
         }
+    } else { // parent
+        const user = parents.find(p => p.email.toLowerCase() === lowerEmail);
+        if (user && user.password === password) {
+            const { password: _, ...parentUser } = user; return { user: parentUser, type: 'parent' };
+        }
     }
     return null;
-  }, [teachers, students]);
+  }, [teachers, students, parents]);
 
   const addStudent = useCallback((student: Omit<Student, 'id' | 'enrollmentDate'>): { success: boolean; message?: string } => {
     if (student.lrn && !/^\d{12}$/.test(student.lrn)) { return { success: false, message: 'Invalid LRN. The LRN must be a 12-digit number.' }; }
@@ -198,10 +222,41 @@ export const useSchoolData = (isOnline: boolean) => {
   }, [setStudents]);
   
   const updateStudent = useCallback((updatedStudent: Student) => setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s)), [setStudents]);
-  const deleteStudent = useCallback((studentId: string) => { setStudents(prev => prev.filter(s => s.id !== studentId)); setGrades(prev => prev.filter(g => g.studentId !== studentId)); setCoreValueGrades(prev => prev.filter(cvg => cvg.studentId !== studentId)); setAttendanceRecords(prev => prev.filter(ar => ar.studentId !== studentId)); setStudentAssignmentGrades(prev => prev.filter(sg => sg.studentId !== studentId)); }, [setStudents, setGrades, setCoreValueGrades, setAttendanceRecords, setStudentAssignmentGrades]);
+  const deleteStudent = useCallback((studentId: string) => { setStudents(prev => prev.filter(s => s.id !== studentId)); setGrades(prev => prev.filter(g => g.studentId !== studentId)); setCoreValueGrades(prev => prev.filter(cvg => cvg.studentId !== studentId)); setAttendanceRecords(prev => prev.filter(ar => ar.studentId !== studentId)); setStudentAssignmentGrades(prev => prev.filter(sg => sg.studentId !== studentId)); setParents(prev => prev.map(p => ({ ...p, studentIds: p.studentIds.filter(id => id !== studentId) }))); }, [setStudents, setGrades, setCoreValueGrades, setAttendanceRecords, setStudentAssignmentGrades, setParents]);
   
+  const addParent = useCallback((parent: Omit<Parent, 'id'>) => {
+    const newParent: Parent = { ...parent, id: `p${Date.now()}`, password: 'parent123' };
+    setParents(prev => [...prev, newParent]);
+  }, [setParents]);
+  
+  const updateParent = useCallback((updatedParent: Parent) => {
+    setParents(prev => prev.map(p => p.id === updatedParent.id ? updatedParent : p));
+  }, [setParents]);
+
+  const deleteParent = useCallback((parentId: string) => {
+    setParents(prev => prev.filter(p => p.id !== parentId));
+  }, [setParents]);
+
+  const assignStudentToParent = useCallback((parentId: string, studentId: string) => {
+    setParents(prev => prev.map(p => {
+      if (p.id === parentId && !p.studentIds.includes(studentId)) {
+        return { ...p, studentIds: [...p.studentIds, studentId] };
+      }
+      return p;
+    }));
+  }, [setParents]);
+
+  const unassignStudentFromParent = useCallback((parentId: string, studentId: string) => {
+    setParents(prev => prev.map(p => {
+      if (p.id === parentId) {
+        return { ...p, studentIds: p.studentIds.filter(id => id !== studentId) };
+      }
+      return p;
+    }));
+  }, [setParents]);
+
   const addLearningArea = useCallback((learningArea: Omit<LearningArea, 'id'>) => { let newLearningArea: LearningArea = { ...learningArea, id: `la${Date.now()}` }; if (learningArea.name.toUpperCase() === 'MAPEH') { newLearningArea = { ...newLearningArea, isComposite: true, subSubjects: ['Music', 'Arts', 'PE', 'Health'], }; } setLearningAreas(prev => [...prev, newLearningArea]); }, [setLearningAreas]);
-  const deleteLearningArea = useCallback((learningAreaId: string) => { setLearningAreas(prev => prev.filter(la => la.id !== learningAreaId)); setGrades(prev => prev.filter(g => g.learningAreaId !== learningAreaId)); setAssignments(prev => prev.filter(a => a.learningAreaId !== learningAreaId)); }, [setLearningAreas, setGrades, setAssignments]);
+  const deleteLearningArea = useCallback((learningAreaId: string) => { setLearningAreas(prev => prev.filter(la => la.id !== learningAreaId)); setGrades(prev => prev.filter(g => g.learningAreaId !== learningAreaId)); setAssignments(prev => prev.filter(a => a.learningAreaId !== learningAreaId)); setLessonPlans(prev => prev.filter(lp => lp.learningAreaId !== learningAreaId)); }, [setLearningAreas, setGrades, setAssignments, setLessonPlans]);
 
   const addTeacher = useCallback((teacher: Omit<Teacher, 'id'>) => { const newTeacher: Teacher = { ...teacher, id: `t${Date.now()}`, password: 'teacher123' }; setTeachers(prev => { let newTeachers = [...prev]; if (newTeacher.role === 'principal') { newTeachers = newTeachers.map(t => t.role === 'principal' ? { ...t, role: 'teacher' } : t); } return [...newTeachers, newTeacher]; }); }, [setTeachers]);
   const updateTeacher = useCallback((updatedTeacher: Teacher) => { setTeachers(prev => { let newTeachers = prev.map(t => t.id === updatedTeacher.id ? updatedTeacher : t); if (updatedTeacher.role === 'principal') { newTeachers = newTeachers.map(t => (t.role === 'principal' && t.id !== updatedTeacher.id) ? { ...t, role: 'teacher' } : t); } return newTeachers; }); }, [setTeachers]);
@@ -209,7 +264,7 @@ export const useSchoolData = (isOnline: boolean) => {
   
   const addSection = useCallback((section: Omit<Section, 'id'>) => { const newSection: Section = { ...section, id: `sec${Date.now()}` }; setSections(prev => [...prev, newSection]); }, [setSections]);
   const updateSection = useCallback((updatedSection: Section) => setSections(prev => prev.map(s => s.id === updatedSection.id ? updatedSection : s)), [setSections]);
-  const deleteSection = useCallback((sectionId: string) => { setSections(prev => prev.filter(s => s.id !== sectionId)); setStudents(prev => prev.map(s => s.sectionId === sectionId ? {...s, sectionId: undefined} : s)); setSubstituteAssignments(prev => prev.filter(sub => sub.sectionId !== sectionId)); setAssignments(prev => prev.filter(a => a.sectionId !== sectionId)); }, [setSections, setStudents, setSubstituteAssignments, setAssignments]);
+  const deleteSection = useCallback((sectionId: string) => { setSections(prev => prev.filter(s => s.id !== sectionId)); setStudents(prev => prev.map(s => s.sectionId === sectionId ? {...s, sectionId: undefined} : s)); setSubstituteAssignments(prev => prev.filter(sub => sub.sectionId !== sectionId)); setAssignments(prev => prev.filter(a => a.sectionId !== sectionId)); setLessonPlans(prev => prev.filter(lp => lp.sectionId !== sectionId)); }, [setSections, setStudents, setSubstituteAssignments, setAssignments, setLessonPlans]);
 
   const addSubstituteAssignment = useCallback((assignment: Omit<SubstituteAssignment, 'id'>) => { const newAssignment: SubstituteAssignment = { ...assignment, id: `sub${Date.now()}` }; setSubstituteAssignments(prev => [...prev, newAssignment]); }, [setSubstituteAssignments]);
   const updateSubstituteAssignment = useCallback((updatedAssignment: SubstituteAssignment) => setSubstituteAssignments(prev => prev.map(sub => sub.id === updatedAssignment.id ? updatedAssignment : sub)), [setSubstituteAssignments]);
@@ -230,8 +285,15 @@ export const useSchoolData = (isOnline: boolean) => {
   const deleteAssignment = useCallback((assignmentId: string) => { setAssignments(prev => prev.filter(a => a.id !== assignmentId)); setStudentAssignmentGrades(prev => prev.filter(sg => sg.assignmentId !== assignmentId)); }, [setAssignments, setStudentAssignmentGrades]);
   const updateStudentAssignmentScore = useCallback((studentId: string, assignmentId: string, score: number | null) => { setStudentAssignmentGrades(prev => { const newGrades = [...prev]; const gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.assignmentId === assignmentId); if (gradeIndex > -1) { newGrades[gradeIndex] = { ...newGrades[gradeIndex], score }; } else { newGrades.push({ studentId, assignmentId, score }); } return newGrades; }); }, [setStudentAssignmentGrades]);
 
+  const addLessonPlan = useCallback((lessonPlan: Omit<LessonPlan, 'id'>) => { const newPlan: LessonPlan = { ...lessonPlan, id: `lp${Date.now()}`}; setLessonPlans(prev => [...prev, newPlan]); }, [setLessonPlans]);
+  const updateLessonPlan = useCallback((updatedPlan: LessonPlan) => { setLessonPlans(prev => prev.map(lp => lp.id === updatedPlan.id ? updatedPlan : lp)); }, [setLessonPlans]);
+  const deleteLessonPlan = useCallback((lessonPlanId: string) => { setLessonPlans(prev => prev.filter(lp => lp.id !== lessonPlanId)); }, [setLessonPlans]);
 
-  return { students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, sections, settings, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, login, addStudent, updateStudent, deleteStudent, addLearningArea, deleteLearningArea, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, updateGrade, updateCoreValueGrade, updateAttendance, updateSettings, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addSchedule, updateSchedule, deleteSchedule, addAssignment, updateAssignment, deleteAssignment, updateStudentAssignmentScore, isSyncing, loading: false, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG };
+  const addAnnouncement = useCallback((announcement: Omit<Announcement, 'id'>) => { const newAnnouncement: Announcement = { ...announcement, id: `an${Date.now()}`}; setAnnouncements(prev => [newAnnouncement, ...prev]); }, [setAnnouncements]);
+  const updateAnnouncement = useCallback((updatedAnnouncement: Announcement) => { setAnnouncements(prev => prev.map(an => an.id === updatedAnnouncement.id ? updatedAnnouncement : an)); }, [setAnnouncements]);
+  const deleteAnnouncement = useCallback((announcementId: string) => { setAnnouncements(prev => prev.filter(an => an.id !== announcementId)); }, [setAnnouncements]);
+
+  return { students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements, login, addStudent, updateStudent, deleteStudent, addLearningArea, deleteLearningArea, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, updateGrade, updateCoreValueGrade, updateAttendance, updateSettings, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addSchedule, updateSchedule, deleteSchedule, addAssignment, updateAssignment, deleteAssignment, updateStudentAssignmentScore, addLessonPlan, updateLessonPlan, deleteLessonPlan, addAnnouncement, updateAnnouncement, deleteAnnouncement, isSyncing, loading: false, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent };
 };
 
 export type SchoolDataHook = ReturnType<typeof useSchoolData>;

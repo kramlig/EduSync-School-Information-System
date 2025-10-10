@@ -1,19 +1,21 @@
 import React from 'react';
-import type { ViewType, AuthUser, StudentUser } from '../types';
-import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon, CalendarDaysIcon, BriefcaseIcon, UsersIcon, CogIcon, ClipboardUserIcon, CalendarIcon, TableCellsIcon, ClipboardCheckIcon, ClipboardDocumentCheckIcon } from './icons';
+import type { ViewType, AuthUser, StudentUser, ParentUser } from '../types';
+import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon, CalendarDaysIcon, BriefcaseIcon, UsersIcon, CogIcon, ClipboardUserIcon, CalendarIcon, TableCellsIcon, ClipboardCheckIcon, ClipboardDocumentCheckIcon, ClipboardDocumentIcon, MegaphoneIcon, IdentificationIcon } from './icons';
 
 interface SidebarProps {
   currentView: ViewType;
   setView: (view: ViewType) => void;
-  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
+  session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, session }) => {
   
   const staffNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
+    { id: 'announcements', label: 'Announcements', icon: <MegaphoneIcon />, roles: ['admin', 'principal'] },
     { id: 'students', label: 'Students', icon: <AcademicCapIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'teachers', label: 'Teachers', icon: <BriefcaseIcon />, roles: ['admin', 'registrar'] },
+    { id: 'parents', label: 'Parents', icon: <IdentificationIcon />, roles: ['admin', 'registrar'] },
     { id: 'sections', label: 'Classes', icon: <UsersIcon />, roles: ['admin', 'registrar'] },
     { id: 'scheduler', label: 'Scheduler', icon: <CalendarIcon />, roles: ['admin', 'principal', 'registrar'] },
     { id: 'substitutes', label: 'Substitutes', icon: <ClipboardUserIcon />, roles: ['admin', 'registrar'] },
@@ -21,6 +23,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, session }) => {
     { id: 'grades', label: 'Grades', icon: <ClipboardDocumentListIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'gradebook', label: 'Gradebook', icon: <TableCellsIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'assignments', label: 'Assignments', icon: <ClipboardDocumentCheckIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
+    { id: 'lessonPlans', label: 'Lesson Plans', icon: <ClipboardDocumentIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'coreValues', label: 'Core Values', icon: <HeartIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'coreValuesGradebook', label: 'Core Values Gradebook', icon: <ClipboardCheckIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'attendance', label: 'Attendance', icon: <CalendarDaysIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
@@ -34,13 +37,24 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, session }) => {
       { id: 'attendance', label: 'My Attendance', icon: <CalendarDaysIcon /> },
       { id: 'scheduler', label: 'My Schedule', icon: <CalendarIcon /> },
   ];
+
+  const parentNavItems = [
+      { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon /> },
+      { id: 'announcements', label: 'Announcements', icon: <MegaphoneIcon /> },
+      { id: 'grades', label: 'Grades', icon: <ClipboardDocumentListIcon /> },
+      { id: 'coreValues', label: 'Core Values', icon: <HeartIcon /> },
+      { id: 'attendance', label: 'Attendance', icon: <CalendarDaysIcon /> },
+      { id: 'scheduler', label: 'Schedule', icon: <CalendarIcon /> },
+  ];
   
   let navItems;
   if (session.type === 'staff') {
       const userRole = (session.user as AuthUser).role;
       navItems = staffNavItems.filter(item => item.roles.includes(userRole));
-  } else {
+  } else if (session.type === 'student') {
       navItems = studentNavItems;
+  } else {
+      navItems = parentNavItems;
   }
 
   return (
