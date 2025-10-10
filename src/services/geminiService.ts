@@ -1,20 +1,18 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { Student, LearningArea, Grade, SubGradeRecord } from '../types';
 
-// FIX: Use process.env.API_KEY as per Gemini API guidelines. This also resolves the error on import.meta.env.
-const apiKey = process.env.API_KEY;
-
-if (!apiKey) {
-  // FIX: Update warning message to reflect the correct environment variable.
+if (!process.env.API_KEY) {
+  // A check to ensure the API key is available. 
+  // In a real app, this would be handled more gracefully.
   console.warn("API_KEY environment variable not set. Gemini features will be disabled.");
 }
 
-const ai = new GoogleGenAI({ apiKey: apiKey! });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
 const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): number | undefined => {
   if (grade === undefined) return undefined;
   if (typeof grade === 'number') return grade;
-  // FIX: Added a filter to ensure subGrades is an array of numbers, resolving type errors on lines 17 and 18.
+  // FIX: Filter values to ensure they are numbers, which helps TypeScript correctly infer the type of subGrades as number[] and prevents errors in the reduce function.
   const subGrades = Object.values(grade).filter(g => typeof g === 'number');
   if (subGrades.length === 0) return undefined;
   const total = subGrades.reduce((acc, val) => acc + val, 0);
@@ -26,7 +24,7 @@ export const generateStudentReport = async (
   grades: Grade[],
   learningAreas: LearningArea[]
 ): Promise<string> => {
-  if (!apiKey) {
+  if (!process.env.API_KEY) {
     return Promise.resolve("AI features are disabled. API key is missing.");
   }
 
@@ -110,7 +108,7 @@ export const generateLessonPlan = async (
     gradeLevel: number,
     objectives: string
 ): Promise<GeneratedLessonPlan> => {
-    if (!apiKey) {
+    if (!process.env.API_KEY) {
       throw new Error("AI features are disabled. API key is missing.");
     }
     
