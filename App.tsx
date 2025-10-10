@@ -96,6 +96,7 @@ const App: React.FC = () => {
         case 'coreValues': return <CoreValuesView schoolData={schoolData} session={studentSession} />;
         case 'attendance': return <AttendanceView schoolData={schoolData} session={studentSession} />;
         case 'scheduler': return <SchedulerView schoolData={schoolData} session={studentSession} />;
+        case 'assignments': return <AssignmentsView schoolData={schoolData} session={studentSession} />;
         case 'dashboard': default: return <StudentDashboard schoolData={schoolData} session={studentSession} />;
       }
     }
@@ -109,6 +110,7 @@ const App: React.FC = () => {
         case 'coreValues': return <CoreValuesView schoolData={schoolData} session={parentSession} forceStudentId={selectedChildId} />;
         case 'attendance': return <AttendanceView schoolData={schoolData} session={parentSession} forceStudentId={selectedChildId} />;
         case 'scheduler': return <SchedulerView schoolData={schoolData} session={parentSession} forceStudentId={selectedChildId} />;
+        case 'assignments': return <AssignmentsView schoolData={schoolData} session={parentSession} forceStudentId={selectedChildId} />;
         case 'announcements': return <AnnouncementsView schoolData={schoolData} session={parentSession} />;
         case 'dashboard': default: return <ParentDashboard schoolData={schoolData} session={parentSession} />;
       }
