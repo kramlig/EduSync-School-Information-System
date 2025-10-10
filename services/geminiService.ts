@@ -12,7 +12,9 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): number | undefined => {
   if (grade === undefined) return undefined;
   if (typeof grade === 'number') return grade;
-  const subGrades = Object.values(grade);
+  // FIX: In strict mode, Object.values on a record can produce `unknown[]`.
+  // Filtering for numbers ensures `subGrades` is correctly typed as `number[]`.
+  const subGrades = Object.values(grade).filter(g => typeof g === 'number');
   if (subGrades.length === 0) return undefined;
   const total = subGrades.reduce((acc, val) => acc + val, 0);
   return Math.round(total / subGrades.length);

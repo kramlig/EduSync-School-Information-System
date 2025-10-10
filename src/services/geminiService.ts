@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { Student, LearningArea, Grade, SubGradeRecord } from '../types';
+import type { Student, LearningArea, Grade, SubGradeRecord } from 'types';
 
 if (!process.env.API_KEY) {
   // A check to ensure the API key is available. 
@@ -12,7 +12,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): number | undefined => {
   if (grade === undefined) return undefined;
   if (typeof grade === 'number') return grade;
-  // FIX: Filter values to ensure they are numbers. This helps TypeScript correctly infer the type of subGrades as number[] and prevents errors in the reduce function.
+  // FIX: The error occurs because Object.values(grade) is inferred as unknown[], making arithmetic operations invalid.
+  // By filtering for numbers, we ensure TypeScript correctly infers `subGrades` as `number[]`.
   const subGrades = Object.values(grade).filter(g => typeof g === 'number');
   if (subGrades.length === 0) return undefined;
   const total = subGrades.reduce((acc, val) => acc + val, 0);
