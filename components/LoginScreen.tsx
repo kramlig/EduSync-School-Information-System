@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import type { AuthUser, StudentUser } from '../types';
+import type { AuthUser, StudentUser, ParentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 
 interface LoginScreenProps {
-  onLogin: (session: { user: AuthUser | StudentUser; type: 'staff' | 'student' }) => void;
+  onLogin: (session: { user: AuthUser | StudentUser | ParentUser; type: 'staff' | 'student' | 'parent' }) => void;
   loginFn: SchoolDataHook['login'];
 }
 
@@ -12,7 +12,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginFn }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [loginType, setLoginType] = useState<'staff' | 'student'>('staff');
+  const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,13 +50,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginFn }) => {
                     onClick={() => setLoginType('staff')}
                     className={`flex-1 py-2 text-sm font-semibold text-center transition-colors ${loginType === 'staff' ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
                 >
-                    Staff Login
+                    Staff
                 </button>
                 <button 
                     onClick={() => setLoginType('student')}
                     className={`flex-1 py-2 text-sm font-semibold text-center transition-colors ${loginType === 'student' ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
                 >
-                    Student Login
+                    Student
+                </button>
+                 <button 
+                    onClick={() => setLoginType('parent')}
+                    className={`flex-1 py-2 text-sm font-semibold text-center transition-colors ${loginType === 'parent' ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+                >
+                    Parent
                 </button>
             </div>
         </div>
@@ -93,7 +99,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginFn }) => {
          <div className="text-center text-xs text-slate-500 dark:text-slate-400">
             <p className="font-semibold">Demo Credentials:</p>
             <p>Admin: <span className="font-mono">admin@school.edu</span> / <span className="font-mono">admin123</span></p>
-            <p>Student: <span className="font-mono">alice.j@school.edu</span> / <span className="font-mono">student123</span></p>
+            <p>Parent: <span className="font-mono">s.johnson@family.com</span> / <span className="font-mono">parent123</span></p>
          </div>
       </div>
     </div>

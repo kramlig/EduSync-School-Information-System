@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { Student, Grade, LearningArea, SubGradeRecord, AuthUser, StudentUser } from '../types';
+import type { Student, Grade, LearningArea, SubGradeRecord, AuthUser, StudentUser, ParentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { generateStudentReport } from '../services/geminiService';
 import Modal from './Modal';
@@ -9,7 +9,8 @@ import PrintableReport from './PrintableReport';
 
 interface GradesViewProps {
   schoolData: SchoolDataHook;
-  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
+  session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
+  forceStudentId?: string; // For parent view
 }
 
 const getGradeColor = (gradeValue: number) => {
@@ -189,10 +190,13 @@ const StudentGradeDetails: React.FC<{
 };
 
 
-const GradesView: React.FC<GradesViewProps> = ({ schoolData, session }) => {
+const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStudentId }) => {
   const { students, grades, learningAreas, sections, substituteAssignments } = schoolData;
   const isStudentView = session.type === 'student';
-  const initialExpanded = isStudentView ? new Set([session.user.id]) : new Set<string>();
+  const isParentView = session.type === 'parent';
+
+  const initialStudentId = isStudentView ? session.user.id : (isParentView ? forceStudentId : null);
+  const initialExpanded = initialStudentId ? new Set([initialStudentId]) : new Set<string>();
 
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(initialExpanded);
   const [searchQuery, setSearchQuery] = useState('');
@@ -200,42 +204,34 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session }) => {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportContent, setReportContent] = useState('');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStudentForAction, setSelectedStudentForAction] = useState<Student | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   
-  const isReadOnly = isStudentView || (session.user as AuthUser).role === 'principal';
+  const isReadOnly = isStudentView || isParentView || (session.user as AuthUser).role === 'principal';
 
   const visibleStudents = useMemo(() => {
-    if (isStudentView) {
-      return students.filter(s => s.id === session.user.id);
-    }
-    
+    if (isStudentView) return students.filter(s => s.id === session.user.id);
+    if (isParentView) return students.filter(s => s.id === forceStudentId);
+
     const authUser = session.user as AuthUser;
-    if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
-      return students;
-    }
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) return students;
     
     const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
     const today = new Date().toISOString().split('T')[0];
     const activeSubAssignments = substituteAssignments.filter(sub => 
-      sub.teacherId === authUser.id &&
-      today >= sub.startDate &&
-      today <= sub.endDate
+      sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate
     );
 
     const authorizedSectionIds = new Set<string>();
-    if (teacherAdviserSection) {
-      authorizedSectionIds.add(teacherAdviserSection.id);
-    }
+    if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
     activeSubAssignments.forEach(sub => authorizedSectionIds.add(sub.sectionId));
     
     if (authorizedSectionIds.size === 0) return [];
-    
     return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
-  }, [students, sections, substituteAssignments, session]);
+  }, [students, sections, substituteAssignments, session, forceStudentId]);
 
   const toggleStudentExpansion = (studentId: string) => {
-    if (isStudentView) return;
+    if (isStudentView || isParentView) return;
     setExpandedStudents(prev => {
       const newSet = new Set(prev);
       if (newSet.has(studentId)) {
@@ -248,7 +244,7 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session }) => {
   };
 
   const handleGenerateReport = async (student: Student) => {
-    setSelectedStudent(student);
+    setSelectedStudentForAction(student);
     setIsReportModalOpen(true);
     setIsGeneratingReport(true);
     const report = await generateStudentReport(student, grades, learningAreas);
@@ -257,22 +253,24 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session }) => {
   };
 
   const handlePrintReport = (student: Student) => {
-    setSelectedStudent(student);
+    setSelectedStudentForAction(student);
     setIsPrintModalOpen(true);
   };
   
-  const filteredStudents = isStudentView
+  const filteredStudents = (isStudentView || isParentView)
     ? visibleStudents
     : visibleStudents.filter(student =>
         student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.email.toLowerCase().includes(searchQuery.toLowerCase())
       );
+  
+  const title = isStudentView ? 'My Grades' : (isParentView ? `Grades for ${filteredStudents[0]?.name}` : 'Manage Grades');
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{isStudentView ? 'My Grades' : 'Manage Grades'}</h1>
+      <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
 
-      {!isStudentView && (
+      {!(isStudentView || isParentView) && (
         <div className="mb-4">
           <input
             type="text"
@@ -296,7 +294,7 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session }) => {
           <tbody>
             {filteredStudents.map((student) => (
               <React.Fragment key={student.id}>
-                <tr className={`${!isStudentView && 'cursor-pointer'} hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700`} onClick={() => toggleStudentExpansion(student.id)}>
+                <tr className={`${!(isStudentView || isParentView) && 'cursor-pointer'} hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700`} onClick={() => toggleStudentExpansion(student.id)}>
                   <td className="pl-4 py-4 text-slate-500">
                     {expandedStudents.has(student.id) ? <ChevronDownIcon /> : <ChevronRightIcon />}
                   </td>
@@ -326,7 +324,7 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session }) => {
         </table>
       </div>
 
-      <Modal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} title={`Performance Report for ${selectedStudent?.name}`}>
+      <Modal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} title={`Performance Report for ${selectedStudentForAction?.name}`}>
         {isGeneratingReport ? (
           <div className="flex flex-col items-center justify-center h-48">
             <Spinner />
@@ -342,9 +340,9 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session }) => {
         )}
       </Modal>
 
-      {selectedStudent && (
-        <Modal isOpen={isPrintModalOpen} onClose={() => setIsPrintModalOpen(false)} title={`Printable Report for ${selectedStudent.name}`} size="7xl" printable={true}>
-          <PrintableReport student={selectedStudent} schoolData={schoolData} />
+      {selectedStudentForAction && (
+        <Modal isOpen={isPrintModalOpen} onClose={() => setIsPrintModalOpen(false)} title={`Printable Report for ${selectedStudentForAction.name}`} size="7xl" printable={true}>
+          <PrintableReport student={selectedStudentForAction} schoolData={schoolData} />
         </Modal>
       )}
     </div>
