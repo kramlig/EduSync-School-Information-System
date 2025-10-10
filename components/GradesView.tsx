@@ -42,7 +42,8 @@ const MapehGradeModal: React.FC<{
   quarter: 'q1' | 'q2' | 'q3' | 'q4',
   grades: Grade | undefined,
   updateGrade: SchoolDataHook['updateGrade'],
-}> = ({ isOpen, onClose, student, learningArea, quarter, grades, updateGrade }) => {
+  isReadOnly: boolean,
+}> = ({ isOpen, onClose, student, learningArea, quarter, grades, updateGrade, isReadOnly }) => {
   const [subGrades, setSubGrades] = useState<SubGradeRecord>(
     (grades?.[quarter] as SubGradeRecord) || {}
   );
@@ -74,7 +75,8 @@ const MapehGradeModal: React.FC<{
               max="100"
               value={subGrades[sub] ?? ''}
               onChange={(e) => handleSubGradeChange(sub, e.target.value)}
-              className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center"
+              disabled={isReadOnly}
+              className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center disabled:bg-slate-100 dark:disabled:bg-slate-700/50"
             />
           </div>
         ))}
@@ -91,7 +93,8 @@ const MapehGradeModal: React.FC<{
 const StudentGradeDetails: React.FC<{
   student: Student,
   schoolData: SchoolDataHook,
-}> = ({ student, schoolData }) => {
+  isReadOnly: boolean,
+}> = ({ student, schoolData, isReadOnly }) => {
   const { learningAreas, grades, updateGrade } = schoolData;
   const [mapehModalState, setMapehModalState] = useState<{ isOpen: boolean, quarter?: 'q1'|'q2'|'q3'|'q4', la?: LearningArea }>({ isOpen: false });
 
@@ -138,7 +141,7 @@ const StudentGradeDetails: React.FC<{
                           <span className={quarterAvg !== undefined ? 'font-semibold' : 'text-slate-400'}>
                             {quarterAvg ?? '-'}
                           </span>
-                          <button onClick={() => setMapehModalState({isOpen: true, quarter: q, la: la })} className="text-indigo-600 dark:text-indigo-400 text-xs font-semibold">Edit</button>
+                          <button onClick={() => setMapehModalState({isOpen: true, quarter: q, la: la })} disabled={isReadOnly} className="text-indigo-600 dark:text-indigo-400 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed">Edit</button>
                         </div>
                       </td>
                     );
@@ -152,7 +155,8 @@ const StudentGradeDetails: React.FC<{
                         value={(currentGrade?.[q] as number) ?? ''}
                         onChange={(e) => handleGradeChange(la.id, q, e.target.value)}
                         tabIndex={(qIndex * learningAreas.length) + laIndex + 1}
-                        className="w-full p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center"
+                        disabled={isReadOnly}
+                        className="w-full p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center disabled:bg-slate-100 dark:disabled:bg-slate-700/50"
                       />
                     </td>
                   );
@@ -177,6 +181,7 @@ const StudentGradeDetails: React.FC<{
           quarter={mapehModalState.quarter}
           grades={gradeMap.get(mapehModalState.la.id)}
           updateGrade={updateGrade}
+          isReadOnly={isReadOnly}
         />
       )}
     </div>
@@ -185,7 +190,7 @@ const StudentGradeDetails: React.FC<{
 
 
 const GradesView: React.FC<GradesViewProps> = ({ schoolData, authUser }) => {
-  const { students, grades, learningAreas, sections } = schoolData;
+  const { students, grades, learningAreas, sections, substituteAssignments } = schoolData;
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -194,15 +199,31 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, authUser }) => {
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const isReadOnly = authUser.role === 'principal';
 
   const visibleStudents = useMemo(() => {
-    if (authUser.role === 'admin') {
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
       return students;
     }
-    const teacherSection = sections.find(s => s.adviserId === authUser.id);
-    if (!teacherSection) return [];
-    return students.filter(s => s.sectionId === teacherSection.id);
-  }, [students, sections, authUser]);
+    
+    const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
+    const today = new Date().toISOString().split('T')[0];
+    const activeSubAssignments = substituteAssignments.filter(sub => 
+      sub.teacherId === authUser.id &&
+      today >= sub.startDate &&
+      today <= sub.endDate
+    );
+
+    const authorizedSectionIds = new Set<string>();
+    if (teacherAdviserSection) {
+      authorizedSectionIds.add(teacherAdviserSection.id);
+    }
+    activeSubAssignments.forEach(sub => authorizedSectionIds.add(sub.sectionId));
+    
+    if (authorizedSectionIds.size === 0) return [];
+    
+    return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
+  }, [students, sections, substituteAssignments, authUser]);
 
   const toggleStudentExpansion = (studentId: string) => {
     setExpandedStudents(prev => {
@@ -249,7 +270,7 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, authUser }) => {
         />
       </div>
       
-      <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
         <table className="min-w-full leading-normal">
           <thead className="bg-slate-100 dark:bg-slate-900">
             <tr>
@@ -281,7 +302,7 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, authUser }) => {
                 {expandedStudents.has(student.id) && (
                   <tr>
                     <td colSpan={3} className="p-0">
-                      <StudentGradeDetails student={student} schoolData={schoolData} />
+                      <StudentGradeDetails student={student} schoolData={schoolData} isReadOnly={isReadOnly} />
                     </td>
                   </tr>
                 )}

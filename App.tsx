@@ -10,6 +10,8 @@ import CoreValuesView from './components/CoreValuesView';
 import AttendanceView from './components/AttendanceView';
 import TeacherList from './components/TeacherList';
 import SectionsView from './components/SectionsView';
+import SubstituteView from './components/SubstituteView';
+import SettingsView from './components/SettingsView';
 import { useSchoolData } from './hooks/useSchoolData';
 import LoginScreen from './components/LoginScreen';
 
@@ -47,6 +49,10 @@ const App: React.FC = () => {
         return <TeacherList schoolData={schoolData} authUser={authUser} />;
       case 'sections':
         return <SectionsView schoolData={schoolData} authUser={authUser} />;
+      case 'substitutes':
+        return <SubstituteView schoolData={schoolData} />;
+      case 'settings':
+        return <SettingsView schoolData={schoolData} />;
       case 'dashboard':
       default:
         return <Dashboard schoolData={schoolData} authUser={authUser} />;

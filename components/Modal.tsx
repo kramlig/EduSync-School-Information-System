@@ -31,16 +31,16 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
       onClick={onClose}
     >
       <div 
-        className={`bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full m-4 ${sizeClasses[size]}`}
+        className={`bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full m-4 flex flex-col ${sizeClasses[size]}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700">
+        <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700">
           <h3 className="text-lg font-semibold text-slate-800 dark:text-white">{title}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
             <CloseIcon />
           </button>
         </div>
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto max-h-[85vh]">
           {children}
         </div>
       </div>
