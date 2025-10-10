@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { Section, AuthUser } from '../types';
+import type { Section, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
 import { PencilIcon, TrashIcon } from './icons';
 
 interface SectionsViewProps {
   schoolData: SchoolDataHook;
-  authUser: AuthUser;
+  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
-const SectionsView: React.FC<SectionsViewProps> = ({ schoolData, authUser }) => {
+const SectionsView: React.FC<SectionsViewProps> = ({ schoolData, session }) => {
   const { sections, teachers, addSection, updateSection, deleteSection } = schoolData;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -23,6 +23,8 @@ const SectionsView: React.FC<SectionsViewProps> = ({ schoolData, authUser }) => 
     name: '',
     adviserId: ''
   });
+  
+  const authUser = session.user as AuthUser;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;

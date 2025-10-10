@@ -1,4 +1,4 @@
-export type ViewType = 'dashboard' | 'students' | 'learningAreas' | 'grades' | 'coreValues' | 'attendance' | 'teachers' | 'sections' | 'settings' | 'substitutes' | 'scheduler' | 'gradebook' | 'coreValuesGradebook';
+export type ViewType = 'dashboard' | 'students' | 'learningAreas' | 'grades' | 'coreValues' | 'attendance' | 'teachers' | 'sections' | 'settings' | 'substitutes' | 'scheduler' | 'gradebook' | 'coreValuesGradebook' | 'assignments';
 import type { SetStateAction } from 'react';
 
 export interface Student {
@@ -10,7 +10,10 @@ export interface Student {
   sex?: 'Male' | 'Female';
   lrn?: string;
   sectionId?: string;
+  password?: string;
 }
+
+export type StudentUser = Omit<Student, 'password'>;
 
 export interface TeacherAssignment {
   gradeLevel: number;
@@ -27,7 +30,10 @@ export interface Teacher {
   password?: string;
 }
 
-export type AuthUser = Omit<Teacher, 'password' | 'assignments' | 'contactNumber'>;
+// FIX: Updated AuthUser to Omit only 'password' from Teacher.
+// The previous type omitted 'assignments' and 'contactNumber', which are present on the user
+// object after login and are required by some components.
+export type AuthUser = Omit<Teacher, 'password'>;
 
 export interface Section {
   id: string;
@@ -112,4 +118,20 @@ export interface ClassSchedule {
   learningAreaId?: string;
   teacherId?: string;
   gradeLevel?: number;
+}
+
+export interface Assignment {
+  id: string;
+  sectionId: string;
+  learningAreaId: string;
+  title: string;
+  description: string;
+  totalPoints: number;
+  dueDate: string;
+}
+
+export interface StudentAssignmentGrade {
+  assignmentId: string;
+  studentId: string;
+  score: number | null;
 }

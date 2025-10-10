@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import Modal from './Modal';
-import type { LearningArea, AuthUser } from '../types';
+import type { LearningArea, AuthUser, StudentUser } from '../types';
 import { TrashIcon } from './icons';
 
 interface LearningAreaListProps {
   schoolData: SchoolDataHook;
-  authUser: AuthUser;
+  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
-const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, authUser }) => {
+const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, session }) => {
   const { learningAreas, addLearningArea, deleteLearningArea } = schoolData;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [areaToDelete, setAreaToDelete] = useState<LearningArea | null>(null);
   const [newLearningArea, setNewLearningArea] = useState<Omit<LearningArea, 'id'>>({ name: '', credits: 3 });
+
+  const authUser = session.user as AuthUser;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { AuthUser, ClassSchedule, Section, Teacher, LearningArea } from '../types';
+import type { AuthUser, StudentUser, ClassSchedule, Section, Teacher, LearningArea } from '../types';
 import Modal from './Modal';
 import { TrashIcon } from './icons';
 
@@ -49,10 +49,15 @@ const getWeekDates = (date: Date): Date[] => {
 };
 
 
-const SchedulerView: React.FC<{ schoolData: SchoolDataHook; authUser: AuthUser; }> = ({ schoolData, authUser }) => {
+const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: AuthUser | StudentUser, type: 'staff' | 'student' }; }> = ({ schoolData, session }) => {
     const { classSchedules, sections, teachers, learningAreas, addSchedule, updateSchedule, deleteSchedule } = schoolData;
-    const [viewType, setViewType] = useState<'section' | 'teacher'>('section');
-    const [selectedId, setSelectedId] = useState<string | null>(sections[0]?.id || null);
+    const isStudentView = session.type === 'student';
+    
+    const initialViewType = isStudentView ? 'section' : 'section';
+    const initialSelectedId = isStudentView ? (session.user as StudentUser).sectionId : (sections[0]?.id || null);
+
+    const [viewType, setViewType] = useState<'section' | 'teacher'>(initialViewType);
+    const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId || null);
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalData, setModalData] = useState<Partial<ClassSchedule> & { isEditing?: boolean }>({});
@@ -82,6 +87,7 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; authUser: AuthUser; 
     }, [classSchedules, selectedId, viewType, sections]);
     
     const handleCellClick = (day: string, time: string) => {
+        if (isStudentView) return;
         setModalError(null);
         const startTime = time;
         const endTime = `${String(Number(time.split(':')[0]) + 1).padStart(2, '0')}:00`;
@@ -102,6 +108,7 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; authUser: AuthUser; 
     };
 
     const handleScheduleClick = (schedule: ClassSchedule) => {
+        if (isStudentView) return;
         setModalError(null);
         setModalData({ ...schedule, isEditing: true });
         setIsModalOpen(true);
@@ -158,13 +165,14 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; authUser: AuthUser; 
     const gradeLevels = useMemo(() => Array.from(new Set(sections.map(s => s.gradeLevel))).sort(), [sections]);
     
     useEffect(() => {
+        if (isStudentView) return;
         const currentSelectionExists = options.some(o => o.id === selectedId);
         if (!currentSelectionExists && options.length > 0) {
             setSelectedId(options[0].id);
         } else if (options.length === 0) {
             setSelectedId(null);
         }
-    }, [options, selectedId]);
+    }, [options, selectedId, isStudentView]);
     
     useEffect(() => {
         if (modalData.type === 'academic' && modalData.learningAreaId) {
@@ -176,21 +184,25 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; authUser: AuthUser; 
 
     return (
         <div>
-            <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">Class Scheduler</h1>
+            <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{isStudentView ? 'My Class Schedule' : 'Class Scheduler'}</h1>
             <div className="flex flex-wrap items-center gap-4 mb-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm">
-                <div className="flex items-center space-x-2">
-                    <label className="font-semibold">View by:</label>
-                    <select value={viewType} onChange={e => { setViewType(e.target.value as 'section' | 'teacher'); }} className="input-style">
-                        <option value="section">Class</option>
-                        <option value="teacher">Teacher</option>
-                    </select>
-                </div>
-                 <div className="flex items-center space-x-2">
-                    <label htmlFor="view-select" className="font-semibold capitalize">{viewType}:</label>
-                    <select id="view-select" value={selectedId ?? ''} onChange={e => setSelectedId(e.target.value)} className="input-style min-w-[200px]">
-                       {options.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
-                    </select>
-                </div>
+                {!isStudentView && (
+                    <>
+                        <div className="flex items-center space-x-2">
+                            <label className="font-semibold">View by:</label>
+                            <select value={viewType} onChange={e => { setViewType(e.target.value as 'section' | 'teacher'); }} className="input-style">
+                                <option value="section">Class</option>
+                                <option value="teacher">Teacher</option>
+                            </select>
+                        </div>
+                         <div className="flex items-center space-x-2">
+                            <label htmlFor="view-select" className="font-semibold capitalize">{viewType}:</label>
+                            <select id="view-select" value={selectedId ?? ''} onChange={e => setSelectedId(e.target.value)} className="input-style min-w-[200px]">
+                               {options.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
+                            </select>
+                        </div>
+                    </>
+                )}
                  <div className="flex items-center space-x-2">
                     <label htmlFor="date-picker" className="font-semibold">Week of:</label>
                     <input
@@ -223,7 +235,7 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; authUser: AuthUser; 
                         <div className="pr-2 text-right text-xs text-slate-500 dark:text-slate-400 row-start-auto" style={{ gridRow: index + 2 }}>{time}</div>
                         <div className="col-start-2 grid grid-cols-5 border-t border-slate-200 dark:border-slate-700">
                            {weekDates.map((_date, dayIndex) => (
-                               <div key={`${days[dayIndex]}-${time}`} onClick={() => handleCellClick(days[dayIndex], time)} className="border-l border-slate-200 dark:border-slate-700 h-full cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50"></div>
+                               <div key={`${days[dayIndex]}-${time}`} onClick={() => handleCellClick(days[dayIndex], time)} className={`border-l border-slate-200 dark:border-slate-700 h-full ${!isStudentView && 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}></div>
                            ))}
                         </div>
                     </React.Fragment>
@@ -247,7 +259,7 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; authUser: AuthUser; 
                     return (
                         <div key={schedule.id}
                             onClick={() => handleScheduleClick(schedule)}
-                            className={`absolute p-2 rounded-lg border cursor-pointer overflow-hidden ${getScheduleColor(schedule)}`}
+                            className={`absolute p-2 rounded-lg border ${!isStudentView && 'cursor-pointer'} overflow-hidden ${getScheduleColor(schedule)}`}
                             style={{
                                 top: `calc(2.5rem + (${topOffset} / ${timeSlots.length}) * (100% - 2.5rem))`,
                                 left: `calc(4rem + (${dayIndex} / 5) * (100% - 4rem))`,

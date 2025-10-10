@@ -2,15 +2,17 @@ import React, { useMemo } from 'react';
 import Card from './Card';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { AcademicCapIcon, BookOpenIcon, StarIcon } from './icons';
-import type { AuthUser } from '../types';
+import type { AuthUser, StudentUser } from '../types';
 
 interface DashboardProps {
   schoolData: SchoolDataHook;
-  authUser: AuthUser;
+  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ schoolData, authUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
   const { students, learningAreas, grades, sections, substituteAssignments, isSyncing } = schoolData;
+  
+  const authUser = session.user as AuthUser;
 
   const visibleStudents = useMemo(() => {
     if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
