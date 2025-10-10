@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Student, CoreValue, CoreValueGrade, CoreValueMarking, AuthUser } from '../types';
+import type { Student, CoreValue, CoreValueGrade, CoreValueMarking, AuthUser, StudentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 
 const MARKING_OPTIONS: CoreValueMarking[] = ['AO', 'SO', 'RO', 'NO'];
@@ -14,13 +14,14 @@ const getMarkingColor = (marking: CoreValueMarking | undefined) => {
   }
 };
 
-const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; authUser: AuthUser }> = ({ schoolData, authUser }) => {
+const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: AuthUser | StudentUser, type: 'staff' | 'student' }; }> = ({ schoolData, session }) => {
     const { students, coreValues, coreValueGrades, sections, substituteAssignments, updateCoreValueGrade } = schoolData;
     
     const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
     const [selectedCoreValueId, setSelectedCoreValueId] = useState<string | null>(null);
     const [selectedQuarter, setSelectedQuarter] = useState<'q1' | 'q2' | 'q3' | 'q4'>('q1');
     
+    const authUser = session.user as AuthUser;
     const isReadOnly = authUser.role === 'principal';
 
     const visibleSections = useMemo(() => {

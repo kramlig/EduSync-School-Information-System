@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Student, Grade, LearningArea, SubGradeRecord, AuthUser } from '../types';
+import type { Student, Grade, LearningArea, SubGradeRecord, AuthUser, StudentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import Modal from './Modal';
 
@@ -66,12 +66,13 @@ const MapehGradeModal: React.FC<{
 };
 
 
-const GradebookView: React.FC<{ schoolData: SchoolDataHook; authUser: AuthUser }> = ({ schoolData, authUser }) => {
+const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: AuthUser | StudentUser, type: 'staff' | 'student' }; }> = ({ schoolData, session }) => {
   const { students, grades, learningAreas, sections, substituteAssignments, updateGrade } = schoolData;
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [quarterFilter, setQuarterFilter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>('all');
   const [mapehModalState, setMapehModalState] = useState<{ isOpen: boolean, student?: Student, quarter?: 'q1'|'q2'|'q3'|'q4', la?: LearningArea }>({ isOpen: false });
 
+  const authUser = session.user as AuthUser;
   const isReadOnly = authUser.role === 'principal';
 
   const visibleSections = useMemo(() => {
@@ -288,7 +289,6 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; authUser: AuthUser }
       )}
 
       {mapehModalState.isOpen && mapehModalState.la && mapehModalState.student && mapehModalState.quarter && (
-        // FIX: The component name was 'MapehModal' but it is defined as 'MapehGradeModal'.
         <MapehGradeModal 
           isOpen={mapehModalState.isOpen}
           onClose={() => setMapehModalState({isOpen: false})}

@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import type { Student, CoreValue, CoreValueGrade, CoreValueMarking, AuthUser } from '../types';
+import type { Student, CoreValue, CoreValueGrade, CoreValueMarking, AuthUser, StudentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { ChevronDownIcon, ChevronRightIcon } from './icons';
 
 interface CoreValuesViewProps {
   schoolData: SchoolDataHook;
-  authUser: AuthUser;
+  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
 const MARKING_OPTIONS: { value: CoreValueMarking; label: string }[] = [
@@ -109,13 +109,22 @@ const StudentCoreValueDetails: React.FC<{
 };
 
 
-const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, authUser }) => {
+const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, session }) => {
   const { students, coreValues, coreValueGrades, updateCoreValueGrade, sections, substituteAssignments } = schoolData;
-  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
+  const isStudentView = session.type === 'student';
+  const initialExpanded = isStudentView ? new Set([session.user.id]) : new Set<string>();
+
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(initialExpanded);
   const [searchQuery, setSearchQuery] = useState('');
-  const isReadOnly = authUser.role === 'principal';
+  
+  const isReadOnly = isStudentView || (session.user as AuthUser).role === 'principal';
   
   const visibleStudents = useMemo(() => {
+    if (isStudentView) {
+      return students.filter(s => s.id === session.user.id);
+    }
+
+    const authUser = session.user as AuthUser;
     if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
       return students;
     }
@@ -137,9 +146,10 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, authUser })
     if (authorizedSectionIds.size === 0) return [];
     
     return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
-  }, [students, sections, substituteAssignments, authUser]);
+  }, [students, sections, substituteAssignments, session]);
 
   const toggleStudentExpansion = (studentId: string) => {
+    if (isStudentView) return;
     setExpandedStudents(prev => {
       const newSet = new Set(prev);
       if (newSet.has(studentId)) {
@@ -151,24 +161,28 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, authUser })
     });
   };
 
-  const filteredStudents = visibleStudents.filter(student =>
-    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredStudents = isStudentView 
+    ? visibleStudents
+    : visibleStudents.filter(student =>
+        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchQuery.toLowerCase())
+      );
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">Evaluate Core Values</h1>
+      <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{isStudentView ? 'My Core Values' : 'Evaluate Core Values'}</h1>
       
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Search students by name or email..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
-        />
-      </div>
+      {!isStudentView && (
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Search students by name or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
+          />
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
         <table className="min-w-full leading-normal">
@@ -181,7 +195,7 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, authUser })
           <tbody>
             {filteredStudents.map((student) => (
               <React.Fragment key={student.id}>
-                <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer border-b border-slate-200 dark:border-slate-700" onClick={() => toggleStudentExpansion(student.id)}>
+                <tr className={`${!isStudentView && 'cursor-pointer'} hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700`} onClick={() => toggleStudentExpansion(student.id)}>
                   <td className="pl-4 py-4 text-slate-500">
                     {expandedStudents.has(student.id) ? <ChevronDownIcon /> : <ChevronRightIcon />}
                   </td>

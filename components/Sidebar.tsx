@@ -1,15 +1,16 @@
 import React from 'react';
-import type { ViewType, AuthUser } from '../types';
-import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon, CalendarDaysIcon, BriefcaseIcon, UsersIcon, CogIcon, ClipboardUserIcon, CalendarIcon, TableCellsIcon, ClipboardCheckIcon } from './icons';
+import type { ViewType, AuthUser, StudentUser } from '../types';
+import { ChartPieIcon, AcademicCapIcon, BookOpenIcon, ClipboardDocumentListIcon, HomeIcon, HeartIcon, CalendarDaysIcon, BriefcaseIcon, UsersIcon, CogIcon, ClipboardUserIcon, CalendarIcon, TableCellsIcon, ClipboardCheckIcon, ClipboardDocumentCheckIcon } from './icons';
 
 interface SidebarProps {
   currentView: ViewType;
   setView: (view: ViewType) => void;
-  authUser: AuthUser;
+  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, authUser }) => {
-  const allNavItems = [
+const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, session }) => {
+  
+  const staffNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'students', label: 'Students', icon: <AcademicCapIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'teachers', label: 'Teachers', icon: <BriefcaseIcon />, roles: ['admin', 'registrar'] },
@@ -19,13 +20,28 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView, authUser }) => 
     { id: 'learningAreas', label: 'Learning Areas', icon: <BookOpenIcon />, roles: ['admin'] },
     { id: 'grades', label: 'Grades', icon: <ClipboardDocumentListIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'gradebook', label: 'Gradebook', icon: <TableCellsIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
+    { id: 'assignments', label: 'Assignments', icon: <ClipboardDocumentCheckIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'coreValues', label: 'Core Values', icon: <HeartIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'coreValuesGradebook', label: 'Core Values Gradebook', icon: <ClipboardCheckIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'attendance', label: 'Attendance', icon: <CalendarDaysIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
     { id: 'settings', label: 'Settings', icon: <CogIcon />, roles: ['admin'] },
   ];
   
-  const navItems = allNavItems.filter(item => item.roles.includes(authUser.role));
+  const studentNavItems = [
+      { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon /> },
+      { id: 'grades', label: 'My Grades', icon: <ClipboardDocumentListIcon /> },
+      { id: 'coreValues', label: 'My Core Values', icon: <HeartIcon /> },
+      { id: 'attendance', label: 'My Attendance', icon: <CalendarDaysIcon /> },
+      { id: 'scheduler', label: 'My Schedule', icon: <CalendarIcon /> },
+  ];
+  
+  let navItems;
+  if (session.type === 'staff') {
+      const userRole = (session.user as AuthUser).role;
+      navItems = staffNavItems.filter(item => item.roles.includes(userRole));
+  } else {
+      navItems = studentNavItems;
+  }
 
   return (
     <nav className="w-16 md:w-64 bg-slate-800 dark:bg-slate-950 text-white flex flex-col print:hidden">

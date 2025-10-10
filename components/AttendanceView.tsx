@@ -1,20 +1,26 @@
 import React, { useState, useMemo } from 'react';
 import { SchoolDataHook, MONTHLY_SCHOOL_DAYS_CONFIG } from '../hooks/useSchoolData';
-import type { AuthUser } from '../types';
+import type { AuthUser, StudentUser } from '../types';
 
 interface AttendanceViewProps {
   schoolData: SchoolDataHook;
-  authUser: AuthUser;
+  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
-const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, authUser }) => {
+const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session }) => {
   const { students, attendanceRecords, updateAttendance, sections, substituteAssignments } = schoolData;
+  const isStudentView = session.type === 'student';
+
   const [searchQuery, setSearchQuery] = useState('');
-  const isReadOnly = authUser.role === 'principal';
+  const isReadOnly = isStudentView || (session.user as AuthUser).role === 'principal';
 
   const months = Object.keys(MONTHLY_SCHOOL_DAYS_CONFIG);
   
   const visibleStudents = useMemo(() => {
+    if (isStudentView) {
+      return students.filter(s => s.id === session.user.id);
+    }
+    const authUser = session.user as AuthUser;
     if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
       return students;
     }
@@ -36,12 +42,14 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, authUser })
     if (authorizedSectionIds.size === 0) return [];
     
     return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
-  }, [students, sections, substituteAssignments, authUser]);
+  }, [students, sections, substituteAssignments, session]);
 
-  const filteredStudents = visibleStudents.filter(student =>
-    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredStudents = isStudentView 
+    ? visibleStudents
+    : visibleStudents.filter(student =>
+        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchQuery.toLowerCase())
+      );
   
   const handleAttendanceChange = (studentId: string, month: string, type: 'present' | 'absent', value: string) => {
     const numValue = value === '' ? 0 : parseInt(value, 10);
@@ -60,8 +68,6 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, authUser })
         totals.absent += monthData.absent || 0;
         return totals;
       },
-      // FIX: The `reduce` function's initial value was an empty object, causing a type mismatch.
-      // It is now correctly initialized with `{ present: 0, absent: 0 }` to match the accumulator's type.
       { present: 0, absent: 0 }
     );
   };
@@ -70,17 +76,19 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, authUser })
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">Manage Attendance</h1>
+      <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{isStudentView ? 'My Attendance' : 'Manage Attendance'}</h1>
 
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Search students..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
-        />
-      </div>
+      {!isStudentView && (
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Search students..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
+          />
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
         <table className="min-w-full leading-normal text-sm">

@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { Student, AuthUser } from '../types';
+import type { Student, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
 import { UserCircleIcon, PencilIcon, TrashIcon } from './icons';
 
 interface StudentListProps {
   schoolData: SchoolDataHook;
-  authUser: AuthUser;
+  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
 const calculateAge = (dateOfBirth?: string): number | string => {
@@ -21,7 +21,7 @@ const calculateAge = (dateOfBirth?: string): number | string => {
   return age;
 };
 
-const StudentList: React.FC<StudentListProps> = ({ schoolData, authUser }) => {
+const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   const { students, teachers, sections, addStudent, settings, updateStudent, deleteStudent, substituteAssignments } = schoolData;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -35,6 +35,8 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, authUser }) => {
   const [newStudent, setNewStudent] = useState<Omit<Student, 'id' | 'enrollmentDate'>>({ name: '', email: '' });
   const [searchQuery, setSearchQuery] = useState('');
   
+  const authUser = session.user as AuthUser;
+
   const visibleStudents = useMemo(() => {
     if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
       return students;

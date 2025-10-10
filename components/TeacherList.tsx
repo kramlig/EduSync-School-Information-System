@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { Teacher, TeacherAssignment, AuthUser } from '../types';
+import type { Teacher, TeacherAssignment, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
 import { CloseIcon, PencilIcon, TrashIcon } from './icons';
 
 interface TeacherListProps {
   schoolData: SchoolDataHook;
-  authUser: AuthUser;
+  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
 const getRoleStyle = (role: Teacher['role']) => {
@@ -23,7 +23,7 @@ const getRoleStyle = (role: Teacher['role']) => {
     }
 }
 
-const TeacherList: React.FC<TeacherListProps> = ({ schoolData, authUser }) => {
+const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
   const { teachers, learningAreas, addTeacher, updateTeacher, deleteTeacher } = schoolData;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -34,6 +34,8 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, authUser }) => {
 
   const [newTeacher, setNewTeacher] = useState<Omit<Teacher, 'id'>>({ name: '', email: '', contactNumber: '', assignments: [], role: 'teacher' });
   const [newAssignment, setNewAssignment] = useState<{ gradeLevel: string; learningAreaId: string }>({ gradeLevel: '', learningAreaId: '' });
+  
+  const authUser = session.user as AuthUser;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
