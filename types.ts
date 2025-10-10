@@ -140,6 +140,9 @@ export interface StudentAssignmentGrade {
   assignmentId: string;
   studentId: string;
   score: number | null;
+  submissionDate: string | null;
+  filePath: string | null;
+  feedback: string | null;
 }
 
 export interface LessonResource {

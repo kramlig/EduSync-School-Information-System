@@ -150,8 +150,8 @@ const MOCK_ATTENDANCE_RECORDS: AttendanceRecord[] = MOCK_STUDENTS.map(student =>
 const MOCK_STUDENT_ASSIGNMENT_GRADES: StudentAssignmentGrade[] = MOCK_STUDENTS
     .filter(s => s.sectionId === 'sec1')
     .flatMap(student => [
-        { assignmentId: 'as1', studentId: student.id, score: rand(15, 20) },
-        { assignmentId: 'as2', studentId: student.id, score: rand(35, 50) },
+        { assignmentId: 'as1', studentId: student.id, score: rand(15, 20), submissionDate: '2023-09-28', filePath: 'math-worksheet.pdf', feedback: 'Good job on the calculations!' },
+        { assignmentId: 'as2', studentId: student.id, score: null, submissionDate: null, filePath: null, feedback: null },
     ]);
 
 
@@ -283,7 +283,34 @@ export const useSchoolData = (isOnline: boolean) => {
   const addAssignment = useCallback((assignment: Omit<Assignment, 'id'>) => { const newAssignment: Assignment = { ...assignment, id: `as${Date.now()}` }; setAssignments(prev => [...prev, newAssignment]); }, [setAssignments]);
   const updateAssignment = useCallback((updatedAssignment: Assignment) => setAssignments(prev => prev.map(a => a.id === updatedAssignment.id ? updatedAssignment : a)), [setAssignments]);
   const deleteAssignment = useCallback((assignmentId: string) => { setAssignments(prev => prev.filter(a => a.id !== assignmentId)); setStudentAssignmentGrades(prev => prev.filter(sg => sg.assignmentId !== assignmentId)); }, [setAssignments, setStudentAssignmentGrades]);
-  const updateStudentAssignmentScore = useCallback((studentId: string, assignmentId: string, score: number | null) => { setStudentAssignmentGrades(prev => { const newGrades = [...prev]; const gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.assignmentId === assignmentId); if (gradeIndex > -1) { newGrades[gradeIndex] = { ...newGrades[gradeIndex], score }; } else { newGrades.push({ studentId, assignmentId, score }); } return newGrades; }); }, [setStudentAssignmentGrades]);
+  
+  const updateAssignmentGrade = useCallback((studentId: string, assignmentId: string, score: number | null, feedback: string | null) => {
+    setStudentAssignmentGrades(prev => {
+        const newGrades = [...prev];
+        const gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.assignmentId === assignmentId);
+        if (gradeIndex > -1) {
+            newGrades[gradeIndex] = { ...newGrades[gradeIndex], score, feedback };
+        } else {
+            newGrades.push({ studentId, assignmentId, score, feedback, submissionDate: null, filePath: null });
+        }
+        return newGrades;
+    });
+  }, [setStudentAssignmentGrades]);
+
+  const submitAssignment = useCallback((studentId: string, assignmentId: string, filePath: string) => {
+    setStudentAssignmentGrades(prev => {
+        const newGrades = [...prev];
+        const gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.assignmentId === assignmentId);
+        const submissionDate = new Date().toISOString().split('T')[0];
+        if (gradeIndex > -1) {
+            newGrades[gradeIndex] = { ...newGrades[gradeIndex], filePath, submissionDate };
+        } else {
+            newGrades.push({ studentId, assignmentId, score: null, feedback: null, submissionDate, filePath });
+        }
+        return newGrades;
+    });
+  }, [setStudentAssignmentGrades]);
+
 
   const addLessonPlan = useCallback((lessonPlan: Omit<LessonPlan, 'id'>) => { const newPlan: LessonPlan = { ...lessonPlan, id: `lp${Date.now()}`}; setLessonPlans(prev => [...prev, newPlan]); }, [setLessonPlans]);
   const updateLessonPlan = useCallback((updatedPlan: LessonPlan) => { setLessonPlans(prev => prev.map(lp => lp.id === updatedPlan.id ? updatedPlan : lp)); }, [setLessonPlans]);
@@ -293,7 +320,7 @@ export const useSchoolData = (isOnline: boolean) => {
   const updateAnnouncement = useCallback((updatedAnnouncement: Announcement) => { setAnnouncements(prev => prev.map(an => an.id === updatedAnnouncement.id ? updatedAnnouncement : an)); }, [setAnnouncements]);
   const deleteAnnouncement = useCallback((announcementId: string) => { setAnnouncements(prev => prev.filter(an => an.id !== announcementId)); }, [setAnnouncements]);
 
-  return { students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements, login, addStudent, updateStudent, deleteStudent, addLearningArea, deleteLearningArea, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, updateGrade, updateCoreValueGrade, updateAttendance, updateSettings, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addSchedule, updateSchedule, deleteSchedule, addAssignment, updateAssignment, deleteAssignment, updateStudentAssignmentScore, addLessonPlan, updateLessonPlan, deleteLessonPlan, addAnnouncement, updateAnnouncement, deleteAnnouncement, isSyncing, loading: false, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent };
+  return { students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements, login, addStudent, updateStudent, deleteStudent, addLearningArea, deleteLearningArea, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, updateGrade, updateCoreValueGrade, updateAttendance, updateSettings, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addSchedule, updateSchedule, deleteSchedule, addAssignment, updateAssignment, deleteAssignment, updateAssignmentGrade, submitAssignment, addLessonPlan, updateLessonPlan, deleteLessonPlan, addAnnouncement, updateAnnouncement, deleteAnnouncement, isSyncing, loading: false, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent };
 };
 
 export type SchoolDataHook = ReturnType<typeof useSchoolData>;
