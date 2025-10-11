@@ -270,7 +270,7 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                       <td key={col.id} className="p-1 border-l dark:border-slate-700">
                         <input
                           id={`cell-${rowIndex}-${colIndex}`}
-                          key={`${student.id}-${col.id}-${gradeValue}`}
+                          key={`${student.id}-${col.id}`}
                           type="number" min="0" max="100"
                           defaultValue={gradeValue}
                           onBlur={(e) => handleGradeChange(student.id, col.learningArea.id, col.quarter, e.target.value)}
