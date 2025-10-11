@@ -23,6 +23,7 @@ import AnnouncementsView from './components/AnnouncementsView';
 import ParentsView from './components/ParentsView';
 import { useSchoolData } from './hooks/useSchoolData';
 import LoginScreen from './components/LoginScreen';
+import FullScreenLoader from './components/FullScreenLoader';
 
 type SessionUser = AuthUser | StudentUser | ParentUser;
 type SessionType = 'staff' | 'student' | 'parent';
@@ -62,7 +63,7 @@ const App: React.FC = () => {
   }, [session, selectedChildId]);
 
   const renderView = () => {
-    if (!session) {
+    if (!session || schoolData.loading) {
       return null;
     }
 
@@ -119,6 +120,10 @@ const App: React.FC = () => {
     return null;
   };
   
+  if (schoolData.loading) {
+    return <FullScreenLoader />;
+  }
+
   if (!session) {
     return <LoginScreen onLogin={handleLogin} loginFn={schoolData.login} />;
   }

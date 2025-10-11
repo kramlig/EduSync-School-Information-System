@@ -99,6 +99,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginFn }) => {
          <div className="text-center text-xs text-slate-500 dark:text-slate-400">
             <p className="font-semibold">Demo Credentials:</p>
             <p>Admin: <span className="font-mono">admin@school.edu</span> / <span className="font-mono">admin123</span></p>
+            <p>Teacher: <span className="font-mono">teacher@school.edu</span> / <span className="font-mono">teacher123</span></p>
             <p>Parent: <span className="font-mono">s.johnson@family.com</span> / <span className="font-mono">parent123</span></p>
          </div>
       </div>

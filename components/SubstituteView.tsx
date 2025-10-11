@@ -9,18 +9,22 @@ interface SubstituteViewProps {
 }
 
 const getStatus = (assignment: SubstituteAssignment): { text: string; color: string } => {
-    const today = new Date().toISOString().split('T')[0];
-    if (today >= assignment.startDate && today <= assignment.endDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startDate = new Date(assignment.startDate);
+    const endDate = new Date(assignment.endDate);
+
+    if (today >= startDate && today <= endDate) {
         return { text: 'Active', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' };
     }
-    if (today < assignment.startDate) {
+    if (today < startDate) {
         return { text: 'Upcoming', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' };
     }
     return { text: 'Expired', color: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-200' };
 };
 
 const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
-  const { substituteAssignments, teachers, sections, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment } = schoolData;
+  const { substituteAssignments, teachers, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment } = schoolData;
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -32,7 +36,7 @@ const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
   const todayStr = new Date().toISOString().split('T')[0];
   const [newAssignment, setNewAssignment] = useState<Omit<SubstituteAssignment, 'id'>>({
     teacherId: '',
-    sectionId: '',
+    originalTeacherId: '',
     startDate: todayStr,
     endDate: todayStr,
   });
@@ -48,11 +52,14 @@ const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
   };
   
   const validateAssignment = (assignment: Omit<SubstituteAssignment, 'id'> | SubstituteAssignment) => {
-    if (!assignment.teacherId || !assignment.sectionId || !assignment.startDate || !assignment.endDate) {
+    if (!assignment.teacherId || !assignment.originalTeacherId || !assignment.startDate || !assignment.endDate) {
         return "All fields are required.";
     }
     if (assignment.endDate < assignment.startDate) {
         return "End date cannot be before the start date.";
+    }
+    if (assignment.teacherId === assignment.originalTeacherId) {
+        return "Substitute and original teacher cannot be the same person.";
     }
     return null;
   };
@@ -65,7 +72,7 @@ const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
         return;
     }
     addSubstituteAssignment(newAssignment);
-    setNewAssignment({ teacherId: '', sectionId: '', startDate: todayStr, endDate: todayStr });
+    setNewAssignment({ teacherId: '', originalTeacherId: '', startDate: todayStr, endDate: todayStr });
     setIsAddModalOpen(false);
     setFormError(null);
   };
@@ -124,10 +131,10 @@ const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
                 </select>
             </div>
              <div>
-                <label htmlFor="sectionId" className="block text-sm font-medium">Class to Cover</label>
-                <select name="sectionId" id="sectionId" value={data.sectionId} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500" required>
-                    <option value="">Select a class...</option>
-                    {sections.map(s => <option key={s.id} value={s.id}>Grade {s.gradeLevel} - {s.name}</option>)}
+                <label htmlFor="originalTeacherId" className="block text-sm font-medium">Teacher to be Replaced</label>
+                <select name="originalTeacherId" id="originalTeacherId" value={data.originalTeacherId} onChange={handleInputChange} className="mt-1 block w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500" required>
+                    <option value="">Select original teacher...</option>
+                    {teacherOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -147,7 +154,7 @@ const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
               )}
         </div>
          <div className="flex justify-end space-x-2 mt-6">
-             <button type="button" onClick={() => isEdit ? setIsEditModalOpen(false) : setIsAddModalOpen(false)} className="bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">Cancel</button>
+             <button type="button" onClick={() => { isEdit ? setIsEditModalOpen(false) : setIsAddModalOpen(false); setFormError(null); }} className="bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">Cancel</button>
              <button type="submit" className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">{isEdit ? 'Save Changes' : 'Add Assignment'}</button>
         </div>
     </form>
@@ -167,36 +174,30 @@ const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
                 <thead>
                     <tr>
                         <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Substitute Teacher</th>
-                        <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Class Covered</th>
-                        <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Start Date</th>
-                        <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">End Date</th>
+                        <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Original Teacher</th>
+                        <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Dates</th>
                         <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Status</th>
                         <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {sortedAssignments.map(sub => {
-                        const teacher = teachers.find(t => t.id === sub.teacherId);
-                        const section = sections.find(s => s.id === sub.sectionId);
+                        const substituteTeacher = teachers.find(t => t.id === sub.teacherId);
+                        const originalTeacher = teachers.find(t => t.id === sub.originalTeacherId);
                         const status = getStatus(sub);
                         return (
                              <tr key={sub.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                                    <p className="text-slate-900 dark:text-white whitespace-no-wrap">{teacher?.name ?? 'Unknown Teacher'}</p>
+                                    <p className="text-slate-900 dark:text-white whitespace-no-wrap">{substituteTeacher?.name ?? 'Unknown'}</p>
                                 </td>
                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                                    <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{section ? `Grade ${section.gradeLevel} - ${section.name}` : 'Unknown Class'}</p>
+                                    <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{originalTeacher?.name ?? 'Unknown'}</p>
                                 </td>
                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                                    <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{sub.startDate}</p>
+                                    <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{sub.startDate} to {sub.endDate}</p>
                                 </td>
                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                                    <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{sub.endDate}</p>
-                                </td>
-                                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                                    <span className={`px-2 py-1 text-xs font-bold rounded-full ${status.color}`}>
-                                        {status.text}
-                                    </span>
+                                    <span className={`px-2 py-1 text-xs font-bold rounded-full ${status.color}`}>{status.text}</span>
                                 </td>
                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
                                     <div className="flex items-center space-x-3">
@@ -208,18 +209,18 @@ const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
                                         </button>
                                     </div>
                                 </td>
-                             </tr>
+                            </tr>
                         )
                     })}
                 </tbody>
             </table>
         </div>
-
-        <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add Substitute Assignment">
+        
+        <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setFormError(null); }} title="Add Substitute Assignment">
             {renderForm(false, newAssignment, handleAddAssignment)}
         </Modal>
 
-        <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Substitute Assignment">
+        <Modal isOpen={isEditModalOpen} onClose={() => { setIsEditModalOpen(false); setFormError(null); }} title="Edit Substitute Assignment">
             {assignmentToEdit && renderForm(true, assignmentToEdit, handleUpdateAssignment)}
         </Modal>
 
@@ -231,7 +232,7 @@ const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
             </div>
         </Modal>
     </div>
-  )
-}
+  );
+};
 
 export default SubstituteView;

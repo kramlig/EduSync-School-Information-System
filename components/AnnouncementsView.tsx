@@ -3,6 +3,7 @@ import { SchoolDataHook } from '../hooks/useSchoolData';
 import type { Announcement, AuthUser, StudentUser, ParentUser } from '../types';
 import Modal from './Modal';
 import { PencilIcon, TrashIcon } from './icons';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface AnnouncementsViewProps {
   schoolData: SchoolDataHook;
@@ -17,14 +18,28 @@ const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({ schoolData, sessi
     const [announcementToEdit, setAnnouncementToEdit] = useState<Partial<Announcement> | null>(null);
     const [announcementToDelete, setAnnouncementToDelete] = useState<Announcement | null>(null);
 
+    const [searchQuery, setSearchQuery] = useState('');
+    const debouncedSearchQuery = useDebounce(searchQuery, 500);
+
     const authUser = session.user as AuthUser;
     const canManage = session.type === 'staff' && ['admin', 'principal'].includes(authUser.role);
 
     const relevantAnnouncements = useMemo(() => {
-        if (session.type === 'staff') return announcements;
-        // For parents and students
-        return announcements.filter(a => a.target === 'all' || a.target === session.type);
-    }, [announcements, session.type]);
+        let filtered = announcements;
+        if (session.type !== 'staff') {
+             filtered = announcements.filter(a => a.target === 'all' || a.target === session.type);
+        }
+
+        if (debouncedSearchQuery) {
+            const lowerQuery = debouncedSearchQuery.toLowerCase();
+            filtered = filtered.filter(a => 
+                a.title.toLowerCase().includes(lowerQuery) ||
+                a.content.toLowerCase().includes(lowerQuery)
+            );
+        }
+
+        return filtered;
+    }, [announcements, session.type, debouncedSearchQuery]);
 
     const sortedAnnouncements = useMemo(() => 
         [...relevantAnnouncements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), 
@@ -81,6 +96,16 @@ const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({ schoolData, sessi
                 )}
             </div>
             
+            <div className="mb-4">
+                <input
+                    type="text"
+                    placeholder="Search announcements..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
+                />
+            </div>
+
             <div className="space-y-6">
                 {sortedAnnouncements.map(announcement => (
                     <div key={announcement.id} className="bg-white dark:bg-slate-800 shadow-md rounded-lg p-6">
@@ -103,7 +128,7 @@ const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({ schoolData, sessi
                 ))}
                 {sortedAnnouncements.length === 0 && (
                     <div className="text-center p-8 bg-white dark:bg-slate-800 rounded-lg shadow-md">
-                        <p className="text-slate-600 dark:text-slate-300">No announcements found.</p>
+                        <p className="text-slate-600 dark:text-slate-300">{debouncedSearchQuery ? 'No announcements match your search.' : 'No announcements found.'}</p>
                     </div>
                 )}
             </div>

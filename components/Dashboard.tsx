@@ -10,7 +10,7 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
-  const { students, learningAreas, grades, sections, substituteAssignments, isSyncing } = schoolData;
+  const { students, learningAreas, grades, sections, substituteAssignments, classSchedules, isSyncing } = schoolData;
   
   const authUser = session.user as AuthUser;
 
@@ -19,8 +19,15 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
       return students;
     }
     
-    // For teachers, find their assigned class and any active substitute assignments
+    const authorizedSectionIds = new Set<string>();
+
+    // 1. Sections where the user is the adviser
     const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
+    if (teacherAdviserSection) {
+        authorizedSectionIds.add(teacherAdviserSection.id);
+    }
+    
+    // 2. Sections where the user is a substitute
     const today = new Date().toISOString().split('T')[0];
     const activeSubAssignments = substituteAssignments.filter(sub => 
       sub.teacherId === authUser.id &&
@@ -28,16 +35,35 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
       today <= sub.endDate
     );
 
-    const authorizedSectionIds = new Set<string>();
-    if (teacherAdviserSection) {
-      authorizedSectionIds.add(teacherAdviserSection.id);
+    if (activeSubAssignments.length > 0) {
+        const originalTeacherIds = activeSubAssignments.map(sub => sub.originalTeacherId);
+        
+        // Find sections where original teachers are advisers
+        sections.forEach(s => {
+            if (s.adviserId && originalTeacherIds.includes(s.adviserId)) {
+                authorizedSectionIds.add(s.id);
+            }
+        });
+
+        // Find sections where original teachers have classes scheduled
+        classSchedules.forEach(schedule => {
+            if (schedule.teacherId && schedule.sectionId && originalTeacherIds.includes(schedule.teacherId)) {
+                authorizedSectionIds.add(schedule.sectionId);
+            }
+        });
     }
-    activeSubAssignments.forEach(sub => authorizedSectionIds.add(sub.sectionId));
+
+    // 3. Sections where the user is assigned as a subject teacher
+    classSchedules.forEach(schedule => {
+      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+        authorizedSectionIds.add(schedule.sectionId);
+      }
+    });
     
     if (authorizedSectionIds.size === 0) return [];
     
     return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
-  }, [students, sections, substituteAssignments, authUser]);
+  }, [students, sections, substituteAssignments, classSchedules, authUser]);
 
 
   const visibleStudentIds = useMemo(() => new Set(visibleStudents.map(s => s.id)), [visibleStudents]);

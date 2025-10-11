@@ -6,6 +6,7 @@ import Modal from './Modal';
 import Spinner from './Spinner';
 import { ChevronDownIcon, ChevronRightIcon, PrinterIcon } from './icons';
 import PrintableReport from './PrintableReport';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface GradesViewProps {
   schoolData: SchoolDataHook;
@@ -191,7 +192,7 @@ const StudentGradeDetails: React.FC<{
 
 
 const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStudentId }) => {
-  const { students, grades, learningAreas, sections, substituteAssignments } = schoolData;
+  const { students, grades, learningAreas, sections, substituteAssignments, classSchedules } = schoolData;
   const isStudentView = session.type === 'student';
   const isParentView = session.type === 'parent';
 
@@ -200,6 +201,7 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
 
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(initialExpanded);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
   
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportContent, setReportContent] = useState('');
@@ -216,19 +218,39 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
     const authUser = session.user as AuthUser;
     if (['admin', 'principal', 'registrar'].includes(authUser.role)) return students;
     
+    const authorizedSectionIds = new Set<string>();
+
     const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
+    if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
+    
     const today = new Date().toISOString().split('T')[0];
     const activeSubAssignments = substituteAssignments.filter(sub => 
       sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate
     );
 
-    const authorizedSectionIds = new Set<string>();
-    if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
-    activeSubAssignments.forEach(sub => authorizedSectionIds.add(sub.sectionId));
-    
+    if (activeSubAssignments.length > 0) {
+        const originalTeacherIds = activeSubAssignments.map(sub => sub.originalTeacherId);
+        sections.forEach(s => {
+            if (s.adviserId && originalTeacherIds.includes(s.adviserId)) {
+                authorizedSectionIds.add(s.id);
+            }
+        });
+        classSchedules.forEach(schedule => {
+            if (schedule.teacherId && schedule.sectionId && originalTeacherIds.includes(schedule.teacherId)) {
+                authorizedSectionIds.add(schedule.sectionId);
+            }
+        });
+    }
+
+    classSchedules.forEach(schedule => {
+      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+        authorizedSectionIds.add(schedule.sectionId);
+      }
+    });
+
     if (authorizedSectionIds.size === 0) return [];
     return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
-  }, [students, sections, substituteAssignments, session, forceStudentId]);
+  }, [students, sections, substituteAssignments, classSchedules, session, forceStudentId]);
 
   const toggleStudentExpansion = (studentId: string) => {
     if (isStudentView || isParentView) return;
@@ -257,12 +279,12 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
     setIsPrintModalOpen(true);
   };
   
-  const filteredStudents = (isStudentView || isParentView)
+  const filteredStudents = useMemo(() => (isStudentView || isParentView)
     ? visibleStudents
     : visibleStudents.filter(student =>
-        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.email.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+        student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+      ), [visibleStudents, debouncedSearchQuery, isStudentView, isParentView]);
   
   const title = isStudentView ? 'My Grades' : (isParentView ? `Grades for ${filteredStudents[0]?.name}` : 'Manage Grades');
 
