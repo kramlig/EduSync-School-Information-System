@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { Student, Grade, SubGradeRecord, CoreValueGrade, AttendanceRecord, Section } from '../types';
+import type { Student, Grade, SubGradeRecord, CoreValueGrade, AttendanceRecord, Section, AttendanceStatus } from '../types';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
 import { PrinterIcon } from './icons';
 
@@ -62,6 +62,30 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
   }, [studentGrades]);
 
   const months = ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
+  
+  const monthlyAttendanceSummary = useMemo(() => {
+    if (!studentAttendance) return {};
+    
+    const summary: Record<string, { present: number, absent: number }> = {};
+    const monthIndexMap: Record<string, number> = { 'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5, 'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11 };
+
+    for (const dateStr in studentAttendance.dailyStatus) {
+        const date = new Date(dateStr + "T00:00:00");
+        const monthAbbr = date.toLocaleString('default', { month: 'short' });
+        
+        if (!summary[monthAbbr]) {
+            summary[monthAbbr] = { present: 0, absent: 0 };
+        }
+        
+        const status = studentAttendance.dailyStatus[dateStr];
+        if (status === 'P' || status === 'L') {
+            summary[monthAbbr].present++;
+        } else if (status === 'A') {
+            summary[monthAbbr].absent++;
+        }
+    }
+    return summary;
+  }, [studentAttendance]);
 
   return (
     <div className="text-black bg-white font-serif">
@@ -92,13 +116,13 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
                       </tr>
                       <tr>
                           <Td className="text-left font-bold h-6">No. of days present</Td>
-                          {months.map(m => <Td key={m}>{studentAttendance?.monthlyData[m]?.present ?? ''}</Td>)}
-                          <Td>{Object.values(studentAttendance?.monthlyData ?? {}).reduce((sum: number, m: { present: number; absent: number }) => sum + (m.present || 0), 0)}</Td>
+                          {months.map(m => <Td key={m}>{monthlyAttendanceSummary[m]?.present ?? ''}</Td>)}
+                           <Td>{Object.values(monthlyAttendanceSummary).reduce((sum, m) => sum + (m.present || 0), 0)}</Td>
                       </tr>
                       <tr>
                           <Td className="text-left font-bold h-6">No. of days absent</Td>
-                          {months.map(m => <Td key={m}>{studentAttendance?.monthlyData[m]?.absent ?? ''}</Td>)}
-                          <Td>{Object.values(studentAttendance?.monthlyData ?? {}).reduce((sum: number, m: { present: number; absent: number }) => sum + (m.absent || 0), 0)}</Td>
+                          {months.map(m => <Td key={m}>{monthlyAttendanceSummary[m]?.absent ?? ''}</Td>)}
+                           <Td>{Object.values(monthlyAttendanceSummary).reduce((sum, m) => sum + (m.absent || 0), 0)}</Td>
                       </tr>
                   </tbody>
               </table>

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import Card from './Card';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { StarIcon, CheckBadgeIcon, XCircleIcon } from './icons';
-import type { AuthUser, StudentUser, Grade } from '../types';
+import type { AuthUser, StudentUser, Grade, AttendanceStatus } from '../types';
 
 interface StudentDashboardProps {
   schoolData: SchoolDataHook;
@@ -26,10 +26,13 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ schoolData, session
     const record = attendanceRecords.find(r => r.studentId === student.id);
     if (!record) return { present: 0, absent: 0 };
 
-    return Object.values(record.monthlyData).reduce(
-      (totals, monthData) => {
-        totals.present += monthData.present || 0;
-        totals.absent += monthData.absent || 0;
+    return Object.values(record.dailyStatus).reduce(
+      (totals: { present: number; absent: number }, status: AttendanceStatus) => {
+        if (status === 'P' || status === 'L') {
+            totals.present++;
+        } else if (status === 'A') {
+            totals.absent++;
+        }
         return totals;
       },
       { present: 0, absent: 0 }

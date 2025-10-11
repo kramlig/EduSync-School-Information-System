@@ -321,7 +321,7 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
                         <EditableList field="activities"/>
                         <EditableList field="materials"/>
                         <EditableList field="assessment"/>
-                        <div><label className="font-bold">Assignments</label><select multiple value={planToEdit.assignmentIds} onChange={e => handleFieldChange('assignmentIds', Array.from(e.target.selectedOptions, option => option.value))} className="w-full input-style h-24">{availableAssignments.map(a => (<option key={a.id} value={a.id}>{a.title}</option>))}</select></div>
+                        <div><label className="font-bold">Assignments</label><select multiple value={planToEdit.assignmentIds} onChange={e => handleFieldChange('assignmentIds', Array.from(e.target.selectedOptions, (option: HTMLOptionElement) => option.value))} className="w-full input-style h-24">{availableAssignments.map(a => (<option key={a.id} value={a.id}>{a.title}</option>))}</select></div>
                         <div className="flex justify-between items-center pt-4">
                             {planToEdit.id && <button type="button" onClick={handleDeletePlan} className="text-red-600 font-semibold flex items-center"><TrashIcon/> Delete</button>}
                             <div className="space-x-2 ml-auto">

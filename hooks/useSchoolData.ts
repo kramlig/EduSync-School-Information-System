@@ -1,6 +1,24 @@
-import { useState, useEffect, useCallback, SetStateAction } from 'react';
-import type { Student, LearningArea, Grade, SubGradeRecord, CoreValue, CoreValueGrade, CoreValueMarking, AttendanceRecord, Teacher, Section, TeacherAssignment, AuthUser, SchoolSettings, SubstituteAssignment, ClassSchedule, StudentUser, Assignment, StudentAssignmentGrade, LessonPlan, Parent, ParentUser, Announcement } from '../types';
+import { useState, useEffect, useCallback } from 'react';
+import type { Student, LearningArea, Grade, SubGradeRecord, CoreValue, CoreValueGrade, CoreValueMarking, AttendanceRecord, Teacher, Section, AuthUser, SchoolSettings, SubstituteAssignment, ClassSchedule, StudentUser, Assignment, StudentAssignmentGrade, LessonPlan, Parent, ParentUser, Announcement, AttendanceStatus } from '../types';
+import * as dbService from '../src/services/dbService';
+// FIX: Import StoreName type from dbService to resolve 'Cannot find name' error.
+import type { StoreName } from '../src/services/dbService';
 
+// --- DATA GENERATION FOR STRESS TESTING ---
+
+const STRESS_TEST_CONFIG = {
+    teachers: 50,
+    sections: 40,
+    students: 1000,
+};
+
+const FIRST_NAMES = ["Liam", "Olivia", "Noah", "Emma", "Oliver", "Ava", "Elijah", "Charlotte", "William", "Sophia", "James", "Amelia", "Benjamin", "Isabella", "Lucas", "Mia", "Henry", "Evelyn", "Alexander", "Harper"];
+const LAST_NAMES = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin"];
+
+const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+const getRandomItem = <T>(arr: T[]): T => arr[rand(0, arr.length - 1)];
+
+// Base data that is always present
 const MOCK_LEARNING_AREAS: LearningArea[] = [
   { id: 'la1', name: 'Mother Tongue Based (MTB)', credits: 3 },
   { id: 'la2', name: 'Filipino', credits: 3 },
@@ -10,37 +28,6 @@ const MOCK_LEARNING_AREAS: LearningArea[] = [
   { id: 'la6', name: 'Edukasyon sa Pagpapakatao (EsP)', credits: 2 },
   { id: 'la7', name: 'MAPEH', credits: 4, isComposite: true, subSubjects: ['Music', 'Arts', 'PE', 'Health']},
   { id: 'la8', name: 'Science', credits: 4 },
-];
-
-const MOCK_TEACHERS: Teacher[] = [
-  { id: 't0', name: 'Admin User', email: 'admin@school.edu', role: 'admin', password: 'admin123' },
-  { id: 't1', name: 'Ms. Eleanor Vance', email: 'e.vance@school.edu', contactNumber: '555-0101', role: 'teacher', password: 'teacher123', assignments: [ { gradeLevel: 3, learningAreaId: 'la2' }, { gradeLevel: 3, learningAreaId: 'la3' } ] },
-  { id: 't2', name: 'Mr. David Chen', email: 'd.chen@school.edu', contactNumber: '555-0102', role: 'principal', password: 'teacher123', assignments: [ { gradeLevel: 3, learningAreaId: 'la4' }, { gradeLevel: 3, learningAreaId: 'la8' } ] },
-  { id: 't3', name: 'Ms. Maria Rodriguez', email: 'm.rodriguez@school.edu', contactNumber: '555-0103', role: 'teacher', password: 'teacher123', assignments: [ { gradeLevel: 4, learningAreaId: 'la5' } ] },
-  { id: 't4', name: 'Mr. John Smith', email: 'j.smith@school.edu', contactNumber: '555-0104', role: 'registrar', password: 'teacher123', assignments: [ { gradeLevel: 4, learningAreaId: 'la1' } ] },
-];
-
-const MOCK_SECTIONS: Section[] = [
-  { id: 'sec1', gradeLevel: 3, name: 'A', adviserId: 't1' },
-  { id: 'sec2', gradeLevel: 3, name: 'B', adviserId: 't2' },
-  { id: 'sec3', gradeLevel: 4, name: 'A', adviserId: 't3' },
-  { id: 'sec4', gradeLevel: 4, name: 'B', adviserId: 't4' },
-];
-
-const MOCK_STUDENTS: Student[] = [
-  { id: 's1', name: 'Alice Johnson', email: 'alice.j@school.edu', enrollmentDate: '2023-09-01', lrn: '123456789012', dateOfBirth: '2015-06-15', sex: 'Female', sectionId: 'sec1', password: 'student123' },
-  { id: 's2', name: 'Bob Williams', email: 'bob.w@school.edu', enrollmentDate: '2023-09-01', lrn: '210987654321', dateOfBirth: '2015-03-22', sex: 'Male', sectionId: 'sec1', password: 'student123' },
-  { id: 's3', name: 'Charlie Brown', email: 'charlie.b@school.edu', enrollmentDate: '2023-09-01', lrn: '345678901234', dateOfBirth: '2015-09-01', sex: 'Male', sectionId: 'sec2', password: 'student123' },
-  { id: 's4', name: 'Diana Miller', email: 'diana.m@school.edu', enrollmentDate: '2023-09-01', lrn: '456789012345', dateOfBirth: '2015-11-10', sex: 'Female', sectionId: 'sec2', password: 'student123' },
-  { id: 's5', name: 'Ethan Garcia', email: 'ethan.g@school.edu', enrollmentDate: '2023-09-01', lrn: '567890123456', dateOfBirth: '2014-02-18', sex: 'Male', sectionId: 'sec3', password: 'student123' },
-  { id: 's6', name: 'Fiona Martinez', email: 'fiona.m@school.edu', enrollmentDate: '2023-09-01', lrn: '678901234567', dateOfBirth: '2014-07-30', sex: 'Female', sectionId: 'sec3', password: 'student123' },
-  { id: 's7', name: 'George Lee', email: 'george.l@school.edu', enrollmentDate: '2023-09-01', lrn: '789012345678', dateOfBirth: '2014-04-05', sex: 'Male', sectionId: 'sec4', password: 'student123' },
-];
-
-const MOCK_PARENTS: Parent[] = [
-    { id: 'p1', name: 'Sarah Johnson', email: 's.johnson@family.com', password: 'parent123', studentIds: ['s1'] },
-    { id: 'p2', name: 'Michael Williams', email: 'm.williams@family.com', password: 'parent123', studentIds: ['s2'] },
-    { id: 'p3', name: 'Linda Brown', email: 'l.brown@family.com', password: 'parent123', studentIds: ['s3', 's5'] }, // Parent with two children
 ];
 
 const MOCK_CORE_VALUES: CoreValue[] = [
@@ -63,106 +50,184 @@ const MOCK_SETTINGS: SchoolSettings = {
     schoolYear: '2023-2024'
 };
 
-const MOCK_SUBSTITUTE_ASSIGNMENTS: SubstituteAssignment[] = [];
+const generateData = () => {
+    const teachers: Teacher[] = [
+      { id: 't0', name: 'Admin User', email: 'admin@school.edu', role: 'admin', password: 'admin123', assignments: [] },
+      { id: 't-principal', name: 'Dr. Evelyn Reed', email: 'principal@school.edu', role: 'principal', password: 'teacher123', assignments: [] },
+      { id: 't-registrar', name: 'Mr. Samuel Grant', email: 'registrar@school.edu', role: 'registrar', password: 'teacher123', assignments: [] },
+      { id: 't-demo', name: 'Maria Dela Cruz', email: 'teacher@school.edu', role: 'teacher', password: 'teacher123', assignments: [] },
+    ];
+    for (let i = 0; i < STRESS_TEST_CONFIG.teachers; i++) {
+        const firstName = getRandomItem(FIRST_NAMES);
+        const lastName = getRandomItem(LAST_NAMES);
+        teachers.push({
+        id: `t${i + 1}`,
+        name: `${firstName} ${lastName}`,
+        email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}${i}@school.edu`,
+        role: 'teacher',
+        password: 'teacher123',
+        assignments: [],
+        });
+    }
 
-const MOCK_SCHEDULES: ClassSchedule[] = [
-  { id: 'cs1', title: 'Math', type: 'academic', scope: 'section', sectionId: 'sec1', learningAreaId: 'la4', teacherId: 't2', dayOfWeek: 'Monday', startTime: '08:00', endTime: '09:00' },
-  { id: 'cs2', title: 'English', type: 'academic', scope: 'section', sectionId: 'sec1', learningAreaId: 'la3', teacherId: 't1', dayOfWeek: 'Monday', startTime: '09:00', endTime: '10:00' },
-  { id: 'cs3', title: 'Science', type: 'academic', scope: 'section', sectionId: 'sec2', learningAreaId: 'la8', teacherId: 't2', dayOfWeek: 'Tuesday', startTime: '10:00', endTime: '11:30' },
-  { id: 'cs4', title: 'Recess', type: 'extracurricular', scope: 'gradeLevel', gradeLevel: 3, dayOfWeek: 'Monday', startTime: '10:00', endTime: '10:30' },
-  { id: 'cs5', title: 'Flag Ceremony', type: 'extracurricular', scope: 'all', dayOfWeek: 'Monday', startTime: '07:30', endTime: '08:00' },
-  { id: 'cs6', title: 'AP', type: 'academic', scope: 'section', sectionId: 'sec3', learningAreaId: 'la5', teacherId: 't3', dayOfWeek: 'Wednesday', startTime: '09:00', endTime: '10:00' },
-  { id: 'cs7', title: 'Lunch', type: 'extracurricular', scope: 'all', dayOfWeek: 'Friday', startTime: '12:00', endTime: '13:00' },
-];
+    const sections: Section[] = [];
+    const gradeLevels = [1, 2, 3, 4, 5, 6];
+    let gradeCounts: Record<number, number> = {};
+    const availableAdvisers = teachers.filter(t => t.role === 'teacher');
+    for (let i = 0; i < STRESS_TEST_CONFIG.sections; i++) {
+        const gradeLevel = gradeLevels[i % gradeLevels.length];
+        gradeCounts[gradeLevel] = (gradeCounts[gradeLevel] || 0) + 1;
+        sections.push({
+        id: `sec${i + 1}`,
+        gradeLevel,
+        name: String.fromCharCode(64 + gradeCounts[gradeLevel]), // A, B, C...
+        adviserId: getRandomItem(availableAdvisers).id,
+        });
+    }
 
-const MOCK_ASSIGNMENTS: Assignment[] = [
-    { id: 'as1', sectionId: 'sec1', learningAreaId: 'la4', title: 'Q1 - Addition Worksheet', description: 'Complete the worksheet on two-digit addition.', totalPoints: 20, dueDate: '2023-09-30' },
-    { id: 'as2', sectionId: 'sec1', learningAreaId: 'la3', title: 'Q1 - Book Report: "Charlotte\'s Web"', description: 'Write a one-page summary and review.', totalPoints: 50, dueDate: '2023-10-15' },
-    { id: 'as3', sectionId: 'sec2', learningAreaId: 'la8', title: 'Q2 - Plant Growth Experiment', description: 'Observe and record plant growth over two weeks.', totalPoints: 100, dueDate: '2023-11-20' },
-];
+    const students: Student[] = [];
+    for (let i = 0; i < STRESS_TEST_CONFIG.students; i++) {
+        const firstName = getRandomItem(FIRST_NAMES);
+        const lastName = getRandomItem(LAST_NAMES);
+        students.push({
+        id: `s${i + 1}`,
+        name: `${firstName} ${lastName}`,
+        email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}${i}@school.edu`,
+        enrollmentDate: '2023-09-01',
+        lrn: Array.from({ length: 12 }, () => rand(0, 9)).join(''),
+        dateOfBirth: `201${rand(4, 5)}-${String(rand(1, 12)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
+        sex: rand(0, 1) === 0 ? 'Male' : 'Female',
+        sectionId: getRandomItem(sections).id,
+        password: 'student123',
+        });
+    }
+    students[0].id = 's-test-parent-child';
+    students[0].name = 'Alice Johnson';
+    students[0].email = 'alice.j@school.edu';
 
-const MOCK_LESSON_PLANS: LessonPlan[] = [
-    { id: 'lp1', sectionId: 'sec1', learningAreaId: 'la4', date: '2023-09-25', title: 'Introduction to Two-Digit Addition', objectives: ['Understand place value', 'Add two-digit numbers without regrouping'], activities: ['Whiteboard examples', 'Worksheet practice'], materials: ['Whiteboard', 'Markers', 'Worksheet A'], assessment: ['Check worksheet for accuracy'], resources: [], assignmentIds: ['as1'] },
-    { id: 'lp2', sectionId: 'sec1', learningAreaId: 'la3', date: '2023-10-02', title: 'Discussing "Charlotte\'s Web"', objectives: ['Identify main characters', 'Summarize the plot'], activities: ['Class discussion', 'Begin book report draft'], materials: ['Copy of "Charlotte\'s Web"'], assessment: ['Oral questioning on plot points'], resources: [{name: 'Book summary online', url: 'http://example.com'}], assignmentIds: ['as2'] },
-];
+    const parents: Parent[] = [
+        { id: 'p1', name: 'Sarah Johnson', email: 's.johnson@family.com', password: 'parent123', studentIds: ['s-test-parent-child'] },
+    ];
 
-const MOCK_ANNOUNCEMENTS: Announcement[] = [
-    { id: 'an1', title: 'Parent-Teacher Conference', content: 'The Q2 Parent-Teacher Conference will be held on December 15th. Please schedule an appointment with your child\'s adviser.', authorId: 't2', date: '2023-11-28', target: 'parents' },
-    { id: 'an2', title: 'School Holiday: National Heroes Day', content: 'There will be no classes on November 30th in observance of National Heroes Day.', authorId: 't2', date: '2023-11-25', target: 'all' },
-];
+    const quarters: ('q1' | 'q2' | 'q3' | 'q4')[] = ['q1', 'q2', 'q3', 'q4'];
+    const grades: Grade[] = students.flatMap(student => 
+        MOCK_LEARNING_AREAS.map(la => {
+        const grade: Grade = { id: `g-${student.id}-${la.id}`, studentId: student.id, learningAreaId: la.id };
+        let finalGradeSum = 0;
+        let quarterCount = 0;
+        quarters.forEach(q => {
+            if (la.isComposite) {
+            const subGrades: SubGradeRecord = {};
+            la.subSubjects!.forEach(sub => { subGrades[sub] = rand(70, 98); });
+            grade[q] = subGrades;
+            const avg = Math.round(Object.values(subGrades).reduce((a, b) => a + b, 0) / la.subSubjects!.length);
+            finalGradeSum += avg;
+            quarterCount++;
+            } else {
+            const qGrade = rand(72, 99);
+            grade[q] = qGrade;
+            finalGradeSum += qGrade;
+            quarterCount++;
+            }
+        });
+        const finalGrade = Math.round(finalGradeSum / quarterCount);
+        grade.finalGrade = finalGrade;
+        grade.remarks = finalGrade >= 75 ? 'Passed' : 'Failed';
+        return grade;
+        })
+    );
+    
+    const markings: CoreValueMarking[] = ['AO', 'SO', 'RO', 'NO'];
+    const coreValueGrades: CoreValueGrade[] = students.flatMap(student =>
+        MOCK_CORE_VALUES.map(cv => {
+            const grade: CoreValueGrade = { id: `cvg-${student.id}-${cv.id}`, studentId: student.id, coreValueId: cv.id };
+            quarters.forEach(q => {
+                grade[q] = {};
+                cv.behaviors.forEach(b => {
+                    grade[q]![b] = markings[rand(0, 3)];
+                });
+            });
+            return grade;
+        })
+    );
+    
+    const attendanceRecords: AttendanceRecord[] = students.map(student => {
+        const record: AttendanceRecord = { studentId: student.id, dailyStatus: {} };
+        const year = new Date().getFullYear();
+        const statuses: AttendanceStatus[] = ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'A', 'L', 'E'];
+        for (let month = 0; month < 12; month++) {
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                if (date.getDay() >= 1 && date.getDay() <= 5) { // Weekdays only
+                    const dateStr = date.toISOString().split('T')[0];
+                    record.dailyStatus[dateStr] = getRandomItem(statuses);
+                }
+            }
+        }
+        return record;
+    });
 
-// Data Generation
-const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-const quarters: ('q1' | 'q2' | 'q3' | 'q4')[] = ['q1', 'q2', 'q3', 'q4'];
-const markings: CoreValueMarking[] = ['AO', 'SO', 'RO', 'NO'];
-
-const MOCK_GRADES: Grade[] = MOCK_STUDENTS.flatMap(student => 
-  MOCK_LEARNING_AREAS.map(la => {
-    const grade: Grade = { id: `g-${student.id}-${la.id}`, studentId: student.id, learningAreaId: la.id };
-    let finalGradeSum = 0;
-    let quarterCount = 0;
-
-    quarters.forEach(q => {
-      if (la.isComposite) {
-        const subGrades: SubGradeRecord = {};
-        la.subSubjects!.forEach(sub => { subGrades[sub] = rand(70, 98); });
-        grade[q] = subGrades;
-        const avg = Math.round(Object.values(subGrades).reduce((a,b) => a+b, 0) / la.subSubjects!.length);
-        finalGradeSum += avg;
-        quarterCount++;
-      } else {
-        const qGrade = rand(72, 99);
-        grade[q] = qGrade;
-        finalGradeSum += qGrade;
-        quarterCount++;
-      }
+    const timeSlots = ["08:00-09:00", "09:00-10:00", "10:30-11:30", "13:00-14:00", "14:00-15:00"];
+    const days: ClassSchedule['dayOfWeek'][] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    let scheduleIdCounter = 1;
+    const classSchedules: ClassSchedule[] = [];
+    days.forEach(day => {
+        classSchedules.push({ id: `cs${scheduleIdCounter++}`, title: 'Recess', type: 'extracurricular', scope: 'all', dayOfWeek: day, startTime: '10:00', endTime: '10:30' });
+        classSchedules.push({ id: `cs${scheduleIdCounter++}`, title: 'Lunch', type: 'extracurricular', scope: 'all', dayOfWeek: day, startTime: '12:00', endTime: '13:00' });
+    });
+    const teacherSchedule: Record<string, Set<string>> = {}; // teacherId -> Set of "day-startTime"
+    sections.forEach(section => {
+        const availableSlotsByDay: Record<string, string[]> = { Monday: [...timeSlots], Tuesday: [...timeSlots], Wednesday: [...timeSlots], Thursday: [...timeSlots], Friday: [...timeSlots] };
+        MOCK_LEARNING_AREAS.forEach(la => {
+        let scheduled = false;
+        for (const day of days) {
+            if (availableSlotsByDay[day].length > 0 && !scheduled) {
+            const slot = availableSlotsByDay[day].shift()!;
+            const [startTime, endTime] = slot.split('-');
+            const availableTeacher = teachers.find(t => {
+                if (t.role !== 'teacher') return false;
+                const scheduleKey = `${day}-${startTime}`;
+                if (!teacherSchedule[t.id]) teacherSchedule[t.id] = new Set();
+                return !teacherSchedule[t.id].has(scheduleKey);
+            });
+            if (availableTeacher) {
+                classSchedules.push({ id: `cs${scheduleIdCounter++}`, title: la.name, type: 'academic', scope: 'section', sectionId: section.id, learningAreaId: la.id, teacherId: availableTeacher.id, dayOfWeek: day, startTime, endTime });
+                teacherSchedule[availableTeacher.id].add(`${day}-${startTime}`);
+                scheduled = true;
+            }
+            }
+        }
+        });
     });
     
-    const finalGrade = Math.round(finalGradeSum / quarterCount);
-    grade.finalGrade = finalGrade;
-    grade.remarks = finalGrade >= 75 ? 'Passed' : 'Failed';
-    return grade;
-  })
-);
-
-const MOCK_CORE_VALUE_GRADES: CoreValueGrade[] = MOCK_STUDENTS.flatMap(student =>
-  MOCK_CORE_VALUES.map(cv => {
-    const grade: CoreValueGrade = { id: `cvg-${student.id}-${cv.id}`, studentId: student.id, coreValueId: cv.id };
-    quarters.forEach(q => {
-      grade[q] = {};
-      cv.behaviors.forEach(b => {
-        grade[q]![b] = markings[rand(0, 3)];
-      });
+    classSchedules.push({
+      id: 'cs-multi',
+      title: 'Book Fair Week',
+      type: 'extracurricular',
+      scope: 'all',
+      dayOfWeek: 'Monday',
+      endDayOfWeek: 'Friday',
+      startTime: '09:00',
+      endTime: '15:00',
     });
-    return grade;
-  })
-);
+    
+    const substituteAssignments: SubstituteAssignment[] = [
+        { id: 'sub1', teacherId: teachers[4].id, originalTeacherId: teachers[5].id, startDate: '2024-10-28', endDate: '2024-10-30' }
+    ];
 
-const MOCK_ATTENDANCE_RECORDS: AttendanceRecord[] = MOCK_STUDENTS.map(student => {
-  const record: AttendanceRecord = { studentId: student.id, monthlyData: {} };
-  Object.entries(MONTHLY_SCHOOL_DAYS_CONFIG).forEach(([month, totalDays]) => {
-    const absent = rand(0, 3);
-    record.monthlyData[month] = { present: totalDays - absent, absent };
-  });
-  return record;
-});
+    const studentAssignmentGrades: StudentAssignmentGrade[] = [];
 
-const MOCK_STUDENT_ASSIGNMENT_GRADES: StudentAssignmentGrade[] = MOCK_STUDENTS
-    .filter(s => s.sectionId === 'sec1')
-    .flatMap(student => [
-        { assignmentId: 'as1', studentId: student.id, score: rand(15, 20), submissionDate: '2023-09-28', filePath: 'math-worksheet.pdf', feedback: 'Good job on the calculations!' },
-        { assignmentId: 'as2', studentId: student.id, score: null, submissionDate: null, filePath: null, feedback: null },
-    ]);
-
-
-const useLocalStorage = <T>(key: string, initialValue: T): [T, (value: SetStateAction<T>) => void] => {
-  const [storedValue, setStoredValue] = useState<T>(() => {
-    try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : initialValue; } catch (error) { console.error(error); return initialValue; }
-  });
-  const setValue = (value: SetStateAction<T>) => {
-    try { const valueToStore = value instanceof Function ? value(storedValue) : value; setStoredValue(valueToStore); window.localStorage.setItem(key, JSON.stringify(valueToStore)); } catch (error) { console.error(error); }
-  };
-  return [storedValue, setValue];
+    return {
+        teachers, sections, students, parents, grades, coreValueGrades, attendanceRecords, classSchedules, substituteAssignments,
+        learningAreas: MOCK_LEARNING_AREAS,
+        coreValues: MOCK_CORE_VALUES,
+        settings: MOCK_SETTINGS,
+        assignments: [],
+        studentAssignmentGrades,
+        lessonPlans: [],
+        announcements: [],
+    };
 };
 
 const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): number | undefined => {
@@ -171,156 +236,333 @@ const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): nu
   const total = subGrades.reduce((acc, val) => acc + val, 0); return Math.round(total / subGrades.length);
 };
 
+type SchoolDataState = {
+    students: Student[]; learningAreas: LearningArea[]; grades: Grade[]; coreValues: CoreValue[];
+    coreValueGrades: CoreValueGrade[]; attendanceRecords: AttendanceRecord[]; teachers: Teacher[];
+    parents: Parent[]; sections: Section[]; settings: SchoolSettings; substituteAssignments: SubstituteAssignment[];
+    classSchedules: ClassSchedule[]; assignments: Assignment[]; studentAssignmentGrades: StudentAssignmentGrade[];
+    lessonPlans: LessonPlan[]; announcements: Announcement[];
+};
+
 export const useSchoolData = (isOnline: boolean) => {
-  const [students, setStudents] = useLocalStorage<Student[]>('students', MOCK_STUDENTS);
-  const [learningAreas, setLearningAreas] = useLocalStorage<LearningArea[]>('learningAreas', MOCK_LEARNING_AREAS);
-  const [grades, setGrades] = useLocalStorage<Grade[]>('grades', MOCK_GRADES);
-  const [coreValues] = useLocalStorage<CoreValue[]>('coreValues', MOCK_CORE_VALUES);
-  const [coreValueGrades, setCoreValueGrades] = useLocalStorage<CoreValueGrade[]>('coreValueGrades', MOCK_CORE_VALUE_GRADES);
-  const [attendanceRecords, setAttendanceRecords] = useLocalStorage<AttendanceRecord[]>('attendance', MOCK_ATTENDANCE_RECORDS);
-  const [teachers, setTeachers] = useLocalStorage<Teacher[]>('teachers', MOCK_TEACHERS);
-  const [parents, setParents] = useLocalStorage<Parent[]>('parents', MOCK_PARENTS);
-  const [sections, setSections] = useLocalStorage<Section[]>('sections', MOCK_SECTIONS);
-  const [settings, setSettings] = useLocalStorage<SchoolSettings>('settings', MOCK_SETTINGS);
-  const [substituteAssignments, setSubstituteAssignments] = useLocalStorage<SubstituteAssignment[]>('substituteAssignments', MOCK_SUBSTITUTE_ASSIGNMENTS);
-  const [classSchedules, setClassSchedules] = useLocalStorage<ClassSchedule[]>('classSchedules', MOCK_SCHEDULES);
-  const [assignments, setAssignments] = useLocalStorage<Assignment[]>('assignments', MOCK_ASSIGNMENTS);
-  const [studentAssignmentGrades, setStudentAssignmentGrades] = useLocalStorage<StudentAssignmentGrade[]>('studentAssignmentGrades', MOCK_STUDENT_ASSIGNMENT_GRADES);
-  const [lessonPlans, setLessonPlans] = useLocalStorage<LessonPlan[]>('lessonPlans', MOCK_LESSON_PLANS);
-  const [announcements, setAnnouncements] = useLocalStorage<Announcement[]>('announcements', MOCK_ANNOUNCEMENTS);
-  const [isSyncing, setIsSyncing] = useState(false);
+    const [state, setState] = useState<SchoolDataState & { loading: boolean }>({
+        loading: true, students: [], learningAreas: [], grades: [], coreValues: [], coreValueGrades: [],
+        attendanceRecords: [], teachers: [], parents: [], sections: [], settings: MOCK_SETTINGS,
+        substituteAssignments: [], classSchedules: [], assignments: [], studentAssignmentGrades: [],
+        lessonPlans: [], announcements: [],
+    });
+
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const studentCount = await dbService.count('students');
+                if (studentCount > 0) {
+                    console.log("Loading data from IndexedDB...");
+                    const [ students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements ] = await Promise.all([
+                        dbService.getAll<Student>('students'), dbService.getAll<LearningArea>('learningAreas'),
+                        dbService.getAll<Grade>('grades'), dbService.getAll<CoreValue>('coreValues'),
+                        dbService.getAll<CoreValueGrade>('coreValueGrades'), dbService.getAll<AttendanceRecord>('attendanceRecords'),
+                        dbService.getAll<Teacher>('teachers'), dbService.getAll<Parent>('parents'),
+                        dbService.getAll<Section>('sections'), dbService.getAll<SchoolSettings>('settings'),
+                        dbService.getAll<SubstituteAssignment>('substituteAssignments'), dbService.getAll<ClassSchedule>('classSchedules'),
+                        dbService.getAll<Assignment>('assignments'), dbService.getAll<StudentAssignmentGrade>('studentAssignmentGrades'),
+                        dbService.getAll<LessonPlan>('lessonPlans'), dbService.getAll<Announcement>('announcements'),
+                    ]);
+                    setState({ loading: false, students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings: settings[0] || MOCK_SETTINGS, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements });
+                } else {
+                    console.log("No data in DB, generating new dataset...");
+                    const generated = generateData();
+                    await Promise.all([
+                        dbService.bulkPut('students', generated.students), dbService.bulkPut('learningAreas', generated.learningAreas),
+                        dbService.bulkPut('grades', generated.grades), dbService.bulkPut('coreValues', generated.coreValues),
+                        dbService.bulkPut('coreValueGrades', generated.coreValueGrades), dbService.bulkPut('attendanceRecords', generated.attendanceRecords),
+                        dbService.bulkPut('teachers', generated.teachers), dbService.bulkPut('parents', generated.parents),
+                        dbService.bulkPut('sections', generated.sections), dbService.bulkPut('settings', [generated.settings]),
+                        dbService.bulkPut('substituteAssignments', generated.substituteAssignments), dbService.bulkPut('classSchedules', generated.classSchedules),
+                        // No need to bulk put empty arrays
+                    ]);
+                    setState({ loading: false, ...generated });
+                }
+            } catch (error) {
+                console.error("Failed to load data from IndexedDB, error:", error);
+                setState(prevState => ({ ...prevState, loading: false }));
+            }
+        };
+        loadData();
+    }, []);
 
   useEffect(() => {
     if (isOnline) { setIsSyncing(true); const timer = setTimeout(() => { console.log("Data synced with server."); setIsSyncing(false); }, 1500); return () => clearTimeout(timer); }
   }, [isOnline]);
 
   const login = useCallback(async (email: string, password: string, type: 'staff' | 'student' | 'parent'): Promise<{ user: AuthUser | StudentUser | ParentUser; type: 'staff' | 'student' | 'parent' } | null> => {
+    if (state.loading) return null;
     const lowerEmail = email.toLowerCase();
     if (type === 'staff') {
-        const user = teachers.find(t => t.email.toLowerCase() === lowerEmail);
-        if (user && user.password === password) {
-            const { password: _, ...authUser } = user; return { user: authUser, type: 'staff' };
-        }
+        const user = state.teachers.find(t => t.email.toLowerCase() === lowerEmail);
+        if (user && user.password === password) { const { password: _, ...authUser } = user; return { user: authUser, type: 'staff' }; }
     } else if (type === 'student') {
-        const user = students.find(s => s.email.toLowerCase() === lowerEmail);
-        if (user && user.password === password) {
-            const { password: _, ...studentUser } = user; return { user: studentUser, type: 'student' };
-        }
-    } else { // parent
-        const user = parents.find(p => p.email.toLowerCase() === lowerEmail);
-        if (user && user.password === password) {
-            const { password: _, ...parentUser } = user; return { user: parentUser, type: 'parent' };
-        }
+        const user = state.students.find(s => s.email.toLowerCase() === lowerEmail);
+        if (user && user.password === password) { const { password: _, ...studentUser } = user; return { user: studentUser, type: 'student' }; }
+    } else {
+        const user = state.parents.find(p => p.email.toLowerCase() === lowerEmail);
+        if (user && user.password === password) { const { password: _, ...parentUser } = user; return { user: parentUser, type: 'parent' }; }
     }
     return null;
-  }, [teachers, students, parents]);
+  }, [state.loading, state.teachers, state.students, state.parents]);
 
-  const addStudent = useCallback((student: Omit<Student, 'id' | 'enrollmentDate'>): { success: boolean; message?: string } => {
-    if (student.lrn && !/^\d{12}$/.test(student.lrn)) { return { success: false, message: 'Invalid LRN. The LRN must be a 12-digit number.' }; }
-    const newStudent: Student = { ...student, id: `s${Date.now()}`, enrollmentDate: new Date().toISOString().split('T')[0], password: 'student123' };
-    setStudents(prev => [...prev, newStudent]); return { success: true };
-  }, [setStudents]);
-  
-  const updateStudent = useCallback((updatedStudent: Student) => setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s)), [setStudents]);
-  const deleteStudent = useCallback((studentId: string) => { setStudents(prev => prev.filter(s => s.id !== studentId)); setGrades(prev => prev.filter(g => g.studentId !== studentId)); setCoreValueGrades(prev => prev.filter(cvg => cvg.studentId !== studentId)); setAttendanceRecords(prev => prev.filter(ar => ar.studentId !== studentId)); setStudentAssignmentGrades(prev => prev.filter(sg => sg.studentId !== studentId)); setParents(prev => prev.map(p => ({ ...p, studentIds: p.studentIds.filter(id => id !== studentId) }))); }, [setStudents, setGrades, setCoreValueGrades, setAttendanceRecords, setStudentAssignmentGrades, setParents]);
-  
-  const addParent = useCallback((parent: Omit<Parent, 'id'>) => {
-    const newParent: Parent = { ...parent, id: `p${Date.now()}`, password: 'parent123' };
-    setParents(prev => [...prev, newParent]);
-  }, [setParents]);
-  
-  const updateParent = useCallback((updatedParent: Parent) => {
-    setParents(prev => prev.map(p => p.id === updatedParent.id ? updatedParent : p));
-  }, [setParents]);
-
-  const deleteParent = useCallback((parentId: string) => {
-    setParents(prev => prev.filter(p => p.id !== parentId));
-  }, [setParents]);
-
-  const assignStudentToParent = useCallback((parentId: string, studentId: string) => {
-    setParents(prev => prev.map(p => {
-      if (p.id === parentId && !p.studentIds.includes(studentId)) {
-        return { ...p, studentIds: [...p.studentIds, studentId] };
-      }
-      return p;
-    }));
-  }, [setParents]);
-
-  const unassignStudentFromParent = useCallback((parentId: string, studentId: string) => {
-    setParents(prev => prev.map(p => {
-      if (p.id === parentId) {
-        return { ...p, studentIds: p.studentIds.filter(id => id !== studentId) };
-      }
-      return p;
-    }));
-  }, [setParents]);
-
-  const addLearningArea = useCallback((learningArea: Omit<LearningArea, 'id'>) => { let newLearningArea: LearningArea = { ...learningArea, id: `la${Date.now()}` }; if (learningArea.name.toUpperCase() === 'MAPEH') { newLearningArea = { ...newLearningArea, isComposite: true, subSubjects: ['Music', 'Arts', 'PE', 'Health'], }; } setLearningAreas(prev => [...prev, newLearningArea]); }, [setLearningAreas]);
-  const deleteLearningArea = useCallback((learningAreaId: string) => { setLearningAreas(prev => prev.filter(la => la.id !== learningAreaId)); setGrades(prev => prev.filter(g => g.learningAreaId !== learningAreaId)); setAssignments(prev => prev.filter(a => a.learningAreaId !== learningAreaId)); setLessonPlans(prev => prev.filter(lp => lp.learningAreaId !== learningAreaId)); }, [setLearningAreas, setGrades, setAssignments, setLessonPlans]);
-
-  const addTeacher = useCallback((teacher: Omit<Teacher, 'id'>) => { const newTeacher: Teacher = { ...teacher, id: `t${Date.now()}`, password: 'teacher123' }; setTeachers(prev => { let newTeachers = [...prev]; if (newTeacher.role === 'principal') { newTeachers = newTeachers.map(t => t.role === 'principal' ? { ...t, role: 'teacher' } : t); } return [...newTeachers, newTeacher]; }); }, [setTeachers]);
-  const updateTeacher = useCallback((updatedTeacher: Teacher) => { setTeachers(prev => { let newTeachers = prev.map(t => t.id === updatedTeacher.id ? updatedTeacher : t); if (updatedTeacher.role === 'principal') { newTeachers = newTeachers.map(t => (t.role === 'principal' && t.id !== updatedTeacher.id) ? { ...t, role: 'teacher' } : t); } return newTeachers; }); }, [setTeachers]);
-  const deleteTeacher = useCallback((teacherId: string) => { setTeachers(prev => prev.filter(t => t.id !== teacherId)); setSections(prev => prev.map(s => s.adviserId === teacherId ? {...s, adviserId: undefined} : s)); setSubstituteAssignments(prev => prev.filter(sub => sub.teacherId !== teacherId)); }, [setTeachers, setSections, setSubstituteAssignments]);
-  
-  const addSection = useCallback((section: Omit<Section, 'id'>) => { const newSection: Section = { ...section, id: `sec${Date.now()}` }; setSections(prev => [...prev, newSection]); }, [setSections]);
-  const updateSection = useCallback((updatedSection: Section) => setSections(prev => prev.map(s => s.id === updatedSection.id ? updatedSection : s)), [setSections]);
-  const deleteSection = useCallback((sectionId: string) => { setSections(prev => prev.filter(s => s.id !== sectionId)); setStudents(prev => prev.map(s => s.sectionId === sectionId ? {...s, sectionId: undefined} : s)); setSubstituteAssignments(prev => prev.filter(sub => sub.sectionId !== sectionId)); setAssignments(prev => prev.filter(a => a.sectionId !== sectionId)); setLessonPlans(prev => prev.filter(lp => lp.sectionId !== sectionId)); }, [setSections, setStudents, setSubstituteAssignments, setAssignments, setLessonPlans]);
-
-  const addSubstituteAssignment = useCallback((assignment: Omit<SubstituteAssignment, 'id'>) => { const newAssignment: SubstituteAssignment = { ...assignment, id: `sub${Date.now()}` }; setSubstituteAssignments(prev => [...prev, newAssignment]); }, [setSubstituteAssignments]);
-  const updateSubstituteAssignment = useCallback((updatedAssignment: SubstituteAssignment) => setSubstituteAssignments(prev => prev.map(sub => sub.id === updatedAssignment.id ? updatedAssignment : sub)), [setSubstituteAssignments]);
-  const deleteSubstituteAssignment = useCallback((assignmentId: string) => setSubstituteAssignments(prev => prev.filter(sub => sub.id !== assignmentId)), [setSubstituteAssignments]);
-
-  const updateGrade = useCallback((studentId: string, learningAreaId: string, quarter: 'q1'|'q2'|'q3'|'q4', gradeValue: number|undefined, subSubject?: string) => { setGrades(prev => { const newGrades = [...prev]; let gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.learningAreaId === learningAreaId); if (gradeIndex === -1) { newGrades.push({ id: `g-${studentId}-${learningAreaId}`, studentId, learningAreaId, }); gradeIndex = newGrades.length - 1; } const updatedGrade = { ...newGrades[gradeIndex] }; const learningArea = learningAreas.find(la => la.id === learningAreaId); if (learningArea?.isComposite && subSubject) { const currentQuarterGrade = updatedGrade[quarter]; let newSubGrades: SubGradeRecord = {}; if (typeof currentQuarterGrade === 'object' && currentQuarterGrade !== null) { newSubGrades = { ...currentQuarterGrade }; } if (gradeValue === undefined) { delete newSubGrades[subSubject]; } else { newSubGrades[subSubject] = gradeValue; } updatedGrade[quarter] = newSubGrades; } else if (!learningArea?.isComposite) { if (gradeValue === undefined) { delete updatedGrade[quarter]; } else { updatedGrade[quarter] = gradeValue; } } const quarterAverages = [calculateQuarterAverage(updatedGrade.q1), calculateQuarterAverage(updatedGrade.q2), calculateQuarterAverage(updatedGrade.q3), calculateQuarterAverage(updatedGrade.q4)].filter(g => g !== undefined) as number[]; if (quarterAverages.length > 0) { const total = quarterAverages.reduce((acc, val) => acc + val, 0); const finalGrade = Math.round(total / quarterAverages.length); updatedGrade.finalGrade = finalGrade; updatedGrade.remarks = finalGrade >= 75 ? 'Passed' : 'Failed'; } else { delete updatedGrade.finalGrade; delete updatedGrade.remarks; } newGrades[gradeIndex] = updatedGrade; return newGrades; }); }, [setGrades, learningAreas]);
-  const updateCoreValueGrade = useCallback((studentId: string, coreValueId: string, quarter: 'q1'|'q2'|'q3'|'q4', behavior: string, marking: CoreValueMarking|'') => { setCoreValueGrades(prev => { const newGrades = [...prev]; let gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.coreValueId === coreValueId); if (gradeIndex === -1) { newGrades.push({ id: `cvg-${studentId}-${coreValueId}`, studentId, coreValueId, }); gradeIndex = newGrades.length - 1; } const updatedGrade = { ...newGrades[gradeIndex] }; const currentQuarterMarkings = updatedGrade[quarter] ?? {}; const newQuarterMarkings = { ...currentQuarterMarkings }; if (marking === '') { delete newQuarterMarkings[behavior]; } else { newQuarterMarkings[behavior] = marking; } updatedGrade[quarter] = newQuarterMarkings; newGrades[gradeIndex] = updatedGrade; return newGrades; }); }, [setCoreValueGrades]);
-  const updateAttendance = useCallback((studentId: string, month: string, type: 'present' | 'absent', value: number) => { setAttendanceRecords(prev => { const newRecords = [...prev]; let recordIndex = newRecords.findIndex(r => r.studentId === studentId); if (recordIndex === -1) { newRecords.push({ studentId, monthlyData: {} }); recordIndex = newRecords.length - 1; } const updatedRecord = { ...newRecords[recordIndex] }; const monthData = updatedRecord.monthlyData[month] ?? { present: 0, absent: 0 }; const newMonthData = { ...monthData, [type]: value }; updatedRecord.monthlyData = { ...updatedRecord.monthlyData, [month]: newMonthData }; newRecords[recordIndex] = updatedRecord; return newRecords; }); }, [setAttendanceRecords]);
-  const updateSettings = useCallback((newSettings: SchoolSettings) => setSettings(newSettings), [setSettings]);
-
-  const checkScheduleConflict = (newSchedule: Omit<ClassSchedule, 'id'>, existingSchedules: ClassSchedule[], scheduleIdToIgnore?: string): string | null => { const { startTime: newStart, endTime: newEnd, dayOfWeek, type, scope, sectionId, gradeLevel, teacherId } = newSchedule; const newScheduleSection = sections.find(s => s.id === sectionId); for (const existing of existingSchedules) { if (scheduleIdToIgnore && existing.id === scheduleIdToIgnore) continue; if (existing.dayOfWeek !== dayOfWeek) continue; if (newStart < existing.endTime && existing.startTime < newEnd) { if (type === 'academic' && existing.type === 'academic' && teacherId && existing.teacherId === teacherId) { const teacher = teachers.find(t => t.id === teacherId); return `Conflict: ${teacher?.name || 'Teacher'} is already scheduled at this time.`; } const existingSection = sections.find(s => s.id === existing.sectionId); if (scope === 'all' || existing.scope === 'all') return `Conflict: A school-wide event is scheduled at this time.`; if (scope === 'gradeLevel' && existing.scope === 'gradeLevel' && gradeLevel === existing.gradeLevel) return `Conflict: An event for Grade ${gradeLevel} is already scheduled.`; if (scope === 'section' && existing.scope === 'section' && sectionId === existing.sectionId) { const section = sections.find(s => s.id === sectionId); return `Conflict: Section ${section?.name || ''} already has an event scheduled.`; } if (scope === 'gradeLevel' && existing.scope === 'section' && existingSection && gradeLevel === existingSection.gradeLevel) return `Conflict: Section ${existingSection.name} (Grade ${gradeLevel}) has a class, which conflicts with the grade-level event.`; if (scope === 'section' && existing.scope === 'gradeLevel' && newScheduleSection && newScheduleSection.gradeLevel === existing.gradeLevel) return `Conflict: A grade-level event for Grade ${newScheduleSection.gradeLevel} is scheduled, which conflicts with this section's class.`; } } return null; };
-  const addSchedule = useCallback((schedule: Omit<ClassSchedule, 'id'>): { success: boolean, message?: string } => { const conflict = checkScheduleConflict(schedule, classSchedules); if (conflict) { return { success: false, message: conflict }; } const newSchedule: ClassSchedule = { ...schedule, id: `cs${Date.now()}` }; setClassSchedules(prev => [...prev, newSchedule]); return { success: true }; }, [classSchedules, setClassSchedules, teachers, sections]);
-  const updateSchedule = useCallback((updatedSchedule: ClassSchedule): { success: boolean, message?: string } => { const conflict = checkScheduleConflict(updatedSchedule, classSchedules, updatedSchedule.id); if (conflict) { return { success: false, message: conflict }; } setClassSchedules(prev => prev.map(s => s.id === updatedSchedule.id ? updatedSchedule : s)); return { success: true }; }, [classSchedules, setClassSchedules, teachers, sections]);
-  const deleteSchedule = useCallback((scheduleId: string) => setClassSchedules(prev => prev.filter(s => s.id !== scheduleId)), [setClassSchedules]);
-
-  const addAssignment = useCallback((assignment: Omit<Assignment, 'id'>) => { const newAssignment: Assignment = { ...assignment, id: `as${Date.now()}` }; setAssignments(prev => [...prev, newAssignment]); }, [setAssignments]);
-  const updateAssignment = useCallback((updatedAssignment: Assignment) => setAssignments(prev => prev.map(a => a.id === updatedAssignment.id ? updatedAssignment : a)), [setAssignments]);
-  const deleteAssignment = useCallback((assignmentId: string) => { setAssignments(prev => prev.filter(a => a.id !== assignmentId)); setStudentAssignmentGrades(prev => prev.filter(sg => sg.assignmentId !== assignmentId)); }, [setAssignments, setStudentAssignmentGrades]);
-  
-  const updateAssignmentGrade = useCallback((studentId: string, assignmentId: string, score: number | null, feedback: string | null) => {
-    setStudentAssignmentGrades(prev => {
-        const newGrades = [...prev];
-        const gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.assignmentId === assignmentId);
-        if (gradeIndex > -1) {
-            newGrades[gradeIndex] = { ...newGrades[gradeIndex], score, feedback };
-        } else {
-            newGrades.push({ studentId, assignmentId, score, feedback, submissionDate: null, filePath: null });
+  const createMutation = <T extends any[]>(dbAction: (...args: T) => Promise<any>, stateUpdate: (...args: T) => void) => {
+    return useCallback(async (...args: T) => {
+        stateUpdate(...args); // Optimistic UI update
+        try {
+            await dbAction(...args);
+        } catch (error) {
+            console.error("Failed to persist change to DB:", error);
+            // Here you could implement a rollback mechanism if needed
         }
-        return newGrades;
-    });
-  }, [setStudentAssignmentGrades]);
+    }, [stateUpdate, dbAction]);
+  };
+  
+    // FIX: Update addStudent to return a success/error object for validation feedback in the UI.
+    const addStudent = useCallback((student: Omit<Student, 'id' | 'enrollmentDate'>): { success: boolean; message?: string } => {
+        if (state.students.some(s => s.email.toLowerCase() === student.email.toLowerCase())) {
+            return { success: false, message: 'A student with this email already exists.' };
+        }
+        const newStudent: Student = { ...student, id: `s${Date.now()}`, enrollmentDate: new Date().toISOString().split('T')[0], password: 'student123' };
+        dbService.add('students', newStudent).catch(console.error);
+        setState(prev => ({ ...prev, students: [...prev.students, newStudent] }));
+        return { success: true };
+    }, [state.students]);
 
-  const submitAssignment = useCallback((studentId: string, assignmentId: string, filePath: string) => {
-    setStudentAssignmentGrades(prev => {
-        const newGrades = [...prev];
+    const updateStudent = useCallback((updatedStudent: Student) => {
+        dbService.put('students', updatedStudent).catch(console.error);
+        setState(prev => ({ ...prev, students: prev.students.map(s => s.id === updatedStudent.id ? updatedStudent : s) }));
+    }, []);
+    const deleteStudent = useCallback((studentId: string) => {
+        // This is complex, involving multiple stores. Handle carefully.
+        dbService.remove('students', studentId).catch(console.error);
+        // Fire-and-forget deletion of related items
+        state.grades.filter(g => g.studentId === studentId).forEach(g => dbService.remove('grades', g.id).catch(console.error));
+        state.coreValueGrades.filter(cvg => cvg.studentId === studentId).forEach(cvg => dbService.remove('coreValueGrades', cvg.id).catch(console.error));
+        dbService.remove('attendanceRecords', studentId).catch(console.error);
+        
+        setState(prev => ({
+            ...prev,
+            students: prev.students.filter(s => s.id !== studentId),
+            grades: prev.grades.filter(g => g.studentId !== studentId),
+            coreValueGrades: prev.coreValueGrades.filter(cvg => cvg.studentId !== studentId),
+            attendanceRecords: prev.attendanceRecords.filter(ar => ar.studentId !== studentId),
+            parents: prev.parents.map(p => ({ ...p, studentIds: p.studentIds.filter(id => id !== studentId) })),
+        }));
+    }, [state.grades, state.coreValueGrades]);
+
+    const addParent = useCallback((parent: Omit<Parent, 'id'>) => {
+        const newParent: Parent = { ...parent, id: `p${Date.now()}`, password: 'parent123' };
+        dbService.add('parents', newParent).catch(console.error);
+        setState(prev => ({ ...prev, parents: [...prev.parents, newParent] }));
+    }, []);
+    const updateParent = useCallback((updatedParent: Parent) => {
+        dbService.put('parents', updatedParent).catch(console.error);
+        setState(prev => ({ ...prev, parents: prev.parents.map(p => p.id === updatedParent.id ? updatedParent : p) }));
+    }, []);
+    const deleteParent = useCallback((parentId: string) => {
+        dbService.remove('parents', parentId).catch(console.error);
+        setState(prev => ({ ...prev, parents: prev.parents.filter(p => p.id !== parentId) }));
+    }, []);
+    const assignStudentToParent = useCallback((parentId: string, studentId: string) => {
+        const parent = state.parents.find(p => p.id === parentId);
+        if(parent && !parent.studentIds.includes(studentId)) {
+            const updatedParent = { ...parent, studentIds: [...parent.studentIds, studentId] };
+            dbService.put('parents', updatedParent).catch(console.error);
+            setState(prev => ({...prev, parents: prev.parents.map(p => p.id === parentId ? updatedParent : p)}));
+        }
+    }, [state.parents]);
+    const unassignStudentFromParent = useCallback((parentId: string, studentId: string) => {
+        const parent = state.parents.find(p => p.id === parentId);
+        if(parent) {
+            const updatedParent = { ...parent, studentIds: parent.studentIds.filter(id => id !== studentId) };
+            dbService.put('parents', updatedParent).catch(console.error);
+            setState(prev => ({...prev, parents: prev.parents.map(p => p.id === parentId ? updatedParent : p)}));
+        }
+    }, [state.parents]);
+
+    const updateGrade = useCallback((studentId: string, learningAreaId: string, quarter: 'q1'|'q2'|'q3'|'q4', gradeValue: number|undefined, subSubject?: string) => {
+        let updatedGrade: Grade | undefined;
+        const newGrades = [...state.grades];
+        let gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.learningAreaId === learningAreaId);
+        if (gradeIndex === -1) { 
+            const newGradeEntry: Grade = { id: `g-${studentId}-${learningAreaId}`, studentId, learningAreaId };
+            newGrades.push(newGradeEntry);
+            gradeIndex = newGrades.length - 1;
+        }
+        updatedGrade = { ...newGrades[gradeIndex] };
+        const learningArea = state.learningAreas.find(la => la.id === learningAreaId);
+        if (learningArea?.isComposite && subSubject) {
+            const currentQuarterGrade = updatedGrade[quarter]; let newSubGrades: SubGradeRecord = {};
+            if (typeof currentQuarterGrade === 'object' && currentQuarterGrade !== null) { newSubGrades = { ...currentQuarterGrade }; }
+            if (gradeValue === undefined) { delete newSubGrades[subSubject]; } else { newSubGrades[subSubject] = gradeValue; }
+            updatedGrade[quarter] = newSubGrades;
+        } else if (!learningArea?.isComposite) {
+            if (gradeValue === undefined) { delete updatedGrade[quarter]; } else { updatedGrade[quarter] = gradeValue; }
+        }
+        const quarterAverages = [calculateQuarterAverage(updatedGrade.q1), calculateQuarterAverage(updatedGrade.q2), calculateQuarterAverage(updatedGrade.q3), calculateQuarterAverage(updatedGrade.q4)].filter(g => g !== undefined) as number[];
+        if (quarterAverages.length > 0) { const total = quarterAverages.reduce((acc, val) => acc + val, 0); const finalGrade = Math.round(total / quarterAverages.length); updatedGrade.finalGrade = finalGrade; updatedGrade.remarks = finalGrade >= 75 ? 'Passed' : 'Failed'; } else { delete updatedGrade.finalGrade; delete updatedGrade.remarks; }
+        newGrades[gradeIndex] = updatedGrade;
+
+        dbService.put('grades', updatedGrade).catch(console.error);
+        setState(prev => ({...prev, grades: newGrades}));
+    }, [state.grades, state.learningAreas]);
+
+    const updateAttendance = useCallback((studentId: string, date: string, status: AttendanceStatus) => {
+        const newRecords = [...state.attendanceRecords];
+        let recordIndex = newRecords.findIndex(r => r.studentId === studentId);
+        if (recordIndex === -1) { 
+            const newRecordEntry: AttendanceRecord = { studentId, dailyStatus: {} };
+            newRecords.push(newRecordEntry); 
+            recordIndex = newRecords.length - 1; 
+        }
+        const updatedRecord = { ...newRecords[recordIndex], dailyStatus: { ...newRecords[recordIndex].dailyStatus, [date]: status } };
+        newRecords[recordIndex] = updatedRecord;
+
+        dbService.put('attendanceRecords', updatedRecord).catch(console.error);
+        setState(prev => ({ ...prev, attendanceRecords: newRecords }));
+    }, [state.attendanceRecords]);
+    
+    // Simplified wrappers for other mutations
+    const createGenericMutations = <T extends {id: string}>(storeName: StoreName, stateKey: keyof SchoolDataState) => {
+        const add = (item: Omit<T, 'id'>) => {
+            const newItem = { ...item, id: `${storeName.slice(0,3)}-${Date.now()}` } as T;
+            dbService.add(storeName, newItem).catch(console.error);
+            // FIX: The type `prev[stateKey]` is a wide union. Cast to `unknown` first to satisfy TypeScript's strict checks.
+            setState(prev => ({ ...prev, [stateKey]: [...(prev[stateKey] as unknown as T[]), newItem] }));
+        };
+        const update = (updatedItem: T) => {
+            dbService.put(storeName, updatedItem).catch(console.error);
+            // FIX: The type `prev[stateKey]` is a wide union. Cast to `unknown` first to satisfy TypeScript's strict checks.
+            setState(prev => ({ ...prev, [stateKey]: (prev[stateKey] as unknown as T[]).map(i => i.id === updatedItem.id ? updatedItem : i) }));
+        };
+        const remove = (itemId: string) => {
+            dbService.remove(storeName, itemId).catch(console.error);
+            // FIX: The type `prev[stateKey]` is a wide union. Cast to `unknown` first to satisfy TypeScript's strict checks.
+            setState(prev => ({ ...prev, [stateKey]: (prev[stateKey] as unknown as T[]).filter(i => i.id !== itemId) }));
+        };
+        return { add, update, remove };
+    };
+
+    const { add: addLearningArea, remove: deleteLearningArea } = createGenericMutations<LearningArea>('learningAreas', 'learningAreas');
+    const { add: addTeacher, update: updateTeacher, remove: deleteTeacher } = createGenericMutations<Teacher>('teachers', 'teachers');
+    const { add: addSection, update: updateSection, remove: deleteSection } = createGenericMutations<Section>('sections', 'sections');
+    const { add: addSubstituteAssignment, update: updateSubstituteAssignment, remove: deleteSubstituteAssignment } = createGenericMutations<SubstituteAssignment>('substituteAssignments', 'substituteAssignments');
+    const { add: addSchedule, update: updateSchedule, remove: deleteSchedule } = createGenericMutations<ClassSchedule>('classSchedules', 'classSchedules');
+    const { add: addAssignment, update: updateAssignment, remove: deleteAssignment } = createGenericMutations<Assignment>('assignments', 'assignments');
+    const { add: addLessonPlan, update: updateLessonPlan, remove: deleteLessonPlan } = createGenericMutations<LessonPlan>('lessonPlans', 'lessonPlans');
+    const { add: addAnnouncement, update: updateAnnouncement, remove: deleteAnnouncement } = createGenericMutations<Announcement>('announcements', 'announcements');
+
+    // Custom mutations that don't fit the generic pattern
+    const updateCoreValueGrade = useCallback((studentId: string, coreValueId: string, quarter: 'q1'|'q2'|'q3'|'q4', behavior: string, marking: CoreValueMarking|'') => {
+        const newGrades = [...state.coreValueGrades];
+        let gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.coreValueId === coreValueId);
+        if (gradeIndex === -1) { newGrades.push({ id: `cvg-${studentId}-${coreValueId}`, studentId, coreValueId }); gradeIndex = newGrades.length - 1; }
+        const updatedGrade = { ...newGrades[gradeIndex] };
+        const newQuarterMarkings = { ...(updatedGrade[quarter] ?? {}) };
+        if (marking === '') { delete newQuarterMarkings[behavior]; } else { newQuarterMarkings[behavior] = marking; }
+        updatedGrade[quarter] = newQuarterMarkings;
+        newGrades[gradeIndex] = updatedGrade;
+        
+        dbService.put('coreValueGrades', updatedGrade).catch(console.error);
+        setState(prev => ({...prev, coreValueGrades: newGrades}));
+    }, [state.coreValueGrades]);
+
+    const updateSettings = useCallback((newSettings: SchoolSettings) => {
+        dbService.put('settings', newSettings).catch(console.error);
+        setState(prev => ({ ...prev, settings: newSettings }));
+    }, []);
+    
+    const updateAssignmentGrade = useCallback((studentId: string, assignmentId: string, score: number | null, feedback: string | null) => {
+        const newGrades = [...state.studentAssignmentGrades];
+        const gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.assignmentId === assignmentId);
+        const newGrade = gradeIndex > -1 ? { ...newGrades[gradeIndex], score, feedback } : { studentId, assignmentId, score, feedback, submissionDate: null, filePath: null };
+        if (gradeIndex > -1) { newGrades[gradeIndex] = newGrade; } else { newGrades.push(newGrade); }
+
+        dbService.put('studentAssignmentGrades', newGrade).catch(console.error);
+        setState(prev => ({ ...prev, studentAssignmentGrades: newGrades }));
+    }, [state.studentAssignmentGrades]);
+
+    const submitAssignment = useCallback((studentId: string, assignmentId: string, filePath: string) => {
+        const newGrades = [...state.studentAssignmentGrades];
         const gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.assignmentId === assignmentId);
         const submissionDate = new Date().toISOString().split('T')[0];
-        if (gradeIndex > -1) {
-            newGrades[gradeIndex] = { ...newGrades[gradeIndex], filePath, submissionDate };
-        } else {
-            newGrades.push({ studentId, assignmentId, score: null, feedback: null, submissionDate, filePath });
+        const newGrade = gradeIndex > -1 ? { ...newGrades[gradeIndex], filePath, submissionDate } : { studentId, assignmentId, score: null, feedback: null, submissionDate, filePath };
+        if (gradeIndex > -1) { newGrades[gradeIndex] = newGrade; } else { newGrades.push(newGrade); }
+
+        dbService.put('studentAssignmentGrades', newGrade).catch(console.error);
+        setState(prev => ({ ...prev, studentAssignmentGrades: newGrades }));
+    }, [state.studentAssignmentGrades]);
+    
+    // Custom logic for add/update schedule due to conflict checking
+    const addScheduleWithConflictCheck = useCallback((schedule: Omit<ClassSchedule, 'id'>): { success: boolean, message?: string } => {
+        const conflict = checkScheduleConflict(schedule, state.classSchedules);
+        if (conflict) return { success: false, message: conflict };
+        const newSchedule: ClassSchedule = { ...schedule, id: `cs${Date.now()}` };
+        dbService.add('classSchedules', newSchedule).catch(console.error);
+        setState(prev => ({ ...prev, classSchedules: [...prev.classSchedules, newSchedule] }));
+        return { success: true };
+    }, [state.classSchedules, state.teachers, state.sections]);
+    
+    const updateScheduleWithConflictCheck = useCallback((updatedSchedule: ClassSchedule): { success: boolean, message?: string } => {
+        const conflict = checkScheduleConflict(updatedSchedule, state.classSchedules, updatedSchedule.id);
+        if (conflict) return { success: false, message: conflict };
+        dbService.put('classSchedules', updatedSchedule).catch(console.error);
+        setState(prev => ({ ...prev, classSchedules: prev.classSchedules.map(s => s.id === updatedSchedule.id ? updatedSchedule : s) }));
+        return { success: true };
+    }, [state.classSchedules, state.teachers, state.sections]);
+
+    const checkScheduleConflict = (newSchedule: Omit<ClassSchedule, 'id'>, existingSchedules: ClassSchedule[], scheduleIdToIgnore?: string): string | null => {
+        const DAYS_ORDER: ClassSchedule['dayOfWeek'][] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+        const getDayIndex = (day: ClassSchedule['dayOfWeek']) => DAYS_ORDER.indexOf(day);
+        const { startTime: newStart, endTime: newEnd, dayOfWeek: newStartDay, endDayOfWeek: newEndDay, type, scope, sectionId, gradeLevel, teacherId } = newSchedule;
+        const newStartIndex = getDayIndex(newStartDay);
+        const newEndIndex = newEndDay ? getDayIndex(newEndDay) : newStartIndex;
+        if (newEndIndex < newStartIndex) { return "End day cannot be before start day."; }
+        const newScheduleSection = state.sections.find(s => s.id === sectionId);
+        for (const existing of existingSchedules) {
+            if (scheduleIdToIgnore && existing.id === scheduleIdToIgnore) continue;
+            const existingStartIndex = getDayIndex(existing.dayOfWeek);
+            const existingEndIndex = existing.endDayOfWeek ? getDayIndex(existing.endDayOfWeek) : existingStartIndex;
+            const daysOverlap = newStartIndex <= existingEndIndex && existingStartIndex <= newEndIndex;
+            if (!daysOverlap) continue;
+            const timesOverlap = newStart < existing.endTime && existing.startTime < newEnd;
+            if (!timesOverlap) continue;
+            if (type === 'academic' && existing.type === 'academic' && teacherId && existing.teacherId === teacherId) {
+                const teacher = state.teachers.find(t => t.id === teacherId);
+                return `Conflict: ${teacher?.name || 'Teacher'} is already scheduled at this time.`;
+            }
+            const existingSection = state.sections.find(s => s.id === existing.sectionId);
+            if (scope === 'all' || existing.scope === 'all') return `Conflict: A school-wide event is scheduled at this time.`;
+            if (scope === 'gradeLevel' && existing.scope === 'gradeLevel' && gradeLevel === existing.gradeLevel) return `Conflict: An event for Grade ${gradeLevel} is already scheduled.`;
+            if (scope === 'section' && existing.scope === 'section' && sectionId === existing.sectionId) {
+                const section = state.sections.find(s => s.id === sectionId);
+                return `Conflict: Section ${section?.name || ''} already has an event scheduled.`;
+            }
+            if (scope === 'gradeLevel' && existing.scope === 'section' && existingSection && gradeLevel === existingSection.gradeLevel) return `Conflict: Section ${existingSection.name} (Grade ${gradeLevel}) has a class, which conflicts with the grade-level event.`;
+            if (scope === 'section' && existing.scope === 'gradeLevel' && newScheduleSection && newScheduleSection.gradeLevel === existing.gradeLevel) return `Conflict: A grade-level event for Grade ${newScheduleSection.gradeLevel} is scheduled, which conflicts with this section's class.`;
         }
-        return newGrades;
-    });
-  }, [setStudentAssignmentGrades]);
+        return null;
+    };
 
-
-  const addLessonPlan = useCallback((lessonPlan: Omit<LessonPlan, 'id'>) => { const newPlan: LessonPlan = { ...lessonPlan, id: `lp${Date.now()}`}; setLessonPlans(prev => [...prev, newPlan]); }, [setLessonPlans]);
-  const updateLessonPlan = useCallback((updatedPlan: LessonPlan) => { setLessonPlans(prev => prev.map(lp => lp.id === updatedPlan.id ? updatedPlan : lp)); }, [setLessonPlans]);
-  const deleteLessonPlan = useCallback((lessonPlanId: string) => { setLessonPlans(prev => prev.filter(lp => lp.id !== lessonPlanId)); }, [setLessonPlans]);
-
-  const addAnnouncement = useCallback((announcement: Omit<Announcement, 'id'>) => { const newAnnouncement: Announcement = { ...announcement, id: `an${Date.now()}`}; setAnnouncements(prev => [newAnnouncement, ...prev]); }, [setAnnouncements]);
-  const updateAnnouncement = useCallback((updatedAnnouncement: Announcement) => { setAnnouncements(prev => prev.map(an => an.id === updatedAnnouncement.id ? updatedAnnouncement : an)); }, [setAnnouncements]);
-  const deleteAnnouncement = useCallback((announcementId: string) => { setAnnouncements(prev => prev.filter(an => an.id !== announcementId)); }, [setAnnouncements]);
-
-  return { students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements, login, addStudent, updateStudent, deleteStudent, addLearningArea, deleteLearningArea, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, updateGrade, updateCoreValueGrade, updateAttendance, updateSettings, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addSchedule, updateSchedule, deleteSchedule, addAssignment, updateAssignment, deleteAssignment, updateAssignmentGrade, submitAssignment, addLessonPlan, updateLessonPlan, deleteLessonPlan, addAnnouncement, updateAnnouncement, deleteAnnouncement, isSyncing, loading: false, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent };
+  return { 
+      ...state, login, addStudent, updateStudent, deleteStudent, 
+      addLearningArea, deleteLearningArea, addTeacher, updateTeacher, deleteTeacher, 
+      addSection, updateSection, deleteSection, updateGrade, updateCoreValueGrade, 
+      updateAttendance, updateSettings, addSubstituteAssignment, updateSubstituteAssignment, 
+      deleteSubstituteAssignment, addSchedule: addScheduleWithConflictCheck, updateSchedule: updateScheduleWithConflictCheck, 
+      deleteSchedule, addAssignment, updateAssignment, deleteAssignment, updateAssignmentGrade, 
+      submitAssignment, addLessonPlan, updateLessonPlan, deleteLessonPlan, addAnnouncement, 
+      updateAnnouncement, deleteAnnouncement, isSyncing, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG, 
+      addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent 
+    };
 };
 
 export type SchoolDataHook = ReturnType<typeof useSchoolData>;

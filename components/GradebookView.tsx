@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import type { Student, Grade, LearningArea, SubGradeRecord, AuthUser, StudentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import Modal from './Modal';
+import { useDebounce } from '../hooks/useDebounce';
 
 // Shared utility and sub-component
 const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): number | undefined => {
@@ -67,38 +68,67 @@ const MapehGradeModal: React.FC<{
 
 
 const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: AuthUser | StudentUser, type: 'staff' | 'student' }; }> = ({ schoolData, session }) => {
-  const { students, grades, learningAreas, sections, substituteAssignments, updateGrade } = schoolData;
+  const { students, grades, learningAreas, sections, substituteAssignments, classSchedules, updateGrade } = schoolData;
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [quarterFilter, setQuarterFilter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>('all');
   const [mapehModalState, setMapehModalState] = useState<{ isOpen: boolean, student?: Student, quarter?: 'q1'|'q2'|'q3'|'q4', la?: LearningArea }>({ isOpen: false });
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
   const authUser = session.user as AuthUser;
   const isReadOnly = authUser.role === 'principal';
 
   const visibleSections = useMemo(() => {
-    if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
-      return sections;
-    }
-    const teacherAdviserSectionId = sections.find(s => s.adviserId === authUser.id)?.id;
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) return sections;
+
+    const authorizedSectionIds = new Set<string>();
+
+    const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
+    if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
+
     const today = new Date().toISOString().split('T')[0];
-    const activeSubSectionIds = substituteAssignments
-        .filter(sub => sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate)
-        .map(sub => sub.sectionId);
-    
-    const authorizedSectionIds = new Set([teacherAdviserSectionId, ...activeSubSectionIds].filter(Boolean));
+    const activeSubAssignments = substituteAssignments.filter(sub => 
+      sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate
+    );
+
+    if (activeSubAssignments.length > 0) {
+        const originalTeacherIds = activeSubAssignments.map(sub => sub.originalTeacherId);
+        sections.forEach(s => {
+            if (s.adviserId && originalTeacherIds.includes(s.adviserId)) {
+                authorizedSectionIds.add(s.id);
+            }
+        });
+        classSchedules.forEach(schedule => {
+            if (schedule.teacherId && schedule.sectionId && originalTeacherIds.includes(schedule.teacherId)) {
+                authorizedSectionIds.add(schedule.sectionId);
+            }
+        });
+    }
+
+    classSchedules.forEach(schedule => {
+      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+        authorizedSectionIds.add(schedule.sectionId);
+      }
+    });
+
     return sections.filter(s => authorizedSectionIds.has(s.id));
-  }, [sections, substituteAssignments, authUser]);
+  }, [sections, substituteAssignments, classSchedules, authUser]);
 
   useEffect(() => {
     if (!selectedSectionId && visibleSections.length > 0) {
       setSelectedSectionId(visibleSections[0].id);
+    } else if (selectedSectionId && !visibleSections.some(s => s.id === selectedSectionId)) {
+      setSelectedSectionId(visibleSections[0]?.id || null);
     }
   }, [visibleSections, selectedSectionId]);
 
   const studentsInSection = useMemo(() => {
     if (!selectedSectionId) return [];
-    return students.filter(s => s.sectionId === selectedSectionId);
-  }, [students, selectedSectionId]);
+    return students.filter(s => 
+        s.sectionId === selectedSectionId &&
+        s.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+    );
+  }, [students, selectedSectionId, debouncedSearchQuery]);
 
   const gradeMap = useMemo(() => {
     const map = new Map<string, Map<string, Grade>>();
@@ -219,6 +249,15 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
             <option value="q3">Quarter 3</option>
             <option value="q4">Quarter 4</option>
           </select>
+        </div>
+        <div className="flex-grow">
+          <input
+            type="text"
+            placeholder="Search student in this class..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full max-w-xs p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
+          />
         </div>
       </div>
 

@@ -88,9 +88,11 @@ export interface CoreValueGrade {
   q4?: Record<string, CoreValueMarking>;
 }
 
+export type AttendanceStatus = 'P' | 'A' | 'L' | 'E'; // Present, Absent, Late, Excused
+
 export interface AttendanceRecord {
     studentId: string;
-    monthlyData: Record<string, { present: number; absent: number }>; 
+    dailyStatus: Record<string, AttendanceStatus>; // "YYYY-MM-DD": "P"
 }
 
 export interface SchoolSettings {
@@ -103,8 +105,8 @@ export interface SchoolSettings {
 
 export interface SubstituteAssignment {
   id: string;
-  teacherId: string;
-  sectionId: string;
+  teacherId: string; // The substitute teacher
+  originalTeacherId: string; // The teacher being replaced
   startDate: string; 
   endDate: string;
 }
@@ -113,7 +115,8 @@ export interface ClassSchedule {
   id: string;
   title: string;
   type: 'academic' | 'extracurricular';
-  dayOfWeek: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday';
+  dayOfWeek: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday'; // This is the start day
+  endDayOfWeek?: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday'; // Optional end day for multi-day events
   startTime: string; // "HH:mm" format
   endTime: string;   // "HH:mm" format
   

@@ -3,6 +3,7 @@ import { SchoolDataHook } from '../hooks/useSchoolData';
 import type { Student, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
 import { UserCircleIcon, PencilIcon, TrashIcon } from './icons';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface StudentListProps {
   schoolData: SchoolDataHook;
@@ -21,8 +22,10 @@ const calculateAge = (dateOfBirth?: string): number | string => {
   return age;
 };
 
+const ITEMS_PER_PAGE = 25;
+
 const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
-  const { students, teachers, sections, addStudent, settings, updateStudent, deleteStudent, substituteAssignments } = schoolData;
+  const { students, teachers, sections, addStudent, settings, updateStudent, deleteStudent, substituteAssignments, classSchedules } = schoolData;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -34,6 +37,8 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   
   const [newStudent, setNewStudent] = useState<Omit<Student, 'id' | 'enrollmentDate'>>({ name: '', email: '' });
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
   
   const authUser = session.user as AuthUser;
 
@@ -42,7 +47,15 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       return students;
     }
     
+    const authorizedSectionIds = new Set<string>();
+
+    // 1. Sections where the user is the adviser
     const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
+    if (teacherAdviserSection) {
+        authorizedSectionIds.add(teacherAdviserSection.id);
+    }
+    
+    // 2. Sections where the user is a substitute
     const today = new Date().toISOString().split('T')[0];
     const activeSubAssignments = substituteAssignments.filter(sub => 
       sub.teacherId === authUser.id &&
@@ -50,16 +63,35 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       today <= sub.endDate
     );
 
-    const authorizedSectionIds = new Set<string>();
-    if (teacherAdviserSection) {
-      authorizedSectionIds.add(teacherAdviserSection.id);
+    if (activeSubAssignments.length > 0) {
+        const originalTeacherIds = activeSubAssignments.map(sub => sub.originalTeacherId);
+        
+        // Find sections where original teachers are advisers
+        sections.forEach(s => {
+            if (s.adviserId && originalTeacherIds.includes(s.adviserId)) {
+                authorizedSectionIds.add(s.id);
+            }
+        });
+
+        // Find sections where original teachers have classes scheduled
+        classSchedules.forEach(schedule => {
+            if (schedule.teacherId && schedule.sectionId && originalTeacherIds.includes(schedule.teacherId)) {
+                authorizedSectionIds.add(schedule.sectionId);
+            }
+        });
     }
-    activeSubAssignments.forEach(sub => authorizedSectionIds.add(sub.sectionId));
+
+    // 3. Sections where the user is assigned as a subject teacher
+    classSchedules.forEach(schedule => {
+      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+        authorizedSectionIds.add(schedule.sectionId);
+      }
+    });
     
     if (authorizedSectionIds.size === 0) return [];
     
     return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
-  }, [students, sections, substituteAssignments, authUser]);
+  }, [students, sections, substituteAssignments, classSchedules, authUser]);
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -120,11 +152,20 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     }
   };
 
-  const filteredStudents = visibleStudents.filter(student =>
-    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.lrn?.includes(searchQuery)
-  );
+  const filteredStudents = useMemo(() => visibleStudents.filter(student =>
+    student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+    student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+    student.lrn?.includes(debouncedSearchQuery)
+  ), [visibleStudents, debouncedSearchQuery]);
+
+  // Pagination Logic
+  const totalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
+  
+  const paginatedStudents = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return filteredStudents.slice(startIndex, endIndex);
+  }, [filteredStudents, currentPage]);
 
   const closeAddModal = () => {
     setIsAddModalOpen(false);
@@ -143,7 +184,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       </div>
       
       <div className="mb-4">
-        <input type="text" placeholder="Search by name, email, or LRN..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"/>
+        <input type="text" placeholder="Search by name, email, or LRN..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }} className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"/>
       </div>
 
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
@@ -157,7 +198,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredStudents.map((student) => {
+            {paginatedStudents.map((student) => {
               const section = sections.find(s => s.id === student.sectionId);
               return (
               <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
@@ -183,6 +224,29 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             )})}
           </tbody>
         </table>
+        {totalPages > 1 && (
+          <div className="px-5 py-3 bg-white dark:bg-slate-800 border-t flex flex-col xs:flex-row items-center xs:justify-between">
+            <span className="text-xs xs:text-sm text-slate-600 dark:text-slate-300">
+              Showing {Math.min(1 + (currentPage-1)*ITEMS_PER_PAGE, filteredStudents.length)} to {Math.min(currentPage*ITEMS_PER_PAGE, filteredStudents.length)} of {filteredStudents.length} Students
+            </span>
+            <div className="inline-flex mt-2 xs:mt-0">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-l disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-r disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <Modal isOpen={isAddModalOpen} onClose={closeAddModal} title="Add New Student" size="2xl">

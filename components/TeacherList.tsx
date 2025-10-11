@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import type { Teacher, TeacherAssignment, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
 import { CloseIcon, PencilIcon, TrashIcon } from './icons';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface TeacherListProps {
   schoolData: SchoolDataHook;
@@ -23,6 +24,8 @@ const getRoleStyle = (role: Teacher['role']) => {
     }
 }
 
+const ITEMS_PER_PAGE = 25;
+
 const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
   const { teachers, learningAreas, addTeacher, updateTeacher, deleteTeacher } = schoolData;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -35,6 +38,10 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
   const [newTeacher, setNewTeacher] = useState<Omit<Teacher, 'id'>>({ name: '', email: '', contactNumber: '', assignments: [], role: 'teacher' });
   const [newAssignment, setNewAssignment] = useState<{ gradeLevel: string; learningAreaId: string }>({ gradeLevel: '', learningAreaId: '' });
   
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+
   const authUser = session.user as AuthUser;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -116,6 +123,19 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
   
   const gradeLevels = [1, 2, 3, 4, 5, 6];
 
+  const filteredTeachers = useMemo(() => teachers.filter(teacher =>
+    teacher.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+    teacher.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+  ), [teachers, debouncedSearchQuery]);
+
+  const totalPages = Math.ceil(filteredTeachers.length / ITEMS_PER_PAGE);
+  
+  const paginatedTeachers = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredTeachers.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredTeachers, currentPage]);
+
+
   const renderAssignmentsForm = (
       teacher: Omit<Teacher, 'id'> | Teacher | null, 
       isEditMode: boolean
@@ -160,6 +180,10 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
         )}
       </div>
       
+      <div className="mb-4">
+        <input type="text" placeholder="Search by name or email..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }} className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"/>
+      </div>
+
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
         <table className="min-w-full leading-normal">
           <thead>
@@ -171,7 +195,7 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
             </tr>
           </thead>
           <tbody>
-            {teachers.map((teacher) => (
+            {paginatedTeachers.map((teacher) => (
               <tr key={teacher.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
                     <p className="text-slate-900 dark:text-white whitespace-no-wrap">{teacher.name}</p>
@@ -207,6 +231,29 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
             ))}
           </tbody>
         </table>
+        {totalPages > 1 && (
+          <div className="px-5 py-3 bg-white dark:bg-slate-800 border-t flex flex-col xs:flex-row items-center xs:justify-between">
+            <span className="text-xs xs:text-sm text-slate-600 dark:text-slate-300">
+              Showing {Math.min(1 + (currentPage-1)*ITEMS_PER_PAGE, filteredTeachers.length)} to {Math.min(currentPage*ITEMS_PER_PAGE, filteredTeachers.length)} of {filteredTeachers.length} Teachers
+            </span>
+            <div className="inline-flex mt-2 xs:mt-0">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-l disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-r disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add New Teacher" size="2xl">

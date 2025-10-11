@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { SchoolDataHook, MONTHLY_SCHOOL_DAYS_CONFIG } from '../hooks/useSchoolData';
-import type { AuthUser, StudentUser, ParentUser } from '../types';
+import type { AttendanceStatus, AuthUser, StudentUser, ParentUser } from '../types';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface AttendanceViewProps {
   schoolData: SchoolDataHook;
@@ -8,16 +9,46 @@ interface AttendanceViewProps {
   forceStudentId?: string;
 }
 
+const STATUS_OPTIONS: AttendanceStatus[] = ['P', 'A', 'L', 'E'];
+const STATUS_MAP: Record<AttendanceStatus, { label: string; color: string; bgColor: string }> = {
+    P: { label: 'Present', color: 'text-green-800 dark:text-green-200', bgColor: 'bg-green-100 dark:bg-green-900/50' },
+    A: { label: 'Absent', color: 'text-red-800 dark:text-red-200', bgColor: 'bg-red-100 dark:bg-red-900/50' },
+    L: { label: 'Late', color: 'text-amber-800 dark:text-amber-200', bgColor: 'bg-amber-100 dark:bg-amber-900/50' },
+    E: { label: 'Excused', color: 'text-sky-800 dark:text-sky-200', bgColor: 'bg-sky-100 dark:bg-sky-900/50' },
+};
+
+const getStatusColor = (status?: AttendanceStatus) => {
+    if (!status) return 'bg-white dark:bg-slate-800';
+    return STATUS_MAP[status].bgColor;
+}
+
 const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, forceStudentId }) => {
-  const { students, attendanceRecords, updateAttendance, sections, substituteAssignments } = schoolData;
+  const { students, attendanceRecords, updateAttendance, sections, substituteAssignments, classSchedules } = schoolData;
   const isStudentView = session.type === 'student';
   const isParentView = session.type === 'parent';
+  
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const isReadOnly = isStudentView || isParentView || (session.user as AuthUser).role === 'principal';
-
-  const months = Object.keys(MONTHLY_SCHOOL_DAYS_CONFIG);
   
+  const selectedMonth = useMemo(() => currentDate.toLocaleString('default', { month: 'short' }), [currentDate]);
+  
+  const daysInMonth = useMemo(() => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const date = new Date(year, month, 1);
+    const days: Date[] = [];
+    while (date.getMonth() === month) {
+      if (date.getDay() >= 1 && date.getDay() <= 5) { // Only include weekdays
+        days.push(new Date(date));
+      }
+      date.setDate(date.getDate() + 1);
+    }
+    return days;
+  }, [currentDate]);
+
   const visibleStudents = useMemo(() => {
     if (isStudentView) return students.filter(s => s.id === session.user.id);
     if (isParentView) return students.filter(s => s.id === forceStudentId);
@@ -25,129 +56,181 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
     const authUser = session.user as AuthUser;
     if (['admin', 'principal', 'registrar'].includes(authUser.role)) return students;
     
+    const authorizedSectionIds = new Set<string>();
+
     const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
+    if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
+    
     const today = new Date().toISOString().split('T')[0];
     const activeSubAssignments = substituteAssignments.filter(sub => 
       sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate
     );
 
-    const authorizedSectionIds = new Set<string>();
-    if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
-    activeSubAssignments.forEach(sub => authorizedSectionIds.add(sub.sectionId));
-    
+    if (activeSubAssignments.length > 0) {
+        const originalTeacherIds = activeSubAssignments.map(sub => sub.originalTeacherId);
+        sections.forEach(s => {
+            if (s.adviserId && originalTeacherIds.includes(s.adviserId)) {
+                authorizedSectionIds.add(s.id);
+            }
+        });
+        classSchedules.forEach(schedule => {
+            if (schedule.teacherId && schedule.sectionId && originalTeacherIds.includes(schedule.teacherId)) {
+                authorizedSectionIds.add(schedule.sectionId);
+            }
+        });
+    }
+
+    classSchedules.forEach(schedule => {
+      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+        authorizedSectionIds.add(schedule.sectionId);
+      }
+    });
+
     if (authorizedSectionIds.size === 0) return [];
     return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
-  }, [students, sections, substituteAssignments, session, forceStudentId]);
+  }, [students, sections, substituteAssignments, classSchedules, session, forceStudentId]);
 
-  const filteredStudents = (isStudentView || isParentView) 
+  const filteredStudents = useMemo(() => (isStudentView || isParentView) 
     ? visibleStudents
     : visibleStudents.filter(student =>
-        student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.email.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+        student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+      ), [visibleStudents, debouncedSearchQuery, isStudentView, isParentView]);
   
-  const handleAttendanceChange = (studentId: string, month: string, type: 'present' | 'absent', value: string) => {
-    const numValue = value === '' ? 0 : parseInt(value, 10);
-    if (!isNaN(numValue) && numValue >= 0) {
-        updateAttendance(studentId, month, type, numValue);
-    }
+  const handleAttendanceChange = (studentId: string, date: Date, currentStatus?: AttendanceStatus) => {
+    if(isReadOnly) return;
+    const dateStr = date.toISOString().split('T')[0];
+    const currentIndex = currentStatus ? STATUS_OPTIONS.indexOf(currentStatus) : -1;
+    const nextIndex = (currentIndex + 1) % STATUS_OPTIONS.length;
+    const newStatus = STATUS_OPTIONS[nextIndex];
+    updateAttendance(studentId, dateStr, newStatus);
   };
-
-  const calculateTotals = (studentId: string): { present: number, absent: number } => {
-    const record = attendanceRecords.find(r => r.studentId === studentId);
-    if (!record) return { present: 0, absent: 0 };
-
-    return Object.values(record.monthlyData).reduce(
-      (totals: { present: number; absent: number }, monthData: { present: number; absent: number }) => {
-        totals.present += monthData.present || 0;
-        totals.absent += monthData.absent || 0;
-        return totals;
-      },
-      { present: 0, absent: 0 }
+  
+  const handleMarkAllPresent = useCallback((day: Date) => {
+    if (isReadOnly) return;
+    const dateStr = day.toISOString().split('T')[0];
+    const promises = filteredStudents.map(student => 
+      updateAttendance(student.id, dateStr, 'P')
     );
-  };
+    // We can fire them off without awaiting all for faster UI feedback
+  }, [filteredStudents, updateAttendance, isReadOnly]);
+
+
+  const calculateTotals = useCallback((studentId: string): Record<AttendanceStatus, number> & { total: number } => {
+    const record = attendanceRecords.find(r => r.studentId === studentId);
+    if (!record) return { P: 0, A: 0, L: 0, E: 0, total: 0 };
+
+    const year = currentDate.getFullYear();
+    const schoolYearStartMonth = 6; // June
+    
+    const totals = Object.entries(record.dailyStatus).reduce((acc, [date, status]) => {
+      const entryDate = new Date(date);
+      // Simple school year check
+      const entryYear = entryDate.getMonth() >= schoolYearStartMonth - 1 ? entryDate.getFullYear() : entryDate.getFullYear() -1;
+      const currentSchoolYear = currentDate.getMonth() >= schoolYearStartMonth - 1 ? year : year - 1;
+
+      if(entryYear === currentSchoolYear) {
+        acc[status] = (acc[status] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<AttendanceStatus, number>);
+
+    return {
+      P: totals.P || 0,
+      A: totals.A || 0,
+      L: totals.L || 0,
+      E: totals.E || 0,
+      total: (totals.P || 0) + (totals.A || 0) + (totals.L || 0) + (totals.E || 0),
+    };
+  }, [attendanceRecords, currentDate]);
   
-  const totalStudents = filteredStudents.length;
   const title = isStudentView ? 'My Attendance' : (isParentView ? `Attendance for ${filteredStudents[0]?.name}` : 'Manage Attendance');
 
   return (
     <div>
       <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
 
-      {!(isStudentView || isParentView) && (
-        <div className="mb-4">
-          <input
-            type="text"
-            placeholder="Search students..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
-          />
+      <div className="mb-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm flex flex-wrap items-center justify-between gap-4">
+        {!(isStudentView || isParentView) && (
+          <div className="flex-1 min-w-[200px]">
+            <input
+              type="text"
+              placeholder="Search students..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full max-w-sm input-style"
+            />
+          </div>
+        )}
+        <div className="flex items-center space-x-2">
+            <button onClick={() => setCurrentDate(d => new Date(d.setMonth(d.getMonth() - 1)))} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">‹</button>
+            <span className="font-bold text-lg w-32 text-center">{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
+            <button onClick={() => setCurrentDate(d => new Date(d.setMonth(d.getMonth() + 1)))} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">›</button>
         </div>
-      )}
+        <div className="flex-1 min-w-[200px] flex justify-end">
+            <div className="flex space-x-2 text-xs">
+                {Object.entries(STATUS_MAP).map(([key, {label, bgColor}]) => (
+                    <div key={key} className="flex items-center space-x-1">
+                        <div className={`w-3 h-3 rounded-full ${bgColor}`}></div>
+                        <span>{label}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+      </div>
 
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
-        <table className="min-w-full leading-normal text-sm">
+        <table className="min-w-full leading-normal text-sm border-collapse">
           <thead>
             <tr className="bg-slate-100 dark:bg-slate-900">
-              <th className="px-3 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider sticky left-0 bg-slate-100 dark:bg-slate-900 z-10 w-48">Student Name</th>
-              {months.map(month => (
-                <th key={month} colSpan={2} className="px-3 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">{month}</th>
+              <th className="sticky left-0 z-20 bg-slate-100 dark:bg-slate-900 px-3 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider w-1/4">Student Name</th>
+              {daysInMonth.map(day => (
+                <th key={day.toISOString()} className="px-1 py-2 border-b-2 border-l border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  <button 
+                    onClick={() => handleMarkAllPresent(day)} 
+                    disabled={isReadOnly}
+                    title={isReadOnly ? '' : `Mark all present for ${day.toLocaleDateString()}`}
+                    className="w-full h-full disabled:cursor-not-allowed hover:bg-green-100 dark:hover:bg-green-900/50 rounded-sm"
+                  >
+                      <div className="font-normal text-slate-400">{day.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                      <div>{day.getDate()}</div>
+                  </button>
+                </th>
               ))}
-              <th colSpan={2} className="px-3 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Total</th>
-            </tr>
-             <tr className="bg-slate-100 dark:bg-slate-900">
-              <th className="px-3 py-2 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 sticky left-0 bg-slate-100 dark:bg-slate-900 z-10"></th>
-                {months.map(month => (
-                  <React.Fragment key={month}>
-                    <th className="px-2 py-2 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-500 dark:text-slate-400">P</th>
-                    <th className="px-2 py-2 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-500 dark:text-slate-400">A</th>
-                  </React.Fragment>
-                ))}
-                 <th className="px-2 py-2 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-500 dark:text-slate-400">P</th>
-                 <th className="px-2 py-2 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-500 dark:text-slate-400">A</th>
+              <th className="px-2 py-3 border-b-2 border-l border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Total Present</th>
+              <th className="px-2 py-3 border-b-2 border-l border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Total Absent</th>
+              <th className="px-2 py-3 border-b-2 border-l border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Total Late</th>
             </tr>
           </thead>
           <tbody>
-            {filteredStudents.map((student, studentIndex) => {
+            {filteredStudents.map((student) => {
               const studentRecord = attendanceRecords.find(r => r.studentId === student.id);
               const totals = calculateTotals(student.id);
               return (
               <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                <td className="px-3 py-3 border-b border-slate-200 dark:border-slate-700 font-medium text-slate-900 dark:text-white whitespace-no-wrap sticky left-0 bg-white dark:bg-slate-800 z-10">{student.name}</td>
-                {months.map((month, monthIndex) => (
-                  <React.Fragment key={month}>
-                    <td className="p-1 border-b border-slate-200 dark:border-slate-700">
-                      <input 
-                        type="number"
-                        min="0"
-                        value={studentRecord?.monthlyData[month]?.present ?? ''}
-                        onChange={e => handleAttendanceChange(student.id, month, 'present', e.target.value)}
-                        tabIndex={(monthIndex * 2 * totalStudents) + studentIndex + 1}
-                        disabled={isReadOnly}
-                        className="w-12 p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center disabled:bg-slate-100 dark:disabled:bg-slate-700/50"
-                       />
-                    </td>
-                     <td className="p-1 border-b border-slate-200 dark:border-slate-700">
-                      <input
-                        type="number"
-                        min="0"
-                        value={studentRecord?.monthlyData[month]?.absent ?? ''}
-                        onChange={e => handleAttendanceChange(student.id, month, 'absent', e.target.value)}
-                        tabIndex={(monthIndex * 2 * totalStudents) + totalStudents + studentIndex + 1}
-                        disabled={isReadOnly}
-                        className="w-12 p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center disabled:bg-slate-100 dark:disabled:bg-slate-700/50"
-                      />
-                    </td>
-                  </React.Fragment>
-                ))}
-                <td className="px-2 py-3 border-b border-slate-200 dark:border-slate-700 text-center font-bold text-green-600">{totals.present}</td>
-                <td className="px-2 py-3 border-b border-slate-200 dark:border-slate-700 text-center font-bold text-red-600">{totals.absent}</td>
+                <td className="sticky left-0 z-10 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 px-3 py-3 border-b border-slate-200 dark:border-slate-700 font-medium text-slate-900 dark:text-white whitespace-no-wrap">{student.name}</td>
+                {daysInMonth.map(day => {
+                    const dateStr = day.toISOString().split('T')[0];
+                    const status = studentRecord?.dailyStatus[dateStr];
+                    return (
+                        <td 
+                            key={dateStr} 
+                            onClick={() => handleAttendanceChange(student.id, day, status)}
+                            className={`border-b border-l border-slate-200 dark:border-slate-700 text-center font-bold text-xs ${!isReadOnly && 'cursor-pointer'} ${getStatusColor(status)}`}
+                        >
+                            {status}
+                        </td>
+                    )
+                })}
+                <td className="px-2 py-3 border-b border-l border-slate-200 dark:border-slate-700 text-center font-bold text-green-600">{totals.P}</td>
+                <td className="px-2 py-3 border-b border-l border-slate-200 dark:border-slate-700 text-center font-bold text-red-600">{totals.A}</td>
+                <td className="px-2 py-3 border-b border-l border-slate-200 dark:border-slate-700 text-center font-bold text-amber-600">{totals.L}</td>
               </tr>
             )})}
           </tbody>
         </table>
       </div>
+      <style>{`.input-style { display: block; width: 100%; border-radius: 0.375rem; border: 1px solid; border-color: #d1d5db; background-color: transparent; padding: 0.5rem 0.75rem; } .dark .input-style { border-color: #4b5563; }`}</style>
     </div>
   );
 };

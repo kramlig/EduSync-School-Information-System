@@ -3,11 +3,14 @@ import { SchoolDataHook } from '../hooks/useSchoolData';
 import type { Parent, Student, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
 import { PencilIcon, TrashIcon, CloseIcon, PlusIcon } from './icons';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface ParentsViewProps {
   schoolData: SchoolDataHook;
   session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
+
+const ITEMS_PER_PAGE = 25;
 
 const ParentsView: React.FC<ParentsViewProps> = ({ schoolData, session }) => {
   const { 
@@ -25,7 +28,13 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData, session }) => {
   const [parentToDelete, setParentToDelete] = useState<Parent | null>(null);
 
   const [newParent, setNewParent] = useState<Omit<Parent, 'id' | 'studentIds'>>({ name: '', email: '' });
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+
   const [childSearchQuery, setChildSearchQuery] = useState('');
+  const debouncedChildSearchQuery = useDebounce(childSearchQuery, 300);
   
   const authUser = session.user as AuthUser;
 
@@ -94,23 +103,26 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData, session }) => {
     }
   };
 
-  const unassignedStudents = useMemo(() => {
-    const assignedIds = new Set(parents.flatMap(p => p.studentIds));
-    if (parentToManage) {
-      // While managing, also consider students of the current parent as "unassigned" to others, but not self.
-      const otherParentsAssignedIds = new Set(parents.filter(p => p.id !== parentToManage.id).flatMap(p => p.studentIds));
-      return students.filter(s => !otherParentsAssignedIds.has(s.id));
-    }
-    return students.filter(s => !assignedIds.has(s.id));
-  }, [students, parents, parentToManage]);
+  const filteredParents = useMemo(() => parents.filter(parent =>
+    parent.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+    parent.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+  ), [parents, debouncedSearchQuery]);
+
+  const totalPages = Math.ceil(filteredParents.length / ITEMS_PER_PAGE);
+
+  const paginatedParents = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredParents.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredParents, currentPage]);
+
 
   const filteredUnassignedStudents = useMemo(() => {
-    if (!childSearchQuery || !parentToManage) return [];
+    if (!debouncedChildSearchQuery || !parentToManage) return [];
     return students.filter(s => 
         !parentToManage.studentIds.includes(s.id) &&
-        s.name.toLowerCase().includes(childSearchQuery.toLowerCase())
+        s.name.toLowerCase().includes(debouncedChildSearchQuery.toLowerCase())
     );
-  }, [students, parentToManage, childSearchQuery]);
+  }, [students, parentToManage, debouncedChildSearchQuery]);
   
   const childrenOfParent = useMemo(() => {
     if (!parentToManage) return [];
@@ -124,6 +136,10 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData, session }) => {
         <button onClick={() => setIsAddModalOpen(true)} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Add Parent</button>
       </div>
 
+       <div className="mb-4">
+        <input type="text" placeholder="Search by name or email..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }} className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"/>
+      </div>
+
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
         <table className="min-w-full leading-normal">
           <thead>
@@ -134,7 +150,7 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData, session }) => {
             </tr>
           </thead>
           <tbody>
-            {parents.map((parent) => (
+            {paginatedParents.map((parent) => (
               <tr key={parent.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
                     <p className="text-slate-900 dark:text-white whitespace-no-wrap">{parent.name}</p>
@@ -160,6 +176,29 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData, session }) => {
             ))}
           </tbody>
         </table>
+         {totalPages > 1 && (
+          <div className="px-5 py-3 bg-white dark:bg-slate-800 border-t flex flex-col xs:flex-row items-center xs:justify-between">
+            <span className="text-xs xs:text-sm text-slate-600 dark:text-slate-300">
+              Showing {Math.min(1 + (currentPage-1)*ITEMS_PER_PAGE, filteredParents.length)} to {Math.min(currentPage*ITEMS_PER_PAGE, filteredParents.length)} of {filteredParents.length} Parents
+            </span>
+            <div className="inline-flex mt-2 xs:mt-0">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-l disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-r disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add New Parent">
@@ -219,7 +258,7 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData, session }) => {
                     placeholder="Type student name..."
                     className="mt-1 w-full input-style"
                 />
-                {childSearchQuery && (
+                {debouncedChildSearchQuery && (
                     <div className="absolute z-10 w-full bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md mt-1 max-h-48 overflow-y-auto shadow-lg">
                         {filteredUnassignedStudents.length > 0 ? (
                             filteredUnassignedStudents.map(student => (
