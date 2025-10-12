@@ -64,9 +64,12 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
   const months = ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
   
   const monthlyAttendanceSummary = useMemo(() => {
-    if (!studentAttendance) return {};
-    
+    // FIX: Ensure a consistently typed object is returned to avoid `unknown` type inference downstream.
     const summary: Record<string, { present: number, absent: number }> = {};
+    if (!studentAttendance) {
+        return summary;
+    }
+    
     const monthIndexMap: Record<string, number> = { 'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5, 'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11 };
 
     for (const dateStr in studentAttendance.dailyStatus) {

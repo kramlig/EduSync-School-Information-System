@@ -130,7 +130,9 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
       const currentSchoolYear = currentDate.getMonth() >= schoolYearStartMonth - 1 ? year : year - 1;
 
       if(entryYear === currentSchoolYear) {
-        acc[status] = (acc[status] || 0) + 1;
+        // FIX: The `status` from Object.entries is typed as `unknown`. Cast it to the correct type `AttendanceStatus` to use it as an index.
+        const statusKey = status as AttendanceStatus;
+        acc[statusKey] = (acc[statusKey] || 0) + 1;
       }
       return acc;
     }, {} as Record<AttendanceStatus, number>);
