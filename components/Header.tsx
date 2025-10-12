@@ -51,7 +51,14 @@ const Header: React.FC<HeaderProps> = ({ isOnline, setIsOnline, session, onLogou
                 </div>
             </div>
         )}
+
+        <div className={`flex items-center px-3 py-1 rounded-full text-xs font-semibold transition-colors ${isOnline ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200' : 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200'}`}>
+            {isOnline ? <WifiIcon className="h-4 w-4 mr-1.5" /> : <WifiSlashIcon className="h-4 w-4 mr-1.5" />}
+            <span>{isOnline ? 'Online' : 'Offline Mode'}</span>
+        </div>
+
         <button onClick={onLogout} className="text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400">Logout</button>
+        
         {session.type === 'staff' && (
           <>
             <div className="h-6 w-px bg-slate-200 dark:bg-slate-600"></div>
@@ -64,7 +71,6 @@ const Header: React.FC<HeaderProps> = ({ isOnline, setIsOnline, session, onLogou
                 onChange={() => setIsOnline(!isOnline)} 
               />
               <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-600"></div>
-              {isOnline ? <WifiIcon className="ml-2 text-green-500"/> : <WifiSlashIcon className="ml-2 text-amber-500"/>}
             </label>
           </>
         )}
