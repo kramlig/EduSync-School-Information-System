@@ -1,107 +1,84 @@
-// Service Worker for Caching Application Assets
+// Production-safe Service Worker
+// - Only caches the built `index.html` for navigation fallback
+// - Uses network-first for navigation and assets, with cache fallback
+// - Does NOT cache source files or external API responses
 
-const CACHE_NAME = 'edusync-assets-v1';
+const CACHE_NAME = 'edusync-static-v1';
+const NAV_CACHE = 'edusync-nav-v1';
+const OFFLINE_URL = '/index.html';
 
-// App Shell: The core files needed to display the initial UI.
-// Other files are cached on-the-fly as they are requested.
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/src/index.tsx',
-  '/App.tsx',
-  '/components/Sidebar.tsx',
-  '/components/Header.tsx',
-  '/components/icons.tsx',
-  '/components/FullScreenLoader.tsx',
-  '/components/Spinner.tsx',
-  '/components/LoginScreen.tsx',
-  '/hooks/useSchoolData.ts',
-  '/types.ts',
-  'https://depedph.com/wp-content/uploads/2024/01/deped-logo-symbol-philippines-1024x1024.png',
-  'https://cdn.tailwindcss.com'
-];
-
-/**
- * On install, open a cache and add the core app shell assets to it.
- */
 self.addEventListener('install', (event) => {
+  // Activate immediately
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Service Worker: Caching app shell');
-        return cache.addAll(urlsToCache);
-      })
-      .catch(err => {
-        console.error('Service Worker: Failed to cache app shell:', err);
-      })
+    caches.open(NAV_CACHE).then((cache) => cache.addAll([OFFLINE_URL])).catch(() => {})
   );
 });
 
-/**
- * On activation, clean up any old caches that are no longer needed.
- */
 self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            console.log('Service Worker: Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
+    (async () => {
+      // Claim clients so the SW starts controlling pages immediately
+      await self.clients.claim();
+      const keys = await caches.keys();
+      await Promise.all(
+        keys.map((k) => {
+          if (![NAV_CACHE, CACHE_NAME].includes(k)) return caches.delete(k);
+          return Promise.resolve();
         })
       );
-    })
+    })()
   );
 });
 
-/**
- * On fetch, intercept network requests and serve from cache if available.
- * This is a "Cache falling back to Network" strategy.
- */
 self.addEventListener('fetch', (event) => {
-  // We only want to cache GET requests.
-  if (event.request.method !== 'GET') {
+  // Only handle GET requests
+  if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+
+  // Do not interfere with requests to third-party APIs (e.g., Gemini)
+  if (url.hostname !== self.location.hostname) return;
+
+  // For navigation requests, use a network-first strategy with a cache fallback
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((resp) => {
+          // Optionally update the cached navigation response
+          const copy = resp.clone();
+          caches.open(NAV_CACHE).then((cache) => cache.put(OFFLINE_URL, copy)).catch(() => {});
+          return resp;
+        })
+        .catch(() => caches.match(OFFLINE_URL))
+    );
     return;
   }
 
-  // Do not cache requests to the Gemini API.
-  if (event.request.url.includes('generativelanguage.googleapis.com')) {
-    return;
-  }
-
-  event.respondWith(
-    caches.match(event.request)
-      .then((cachedResponse) => {
-        // If the response is in the cache, return it.
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-
-        // If not in cache, fetch from the network.
-        return fetch(event.request).then(
-          (networkResponse) => {
-            // Check if we received a valid response
-            if (!networkResponse || networkResponse.status !== 200) {
-              return networkResponse;
-            }
-
-            // Clone the response because it's a stream and can only be consumed once.
-            const responseToCache = networkResponse.clone();
-
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                // Add the new response to the cache.
-                cache.put(event.request, responseToCache);
-              });
-
-            return networkResponse;
+  // For same-origin static assets (scripts/styles/images) try network then cache
+  if (['script', 'style', 'image', 'font'].includes(event.request.destination)) {
+    event.respondWith(
+      fetch(event.request)
+        .then((resp) => {
+          // Cache a copy for future offline use
+          if (resp && resp.status === 200) {
+            const copy = resp.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)).catch(() => {});
           }
-        ).catch((error) => {
-          console.error('Service Worker: Fetch failed. User may be offline.', error);
-          // In a more advanced implementation, you could return a fallback offline page here.
-        });
-      })
+          return resp;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Default: try network, fallback to cache
+  event.respondWith(
+    fetch(event.request).catch(() => caches.match(event.request))
   );
+});
+
+// Listen for a message to skip waiting (useful when deploying a new SW)
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
