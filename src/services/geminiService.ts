@@ -1,13 +1,34 @@
-import { GoogleGenAI, Type } from "@google/genai";
+// Use a type-only import so the runtime module isn't pulled into the browser bundle.
+import type { GoogleGenAI } from "@google/genai";
 import type { Student, LearningArea, Grade, SubGradeRecord } from 'types';
 
-if (!process.env.API_KEY) {
-  // A check to ensure the API key is available. 
-  // In a real app, this would be handled more gracefully.
-  console.warn("API_KEY environment variable not set. Gemini features will be disabled.");
-}
+// Do not initialize the real Gemini client at module load time. Initializing
+// @google/genai in a browser bundle can throw when an API key isn't present.
+// Instead lazily initialize on the server (Node) when an API key exists.
+let _aiClient: any | null = null;
+let _aiModule: any | null = null;
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+// Returns an object with the instantiated client and the raw module so callers
+// can access exported helpers (like `Type`) without importing the module at
+// top-level.
+async function getAI(): Promise<{ client: any; mod: any } | null> {
+  if (_aiClient && _aiModule) return { client: _aiClient, mod: _aiModule };
+  // Require an API key to initialize. Also avoid initializing in the browser.
+  if (!process.env.API_KEY) {
+    return null;
+  }
+  if (typeof window !== 'undefined') {
+    // Running in a browser; do not initialize the server-side client here.
+    console.warn('Gemini client not initialized in browser. API key must be used from a server environment.');
+    return null;
+  }
+
+  // Dynamic import so the module is only pulled in on the server when needed.
+  const mod = await import('@google/genai');
+  _aiModule = mod;
+  _aiClient = new mod.GoogleGenAI({ apiKey: process.env.API_KEY });
+  return { client: _aiClient, mod: _aiModule };
+}
 
 const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): number | undefined => {
   if (grade === undefined) return undefined;
@@ -25,9 +46,14 @@ export const generateStudentReport = async (
   grades: Grade[],
   learningAreas: LearningArea[]
 ): Promise<string> => {
-  if (!process.env.API_KEY) {
-    return Promise.resolve("AI features are disabled. API key is missing.");
+  // Try to get an initialized AI client. If none is available (no API key or
+  // running in the browser), return a friendly disabled-message so the app
+  // remains functional instead of throwing at runtime.
+  const aiPair = await getAI();
+  if (!aiPair) {
+    return Promise.resolve("AI features are disabled. API key is missing or running in the browser.");
   }
+  const ai = aiPair.client;
 
   const studentGrades = grades
     .filter((g) => g.studentId === student.id)
@@ -109,9 +135,14 @@ export const generateLessonPlan = async (
     gradeLevel: number,
     objectives: string
 ): Promise<GeneratedLessonPlan> => {
-    if (!process.env.API_KEY) {
-      throw new Error("AI features are disabled. API key is missing.");
+    // Server-only: require an initialized AI client. In the browser this will
+    // be null and we'll throw a clear error to the caller.
+    const aiPair = await getAI();
+    if (!aiPair) {
+      throw new Error("AI features are disabled. API key is missing or the client is running in the browser.");
     }
+    const ai = aiPair.client;
+    const mod = aiPair.mod;
     
     const prompt = `
       You are an expert instructional designer creating a lesson plan for an elementary school teacher.
@@ -132,24 +163,24 @@ export const generateLessonPlan = async (
     `;
     
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        title: { type: Type.STRING, description: "The lesson plan title." },
-                        objectives: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of learning objectives." },
-                        activities: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of learning activities." },
-                        materials: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of required materials." },
-                        assessment: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of assessment questions or tasks." },
-                    },
-                    required: ["title", "objectives", "activities", "materials", "assessment"]
-                },
-            },
-        });
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: mod.Type.OBJECT,
+          properties: {
+            title: { type: mod.Type.STRING, description: "The lesson plan title." },
+            objectives: { type: mod.Type.ARRAY, items: { type: mod.Type.STRING }, description: "List of learning objectives." },
+            activities: { type: mod.Type.ARRAY, items: { type: mod.Type.STRING }, description: "List of learning activities." },
+            materials: { type: mod.Type.ARRAY, items: { type: mod.Type.STRING }, description: "List of required materials." },
+            assessment: { type: mod.Type.ARRAY, items: { type: mod.Type.STRING }, description: "List of assessment questions or tasks." },
+          },
+          required: ["title", "objectives", "activities", "materials", "assessment"]
+        },
+      },
+    });
 
         const jsonStr = response.text.trim();
         return JSON.parse(jsonStr) as GeneratedLessonPlan;
