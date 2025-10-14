@@ -53,3 +53,5 @@ npx firebase deploy --only firestore --project=edusync-sis
 CI: A GitHub Actions workflow (`.github/workflows/firestore-rules.yml`) runs the rules tests on PRs and will auto-deploy rules/indexes when changes are merged to `main`. To allow deploys, add the `FIREBASE_SERVICE_ACCOUNT` and `FIREBASE_TOKEN` secrets to the repository.
 
 ci: trigger workflow - 2025-10-14T08:42:41.8440505+08:00
+
+ci: re-run workflow - 2025-10-14T08:52:04.6215515+08:00
