@@ -1,0 +1,17 @@
+[
+  {
+    "id": "uid_teacher1",
+    "displayName": "Jane Teacher",
+    "email": "jane@school.edu",
+    "role": "teacher",
+    "schoolId": "school_123"
+  },
+  {
+    "id": "uid_parent1",
+    "displayName": "Paul Parent",
+    "email": "paul@family.com",
+    "role": "parent",
+    "schoolId": "school_123",
+    "guardianIds": ["student_1"]
+  }
+]
