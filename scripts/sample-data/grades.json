@@ -1,0 +1,24 @@
+[
+  {
+    "id": "g-1-student_1-math",
+    "studentId": "student_1",
+    "learningAreaId": "math",
+    "q1": 88,
+    "q2": 90,
+    "q3": 92,
+    "q4": 89,
+    "finalGrade": 90,
+    "remarks": "Passed"
+  },
+  {
+    "id": "g-2-student_2-math",
+    "studentId": "student_2",
+    "learningAreaId": "math",
+    "q1": 76,
+    "q2": 78,
+    "q3": 81,
+    "q4": 80,
+    "finalGrade": 79,
+    "remarks": "Passed"
+  }
+]

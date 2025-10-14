@@ -1,0 +1,13 @@
+[
+  {
+    "id": "lesson1",
+    "creatorId": "uid_teacher1",
+    "title": "Plants",
+    "objectives": ["Identify plant parts","Describe functions of plant parts"],
+    "activities": ["Observation","Group discussion"],
+    "materials": ["Leaves","Magnifying glass"],
+    "assessment": ["Worksheet"],
+    "createdAt": {"_seconds": 1697212800},
+    "gradeLevel": 3
+  }
+]
