@@ -10,6 +10,7 @@ jobs:
   test-rules:
     name: Test Firestore Rules
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node
@@ -24,15 +25,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Run rules unit tests (install tools + start emulator)
+      - name: Run rules unit tests (install tools + start emulator, debug)
         run: |
           # Install firebase-tools and verify installation
           npm install -g firebase-tools
           firebase --version
 
-          # Start the Firestore emulator and run the unit tests so the
-          # rules-unit-testing SDK can auto-discover the emulator without hardcoding host/port
-          firebase emulators:exec --only firestore -- node ./scripts/test-firestore-rules.cjs
+          # Start the Firestore emulator with debug logging to capture startup details
+          firebase --debug emulators:exec --only firestore -- node ./scripts/test-firestore-rules.cjs
 
   deploy-rules:
     name: Deploy Firestore Rules & Indexes
