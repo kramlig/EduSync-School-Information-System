@@ -24,13 +24,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Firebase Tools
-        run: npm install -g firebase-tools
-
-      - name: Run rules unit tests (start emulator)
+      - name: Run rules unit tests (install tools + start emulator)
         run: |
-          # Start the Firestore emulator and run the unit tests inside it so
-          # rules-unit-testing can auto-discover the emulator without a hardcoded host/port
+          # Install firebase-tools and verify installation
+          npm install -g firebase-tools
+          firebase --version
+
+          # Start the Firestore emulator and run the unit tests so the
+          # rules-unit-testing SDK can auto-discover the emulator without hardcoding host/port
           firebase emulators:exec --only firestore -- node ./scripts/test-firestore-rules.cjs
 
   deploy-rules:
