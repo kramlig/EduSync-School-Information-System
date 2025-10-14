@@ -1,0 +1,32 @@
+[
+  {
+    "id": "student_1",
+    "name": "Alice Johnson",
+    "email": "alice.j@school.edu",
+    "enrollmentDate": "2023-09-01",
+    "dateOfBirth": "2012-04-12",
+    "sex": "Female",
+    "lrn": "123456789012",
+    "sectionId": "sec1"
+  },
+  {
+    "id": "student_2",
+    "name": "Ben Santos",
+    "email": "ben.s@school.edu",
+    "enrollmentDate": "2023-09-01",
+    "dateOfBirth": "2011-11-03",
+    "sex": "Male",
+    "lrn": "223456789012",
+    "sectionId": "sec1"
+  },
+  {
+    "id": "student_3",
+    "name": "Carmen Reyes",
+    "email": "carmen.r@school.edu",
+    "enrollmentDate": "2023-09-01",
+    "dateOfBirth": "2012-01-22",
+    "sex": "Female",
+    "lrn": "323456789012",
+    "sectionId": "sec2"
+  }
+]
