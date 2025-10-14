@@ -6,7 +6,7 @@ Quick start (dry-run):
 
 ```powershell
 cd scripts/migrate-to-firestore
-node index.js --source ../sample-data --dry-run
+node index.cjs --source ../sample-data --dry-run
 ```
 
 To run against a Firestore project (non-dry-run):
@@ -14,7 +14,7 @@ To run against a Firestore project (non-dry-run):
 - Run:
 
 ```powershell
-node index.js --project <your-gcp-project> --source ../sample-data --dry-run=false
+node index.cjs --project <your-gcp-project> --source ../sample-data --dry-run=false
 ```
 
 Notes:
