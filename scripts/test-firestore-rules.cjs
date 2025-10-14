@@ -5,9 +5,20 @@ const fs = require('fs');
   const projectId = 'edusync-sis-tests';
   const rules = fs.readFileSync('firestore.rules', 'utf8');
 
+  // If the emulator is started separately (CI helper), allow overriding host/port
+  // via FIRESTORE_EMULATOR_HOST env var (format: host:port) or default to 127.0.0.1:8085
+  let firestoreConfig = { rules };
+  const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8085';
+  if (emulatorHost) {
+    const [host, portStr] = emulatorHost.split(':');
+    const port = portStr ? parseInt(portStr, 10) : 8085;
+    firestoreConfig.host = host;
+    firestoreConfig.port = port;
+  }
+
   const testEnv = await initializeTestEnvironment({
     projectId,
-    firestore: { rules }
+    firestore: firestoreConfig
   });
 
   try {
