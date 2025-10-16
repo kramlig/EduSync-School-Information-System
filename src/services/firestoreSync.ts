@@ -144,6 +144,13 @@ export async function enqueueWrite(collectionName: string, docObj: any): Promise
   // add to local queue immediately and include idemKey
   const qId = await addToQueue({ collection: collectionName, doc: docObj, idemKey });
   // return both queue id and idempotency key so callers can inspect
+  // Proactively flush asap when online to minimize cross-client latency
+  try {
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      // slight delay to allow burst coalescing
+      setTimeout(() => { flushQueue().catch(() => {}); }, 50);
+    }
+  } catch { /* no-op */ }
   return qId as any as number & { idemKey: string };
 }
 

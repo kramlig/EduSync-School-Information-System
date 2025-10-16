@@ -288,7 +288,7 @@ exports.dataSummary = functions.https.onRequest((req, res) => {
     if (!checkAuth(req)) return res.status(401).json({ error: 'Unauthorized' });
     try {
       const db = admin.firestore();
-      const cols = ['teachers','parents','sections','students','classSchedules','coreValues','coreValueGrades'];
+      const cols = ['teachers','parents','sections','students','classSchedules','coreValues','coreValueGrades','announcements'];
       const counts = {};
       for (const c of cols) {
         const snap = await db.collection(c).limit(1_000_000).get(); // simple count (free tier ok for now)
@@ -414,6 +414,105 @@ exports.seedCoreValuesSafe = functions.https.onRequest(async (req, res) => {
     } catch (err) {
       console.error('seedCoreValuesSafe error:', err && err.stack ? err.stack : err);
       return res.status(500).json({ error: 'Internal error', details: err && err.message ? err.message : String(err) });
+    }
+  });
+});
+
+// --- Protected seeding for Announcements ---
+exports.seedAnnouncements = functions.https.onRequest((req, res) => {
+  cors(req, res, async () => {
+    try {
+      if (req.method === 'OPTIONS') return res.status(204).send('');
+      if (!checkAuth(req)) return res.status(401).json({ error: 'Unauthorized' });
+
+      const db = admin.firestore();
+      const body = req.body || {};
+      const { dryRun = false, clearExisting = false, count = 8, authors = [], startDaysAgo = 30, endDaysAhead = 30, targets = ['all','staff','parents','students'] } = body;
+
+      // Helper: get random element
+      const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+      const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+      const N = clamp(parseInt(count, 10) || 8, 1, 100);
+
+      // Ensure we have authors; fallback to teachers collection if not provided.
+      let authorIds = Array.isArray(authors) ? authors.filter(Boolean) : [];
+      if (authorIds.length === 0) {
+        const tSnap = await db.collection('teachers').select('id').get();
+        authorIds = tSnap.docs.map(d => d.id);
+        if (authorIds.length === 0) {
+          // Fallback to a generic admin id
+          authorIds = ['admin-user'];
+        }
+      }
+
+      const sampleTitles = [
+        'School Opening Advisory',
+        'Parent-Teacher Conference Schedule',
+        'Intramurals Week Announcement',
+        'DepEd Brigada Eskwela',
+        'Power Interruption Notice',
+        'Earthquake Drill Reminder',
+        'Submission of Requirements',
+        'Recognition Day Program',
+        'Campus Clean-up Drive',
+      ];
+      const sampleBodies = [
+        'Please be informed of the following details. Your cooperation is appreciated.',
+        'We encourage everyone to participate. Thank you for your support.',
+        'Safety protocols will be strictly implemented. Kindly arrive on time.',
+        'All students are required to wear proper school attire.',
+        'For inquiries, please coordinate with your class adviser.',
+        'Further updates will be posted in this channel.',
+      ];
+
+      const makeDate = () => {
+        const now = new Date();
+        const start = -Math.abs(parseInt(startDaysAgo, 10) || 30);
+        const end = Math.abs(parseInt(endDaysAhead, 10) || 30);
+        const offset = Math.floor(Math.random() * (end - start + 1)) + start; // inclusive range
+        const d = new Date(now);
+        d.setDate(now.getDate() + offset);
+        return d.toISOString().slice(0, 10);
+      };
+
+      const gen = (i) => ({
+        id: undefined, // let Firestore auto id; client can still read back
+        title: pick(sampleTitles) + (Math.random() < 0.3 ? ` #${Math.floor(Math.random()*100)}` : ''),
+        content: pick(sampleBodies) + '\n\n' + pick(sampleBodies),
+        authorId: pick(authorIds),
+        date: makeDate(),
+        target: pick(Array.isArray(targets) && targets.length ? targets : ['all','staff','parents','students']),
+      });
+
+      if (clearExisting && !dryRun) {
+        const snap = await db.collection('announcements').get();
+        const batch = db.batch();
+        snap.docs.forEach(doc => batch.delete(doc.ref));
+        if (!snap.empty) await batch.commit();
+      }
+
+      const toCreate = Array.from({ length: N }, (_, i) => gen(i));
+      if (dryRun) {
+        return res.json({ ok: true, wouldCreate: toCreate.length, sample: toCreate.slice(0, 3) });
+      }
+
+      // Batched writes (chunks of 400)
+      const chunkSize = 400;
+      for (let i = 0; i < toCreate.length; i += chunkSize) {
+        const batch = db.batch();
+        const chunk = toCreate.slice(i, i + chunkSize);
+        for (const a of chunk) {
+          const ref = db.collection('announcements').doc();
+          batch.set(ref, { ...a, id: ref.id }); // store id field too for consistency with client
+        }
+        await batch.commit();
+      }
+
+      const countSnap = await db.collection('announcements').get();
+      return res.json({ ok: true, created: toCreate.length, total: countSnap.size });
+    } catch (e) {
+      console.error('seedAnnouncements error:', e && e.message ? e.message : e);
+      return res.status(500).json({ error: 'Internal error' });
     }
   });
 });

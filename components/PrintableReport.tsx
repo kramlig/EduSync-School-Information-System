@@ -1,5 +1,9 @@
 import React, { useMemo } from 'react';
-import type { Student, Grade, SubGradeRecord, CoreValueGrade, AttendanceRecord, Section, AttendanceStatus } from '../types';
+import DepEdLogo from './DepEdLogo';
+// Deterministic PDF generation: render each page to canvas, then compose into jsPDF
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+import type { Student, Grade, SubGradeRecord } from '../types';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
 import { PrinterIcon } from './icons';
 
@@ -42,10 +46,15 @@ const InfoField: React.FC<{ label: string; value: React.ReactNode, className?: s
     </div>
 );
 
-const logoBase64 = "https://depedph.com/wp-content/uploads/2024/01/deped-logo-symbol-philippines-1024x1024.png";
+// No runtime fallback needed since the asset is embedded; to change the logo, replace the file on disk.
 
 const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }) => {
   const { grades, learningAreas, coreValues, coreValueGrades, attendanceRecords, monthlySchoolDaysConfig, teachers, sections, settings } = schoolData;
+  const slug = (s: string) => s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 80);
   
   const studentGrades = useMemo(() => new Map(grades.filter(g => g.studentId === student.id).map(g => [g.learningAreaId, g])), [grades, student.id]);
   const studentCoreValues = useMemo(() => new Map(coreValueGrades.filter(g => g.studentId === student.id).map(g => [g.coreValueId, g])), [coreValueGrades, student.id]);
@@ -70,7 +79,7 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
         return summary;
     }
     
-    const monthIndexMap: Record<string, number> = { 'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5, 'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11 };
+  // const monthIndexMap: Record<string, number> = { 'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5, 'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11 };
 
     for (const dateStr in studentAttendance.dailyStatus) {
         const date = new Date(dateStr + "T00:00:00");
@@ -92,13 +101,56 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
 
   return (
     <div className="text-black bg-white font-serif">
-      <div className="flex justify-end mb-4 print:hidden">
-        <button onClick={() => window.print()} className="flex items-center bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"><PrinterIcon /><span className="ml-2">Print</span></button>
+      <div className="flex justify-end items-center gap-3 mb-4 print:hidden">
+        <button
+          onClick={async () => {
+            // Robust selection: prefer explicit IDs, fall back to first two .page-content blocks
+            let page1 = document.getElementById('page-1') as HTMLElement | null;
+            let page2 = document.getElementById('page-2') as HTMLElement | null;
+            if (!page1 || !page2) {
+              const blocks = Array.from(document.querySelectorAll('#print-content .page-content')) as HTMLElement[];
+              if (!page1) page1 = blocks[0] ?? null;
+              if (!page2) page2 = blocks[1] ?? null;
+            }
+            if (!page1 || !page2) {
+              console.error('PDF export error: could not find two page blocks.');
+              return;
+            }
+            document.body.classList.add('pdf-export');
+            try {
+              const cnvOpts = {
+                scale: 2,
+                useCORS: true,
+                allowTaint: false,
+                backgroundColor: '#ffffff',
+                scrollY: 0,
+              } as const;
+              const [c1, c2] = await Promise.all([
+                html2canvas(page1, cnvOpts),
+                html2canvas(page2, cnvOpts),
+              ]);
+              const img1 = c1.toDataURL('image/jpeg', 0.98);
+              const img2 = c2.toDataURL('image/jpeg', 0.98);
+              const pdf = new jsPDF({ unit: 'in', format: 'letter', orientation: 'landscape' });
+              pdf.addImage(img1, 'JPEG', 0, 0, 11, 8.5);
+              pdf.addPage('letter', 'landscape');
+              pdf.addImage(img2, 'JPEG', 0, 0, 11, 8.5);
+              const filename = `Form138_${slug(student.name)}_${slug(String(settings.schoolYear))}.pdf`;
+              pdf.save(filename);
+            } finally {
+              document.body.classList.remove('pdf-export');
+            }
+          }}
+          className="flex items-center bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          <PrinterIcon />
+          <span className="ml-2">Download PDF</span>
+        </button>
       </div>
 
       <div id="print-content" className="p-4 bg-gray-200 text-[10px]">
         {/* PAGE 1: Front Page */}
-        <div className="page-content bg-white shadow-lg p-8 mb-8 mx-auto" style={{width: '8.5in', minHeight: '11in'}}>
+  <div id="page-1" className="page-content bg-white shadow-lg p-8 mb-8 mx-auto" style={{width: '11in', minHeight: '8.5in'}}>
           <div className="grid grid-cols-12 gap-4">
             {/* Left Column */}
             <div className="col-span-6">
@@ -150,9 +202,9 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
                         <p>{settings.district}</p>
                         <p className="font-bold text-xs mt-1">{settings.schoolName}</p>
                     </div>
-                    <div className="w-1/4 flex justify-end">
-                        <img src={logoBase64} alt="DepEd Logo" className="w-16 h-16" />
-                    </div>
+          <div className="w-1/4 flex justify-end">
+            <DepEdLogo className="w-24 h-24" />
+          </div>
                 </div>
                 <div className="space-y-2 text-[10px] mb-4">
                     <InfoField label="Name:" value={student.name} />
@@ -204,10 +256,8 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
           </div>
         </div>
         
-        <div className="print-break"></div>
-
         {/* PAGE 2: Back Page */}
-        <div className="page-content bg-white shadow-lg p-8 mx-auto" style={{width: '8.5in', minHeight: '11in'}}>
+  <div id="page-2" className="page-content bg-white shadow-lg p-8 mx-auto" style={{width: '11in', minHeight: '8.5in'}}>
             <div className="grid grid-cols-2 gap-8">
                 <div>
                     <h2 className="text-center font-bold text-xs mb-1">REPORT ON LEARNING PROGRESS ACHIEVEMENT</h2>
@@ -273,38 +323,92 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
       </div>
       <style>{`
         @page {
-          size: letter portrait;
+          size: letter landscape;
           margin: 0.5in;
+        }
+        /* PDF export normalization: ensures exactly two pages without blanks */
+        .pdf-export #print-content {
+          padding: 0 !important;
+          background: white !important;
+        }
+        .pdf-export #print-content .page-content {
+          /* Fit the full Letter landscape page (we add internal padding for margins) */
+          box-sizing: border-box !important;
+          width: 11in !important;
+          height: calc(8.5in - 0.06in) !important; /* compact default to avoid rounding overflow */
+          margin: 0 auto !important;
+          /* emulate 0.5in external margins via internal padding */
+          padding: 0.45in !important; /* compact default */
+          box-shadow: none !important;
+          border: none !important;
+          page-break-before: auto !important;
+          page-break-after: auto !important;
+          break-before: auto !important;
+          break-after: auto !important;
+        }
+        .pdf-export #print-content .page-content + .page-content {
+          /* remove inter-page spacing that could create blank pages */
+          margin-top: 0 !important;
+        }
+        .pdf-export #print-content .page-content { margin-bottom: 0 !important; }
+        .pdf-export #print-content .print-break {
+          /* marker only; no visual gap */
+          height: 0 !important;
         }
         @media print {
           body {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
+          /* Hide everything but print-content */
           body * {
             visibility: hidden;
           }
           #print-content, #print-content * {
             visibility: visible;
           }
+          /* Keep natural document flow for proper pagination */
           #print-content {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            background-color: transparent !important;
-            padding: 0 !important;
-          }
-           .page-content {
-            page-break-inside: avoid;
-            box-shadow: none !important;
+            position: static !important;
+            left: auto !important;
+            top: auto !important;
+            width: auto !important;
+            background: transparent !important;
             margin: 0 !important;
             padding: 0 !important;
-            border: none !important;
           }
+          /* Page container: respect page margins; avoid clipping */
+          .page-content {
+            /* Fit inside printable area for Letter landscape (11in x 8.5in) minus margins */
+            box-sizing: border-box;
+            width: calc(11in - 1in) !important;
+            min-height: calc(8.5in - 1in) !important;
+            margin: 0 auto !important;
+            padding: 0.2in !important;
+            border: none !important;
+            box-shadow: none !important;
+            page-break-inside: avoid;
+            break-inside: avoid-page;
+            /* Force a page break after each page block, then cancel on last */
+            break-after: page;
+            page-break-after: always;
+          }
+          /* Force a new physical page where requested */
           .print-break {
+            break-before: page;
             page-break-before: always;
           }
+          .page-content:last-child { break-after: auto; page-break-after: auto; }
+          /* Better table pagination */
+          table { page-break-inside: auto; }
+          thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
+          tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+          /* Remove any potential clipping */
+          html, body { height: auto !important; overflow: visible !important; }
+          * { box-shadow: none !important; }
+          /* Improve long text wrapping in print */
+          p, td, th, div { overflow-wrap: anywhere; word-break: break-word; }
         }
       `}</style>
     </div>

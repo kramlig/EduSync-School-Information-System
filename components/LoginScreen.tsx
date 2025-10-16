@@ -1,3 +1,4 @@
+import DepEdLogo from './DepEdLogo';
 import React, { useState } from 'react';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
 
@@ -58,7 +59,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users, loginType, se
       <div className="w-full max-w-md p-8 space-y-6 bg-white dark:bg-slate-800 rounded-2xl shadow-lg">
         <div className="text-center">
             <div className="flex flex-col items-center justify-center mb-4 text-slate-800 dark:text-white">
-                <img src="https://depedph.com/wp-content/uploads/2024/01/deped-logo-symbol-philippines-1024x1024.png" alt="School Logo" className="w-48 h-48 mb-3" />
+                {/* Use bundled DepEd logo to avoid network/CORS issues */}
+                <DepEdLogo className="w-48 h-48 mb-3" />
                 <h1 className="text-3xl font-bold">EduSync</h1>
             </div>
             <p className="text-slate-500 dark:text-slate-400">School Information System Portal</p>
