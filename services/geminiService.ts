@@ -1,17 +1,13 @@
+import { GoogleGenAI, Type } from "@google/genai";
 import type { Student, LearningArea, Grade, SubGradeRecord } from '../types';
 
-async function postJson(path: string, body: any) {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Request failed: ${res.status} ${res.statusText} ${text}`);
-  }
-  return res.json();
+// Vite client env
+const API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY as string | undefined;
+if (!API_KEY) {
+  // eslint-disable-next-line no-console
+  console.warn("VITE_GEMINI_API_KEY not set. Gemini features will be disabled.");
 }
+const ai = new GoogleGenAI({ apiKey: API_KEY ?? '' });
 
 const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): number | undefined => {
   if (grade === undefined) return undefined;
@@ -82,8 +78,12 @@ export const generateStudentReport = async (
   `;
 
   try {
-    const result = await postJson('/api/generateStudentReport', { prompt, studentId: student.id });
-    return result.text ?? result;
+    if (!API_KEY) return "AI features are disabled. API key is missing.";
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+    return (response as any).text;
   } catch (error: any) {
     console.error('Error generating student report (client):', error);
     return 'There was an error generating the report. Please check the API configuration and try again.';
@@ -104,7 +104,7 @@ export const generateLessonPlan = async (
     gradeLevel: number,
     objectives: string
 ): Promise<GeneratedLessonPlan> => {
-    const prompt = `
+  const prompt = `
       You are an expert instructional designer creating a lesson plan for an elementary school teacher.
 
       Instructions:
@@ -122,12 +122,30 @@ export const generateLessonPlan = async (
       -   Teacher's Core Objectives: ${objectives}
     `;
     
-    try {
-        const result = await postJson('/api/generateLessonPlan', { topic, gradeLevel, objectives });
-        return result as GeneratedLessonPlan;
-
-    } catch (error) {
-        console.error("Error generating lesson plan (client):", error);
-        throw new Error("There was an error generating the lesson plan. Please try again.");
-    }
+  try {
+    if (!API_KEY) throw new Error("AI features are disabled. API key is missing.");
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING, description: "The lesson plan title." },
+            objectives: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of learning objectives." },
+            activities: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of learning activities." },
+            materials: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of required materials." },
+            assessment: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of assessment questions or tasks." },
+          },
+          required: ["title", "objectives", "activities", "materials", "assessment"]
+        },
+      },
+    });
+    const jsonStr = (response as any).text.trim();
+    return JSON.parse(jsonStr) as GeneratedLessonPlan;
+  } catch (error) {
+    console.error("Error generating lesson plan (client):", error);
+    throw new Error("There was an error generating the lesson plan. Please try again.");
+  }
 };

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { LessonPlan, Section, LearningArea, Assignment, AuthUser, StudentUser, LessonResource } from '../types';
+import type { LessonPlan, AuthUser, StudentUser } from '../types';
 import { generateLessonPlan, GeneratedLessonPlan } from '../services/geminiService';
 import Modal from './Modal';
 import Spinner from './Spinner';
@@ -65,21 +65,25 @@ const AIGeneratorModal: React.FC<{
     
     const renderEditableList = (field: keyof GeneratedLessonPlan) => {
         if (!generatedPlan) return null;
-        const list = generatedPlan[field] as string[];
-        
+
         const handleItemChange = (index: number, value: string) => {
-            const newList = [...list];
-            newList[index] = value;
-            setGeneratedPlan({ ...generatedPlan, [field]: newList });
+            setGeneratedPlan(prev => {
+                if (!prev) return prev;
+                const current = Array.isArray(prev[field]) ? (prev[field] as string[]) : [];
+                const next = [...current];
+                next[index] = value;
+                return { ...prev, [field]: next } as GeneratedLessonPlan;
+            });
         };
 
+        const list = (generatedPlan[field] as string[]) || [];
         return (
             <div>
                 <label className="font-bold capitalize">{field}</label>
                 {list.map((item, index) => (
                     <textarea
-                        key={index}
-                        value={item}
+                        key={`${String(field)}-${index}`}
+                        value={item ?? ''}
                         onChange={(e) => handleItemChange(index, e.target.value)}
                         className="w-full input-style mb-2"
                         rows={2}
@@ -141,7 +145,7 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
     
     const visibleSections = useMemo(() => {
         if (['admin', 'principal', 'registrar'].includes(authUser.role)) return sections;
-        const teacherAdviserSectionId = sections.find(s => s.adviserId === authUser.id)?.id;
+    // const teacherAdviserSectionId = sections.find(s => s.adviserId === authUser.id)?.id;
         const assignedLearningAreaIds = new Set(authUser.assignments?.map(a => a.learningAreaId));
         return sections.filter(s => s.adviserId === authUser.id || assignedLearningAreaIds.size > 0);
     }, [sections, authUser]);
@@ -226,42 +230,62 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
     };
     
     const handleFieldChange = (field: keyof LessonPlan, value: any) => {
-        setPlanToEdit(p => ({ ...p, [field]: value }));
+        setPlanToEdit(prev => {
+            const base: any = prev ?? { objectives: [''], activities: [''], materials: [''], assessment: [''] };
+            return { ...base, [field]: value } as any;
+        });
     };
 
     const handleListItemChange = (field: 'objectives' | 'activities' | 'materials' | 'assessment', index: number, value: string) => {
-        const items = [...(planToEdit?.[field] || [])];
-        items[index] = value;
-        handleFieldChange(field, items);
+        setPlanToEdit(prev => {
+            const curr = (prev ?? { objectives: [''], activities: [''], materials: [''], assessment: [''] }) as any;
+            const items: string[] = Array.isArray(curr[field]) ? [...curr[field]] : [];
+            items[index] = value;
+            return { ...curr, [field]: items } as any;
+        });
     };
 
     const addListItem = (field: 'objectives' | 'activities' | 'materials' | 'assessment') => {
-        const items = [...(planToEdit?.[field] || []), ''];
-        handleFieldChange(field, items);
+        setPlanToEdit(prev => {
+            const curr = (prev ?? { objectives: [''], activities: [''], materials: [''], assessment: [''] }) as any;
+            const items: string[] = Array.isArray(curr[field]) ? [...curr[field], ''] : [''];
+            return { ...curr, [field]: items } as any;
+        });
     };
 
     const removeListItem = (field: 'objectives' | 'activities' | 'materials' | 'assessment', index: number) => {
-        const items = (planToEdit?.[field] || []).filter((_, i) => i !== index);
-        handleFieldChange(field, items);
+        setPlanToEdit(prev => {
+            const curr = (prev ?? { objectives: [], activities: [], materials: [], assessment: [] }) as any;
+            const items: string[] = Array.isArray(curr[field]) ? curr[field].filter((_: any, i: number) => i !== index) : [];
+            return { ...curr, [field]: items } as any;
+        });
     };
 
-    const availableAssignments = useMemo(() => {
+        const availableAssignments = useMemo(() => {
         if (!planToEdit?.sectionId || !planToEdit.learningAreaId) return [];
         return assignments.filter(a => a.sectionId === planToEdit.sectionId && a.learningAreaId === planToEdit.learningAreaId);
     }, [assignments, planToEdit]);
     
-    const EditableList: React.FC<{field: 'objectives' | 'activities' | 'materials' | 'assessment'}> = ({ field }) => (
-      <div>
-        <label className="font-bold capitalize">{field}</label>
-        {planToEdit?.[field]?.map((item, index) => (
-            <div key={index} className="flex items-center gap-2 mb-2">
-                <textarea value={item} onChange={e => handleListItemChange(field, index, e.target.value)} className="w-full input-style" rows={2}/>
-                <button type="button" onClick={() => removeListItem(field, index)} className="text-red-500"><CloseIcon/></button>
-            </div>
-        ))}
-        <button type="button" onClick={() => addListItem(field)} className="text-sm text-indigo-600 font-semibold flex items-center"><PlusIcon/> Add {field.slice(0, -1)}</button>
-      </div>
-    );
+        const renderPlanEditableList = (field: 'objectives' | 'activities' | 'materials' | 'assessment') => {
+            const list = (planToEdit?.[field] || []) as string[];
+            return (
+                <div>
+                    <label className="font-bold capitalize">{field}</label>
+                    {list.map((item, index) => (
+                        <div key={`${field}-${index}`} className="flex items-center gap-2 mb-2">
+                            <textarea
+                                value={item ?? ''}
+                                onChange={e => handleListItemChange(field, index, e.target.value)}
+                                className="w-full input-style"
+                                rows={2}
+                            />
+                            <button type="button" onClick={() => removeListItem(field, index)} className="text-red-500"><CloseIcon/></button>
+                        </div>
+                    ))}
+                    <button type="button" onClick={() => addListItem(field)} className="text-sm text-indigo-600 font-semibold flex items-center"><PlusIcon/> Add {field.slice(0, -1)}</button>
+                </div>
+            );
+        };
 
     return (
         <div>
@@ -302,7 +326,7 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
                             <div key={index} onClick={() => handleDateClick(date)} className={`p-2 border rounded-md min-h-[100px] ${date ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700' : 'bg-slate-50 dark:bg-slate-800/50'}`}>
                                 <div className="font-bold">{date?.getDate()}</div>
                                 <div className="text-xs space-y-1 mt-1">
-                                    {plans?.map(plan => (
+                                    {plans?.map((plan: LessonPlan) => (
                                         <div key={plan.id} className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200 p-1 rounded truncate">{plan.title}</div>
                                     ))}
                                 </div>
@@ -317,11 +341,11 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
                     <form onSubmit={handleSavePlan} className="space-y-4">
                         <p className="font-semibold text-lg">{new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                         <div><label className="font-bold">Lesson Title</label><input type="text" value={planToEdit.title ?? ''} onChange={e => handleFieldChange('title', e.target.value)} className="w-full input-style" required /></div>
-                        <EditableList field="objectives"/>
-                        <EditableList field="activities"/>
-                        <EditableList field="materials"/>
-                        <EditableList field="assessment"/>
-                        <div><label className="font-bold">Assignments</label><select multiple value={planToEdit.assignmentIds} onChange={e => handleFieldChange('assignmentIds', Array.from(e.target.selectedOptions, (option: HTMLOptionElement) => option.value))} className="w-full input-style h-24">{availableAssignments.map(a => (<option key={a.id} value={a.id}>{a.title}</option>))}</select></div>
+                        {renderPlanEditableList('objectives')}
+                        {renderPlanEditableList('activities')}
+                        {renderPlanEditableList('materials')}
+                        {renderPlanEditableList('assessment')}
+                        <div><label className="font-bold">Assignments</label><select multiple value={planToEdit.assignmentIds ?? []} onChange={e => handleFieldChange('assignmentIds', Array.from(e.target.selectedOptions, (option: HTMLOptionElement) => option.value))} className="w-full input-style h-24">{availableAssignments.map(a => (<option key={a.id} value={a.id}>{a.title}</option>))}</select></div>
                         <div className="flex justify-between items-center pt-4">
                             {planToEdit.id && <button type="button" onClick={handleDeletePlan} className="text-red-600 font-semibold flex items-center"><TrashIcon/> Delete</button>}
                             <div className="space-x-2 ml-auto">
