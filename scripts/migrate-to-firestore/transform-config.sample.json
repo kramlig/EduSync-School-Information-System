@@ -1,0 +1,7 @@
+{
+  "blacklist": ["password", "demoOnly"],
+  "whitelist": null,
+  "mapFields": [
+    { "from": "email", "to": "contactEmail", "removeSource": false }
+  ]
+}

@@ -107,13 +107,13 @@ const SectionsView: React.FC<SectionsViewProps> = ({ schoolData, session }) => {
                 return (
                     <tr key={section.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                         <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                            <p className="text-slate-900 dark:text-white whitespace-no-wrap">{section.name}</p>
+                            <p className="text-slate-900 dark:text-white whitespace-nowrap">{section.name}</p>
                         </td>
                         <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                            <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{section.gradeLevel}</p>
+                            <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{section.gradeLevel}</p>
                         </td>
                          <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                            <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{adviser?.name ?? 'N/A'}</p>
+                            <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{adviser?.name ?? 'N/A'}</p>
                         </td>
                         {canManageSections && (
                            <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">

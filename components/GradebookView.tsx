@@ -270,19 +270,19 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
       {selectedSectionId && (
         <div className="overflow-x-auto shadow-md rounded-lg" style={{ maxHeight: '70vh' }}>
           <table className="min-w-full text-sm text-left text-slate-500 dark:text-slate-400 border-collapse">
-            <thead className="text-xs text-slate-700 uppercase bg-slate-100 dark:bg-slate-900 dark:text-slate-300 sticky top-0 z-20">
+      <thead className="bg-slate-100 dark:bg-slate-900 sticky top-0 z-20">
               <tr>
-                <th rowSpan={2} scope="col" className="px-4 py-3 sticky left-0 z-30 bg-slate-100 dark:bg-slate-900 min-w-[200px] border-b border-slate-200 dark:border-slate-700">Student Name</th>
-                {(quarterFilter === 'all' ? ['q1', 'q2', 'q3', 'q4'] as const : [quarterFilter]).map(q => (
-                    <th key={q} colSpan={learningAreas.length} className="px-4 py-2 text-center border-b border-l border-slate-200 dark:border-slate-700">{q.toUpperCase()}</th>
+        <th rowSpan={2} scope="col" className="px-4 py-3 sticky left-0 z-30 bg-slate-100 dark:bg-slate-900 min-w-[200px] border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Student Name</th>
+        {(quarterFilter === 'all' ? ['q1', 'q2', 'q3', 'q4'] as const : [quarterFilter]).map(q => (
+          <th key={q} colSpan={learningAreas.length} className="px-4 py-3 text-center border-b-2 border-l border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">{q.toUpperCase()}</th>
                 ))}
               </tr>
-               <tr>
-                {(quarterFilter === 'all' ? ['q1', 'q2', 'q3', 'q4'] as const : [quarterFilter]).flatMap(q => 
-                    learningAreas.map((la, index) => (
-                        <th key={`${la.id}-${q}`} scope="col" className={`px-4 py-3 text-center whitespace-nowrap border-b border-slate-200 dark:border-slate-700 ${index === 0 ? 'border-l' : ''}`}>{la.name}</th>
-                    ))
-                )}
+         <tr>
+        {(quarterFilter === 'all' ? ['q1', 'q2', 'q3', 'q4'] as const : [quarterFilter]).flatMap(q => 
+          learningAreas.map((la, index) => (
+            <th key={`${la.id}-${q}`} scope="col" className={`px-4 py-3 text-center whitespace-nowrap border-b-2 border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider ${index === 0 ? 'border-l' : ''}`}>{la.name}</th>
+          ))
+        )}
               </tr>
             </thead>
             <tbody>

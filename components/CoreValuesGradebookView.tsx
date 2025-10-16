@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Student, CoreValue, CoreValueGrade, CoreValueMarking, AuthUser, StudentUser } from '../types';
+import type { CoreValueGrade, CoreValueMarking, AuthUser, StudentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { useDebounce } from '../hooks/useDebounce';
 
@@ -26,6 +26,8 @@ const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: {
     
     const authUser = session.user as AuthUser;
     const isReadOnly = authUser.role === 'principal';
+    const [page, setPage] = useState(1);
+    const pageSize = 25;
 
     const visibleSections = useMemo(() => {
         if (['admin', 'principal', 'registrar'].includes(authUser.role)) return sections;
@@ -78,6 +80,14 @@ const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: {
             s.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
         );
     }, [students, selectedSectionId, debouncedSearchQuery]);
+
+    const totalPages = Math.max(1, Math.ceil(studentsInSection.length / pageSize));
+    const pagedStudents = useMemo(() => {
+        const start = (page - 1) * pageSize;
+        return studentsInSection.slice(start, start + pageSize);
+    }, [studentsInSection, page]);
+
+    useEffect(() => { setPage(1); }, [selectedSectionId, selectedCoreValueId, selectedQuarter, debouncedSearchQuery]);
 
     const columns = useMemo(() => {
         if (!selectedCoreValueId) return [];
@@ -171,6 +181,7 @@ const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: {
             )}
 
             {selectedSectionId && selectedCoreValueId && (
+                <>
                 <div className="overflow-x-auto shadow-md rounded-lg" style={{ maxHeight: '70vh' }}>
                     <table className="min-w-full text-sm text-left border-collapse">
                         <thead className="text-xs text-slate-700 uppercase bg-slate-100 dark:bg-slate-900 dark:text-slate-300 sticky top-0 z-20">
@@ -182,7 +193,7 @@ const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: {
                             </tr>
                         </thead>
                         <tbody>
-                            {studentsInSection.map((student, rowIndex) => {
+                            {pagedStudents.map((student, rowIndex) => {
                                 const gradeRecord = gradeMap.get(`${student.id}-${selectedCoreValueId}`);
                                 return (
                                 <tr key={student.id} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
@@ -210,6 +221,29 @@ const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: {
                         </tbody>
                     </table>
                 </div>
+                <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-slate-600 dark:text-slate-300">
+                        Showing {(pagedStudents.length === 0 ? 0 : (page - 1) * pageSize + 1)}–{(page - 1) * pageSize + pagedStudents.length} of {studentsInSection.length}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            className="px-3 py-1 rounded border border-slate-300 dark:border-slate-600 disabled:opacity-50"
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page === 1}
+                        >
+                            Prev
+                        </button>
+                        <span className="text-sm">Page {page} / {totalPages}</span>
+                        <button
+                            className="px-3 py-1 rounded border border-slate-300 dark:border-slate-600 disabled:opacity-50"
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            disabled={page === totalPages}
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+                </>
             )}
             <style>{`.input-style { display: block; width: 100%; border-radius: 0.375rem; border: 1px solid; border-color: #d1d5db; background-color: transparent; padding: 0.5rem 0.75rem; } .dark .input-style { border-color: #4b5563; }`}</style>
         </div>

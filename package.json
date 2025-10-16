@@ -6,20 +6,40 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:inspector": "playwright test scripts/tests/playwright --project=chromium",
+    "test:e2e": "playwright test scripts/tests/playwright/crud.spec.js --project=chromium",
+    "emu:seed:small": "node scripts/emu-exec-seed.cjs --projectId=edusync-local --teachers=8 --parents=20 --sections=4 --students=40 --noExport=true",
+    "emu:seed:big": "node scripts/emu-exec-seed.cjs --projectId=edusync-local --teachers=300 --parents=2000 --sections=50 --students=3000 --noExport=true",
+    "emu:seed:export": "node scripts/emu-exec-seed.cjs --projectId=edusync-local --teachers=8 --parents=20 --sections=4 --students=40",
+  "emu:verify": "npx firebase emulators:exec --only firestore --project edusync-local \"node scripts/verify-seed.cjs --useEmulator=true --projectId=edusync-local\"",
+    "env:emu": "node scripts/switch-env.cjs emu",
+    "env:prod": "node scripts/switch-env.cjs prod",
+    "emu:up": "node scripts/emu-up.cjs",
+    "emu:seed:admin": "node scripts/emu-seed-and-admin.cjs",
+    "dev:emu": "npm run env:emu && npm run emu:up && timeout /t 5 > NUL && npm run emu:seed:admin && node scripts/kill-port.cjs 5173 && vite --port 5173 --strictPort",
+    "dev:prod": "npm run env:prod && node scripts/kill-port.cjs 5173 && vite --port 5173 --strictPort"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^7.11.6",
     "@google/genai": "^0.14.0",
+    "firebase": "^12.4.0",
     "firebase-admin": "^13.5.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.25.1",
+    "yargs": "^18.0.0"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",
+    "@playwright/test": "^1.56.0",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react": "^4.0.3",
     "firebase-tools": "^14.19.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
     "typescript": "^5.0.2",
     "vite": "^4.4.5"
   }

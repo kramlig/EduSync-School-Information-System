@@ -122,6 +122,9 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, session, fo
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(initialExpanded);
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | 'all'>('all');
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
   
   const isReadOnly = isStudentView || isParentView || (session.user as AuthUser).role === 'principal';
   
@@ -179,12 +182,30 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, session, fo
     });
   };
 
-  const filteredStudents = useMemo(() => (isStudentView || isParentView) 
-    ? visibleStudents
-    : visibleStudents.filter(student =>
-        student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-        student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-      ), [visibleStudents, debouncedSearchQuery, isStudentView, isParentView]);
+  const visibleSections = useMemo(() => {
+    const ids = new Set<string>();
+    visibleStudents.forEach(s => { if (s.sectionId) ids.add(s.sectionId); });
+    return sections.filter(sec => ids.has(sec.id));
+  }, [visibleStudents, sections]);
+
+  const filteredStudents = useMemo(() => {
+    const base = (isStudentView || isParentView)
+      ? visibleStudents
+      : visibleStudents.filter(student =>
+          student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+        );
+    const bySection = selectedSectionId === 'all' ? base : base.filter(s => s.sectionId === selectedSectionId);
+    return bySection;
+  }, [visibleStudents, debouncedSearchQuery, isStudentView, isParentView, selectedSectionId]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
+  const pagedStudents = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredStudents.slice(start, start + pageSize);
+  }, [filteredStudents, page]);
+
+  React.useEffect(() => { setPage(1); }, [debouncedSearchQuery, selectedSectionId]);
     
   const title = isStudentView ? 'My Core Values' : (isParentView ? `Core Values for ${filteredStudents[0]?.name}` : 'Evaluate Core Values');
 
@@ -193,7 +214,20 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, session, fo
       <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
       
       {!(isStudentView || isParentView) && (
-        <div className="mb-4">
+        <div className="mb-4 flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="font-semibold">Class:</label>
+            <select
+              value={selectedSectionId}
+              onChange={(e) => setSelectedSectionId(e.target.value as any)}
+              className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700"
+            >
+              <option value="all">All</option>
+              {visibleSections.map(s => (
+                <option key={s.id} value={s.id}>{`Grade ${s.gradeLevel} - ${s.name}`}</option>
+              ))}
+            </select>
+          </div>
           <input
             type="text"
             placeholder="Search students by name or email..."
@@ -213,7 +247,7 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, session, fo
             </tr>
           </thead>
           <tbody>
-            {filteredStudents.map((student) => (
+            {pagedStudents.map((student) => (
               <React.Fragment key={student.id}>
                 <tr className={`${!(isStudentView || isParentView) && 'cursor-pointer'} hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700`} onClick={() => toggleStudentExpansion(student.id)}>
                   <td className="pl-4 py-4 text-slate-500">
@@ -235,6 +269,31 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, session, fo
           </tbody>
         </table>
       </div>
+
+      {!(isStudentView || isParentView) && (
+        <div className="flex items-center justify-between mt-4">
+          <div className="text-sm text-slate-600 dark:text-slate-300">
+            Showing {(pagedStudents.length === 0 ? 0 : (page - 1) * pageSize + 1)}–{(page - 1) * pageSize + pagedStudents.length} of {filteredStudents.length}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="px-3 py-1 rounded border border-slate-300 dark:border-slate-600 disabled:opacity-50"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              Prev
+            </button>
+            <span className="text-sm">Page {page} / {totalPages}</span>
+            <button
+              className="px-3 py-1 rounded border border-slate-300 dark:border-slate-600 disabled:opacity-50"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -70,7 +70,7 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
       const setTargetTeacher = isEditMode ? setTeacherToEdit : setNewTeacher;
 
       if (!targetTeacher?.assignments?.some(a => a.gradeLevel === assignment.gradeLevel && a.learningAreaId === assignment.learningAreaId)) {
-        setTargetTeacher(prev => ({...prev!, assignments: [...(prev?.assignments || []), assignment]}));
+        setTargetTeacher((prev: any) => ({...prev!, assignments: [...(prev?.assignments || []), assignment]}));
       }
       setNewAssignment({ gradeLevel: '', learningAreaId: '' });
     }
@@ -78,7 +78,7 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
   
   const removeAssignmentFromTeacher = (index: number, isEditMode = false) => {
     const setTargetTeacher = isEditMode ? setTeacherToEdit : setNewTeacher;
-    setTargetTeacher(prev => ({ ...prev!, assignments: prev!.assignments?.filter((_, i) => i !== index) }));
+  setTargetTeacher((prev: any) => ({ ...prev!, assignments: prev!.assignments?.filter((_: any, i: number) => i !== index) }));
   };
 
   const handleAddTeacher = (e: React.FormEvent) => {
@@ -198,7 +198,7 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
             {paginatedTeachers.map((teacher) => (
               <tr key={teacher.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                    <p className="text-slate-900 dark:text-white whitespace-no-wrap">{teacher.name}</p>
+                    <p className="text-slate-900 dark:text-white whitespace-nowrap">{teacher.name}</p>
                     <p className="text-slate-500 dark:text-slate-400 text-xs">{teacher.email}</p>
                 </td>
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">

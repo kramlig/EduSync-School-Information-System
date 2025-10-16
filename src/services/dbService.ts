@@ -1,5 +1,3 @@
-import type { Student, LearningArea, Grade, CoreValue, CoreValueGrade, AttendanceRecord, Teacher, Section, SchoolSettings, SubstituteAssignment, ClassSchedule, Assignment, StudentAssignmentGrade, LessonPlan, Parent, Announcement } from '../../types';
-
 const DB_NAME = 'EduSyncDB';
 const DB_VERSION = 1;
 
@@ -110,13 +108,21 @@ export const remove = async (storeName: StoreName, key: IDBValidKey): Promise<vo
 };
 
 export const bulkPut = async <T>(storeName: StoreName, items: T[]): Promise<void> => {
-    if(items.length === 0) return Promise.resolve();
+    if (items.length === 0) return;
     const db = await openDB();
-    const transaction = db.transaction(storeName, 'readwrite');
-    const store = transaction.objectStore(storeName);
-    items.forEach(item => store.put(item));
     return new Promise((resolve, reject) => {
-        transaction.oncomplete = () => resolve();
+        const transaction = db.transaction(storeName, 'readwrite');
+        const store = transaction.objectStore(storeName);
+        let i = 0;
+        const putNext = () => {
+            if (i < items.length) {
+                store.put(items[i]).onsuccess = putNext;
+                i++;
+            } else {
+                resolve();
+            }
+        };
+        putNext();
         transaction.onerror = () => reject(transaction.error);
     });
 };
@@ -129,5 +135,50 @@ export const count = async (storeName: StoreName): Promise<number> => {
         const request = store.count();
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
+    });
+};
+
+const deleteDataForStudent = async (storeName: StoreName, studentId: string) => {
+    const db = await openDB();
+    const transaction = db.transaction(storeName, 'readwrite');
+    const store = transaction.objectStore(storeName);
+    const request = store.openCursor();
+    request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+            if (cursor.value.studentId === studentId) {
+                cursor.delete();
+            }
+            cursor.continue();
+        }
+    };
+    return new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+    });
+};
+
+export const deleteGradesForStudent = (studentId: string) => deleteDataForStudent('grades', studentId);
+export const deleteCoreValueGradesForStudent = (studentId: string) => deleteDataForStudent('coreValueGrades', studentId);
+export const deleteAttendanceForStudent = (studentId: string) => deleteDataForStudent('attendanceRecords', studentId);
+
+export const deleteGradesForLearningArea = async (learningAreaId: string) => {
+    const db = await openDB();
+    const transaction = db.transaction('grades', 'readwrite');
+    const store = transaction.objectStore('grades');
+    const request = store.openCursor();
+    request.onsuccess = () => {
+        const cursor = request.result as IDBCursorWithValue | null;
+        if (cursor) {
+            const value: any = cursor.value;
+            if (value.learningAreaId === learningAreaId) {
+                cursor.delete();
+            }
+            cursor.continue();
+        }
+    };
+    return new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
     });
 };

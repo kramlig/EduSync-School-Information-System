@@ -1,4 +1,36 @@
-# Logs
+# Node
+node_modules/
+dist/
+
+# Local env
+.env.local
+
+# Vite cache
+.vite/
+
+# Firebase emulator/exports
+emu-export-*/
+firebase-export-*/
+
+# Transient artifacts
+live_bundle.js
+live_index.html
+response.json
+test_payload.json
+run-*.json
+metadata.json
+pitch.html
+new_gemini_key.txt
+seeder-key.json
+
+# Migration checkpoints
+migrate-*.checkpoint.json
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/# Logs
 logs
 *.log
 npm-debug.log*
