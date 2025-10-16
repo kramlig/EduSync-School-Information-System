@@ -34,6 +34,16 @@ export const useSchoolData = (): SchoolDataState & {
         addSchedule: (sched: Omit<ClassSchedule, 'id'>) => { success: boolean; message?: string };
         updateSchedule: (sched: ClassSchedule) => { success: boolean; message?: string };
         deleteSchedule: (scheduleId: string) => void;
+    // Assignments CRUD and grading
+    addAssignment: (assignment: Omit<Assignment, 'id'>) => void;
+    updateAssignment: (assignment: Assignment) => void;
+    deleteAssignment: (assignmentId: string) => void;
+    updateAssignmentGrade: (studentId: string, assignmentId: string, score: number | null, feedback: string | null) => void;
+    submitAssignment: (studentId: string, assignmentId: string, filePath: string) => void;
+        // Lesson Plans CRUD
+        addLessonPlan: (plan: Omit<LessonPlan, 'id'>) => void;
+        updateLessonPlan: (plan: LessonPlan) => void;
+        deleteLessonPlan: (planId: string) => void;
     updateGrade: (studentId: string, learningAreaId: string, quarter: 'q1'|'q2'|'q3'|'q4', value?: number, subSubject?: string) => void;
     updateCoreValueGrade: (studentId: string, coreValueId: string, quarter: 'q1'|'q2'|'q3'|'q4', behavior: string, value: import('../types').CoreValueMarking | '') => void;
     addLearningArea: (area: Omit<LearningArea, 'id'>) => void;
@@ -343,6 +353,98 @@ export const useSchoolData = (): SchoolDataState & {
             enqueueWrite('sections', { id: sectionId, __delete: true } as any).catch(() => {});
             return { ...prev, sections: nextSections, students: updatedStudents };
         });
+    };
+
+    // Assignments CRUD and grading
+    const addAssignment = (assignment: Omit<Assignment, 'id'>) => {
+        const newAssignment: Assignment = { id: `asg_${Date.now()}`, ...assignment } as Assignment;
+        setState(prev => ({ ...prev, assignments: [...prev.assignments, newAssignment] }));
+        try { dbService.put('assignments', newAssignment); } catch {}
+        enqueueWrite('assignments', newAssignment as any).catch(() => {});
+    };
+
+    const updateAssignment = (assignment: Assignment) => {
+        setState(prev => ({ ...prev, assignments: prev.assignments.map(a => a.id === assignment.id ? { ...assignment } : a) }));
+        try { dbService.put('assignments', assignment); } catch {}
+        enqueueWrite('assignments', assignment as any).catch(() => {});
+    };
+
+    const deleteAssignment = (assignmentId: string) => {
+        setState(prev => {
+            const nextAssignments = prev.assignments.filter(a => a.id !== assignmentId);
+            const nextGrades = prev.studentAssignmentGrades.filter(sg => sg.assignmentId !== assignmentId);
+            // Persist
+            try { dbService.remove('assignments', assignmentId); } catch {}
+            // Attempt to remove per-student grades for this assignment
+            for (const sg of prev.studentAssignmentGrades) {
+                if (sg.assignmentId === assignmentId) {
+                    try { (dbService as any).remove('studentAssignmentGrades', [assignmentId, sg.studentId] as any); } catch {}
+                }
+            }
+            enqueueWrite('assignments', { id: assignmentId, __delete: true } as any).catch(() => {});
+            return { ...prev, assignments: nextAssignments, studentAssignmentGrades: nextGrades };
+        });
+    };
+
+    const updateAssignmentGrade = (studentId: string, assignmentId: string, score: number | null, feedback: string | null) => {
+        setState(prev => {
+            const existing = prev.studentAssignmentGrades.find(g => g.assignmentId === assignmentId && g.studentId === studentId);
+            const nextRecord: StudentAssignmentGrade = {
+                assignmentId,
+                studentId,
+                score: score ?? null,
+                feedback: feedback ?? null,
+                submissionDate: existing?.submissionDate ?? null,
+                filePath: existing?.filePath ?? null,
+            };
+            const updated = existing
+                ? prev.studentAssignmentGrades.map(g => (g.assignmentId === assignmentId && g.studentId === studentId) ? nextRecord : g)
+                : [...prev.studentAssignmentGrades, nextRecord];
+            try { dbService.put('studentAssignmentGrades', nextRecord as any); } catch {}
+            enqueueWrite('studentAssignmentGrades', nextRecord as any).catch(() => {});
+            return { ...prev, studentAssignmentGrades: updated };
+        });
+    };
+
+    const submitAssignment = (studentId: string, assignmentId: string, filePath: string) => {
+        setState(prev => {
+            const existing = prev.studentAssignmentGrades.find(g => g.assignmentId === assignmentId && g.studentId === studentId);
+            const today = new Date().toISOString().split('T')[0];
+            const nextRecord: StudentAssignmentGrade = {
+                assignmentId,
+                studentId,
+                score: existing?.score ?? null,
+                feedback: existing?.feedback ?? null,
+                submissionDate: today,
+                filePath: filePath || existing?.filePath || null,
+            };
+            const updated = existing
+                ? prev.studentAssignmentGrades.map(g => (g.assignmentId === assignmentId && g.studentId === studentId) ? nextRecord : g)
+                : [...prev.studentAssignmentGrades, nextRecord];
+            try { dbService.put('studentAssignmentGrades', nextRecord as any); } catch {}
+            enqueueWrite('studentAssignmentGrades', nextRecord as any).catch(() => {});
+            return { ...prev, studentAssignmentGrades: updated };
+        });
+    };
+
+    // Lesson Plans CRUD
+    const addLessonPlan = (plan: Omit<LessonPlan, 'id'>) => {
+        const newPlan: LessonPlan = { id: `lp_${Date.now()}`, ...plan } as LessonPlan;
+        setState(prev => ({ ...prev, lessonPlans: [newPlan, ...prev.lessonPlans] }));
+        try { dbService.put('lessonPlans', newPlan); } catch {}
+        enqueueWrite('lessonPlans', newPlan as any).catch(() => {});
+    };
+
+    const updateLessonPlan = (plan: LessonPlan) => {
+        setState(prev => ({ ...prev, lessonPlans: prev.lessonPlans.map(p => p.id === plan.id ? { ...plan } : p) }));
+        try { dbService.put('lessonPlans', plan); } catch {}
+        enqueueWrite('lessonPlans', plan as any).catch(() => {});
+    };
+
+    const deleteLessonPlan = (planId: string) => {
+        setState(prev => ({ ...prev, lessonPlans: prev.lessonPlans.filter(p => p.id !== planId) }));
+        try { dbService.remove('lessonPlans', planId); } catch {}
+        enqueueWrite('lessonPlans', { id: planId, __delete: true } as any).catch(() => {});
     };
 
     // SubstituteAssignment CRUD
@@ -825,7 +927,7 @@ export const useSchoolData = (): SchoolDataState & {
         }
     }, []);
 
-    return { ...state, addStudent, updateStudent, deleteStudent, addSchedule, updateSchedule, deleteSchedule, updateGrade, updateCoreValueGrade, addLearningArea, deleteLearningArea, updateSettings, updateAttendance, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addAnnouncement, updateAnnouncement, deleteAnnouncement, refreshStores };
+    return { ...state, addStudent, updateStudent, deleteStudent, addSchedule, updateSchedule, deleteSchedule, addAssignment, updateAssignment, deleteAssignment, updateAssignmentGrade, submitAssignment, addLessonPlan, updateLessonPlan, deleteLessonPlan, updateGrade, updateCoreValueGrade, addLearningArea, deleteLearningArea, updateSettings, updateAttendance, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addAnnouncement, updateAnnouncement, deleteAnnouncement, refreshStores };
 };
 
 export type SchoolDataHook = ReturnType<typeof useSchoolData>;

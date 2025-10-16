@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { initializeFirestore, CACHE_SIZE_UNLIMITED, connectFirestoreEmulator, enableIndexedDbPersistence } from 'firebase/firestore';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, signInAnonymously } from 'firebase/auth';
 
 // Read config from Vite env (VITE_ prefix)
 const firebaseConfig = {
@@ -81,6 +81,19 @@ try {
   }
 } catch (e) {
   console.warn('[Firebase] Emulator connection failed or not configured:', e);
+}
+
+// Ensure we have an authenticated user for write-permission rules.
+// This uses anonymous auth to satisfy `request.auth != null` without affecting app roles.
+try {
+  if (!auth.currentUser) {
+    // Note: This requires Anonymous sign-in to be enabled in Firebase Console for non-emulator projects.
+    signInAnonymously(auth).catch((err) => {
+      console.warn('[Firebase] Anonymous sign-in failed (writes may 403 if rules require auth):', err?.message || err);
+    });
+  }
+} catch (e) {
+  console.warn('[Firebase] Anonymous auth check failed:', e);
 }
 
 // Export services
