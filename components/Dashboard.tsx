@@ -1,16 +1,16 @@
 import React, { useMemo } from 'react';
 import Card from './Card';
-import { SchoolDataHook } from '../hooks/useSchoolData';
+import { SchoolDataState } from '../hooks/useSchoolData';
 import { AcademicCapIcon, BookOpenIcon, StarIcon } from './icons';
 import type { AuthUser, StudentUser } from '../types';
 
 interface DashboardProps {
-  schoolData: SchoolDataHook;
+  schoolData: SchoolDataState & { loading: boolean };
   session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
-  const { students, learningAreas, grades, sections, substituteAssignments, classSchedules, isSyncing } = schoolData;
+  const { students, learningAreas, grades, sections, substituteAssignments, classSchedules } = schoolData;
   
   const authUser = session.user as AuthUser;
 
@@ -78,11 +78,6 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
   return (
     <div>
       <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">Dashboard</h1>
-      {isSyncing && (
-        <div className="mb-4 p-3 rounded-lg bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 text-sm">
-          Syncing local data with the server...
-        </div>
-      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card title="Total Students" value={visibleStudents.length.toString()} icon={<AcademicCapIcon />} />
         <Card title="Total Learning Areas" value={learningAreas.length.toString()} icon={<BookOpenIcon />} />

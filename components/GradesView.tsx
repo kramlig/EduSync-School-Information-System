@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import type { Student, Grade, LearningArea, SubGradeRecord, AuthUser, StudentUser, ParentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { generateStudentReport } from '../services/geminiService';
@@ -91,13 +91,43 @@ const MapehGradeModal: React.FC<{
 };
 
 
-// Sub-component for displaying a student's grades
+// Uncontrolled, memoized grade input cell
+const GradeCell: React.FC<{
+  value: number | '';
+  tabIndex?: number;
+  disabled?: boolean;
+  onCommit: (next: number | undefined) => void;
+}> = React.memo(({ value, tabIndex, disabled, onCommit }) => {
+  const handleBlur = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    const numValue = v === '' ? undefined : parseInt(v, 10);
+    if (numValue !== undefined && (isNaN(numValue) || numValue < 0 || numValue > 100)) return;
+    onCommit(numValue);
+  }, [onCommit]);
+
+  return (
+    <input
+      type="number"
+      min={0}
+      max={100}
+      defaultValue={value as any}
+      onBlur={handleBlur}
+      tabIndex={tabIndex}
+      disabled={disabled}
+      className="w-full p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center disabled:bg-slate-100 dark:disabled:bg-slate-700/50"
+    />
+  );
+});
+GradeCell.displayName = 'GradeCell';
+
+// Sub-component for displaying a student's grades (memoized)
 const StudentGradeDetails: React.FC<{
   student: Student,
-  schoolData: SchoolDataHook,
+  learningAreas: LearningArea[],
+  grades: Grade[],
+  updateGrade: SchoolDataHook['updateGrade'],
   isReadOnly: boolean,
-}> = ({ student, schoolData, isReadOnly }) => {
-  const { learningAreas, grades, updateGrade } = schoolData;
+}> = React.memo(({ student, learningAreas, grades, updateGrade, isReadOnly }) => {
   const [mapehModalState, setMapehModalState] = useState<{ isOpen: boolean, quarter?: 'q1'|'q2'|'q3'|'q4', la?: LearningArea }>({ isOpen: false });
 
   const gradeMap = useMemo(() => {
@@ -108,24 +138,22 @@ const StudentGradeDetails: React.FC<{
     return map;
   }, [grades, student.id]);
 
-  const handleGradeChange = (laId: string, quarter: 'q1'|'q2'|'q3'|'q4', value: string) => {
-      const numValue = value === '' ? undefined : parseInt(value, 10);
-      if (numValue !== undefined && (isNaN(numValue) || numValue < 0 || numValue > 100)) return;
-      updateGrade(student.id, laId, quarter, numValue);
-  };
+  const handleGradeCommit = useCallback((laId: string, quarter: 'q1'|'q2'|'q3'|'q4', numValue: number | undefined) => {
+    updateGrade(student.id, laId, quarter, numValue);
+  }, [student.id, updateGrade]);
 
   return (
-    <div className="overflow-x-auto bg-slate-50 dark:bg-slate-800/50 p-4">
-      <table className="min-w-full">
-        <thead>
-          <tr className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">
-            <th className="py-2 px-3 text-left">Learning Area</th>
-            <th className="py-2 px-3 text-center">Q1</th>
-            <th className="py-2 px-3 text-center">Q2</th>
-            <th className="py-2 px-3 text-center">Q3</th>
-            <th className="py-2 px-3 text-center">Q4</th>
-            <th className="py-2 px-3 text-center">Final Grade</th>
-            <th className="py-2 px-3 text-center">Remarks</th>
+    <div className="overflow-x-auto bg-white dark:bg-slate-800 p-4 rounded-lg shadow-inner">
+      <table className="min-w-full leading-normal">
+        <thead className="bg-slate-100 dark:bg-slate-900">
+          <tr>
+            <th className="py-3 px-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Learning Area</th>
+            <th className="py-3 px-3 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Q1</th>
+            <th className="py-3 px-3 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Q2</th>
+            <th className="py-3 px-3 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Q3</th>
+            <th className="py-3 px-3 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Q4</th>
+            <th className="py-3 px-3 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Final Grade</th>
+            <th className="py-3 px-3 border-b-2 border-slate-200 dark:border-slate-700 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Remarks</th>
           </tr>
         </thead>
         <tbody className="text-sm">
@@ -148,17 +176,16 @@ const StudentGradeDetails: React.FC<{
                       </td>
                     );
                   }
+                  const rawVal = currentGrade?.[q] as number | undefined;
+                  const value = rawVal ?? '';
                   return (
                     <td key={q} className="py-2 px-3">
-                      <input 
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={(currentGrade?.[q] as number) ?? ''}
-                        onChange={(e) => handleGradeChange(la.id, q, e.target.value)}
+                      <GradeCell
+                        key={`${student.id}-${la.id}-${q}-${rawVal ?? ''}`}
+                        value={value as any}
                         tabIndex={(qIndex * learningAreas.length) + laIndex + 1}
                         disabled={isReadOnly}
-                        className="w-full p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center disabled:bg-slate-100 dark:disabled:bg-slate-700/50"
+                        onCommit={(num) => handleGradeCommit(la.id, q, num)}
                       />
                     </td>
                   );
@@ -188,7 +215,8 @@ const StudentGradeDetails: React.FC<{
       )}
     </div>
   );
-};
+});
+StudentGradeDetails.displayName = 'StudentGradeDetails';
 
 
 const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStudentId }) => {
@@ -208,6 +236,9 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [selectedStudentForAction, setSelectedStudentForAction] = useState<Student | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | 'all'>('all');
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
   
   const isReadOnly = isStudentView || isParentView || (session.user as AuthUser).role === 'principal';
 
@@ -249,8 +280,16 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
     });
 
     if (authorizedSectionIds.size === 0) return [];
-    return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
+    const scoped = students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
+    return scoped;
   }, [students, sections, substituteAssignments, classSchedules, session, forceStudentId]);
+
+  const visibleSections = useMemo(() => {
+    // Derive the sections that current user can access from visibleStudents
+    const ids = new Set<string>();
+    visibleStudents.forEach(s => { if (s.sectionId) ids.add(s.sectionId); });
+    return sections.filter(sec => ids.has(sec.id));
+  }, [visibleStudents, sections]);
 
   const toggleStudentExpansion = (studentId: string) => {
     if (isStudentView || isParentView) return;
@@ -279,12 +318,25 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
     setIsPrintModalOpen(true);
   };
   
-  const filteredStudents = useMemo(() => (isStudentView || isParentView)
-    ? visibleStudents
-    : visibleStudents.filter(student =>
-        student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-        student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-      ), [visibleStudents, debouncedSearchQuery, isStudentView, isParentView]);
+  const filteredStudents = useMemo(() => {
+    const base = (isStudentView || isParentView)
+      ? visibleStudents
+      : visibleStudents.filter(student =>
+          student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+        );
+    const bySection = selectedSectionId === 'all' ? base : base.filter(s => s.sectionId === selectedSectionId);
+    return bySection;
+  }, [visibleStudents, debouncedSearchQuery, isStudentView, isParentView, selectedSectionId]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
+  const pagedStudents = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredStudents.slice(start, start + pageSize);
+  }, [filteredStudents, page]);
+
+  // Reset page when filters change
+  React.useEffect(() => { setPage(1); }, [debouncedSearchQuery, selectedSectionId]);
   
   const title = isStudentView ? 'My Grades' : (isParentView ? `Grades for ${filteredStudents[0]?.name}` : 'Manage Grades');
 
@@ -293,7 +345,20 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
       <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
 
       {!(isStudentView || isParentView) && (
-        <div className="mb-4">
+        <div className="mb-4 flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="font-semibold">Class:</label>
+            <select
+              value={selectedSectionId}
+              onChange={(e) => setSelectedSectionId(e.target.value as any)}
+              className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700"
+            >
+              <option value="all">All</option>
+              {visibleSections.map(s => (
+                <option key={s.id} value={s.id}>{`Grade ${s.gradeLevel} - ${s.name}`}</option>
+              ))}
+            </select>
+          </div>
           <input
             type="text"
             placeholder="Search students by name or email..."
@@ -308,13 +373,13 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
         <table className="min-w-full leading-normal">
           <thead className="bg-slate-100 dark:bg-slate-900">
             <tr>
-              <th className="w-12"></th>
+              <th className="w-12 px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider" aria-label="expand" />
               <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Student Name</th>
               <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredStudents.map((student) => (
+            {pagedStudents.map((student) => (
               <React.Fragment key={student.id}>
                 <tr className={`${!(isStudentView || isParentView) && 'cursor-pointer'} hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700`} onClick={() => toggleStudentExpansion(student.id)}>
                   <td className="pl-4 py-4 text-slate-500">
@@ -336,7 +401,13 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
                 {expandedStudents.has(student.id) && (
                   <tr>
                     <td colSpan={3} className="p-0">
-                      <StudentGradeDetails student={student} schoolData={schoolData} isReadOnly={isReadOnly} />
+                      <StudentGradeDetails
+                        student={student}
+                        learningAreas={learningAreas}
+                        grades={grades}
+                        updateGrade={schoolData.updateGrade}
+                        isReadOnly={isReadOnly}
+                      />
                     </td>
                   </tr>
                 )}
@@ -345,6 +416,32 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {!(isStudentView || isParentView) && (
+        <div className="flex items-center justify-between mt-4">
+          <div className="text-sm text-slate-600 dark:text-slate-300">
+            Showing {(pagedStudents.length === 0 ? 0 : (page - 1) * pageSize + 1)}–{(page - 1) * pageSize + pagedStudents.length} of {filteredStudents.length}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="px-3 py-1 rounded border border-slate-300 dark:border-slate-600 disabled:opacity-50"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              Prev
+            </button>
+            <span className="text-sm">Page {page} / {totalPages}</span>
+            <button
+              className="px-3 py-1 rounded border border-slate-300 dark:border-slate-600 disabled:opacity-50"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       <Modal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} title={`Performance Report for ${selectedStudentForAction?.name}`}>
         {isGeneratingReport ? (

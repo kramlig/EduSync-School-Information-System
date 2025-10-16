@@ -73,10 +73,10 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, session
             {learningAreas.map((learningArea) => (
               <tr key={learningArea.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                  <p className="text-slate-900 dark:text-white whitespace-no-wrap">{learningArea.name}</p>
+                  <p className="text-slate-900 dark:text-white whitespace-nowrap">{learningArea.name}</p>
                 </td>
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                  <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{learningArea.credits}</p>
+                  <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{learningArea.credits}</p>
                 </td>
                 {authUser.role === 'admin' && (
                     <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">

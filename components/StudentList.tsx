@@ -1,12 +1,17 @@
 import React, { useState, useMemo } from 'react';
-import { SchoolDataHook } from '../hooks/useSchoolData';
+import { SchoolDataState } from '../hooks/useSchoolData';
 import type { Student, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
 import { UserCircleIcon, PencilIcon, TrashIcon } from './icons';
 import { useDebounce } from '../hooks/useDebounce';
 
 interface StudentListProps {
-  schoolData: SchoolDataHook;
+  schoolData: SchoolDataState & { 
+    loading: boolean;
+    addStudent: (student: Omit<Student, 'id' | 'enrollmentDate'>) => { success: boolean; message?: string; };
+    updateStudent: (student: Student) => void;
+    deleteStudent: (studentId: string) => void;
+  };
   session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
@@ -155,7 +160,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   const filteredStudents = useMemo(() => visibleStudents.filter(student =>
     student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
     student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-    student.lrn?.includes(debouncedSearchQuery)
+    (student.lrn && student.lrn.includes(debouncedSearchQuery))
   ), [visibleStudents, debouncedSearchQuery]);
 
   // Pagination Logic
@@ -202,9 +207,9 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
               const section = sections.find(s => s.id === student.sectionId);
               return (
               <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm"><p className="text-slate-900 dark:text-white whitespace-no-wrap">{student.name}</p></td>
-                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm"><p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{student.lrn ?? 'N/A'}</p></td>
-                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm"><p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{section ? `Grade ${section.gradeLevel} - ${section.name}` : 'N/A'}</p></td>
+                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm"><p className="text-slate-900 dark:text-white whitespace-nowrap">{student.name}</p></td>
+                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm"><p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{student.lrn ?? 'N/A'}</p></td>
+                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm"><p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{section ? `Grade ${section.gradeLevel} - ${section.name}` : 'N/A'}</p></td>
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
                   <div className="flex items-center space-x-3">
                     <button onClick={() => handleViewProfile(student)} className="flex items-center text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-semibold text-xs">

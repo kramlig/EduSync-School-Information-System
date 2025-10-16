@@ -1,35 +1,55 @@
 import React, { useState } from 'react';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
-import { SchoolDataHook } from '../hooks/useSchoolData';
 
 interface LoginScreenProps {
-  onLogin: (session: { user: AuthUser | StudentUser | ParentUser; type: 'staff' | 'student' | 'parent' }) => void;
-  loginFn: SchoolDataHook['login'];
+  onLogin: (user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => void;
+  users: (AuthUser | StudentUser | ParentUser)[];
+  loginType: 'staff' | 'student' | 'parent';
+  setLoginType: (type: 'staff' | 'student' | 'parent') => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginFn }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users, loginType, setLoginType }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
+  // Debug flags (could later be wired to env)
+  const allowAnyPassword = true; // DEBUG ONLY
+  const enableQuickLogin = true; // DEBUG ONLY
+
+  console.log(`Login screen received ${users.length} users for type "${loginType}".`);
+  if (users.length && (window as any).__dumpedUsers !== true) {
+    console.log('[AuthDebug] First 10 user emails:', users.slice(0,10).map(u => u.email));
+    (window as any).__dumpedUsers = true;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    try {
-      const session = await loginFn(email, password, loginType);
-      if (session) {
-        onLogin(session);
+    console.log(`Attempting login with type: "${loginType}", email: "${email}"`);
+
+    // This is a simplified, mock authentication.
+    setTimeout(() => {
+      const user = users.find(u => u.email.trim().toLowerCase() === email.trim().toLowerCase());
+
+      if (user && (allowAnyPassword || password === 'password')) {
+        console.log('[AuthDebug] Login success for', user.email, 'type', loginType);
+        onLogin(user, loginType);
       } else {
         setError('Invalid email or password.');
       }
-    } catch (e) {
-      setError('An unexpected error occurred.');
-    } finally {
       setIsLoading(false);
+    }, 500);
+  };
+
+  const handleQuickLogin = () => {
+    if (!enableQuickLogin) return;
+    const user = users[0];
+    if (user) {
+      console.log('[AuthDebug] Quick login as', user.email);
+      onLogin(user, loginType);
     }
   };
 
@@ -87,21 +107,26 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginFn }) => {
 
             {error && <p className="text-sm text-red-600 text-center">{error}</p>}
             
-            <div>
+            <div className="space-y-2">
                 <button
                     type="submit" disabled={isLoading}
                     className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
                 >
                     {isLoading ? 'Signing in...' : 'Sign in'}
                 </button>
+                {enableQuickLogin && users.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleQuickLogin}
+                    className="w-full flex justify-center py-1.5 px-4 border border-slate-300 dark:border-slate-600 rounded-md text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600"
+                  >Quick Login (debug)</button>
+                )}
             </div>
         </form>
          <div className="text-center text-xs text-slate-500 dark:text-slate-400">
             <p className="font-semibold">Demo Credentials:</p>
-            <p>Admin: <span className="font-mono">admin@school.edu</span> / <span className="font-mono">admin123</span></p>
-            <p>Teacher: <span className="font-mono">teacher@school.edu</span> / <span className="font-mono">teacher123</span></p>
-            <p>Parent: <span className="font-mono">s.johnson@family.com</span> / <span className="font-mono">parent123</span></p>
-         </div>
+            <p>Email: (any staff email) / Pass: password{allowAnyPassword ? ' (any password accepted in debug)' : ''}</p>
+        </div>
       </div>
     </div>
   );

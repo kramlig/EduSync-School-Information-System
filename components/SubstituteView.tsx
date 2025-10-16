@@ -188,13 +188,13 @@ const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
                         return (
                              <tr key={sub.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                                    <p className="text-slate-900 dark:text-white whitespace-no-wrap">{substituteTeacher?.name ?? 'Unknown'}</p>
+                                    <p className="text-slate-900 dark:text-white whitespace-nowrap">{substituteTeacher?.name ?? 'Unknown'}</p>
                                 </td>
                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                                    <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{originalTeacher?.name ?? 'Unknown'}</p>
+                                    <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{originalTeacher?.name ?? 'Unknown'}</p>
                                 </td>
                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                                    <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{sub.startDate} to {sub.endDate}</p>
+                                    <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{sub.startDate} to {sub.endDate}</p>
                                 </td>
                                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
                                     <span className={`px-2 py-1 text-xs font-bold rounded-full ${status.color}`}>{status.text}</span>

@@ -1,46 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { Student, LearningArea, Grade, SubGradeRecord, CoreValue, CoreValueGrade, CoreValueMarking, AttendanceRecord, Teacher, Section, AuthUser, SchoolSettings, SubstituteAssignment, ClassSchedule, StudentUser, Assignment, StudentAssignmentGrade, LessonPlan, Parent, ParentUser, Announcement, AttendanceStatus } from '../types';
+import { useState, useEffect } from 'react';
+import type { Student, LearningArea, Grade, CoreValue, CoreValueGrade, AttendanceRecord, Teacher, Section, SchoolSettings, SubstituteAssignment, ClassSchedule, Assignment, StudentAssignmentGrade, LessonPlan, Parent, Announcement, AttendanceStatus } from '../types';
 import * as dbService from '../src/services/dbService';
-// FIX: Import StoreName type from dbService to resolve 'Cannot find name' error.
+import * as firestoreReader from '../src/services/firestoreReader';
 import type { StoreName } from '../src/services/dbService';
-
-// --- DATA GENERATION FOR STRESS TESTING ---
-
-const STRESS_TEST_CONFIG = {
-    teachers: 50,
-    sections: 40,
-    students: 1000,
-};
-
-const FIRST_NAMES = ["Liam", "Olivia", "Noah", "Emma", "Oliver", "Ava", "Elijah", "Charlotte", "William", "Sophia", "James", "Amelia", "Benjamin", "Isabella", "Lucas", "Mia", "Henry", "Evelyn", "Alexander", "Harper"];
-const LAST_NAMES = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin"];
-
-const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-const getRandomItem = <T>(arr: T[]): T => arr[rand(0, arr.length - 1)];
-
-// Base data that is always present
-const MOCK_LEARNING_AREAS: LearningArea[] = [
-  { id: 'la1', name: 'Mother Tongue Based (MTB)', credits: 3 },
-  { id: 'la2', name: 'Filipino', credits: 3 },
-  { id: 'la3', name: 'English', credits: 4 },
-  { id: 'la4', name: 'Math', credits: 4 },
-  { id: 'la5', name: 'Araling Panlipunan (AP)', credits: 4 },
-  { id: 'la6', name: 'Edukasyon sa Pagpapakatao (EsP)', credits: 2 },
-  { id: 'la7', name: 'MAPEH', credits: 4, isComposite: true, subSubjects: ['Music', 'Arts', 'PE', 'Health']},
-  { id: 'la8', name: 'Science', credits: 4 },
-];
-
-const MOCK_CORE_VALUES: CoreValue[] = [
-  { id: 'cv1', name: 'Maka-Diyos', behaviors: ["Expresses one's spiritual beliefs while respecting the spiritual beliefs of others", "Shows adherence to ethical principles by upholding truth"] },
-  { id: 'cv2', name: 'Makatao', behaviors: ["Is sensitive to individual, social, and cultural differences", "Demonstrates contributions toward solidarity"] },
-  { id: 'cv3', name: 'Makakalikasan', behaviors: ["Cares for the environment and utilizes resources wisely, judiciously, and economically"] },
-  { id: 'cv4', name: 'Makabansa', behaviors: ["Demonstrates pride in being a Filipino; exercises the rights and responsibilities of a Filipino citizen", "Demonstrates appropriate behavior in carrying out activities in the school, community, and country"] }
-];
-
-export const MONTHLY_SCHOOL_DAYS_CONFIG: Record<string, number> = {
-  'Jun': 21, 'Jul': 22, 'Aug': 23, 'Sep': 21, 'Oct': 20,
-  'Nov': 19, 'Dec': 15, 'Jan': 22, 'Feb': 20, 'Mar': 21, 'Apr': 5,
-};
+import { enqueueWrite, startAutoSync } from '../src/services/firestoreSync';
 
 const MOCK_SETTINGS: SchoolSettings = {
     schoolName: 'ENRIQUE URENCIA ELEMENTARY SCHOOL',
@@ -50,209 +13,432 @@ const MOCK_SETTINGS: SchoolSettings = {
     schoolYear: '2023-2024'
 };
 
-const generateData = () => {
-    const teachers: Teacher[] = [
-      { id: 't0', name: 'Admin User', email: 'admin@school.edu', role: 'admin', password: 'admin123', assignments: [] },
-      { id: 't-principal', name: 'Dr. Evelyn Reed', email: 'principal@school.edu', role: 'principal', password: 'teacher123', assignments: [] },
-      { id: 't-registrar', name: 'Mr. Samuel Grant', email: 'registrar@school.edu', role: 'registrar', password: 'teacher123', assignments: [] },
-      { id: 't-demo', name: 'Maria Dela Cruz', email: 'teacher@school.edu', role: 'teacher', password: 'teacher123', assignments: [] },
-    ];
-    for (let i = 0; i < STRESS_TEST_CONFIG.teachers; i++) {
-        const firstName = getRandomItem(FIRST_NAMES);
-        const lastName = getRandomItem(LAST_NAMES);
-        teachers.push({
-        id: `t${i + 1}`,
-        name: `${firstName} ${lastName}`,
-        email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}${i}@school.edu`,
-        role: 'teacher',
-        password: 'teacher123',
-        assignments: [],
-        });
-    }
-
-    const sections: Section[] = [];
-    const gradeLevels = [1, 2, 3, 4, 5, 6];
-    let gradeCounts: Record<number, number> = {};
-    const availableAdvisers = teachers.filter(t => t.role === 'teacher');
-    for (let i = 0; i < STRESS_TEST_CONFIG.sections; i++) {
-        const gradeLevel = gradeLevels[i % gradeLevels.length];
-        gradeCounts[gradeLevel] = (gradeCounts[gradeLevel] || 0) + 1;
-        sections.push({
-        id: `sec${i + 1}`,
-        gradeLevel,
-        name: String.fromCharCode(64 + gradeCounts[gradeLevel]), // A, B, C...
-        adviserId: getRandomItem(availableAdvisers).id,
-        });
-    }
-
-    const students: Student[] = [];
-    for (let i = 0; i < STRESS_TEST_CONFIG.students; i++) {
-        const firstName = getRandomItem(FIRST_NAMES);
-        const lastName = getRandomItem(LAST_NAMES);
-        students.push({
-        id: `s${i + 1}`,
-        name: `${firstName} ${lastName}`,
-        email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}${i}@school.edu`,
-        enrollmentDate: '2023-09-01',
-        lrn: Array.from({ length: 12 }, () => rand(0, 9)).join(''),
-        dateOfBirth: `201${rand(4, 5)}-${String(rand(1, 12)).padStart(2, '0')}-${String(rand(1, 28)).padStart(2, '0')}`,
-        sex: rand(0, 1) === 0 ? 'Male' : 'Female',
-        sectionId: getRandomItem(sections).id,
-        password: 'student123',
-        });
-    }
-    students[0].id = 's-test-parent-child';
-    students[0].name = 'Alice Johnson';
-    students[0].email = 'alice.j@school.edu';
-
-    const parents: Parent[] = [
-        { id: 'p1', name: 'Sarah Johnson', email: 's.johnson@family.com', password: 'parent123', studentIds: ['s-test-parent-child'] },
-    ];
-
-    const quarters: ('q1' | 'q2' | 'q3' | 'q4')[] = ['q1', 'q2', 'q3', 'q4'];
-    const grades: Grade[] = students.flatMap(student => 
-        MOCK_LEARNING_AREAS.map(la => {
-        const grade: Grade = { id: `g-${student.id}-${la.id}`, studentId: student.id, learningAreaId: la.id };
-        let finalGradeSum = 0;
-        let quarterCount = 0;
-        quarters.forEach(q => {
-            if (la.isComposite) {
-            const subGrades: SubGradeRecord = {};
-            la.subSubjects!.forEach(sub => { subGrades[sub] = rand(70, 98); });
-            grade[q] = subGrades;
-            const avg = Math.round(Object.values(subGrades).reduce((a, b) => a + b, 0) / la.subSubjects!.length);
-            finalGradeSum += avg;
-            quarterCount++;
-            } else {
-            const qGrade = rand(72, 99);
-            grade[q] = qGrade;
-            finalGradeSum += qGrade;
-            quarterCount++;
-            }
-        });
-        const finalGrade = Math.round(finalGradeSum / quarterCount);
-        grade.finalGrade = finalGrade;
-        grade.remarks = finalGrade >= 75 ? 'Passed' : 'Failed';
-        return grade;
-        })
-    );
-    
-    const markings: CoreValueMarking[] = ['AO', 'SO', 'RO', 'NO'];
-    const coreValueGrades: CoreValueGrade[] = students.flatMap(student =>
-        MOCK_CORE_VALUES.map(cv => {
-            const grade: CoreValueGrade = { id: `cvg-${student.id}-${cv.id}`, studentId: student.id, coreValueId: cv.id };
-            quarters.forEach(q => {
-                grade[q] = {};
-                cv.behaviors.forEach(b => {
-                    grade[q]![b] = markings[rand(0, 3)];
-                });
-            });
-            return grade;
-        })
-    );
-    
-    const attendanceRecords: AttendanceRecord[] = students.map(student => {
-        const record: AttendanceRecord = { studentId: student.id, dailyStatus: {} };
-        const year = new Date().getFullYear();
-        const statuses: AttendanceStatus[] = ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'A', 'L', 'E'];
-        for (let month = 0; month < 12; month++) {
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-            for (let day = 1; day <= daysInMonth; day++) {
-                const date = new Date(year, month, day);
-                if (date.getDay() >= 1 && date.getDay() <= 5) { // Weekdays only
-                    const dateStr = date.toISOString().split('T')[0];
-                    record.dailyStatus[dateStr] = getRandomItem(statuses);
-                }
-            }
-        }
-        return record;
-    });
-
-    const timeSlots = ["08:00-09:00", "09:00-10:00", "10:30-11:30", "13:00-14:00", "14:00-15:00"];
-    const days: ClassSchedule['dayOfWeek'][] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-    let scheduleIdCounter = 1;
-    const classSchedules: ClassSchedule[] = [];
-    days.forEach(day => {
-        classSchedules.push({ id: `cs${scheduleIdCounter++}`, title: 'Recess', type: 'extracurricular', scope: 'all', dayOfWeek: day, startTime: '10:00', endTime: '10:30' });
-        classSchedules.push({ id: `cs${scheduleIdCounter++}`, title: 'Lunch', type: 'extracurricular', scope: 'all', dayOfWeek: day, startTime: '12:00', endTime: '13:00' });
-    });
-    const teacherSchedule: Record<string, Set<string>> = {}; // teacherId -> Set of "day-startTime"
-    sections.forEach(section => {
-        const availableSlotsByDay: Record<string, string[]> = { Monday: [...timeSlots], Tuesday: [...timeSlots], Wednesday: [...timeSlots], Thursday: [...timeSlots], Friday: [...timeSlots] };
-        MOCK_LEARNING_AREAS.forEach(la => {
-        let scheduled = false;
-        for (const day of days) {
-            if (availableSlotsByDay[day].length > 0 && !scheduled) {
-            const slot = availableSlotsByDay[day].shift()!;
-            const [startTime, endTime] = slot.split('-');
-            const availableTeacher = teachers.find(t => {
-                if (t.role !== 'teacher') return false;
-                const scheduleKey = `${day}-${startTime}`;
-                if (!teacherSchedule[t.id]) teacherSchedule[t.id] = new Set();
-                return !teacherSchedule[t.id].has(scheduleKey);
-            });
-            if (availableTeacher) {
-                classSchedules.push({ id: `cs${scheduleIdCounter++}`, title: la.name, type: 'academic', scope: 'section', sectionId: section.id, learningAreaId: la.id, teacherId: availableTeacher.id, dayOfWeek: day, startTime, endTime });
-                teacherSchedule[availableTeacher.id].add(`${day}-${startTime}`);
-                scheduled = true;
-            }
-            }
-        }
-        });
-    });
-    
-    classSchedules.push({
-      id: 'cs-multi',
-      title: 'Book Fair Week',
-      type: 'extracurricular',
-      scope: 'all',
-      dayOfWeek: 'Monday',
-      endDayOfWeek: 'Friday',
-      startTime: '09:00',
-      endTime: '15:00',
-    });
-    
-    const substituteAssignments: SubstituteAssignment[] = [
-        { id: 'sub1', teacherId: teachers[4].id, originalTeacherId: teachers[5].id, startDate: '2024-10-28', endDate: '2024-10-30' }
-    ];
-
-    const studentAssignmentGrades: StudentAssignmentGrade[] = [];
-
-    return {
-        teachers, sections, students, parents, grades, coreValueGrades, attendanceRecords, classSchedules, substituteAssignments,
-        learningAreas: MOCK_LEARNING_AREAS,
-        coreValues: MOCK_CORE_VALUES,
-        settings: MOCK_SETTINGS,
-        assignments: [],
-        studentAssignmentGrades,
-        lessonPlans: [],
-        announcements: [],
-    };
-};
-
-const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): number | undefined => {
-  if (grade === undefined) return undefined; if (typeof grade === 'number') return grade;
-  const subGrades = Object.values(grade).filter(g => typeof g === 'number'); if (subGrades.length === 0) return undefined;
-  const total = subGrades.reduce((acc, val) => acc + val, 0); return Math.round(total / subGrades.length);
-};
-
-type SchoolDataState = {
+export type SchoolDataState = {
     students: Student[]; learningAreas: LearningArea[]; grades: Grade[]; coreValues: CoreValue[];
     coreValueGrades: CoreValueGrade[]; attendanceRecords: AttendanceRecord[]; teachers: Teacher[];
     parents: Parent[]; sections: Section[]; settings: SchoolSettings; substituteAssignments: SubstituteAssignment[];
     classSchedules: ClassSchedule[]; assignments: Assignment[]; studentAssignmentGrades: StudentAssignmentGrade[];
     lessonPlans: LessonPlan[]; announcements: Announcement[];
+    monthlySchoolDaysConfig: Record<string, number>;
 };
 
-export const useSchoolData = (isOnline: boolean) => {
-    const [state, setState] = useState<SchoolDataState & { loading: boolean }>({
-        loading: true, students: [], learningAreas: [], grades: [], coreValues: [], coreValueGrades: [],
+export const useSchoolData = (): SchoolDataState & { 
+  loading: boolean;
+  error: string | null;
+  addStudent: (student: Omit<Student, 'id' | 'enrollmentDate'>) => { success: boolean; message?: string; };
+  updateStudent: (student: Student) => void;
+  deleteStudent: (studentId: string) => void;
+        // Class scheduler CRUD
+        addSchedule: (sched: Omit<ClassSchedule, 'id'>) => { success: boolean; message?: string };
+        updateSchedule: (sched: ClassSchedule) => { success: boolean; message?: string };
+        deleteSchedule: (scheduleId: string) => void;
+    updateGrade: (studentId: string, learningAreaId: string, quarter: 'q1'|'q2'|'q3'|'q4', value?: number, subSubject?: string) => void;
+    updateCoreValueGrade: (studentId: string, coreValueId: string, quarter: 'q1'|'q2'|'q3'|'q4', behavior: string, value: import('../types').CoreValueMarking | '') => void;
+    addLearningArea: (area: Omit<LearningArea, 'id'>) => void;
+    deleteLearningArea: (learningAreaId: string) => void;
+        updateSettings: (settings: SchoolSettings) => void;
+        updateAttendance: (studentId: string, date: string, status: AttendanceStatus) => void;
+    addParent: (parent: Omit<Parent, 'id'>) => void;
+    updateParent: (parent: Parent) => void;
+    deleteParent: (parentId: string) => void;
+    assignStudentToParent: (parentId: string, studentId: string) => void;
+    unassignStudentFromParent: (parentId: string, studentId: string) => void;
+    addTeacher: (teacher: Omit<Teacher, 'id'>) => void;
+    updateTeacher: (teacher: Teacher) => void;
+    deleteTeacher: (teacherId: string) => void;
+    addSection: (section: Omit<Section, 'id'>) => void;
+    updateSection: (section: Section) => void;
+    deleteSection: (sectionId: string) => void;
+    addSubstituteAssignment: (assignment: Omit<SubstituteAssignment, 'id'>) => void;
+    updateSubstituteAssignment: (assignment: SubstituteAssignment) => void;
+    deleteSubstituteAssignment: (assignmentId: string) => void;
+} => {
+    const [state, setState] = useState<SchoolDataState & { loading: boolean; error: string | null }>({
+        loading: true,
+        error: null,
+        students: [], learningAreas: [], grades: [], coreValues: [], coreValueGrades: [],
         attendanceRecords: [], teachers: [], parents: [], sections: [], settings: MOCK_SETTINGS,
         substituteAssignments: [], classSchedules: [], assignments: [], studentAssignmentGrades: [],
         lessonPlans: [], announcements: [],
+        monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG,
     });
 
-    const [isSyncing, setIsSyncing] = useState(false);
+    const addStudent = (student: Omit<Student, 'id' | 'enrollmentDate'>): { success: boolean; message?: string } => {
+        // Basic validation
+        if (state.students.some(s => s.email === student.email)) {
+            return { success: false, message: 'A student with this email already exists.' };
+        }
+
+        const newStudent: Student = {
+            ...student,
+            id: `s_${Date.now()}`, // Simple unique ID generation
+            enrollmentDate: new Date().toISOString().split('T')[0],
+        };
+
+        const newStudents = [...state.students, newStudent];
+        setState(prevState => ({ ...prevState, students: newStudents }));
+    dbService.put('students', newStudent); // Add to IndexedDB
+    enqueueWrite('students', newStudent).catch(() => {});
+
+        return { success: true };
+    };
+
+    const updateStudent = (student: Student) => {
+        const newStudents = state.students.map(s => s.id === student.id ? student : s);
+        setState(prevState => ({ ...prevState, students: newStudents }));
+    dbService.put('students', student); // Update in IndexedDB
+    enqueueWrite('students', student).catch(() => {});
+    };
+
+    const deleteStudent = (studentId: string) => {
+        const newStudents = state.students.filter(s => s.id !== studentId);
+        // Also delete related data
+        const newGrades = state.grades.filter(g => g.studentId !== studentId);
+        const newCoreValueGrades = state.coreValueGrades.filter(cvg => cvg.studentId !== studentId);
+        const newAttendance = state.attendanceRecords.filter(ar => ar.studentId !== studentId);
+
+        setState(prevState => ({
+            ...prevState,
+            students: newStudents,
+            grades: newGrades,
+            coreValueGrades: newCoreValueGrades,
+            attendanceRecords: newAttendance,
+        }));
+
+        dbService.remove('students', studentId);
+        // Also remove related data from IndexedDB
+        dbService.deleteGradesForStudent(studentId);
+        dbService.deleteCoreValueGradesForStudent(studentId);
+        dbService.deleteAttendanceForStudent(studentId);
+        enqueueWrite('students', { id: studentId, __delete: true } as any).catch(() => {});
+    };
+
+    const computeFinalAndRemarks = (g: Grade): { finalGrade?: number; remarks?: 'Passed'|'Failed' } => {
+        const quarters: (keyof Pick<Grade,'q1'|'q2'|'q3'|'q4'>)[] = ['q1','q2','q3','q4'];
+        const values: number[] = [];
+        for (const q of quarters) {
+            const v = g[q];
+            if (typeof v === 'number') values.push(v);
+            else if (v && typeof v === 'object') {
+                const nums = Object.values(v as any).filter(n => typeof n === 'number') as number[];
+                if (nums.length) values.push(Math.round(nums.reduce((a,b)=>a+b,0)/nums.length));
+            }
+        }
+        if (!values.length) return {};
+        const finalGrade = Math.round(values.reduce((a,b)=>a+b,0)/values.length);
+        const remarks = finalGrade >= 75 ? 'Passed' : 'Failed';
+        return { finalGrade, remarks };
+    };
+
+    const updateGrade = (studentId: string, learningAreaId: string, quarter: 'q1'|'q2'|'q3'|'q4', value?: number, subSubject?: string) => {
+        setState(prev => {
+            const learningArea = prev.learningAreas.find(la => la.id === learningAreaId);
+            let existing = prev.grades.find(g => g.studentId === studentId && g.learningAreaId === learningAreaId);
+            if (!existing) existing = { id: `g_${studentId}_${learningAreaId}`, studentId, learningAreaId } as Grade;
+            else existing = { ...existing };
+
+            if (learningArea?.isComposite && subSubject) {
+                const current = (existing[quarter] as Record<string, number | undefined>) || {};
+                const next = { ...current } as any;
+                if (value === undefined) delete next[subSubject]; else next[subSubject] = value;
+                (existing as any)[quarter] = next;
+            } else {
+                (existing as any)[quarter] = value as any;
+            }
+
+            const calc = computeFinalAndRemarks(existing);
+            existing.finalGrade = calc.finalGrade;
+            existing.remarks = calc.remarks;
+
+            const nextGrades = [...prev.grades.filter(g => !(g.studentId === studentId && g.learningAreaId === learningAreaId)), existing];
+            dbService.put('grades', existing);
+            enqueueWrite('grades', existing).catch(() => {});
+            return { ...prev, grades: nextGrades };
+        });
+    };
+
+    const addLearningArea = (area: Omit<LearningArea, 'id'>) => {
+        const newArea: LearningArea = { id: `la_${Date.now()}`, ...area };
+        setState(prev => ({ ...prev, learningAreas: [...prev.learningAreas, newArea] }));
+        dbService.put('learningAreas', newArea);
+        enqueueWrite('learningAreas', newArea).catch(() => {});
+    };
+
+    const deleteLearningArea = (learningAreaId: string) => {
+        setState(prev => {
+            const nextAreas = prev.learningAreas.filter(la => la.id !== learningAreaId);
+            const nextGrades = prev.grades.filter(g => g.learningAreaId !== learningAreaId);
+            dbService.remove('learningAreas', learningAreaId);
+            if ((dbService as any).deleteGradesForLearningArea) {
+                (dbService as any).deleteGradesForLearningArea(learningAreaId);
+            }
+            enqueueWrite('learningAreas', { id: learningAreaId, __delete: true } as any).catch(() => {});
+            return { ...prev, learningAreas: nextAreas, grades: nextGrades };
+        });
+    };
+
+    const updateSettings = (next: SchoolSettings) => {
+        setState(prev => ({ ...prev, settings: next }));
+        // If key changed, remove old key to avoid duplicates
+        try {
+            const prevKey = state.settings?.schoolName;
+            if (prevKey && prevKey !== next.schoolName) {
+                dbService.remove('settings', prevKey).catch(() => {});
+            }
+        } catch {}
+        dbService.put('settings', next).catch(() => {});
+        // Use deterministic id for remote settings document
+        enqueueWrite('settings', { id: 'default', ...next }).catch(() => {});
+    };
+
+    const updateCoreValueGrade = (studentId: string, coreValueId: string, quarter: 'q1'|'q2'|'q3'|'q4', behavior: string, value: import('../types').CoreValueMarking | '') => {
+        setState(prev => {
+            const existing = prev.coreValueGrades.find(r => r.studentId === studentId && r.coreValueId === coreValueId);
+            let nextRecord: CoreValueGrade;
+            if (!existing) {
+                nextRecord = { id: `cvg_${studentId}_${coreValueId}`, studentId, coreValueId, q1: {}, q2: {}, q3: {}, q4: {} } as CoreValueGrade;
+            } else {
+                nextRecord = { ...existing, [quarter]: { ...(existing as any)[quarter] } } as any;
+            }
+
+            if (value === '' || value == null) {
+                delete (nextRecord as any)[quarter][behavior];
+            } else {
+                (nextRecord as any)[quarter][behavior] = value;
+            }
+
+            let replaced = false;
+            const updatedList = prev.coreValueGrades.map(r => {
+                if (r.studentId === studentId && r.coreValueId === coreValueId) { replaced = true; return nextRecord; }
+                return r;
+            });
+            const next = replaced ? updatedList : [...prev.coreValueGrades, nextRecord];
+            try { dbService.put('coreValueGrades', nextRecord); } catch {}
+            enqueueWrite('coreValueGrades', nextRecord as any).catch(() => {});
+            return { ...prev, coreValueGrades: next };
+        });
+    };
+
+    const updateAttendance = (studentId: string, date: string, status: AttendanceStatus) => {
+        setState(prev => {
+            let record = prev.attendanceRecords.find(r => r.studentId === studentId);
+            if (!record) {
+                record = { studentId, dailyStatus: {} };
+            } else {
+                record = { ...record, dailyStatus: { ...record.dailyStatus } };
+            }
+            record.dailyStatus[date] = status;
+
+            const nextRecords = [
+                ...prev.attendanceRecords.filter(r => r.studentId !== studentId),
+                record,
+            ];
+            try { dbService.put('attendanceRecords', record); } catch {}
+            enqueueWrite('attendanceRecords', record as any).catch(() => {});
+            return { ...prev, attendanceRecords: nextRecords };
+        });
+    };
+
+    // Parents CRUD and child assignments
+    const addParent = (parent: Omit<Parent, 'id'>) => {
+        const newParent: Parent = { id: `p_${Date.now()}`, ...parent };
+        setState(prev => ({ ...prev, parents: [...prev.parents, newParent] }));
+        try { dbService.put('parents', newParent); } catch {}
+        enqueueWrite('parents', newParent as any).catch(() => {});
+    };
+
+    const updateParent = (parent: Parent) => {
+        setState(prev => ({
+            ...prev,
+            parents: prev.parents.map(p => p.id === parent.id ? parent : p)
+        }));
+        try { dbService.put('parents', parent); } catch {}
+        enqueueWrite('parents', parent as any).catch(() => {});
+    };
+
+    const deleteParent = (parentId: string) => {
+        setState(prev => ({ ...prev, parents: prev.parents.filter(p => p.id !== parentId) }));
+        try { dbService.remove('parents', parentId); } catch {}
+        enqueueWrite('parents', { id: parentId, __delete: true } as any).catch(() => {});
+    };
+
+    const assignStudentToParent = (parentId: string, studentId: string) => {
+        setState(prev => {
+            const target = prev.parents.find(p => p.id === parentId);
+            if (!target) return prev;
+            const nextParent: Parent = {
+                ...target,
+                studentIds: Array.from(new Set([...(target.studentIds || []), studentId]))
+            };
+            const nextParents = prev.parents.map(p => p.id === parentId ? nextParent : p);
+            try { dbService.put('parents', nextParent); } catch {}
+            enqueueWrite('parents', nextParent as any).catch(() => {});
+            return { ...prev, parents: nextParents };
+        });
+    };
+
+    const unassignStudentFromParent = (parentId: string, studentId: string) => {
+        setState(prev => {
+            const target = prev.parents.find(p => p.id === parentId);
+            if (!target) return prev;
+            const nextParent: Parent = {
+                ...target,
+                studentIds: (target.studentIds || []).filter(id => id !== studentId)
+            };
+            const nextParents = prev.parents.map(p => p.id === parentId ? nextParent : p);
+            try { dbService.put('parents', nextParent); } catch {}
+            enqueueWrite('parents', nextParent as any).catch(() => {});
+            return { ...prev, parents: nextParents };
+        });
+    };
+
+    // Teacher CRUD
+    const addTeacher = (teacher: Omit<Teacher, 'id'>) => {
+        const newTeacher: Teacher = { id: `t_${Date.now()}`, ...teacher } as Teacher;
+        setState(prev => ({ ...prev, teachers: [...prev.teachers, newTeacher] }));
+        try { dbService.put('teachers', newTeacher); } catch {}
+        enqueueWrite('teachers', newTeacher as any).catch(() => {});
+    };
+
+    const updateTeacher = (teacher: Teacher) => {
+        setState(prev => ({ ...prev, teachers: prev.teachers.map(t => t.id === teacher.id ? teacher : t) }));
+        try { dbService.put('teachers', teacher); } catch {}
+        enqueueWrite('teachers', teacher as any).catch(() => {});
+    };
+
+    const deleteTeacher = (teacherId: string) => {
+        setState(prev => ({ ...prev, teachers: prev.teachers.filter(t => t.id !== teacherId) }));
+        try { dbService.remove('teachers', teacherId); } catch {}
+        enqueueWrite('teachers', { id: teacherId, __delete: true } as any).catch(() => {});
+    };
+
+    // Section CRUD
+    const addSection = (section: Omit<Section, 'id'>) => {
+        const newSection: Section = { id: `sec_${Date.now()}`, ...section } as Section;
+        setState(prev => ({ ...prev, sections: [...prev.sections, newSection] }));
+        try { dbService.put('sections', newSection); } catch {}
+        enqueueWrite('sections', newSection as any).catch(() => {});
+    };
+
+    const updateSection = (section: Section) => {
+        setState(prev => ({ ...prev, sections: prev.sections.map(s => s.id === section.id ? section : s) }));
+        try { dbService.put('sections', section); } catch {}
+        enqueueWrite('sections', section as any).catch(() => {});
+    };
+
+    const deleteSection = (sectionId: string) => {
+        setState(prev => {
+            const nextSections = prev.sections.filter(s => s.id !== sectionId);
+            const updatedStudents = prev.students.map(stu => stu.sectionId === sectionId ? { ...stu, sectionId: undefined } : stu);
+            // Persist updates
+            try { dbService.remove('sections', sectionId); } catch {}
+            updatedStudents.forEach(stu => { try { dbService.put('students', stu); } catch {} });
+            enqueueWrite('sections', { id: sectionId, __delete: true } as any).catch(() => {});
+            return { ...prev, sections: nextSections, students: updatedStudents };
+        });
+    };
+
+    // SubstituteAssignment CRUD
+    const addSubstituteAssignment = (assignment: Omit<SubstituteAssignment, 'id'>) => {
+        const newAssignment: SubstituteAssignment = { id: `sub_${Date.now()}`, ...assignment } as SubstituteAssignment;
+        setState(prev => ({ ...prev, substituteAssignments: [newAssignment, ...prev.substituteAssignments] }));
+        try { dbService.put('substituteAssignments', newAssignment); } catch {}
+        enqueueWrite('substituteAssignments', newAssignment as any).catch(() => {});
+    };
+
+    const updateSubstituteAssignment = (assignment: SubstituteAssignment) => {
+        setState(prev => ({ ...prev, substituteAssignments: prev.substituteAssignments.map(sa => sa.id === assignment.id ? assignment : sa) }));
+        try { dbService.put('substituteAssignments', assignment); } catch {}
+        enqueueWrite('substituteAssignments', assignment as any).catch(() => {});
+    };
+
+    const deleteSubstituteAssignment = (assignmentId: string) => {
+        setState(prev => ({ ...prev, substituteAssignments: prev.substituteAssignments.filter(sa => sa.id !== assignmentId) }));
+        try { dbService.remove('substituteAssignments', assignmentId); } catch {}
+        enqueueWrite('substituteAssignments', { id: assignmentId, __delete: true } as any).catch(() => {});
+    };
+
+    // --- Class Schedule CRUD ---
+    const DAYS: ClassSchedule['dayOfWeek'][] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    const timeToMinutes = (time: string) => {
+        const [h, m] = time.split(':').map(Number);
+        return h * 60 + m;
+    };
+
+    const scheduleOverlaps = (a: Omit<ClassSchedule, 'id'> | ClassSchedule, b: ClassSchedule): boolean => {
+        // Determine overlapping days
+        const aStartIdx = DAYS.indexOf(a.dayOfWeek);
+        const aEndIdx = a.endDayOfWeek ? DAYS.indexOf(a.endDayOfWeek) : aStartIdx;
+        const bStartIdx = DAYS.indexOf(b.dayOfWeek);
+        const bEndIdx = b.endDayOfWeek ? DAYS.indexOf(b.endDayOfWeek) : bStartIdx;
+        const dayOverlap = !(aEndIdx < bStartIdx || bEndIdx < aStartIdx);
+        if (!dayOverlap) return false;
+        // Overlapping time window (treat as [start, end))
+        const aStart = timeToMinutes(a.startTime);
+        const aEnd = timeToMinutes(a.endTime);
+        const bStart = timeToMinutes(b.startTime);
+        const bEnd = timeToMinutes(b.endTime);
+        const timeOverlap = aStart < bEnd && bStart < aEnd;
+        return timeOverlap;
+    };
+
+    const validateSchedule = (sched: Omit<ClassSchedule, 'id'> | ClassSchedule, ignoreId?: string): { ok: boolean; message?: string } => {
+        // Basic validation
+        if (!sched.title || !sched.dayOfWeek || !sched.startTime || !sched.endTime) {
+            return { ok: false, message: 'Missing required schedule fields.' };
+        }
+        if (sched.startTime >= sched.endTime) {
+            return { ok: false, message: 'End time must be after start time.' };
+        }
+        if (sched.endDayOfWeek) {
+            const startIdx = DAYS.indexOf(sched.dayOfWeek);
+            const endIdx = DAYS.indexOf(sched.endDayOfWeek);
+            if (endIdx < startIdx) return { ok: false, message: 'End day cannot be before start day.' };
+        }
+
+        // Minimal conflict checks: prevent same teacher or same section overlapping academic classes on same day/time
+        for (const existing of state.classSchedules) {
+            if (ignoreId && existing.id === ignoreId) continue;
+            // Compare only when overlapping in time/day
+            if (!scheduleOverlaps(sched, existing)) continue;
+            // Academic-specific: teacher or section conflicts
+            if (sched.type === 'academic' && existing.type === 'academic') {
+                if (sched.teacherId && existing.teacherId && sched.teacherId === existing.teacherId) {
+                    return { ok: false, message: 'Teacher has a conflicting class at that time.' };
+                }
+                if (sched.sectionId && existing.sectionId && sched.sectionId === existing.sectionId) {
+                    return { ok: false, message: 'Section already has a class at that time.' };
+                }
+            }
+        }
+        return { ok: true };
+    };
+
+    const addSchedule = (sched: Omit<ClassSchedule, 'id'>): { success: boolean; message?: string } => {
+        const v = validateSchedule(sched);
+        if (!v.ok) return { success: false, message: v.message };
+        const newSchedule: ClassSchedule = { id: `sch_${Date.now()}`, ...sched } as ClassSchedule;
+        setState(prev => ({ ...prev, classSchedules: [...prev.classSchedules, newSchedule] }));
+        try { dbService.put('classSchedules', newSchedule); } catch {}
+        enqueueWrite('classSchedules', newSchedule as any).catch(() => {});
+        return { success: true };
+    };
+
+    const updateSchedule = (sched: ClassSchedule): { success: boolean; message?: string } => {
+        const v = validateSchedule(sched, sched.id);
+        if (!v.ok) return { success: false, message: v.message };
+        setState(prev => ({ ...prev, classSchedules: prev.classSchedules.map(s => s.id === sched.id ? { ...sched } : s) }));
+        try { dbService.put('classSchedules', sched); } catch {}
+        enqueueWrite('classSchedules', sched as any).catch(() => {});
+        return { success: true };
+    };
+
+    const deleteSchedule = (scheduleId: string) => {
+        setState(prev => ({ ...prev, classSchedules: prev.classSchedules.filter(s => s.id !== scheduleId) }));
+        try { dbService.remove('classSchedules', scheduleId); } catch {}
+        enqueueWrite('classSchedules', { id: scheduleId, __delete: true } as any).catch(() => {});
+    };
+
 
     useEffect(() => {
         const loadData = async () => {
@@ -260,7 +446,7 @@ export const useSchoolData = (isOnline: boolean) => {
                 const studentCount = await dbService.count('students');
                 if (studentCount > 0) {
                     console.log("Loading data from IndexedDB...");
-                    const [ students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements ] = await Promise.all([
+                    let [ students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements ] = await Promise.all([
                         dbService.getAll<Student>('students'), dbService.getAll<LearningArea>('learningAreas'),
                         dbService.getAll<Grade>('grades'), dbService.getAll<CoreValue>('coreValues'),
                         dbService.getAll<CoreValueGrade>('coreValueGrades'), dbService.getAll<AttendanceRecord>('attendanceRecords'),
@@ -270,299 +456,249 @@ export const useSchoolData = (isOnline: boolean) => {
                         dbService.getAll<Assignment>('assignments'), dbService.getAll<StudentAssignmentGrade>('studentAssignmentGrades'),
                         dbService.getAll<LessonPlan>('lessonPlans'), dbService.getAll<Announcement>('announcements'),
                     ]);
-                    setState({ loading: false, students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings: settings[0] || MOCK_SETTINGS, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements });
+
+                    if (teachers.length === 0) {
+                        console.warn('[DataSync] No teachers found in IndexedDB. Attempting Firestore backfill.');
+                        try {
+                            const remote = await firestoreReader.fetchAllData();
+                            if (remote.teachers && remote.teachers.length > 0) {
+                                teachers = remote.teachers;
+                                await dbService.bulkPut('teachers', teachers);
+                                console.log(`[DataSync] Backfilled ${teachers.length} teachers from Firestore.`);
+                            } else if ((remote as any).users && (remote as any).users.length > 0 && teachers.length === 0) {
+                                // users->teachers fallback already handled in reader, but just in case
+                                teachers = (remote as any).users.filter((u: any) => ['admin','teacher','principal','registrar'].includes(u.role)).map((u: any) => ({
+                                    id: u.id || u.uid || u.email,
+                                    name: u.name || u.displayName || u.email?.split('@')[0] || 'Unnamed',
+                                    email: u.email,
+                                    role: u.role === 'admin' ? 'admin' : (u.role || 'teacher'),
+                                    assignments: [],
+                                }));
+                                if (teachers.length) {
+                                    await dbService.bulkPut('teachers', teachers);
+                                    console.log(`[DataSync] Backfilled ${teachers.length} teachers from users fallback.`);
+                                }
+                            } else {
+                                console.warn('[DataSync] Firestore backfill produced no teachers.');
+                                // Dev convenience: if running with emulator, seed a default admin so local login works.
+                                const useEmu = String((import.meta as any).env?.VITE_USE_FIREBASE_EMULATOR || '').toLowerCase() === 'true';
+                                if (useEmu) {
+                                    const seedAdmin = {
+                                        id: 'admin-user',
+                                        name: 'System Admin',
+                                        email: 'admin@school.edu',
+                                        role: 'admin' as const,
+                                        assignments: [] as any[],
+                                        createdAt: new Date().toISOString(),
+                                    };
+                                    try {
+                                        await dbService.bulkPut('teachers', [seedAdmin as any]);
+                                        // also enqueue to remote emulator for visibility
+                                        enqueueWrite('teachers', seedAdmin as any).catch(() => {});
+                                        enqueueWrite('users', { ...seedAdmin } as any).catch(() => {});
+                                        teachers = [seedAdmin as any];
+                                        console.info('[DataSync] Seeded default admin into Firestore emulator and local cache.');
+                                    } catch (e) {
+                                        console.warn('[DataSync] Failed to seed default admin into emulator:', e);
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.error('[DataSync] Teacher backfill failed:', e);
+                        }
+                    } else {
+                        // Incremental merge: detect new remote teachers (e.g., newly provisioned admin) not yet in cache
+                        try {
+                            const remote = await firestoreReader.fetchAllData();
+                            const remoteTeachers = remote.teachers || [];
+                            if (remoteTeachers.length) {
+                                const existingIds = new Set(teachers.map(t => t.id));
+                                const newTeachers = remoteTeachers.filter(rt => rt.id && !existingIds.has(rt.id));
+                                if (newTeachers.length) {
+                                    await dbService.bulkPut('teachers', newTeachers);
+                                    teachers = [...teachers, ...newTeachers];
+                                    console.log(`[DataSync] Merged ${newTeachers.length} new teachers from Firestore (incremental).`);
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('[DataSync] Incremental teacher merge skipped due to error:', e);
+                        }
+                    }
+
+                    // Ensure Core Values and Core Value Grades are present even when IndexedDB already has students
+                    try {
+                        const remote = await firestoreReader.fetchAllData();
+
+                        // Merge Core Values if local is empty
+                        if (coreValues.length === 0 && remote.coreValues && remote.coreValues.length) {
+                            await dbService.bulkPut('coreValues', remote.coreValues);
+                            coreValues = remote.coreValues;
+                            console.log(`[DataSync] Backfilled ${coreValues.length} core values from Firestore.`);
+                        }
+
+                        // Merge Core Value Grades: if local is empty, take all remote; else, add only missing IDs
+                        if (remote.coreValueGrades && remote.coreValueGrades.length) {
+                            if (coreValueGrades.length === 0) {
+                                await dbService.bulkPut('coreValueGrades', remote.coreValueGrades);
+                                coreValueGrades = remote.coreValueGrades;
+                                console.log(`[DataSync] Backfilled ${coreValueGrades.length} core value grade records from Firestore.`);
+                            } else {
+                                const existingIds = new Set(coreValueGrades.map(r => r.id));
+                                const newOnes = remote.coreValueGrades.filter(r => r.id && !existingIds.has(r.id));
+                                if (newOnes.length) {
+                                    await dbService.bulkPut('coreValueGrades', newOnes);
+                                    coreValueGrades = [...coreValueGrades, ...newOnes];
+                                    console.log(`[DataSync] Merged ${newOnes.length} new core value grade records from Firestore.`);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[DataSync] Core Values merge skipped due to error:', e);
+                    }
+
+                    setState({ loading: false, error: null, students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings: settings[0] || MOCK_SETTINGS, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements, monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG });
                 } else {
-                    console.log("No data in DB, generating new dataset...");
-                    const generated = generateData();
-                    await Promise.all([
-                        dbService.bulkPut('students', generated.students), dbService.bulkPut('learningAreas', generated.learningAreas),
-                        dbService.bulkPut('grades', generated.grades), dbService.bulkPut('coreValues', generated.coreValues),
-                        dbService.bulkPut('coreValueGrades', generated.coreValueGrades), dbService.bulkPut('attendanceRecords', generated.attendanceRecords),
-                        dbService.bulkPut('teachers', generated.teachers), dbService.bulkPut('parents', generated.parents),
-                        dbService.bulkPut('sections', generated.sections), dbService.bulkPut('settings', [generated.settings]),
-                        dbService.bulkPut('substituteAssignments', generated.substituteAssignments), dbService.bulkPut('classSchedules', generated.classSchedules),
-                        // No need to bulk put empty arrays
-                    ]);
-                    setState({ loading: false, ...generated });
+                    console.log("IndexedDB is empty. Fetching from Firestore...");
+                    const firestoreData = await firestoreReader.fetchAllData();
+                    
+                    // --- DEFINITIVE FIX START ---
+
+                    // 1. Validate and sanitize all data before saving to IndexedDB
+                    const validate = (item: any, key: string | string[]): boolean => {
+                        if (Array.isArray(key)) {
+                            return key.every(k => item.hasOwnProperty(k) && item[k] !== undefined);
+                        }
+                        return item.hasOwnProperty(key) && item[key] !== undefined;
+                    };
+
+                    const sanitizedData = {
+                        students: firestoreData.students.filter(item => validate(item, 'id')),
+                        learningAreas: firestoreData.learningAreas.filter(item => validate(item, 'id')),
+                        grades: firestoreData.grades.filter(item => validate(item, 'id')),
+                        coreValues: firestoreData.coreValues.filter(item => validate(item, 'id')),
+                        coreValueGrades: firestoreData.coreValueGrades.filter(item => validate(item, 'id')),
+                        attendanceRecords: firestoreData.attendanceRecords.filter(item => validate(item, 'studentId')),
+                        teachers: firestoreData.teachers.filter(item => validate(item, 'id')),
+                        parents: firestoreData.parents.filter(item => validate(item, 'id')),
+                        sections: firestoreData.sections.filter(item => validate(item, 'id')),
+                        substituteAssignments: firestoreData.substituteAssignments.filter(item => validate(item, 'id')),
+                        classSchedules: firestoreData.classSchedules.filter(item => validate(item, 'id')),
+                        assignments: firestoreData.assignments.filter(item => validate(item, 'id')),
+                        studentAssignmentGrades: firestoreData.studentAssignmentGrades.filter(item => validate(item, ['assignmentId', 'studentId'])),
+                        lessonPlans: firestoreData.lessonPlans.filter(item => validate(item, 'id')),
+                        announcements: firestoreData.announcements.filter(item => validate(item, 'id')),
+                        settings: firestoreData.settings?.[0] || MOCK_SETTINGS,
+                    };
+
+                    // Log if any data was filtered out
+                    Object.keys(sanitizedData).forEach(key => {
+                        const originalCount = (firestoreData as any)[key].length;
+                        const sanitizedCount = (sanitizedData as any)[key].length;
+                        if (originalCount > 0 && originalCount !== sanitizedCount) {
+                            console.warn(`[Data Sanitization] Filtered ${originalCount - sanitizedCount} invalid records from '${key}'`);
+                        }
+                    });
+                    
+                    // --- DEFINITIVE FIX END ---
+
+
+                    // If learning areas are missing, seed defaults
+                    if (sanitizedData.learningAreas.length === 0) {
+                        sanitizedData.learningAreas = DEFAULT_LEARNING_AREAS;
+                        console.warn('[DataSync] Seeded default learning areas (none found in Firestore).');
+                    }
+
+                    // Incremental, instrumented writes so one failure doesn't abort all.
+                    const storeWritePlan: Array<{name: StoreName | 'settings'; action: () => Promise<any>; count: number}> = [
+                        { name: 'students', action: () => dbService.bulkPut('students', sanitizedData.students), count: sanitizedData.students.length },
+                        { name: 'learningAreas', action: () => dbService.bulkPut('learningAreas', sanitizedData.learningAreas), count: sanitizedData.learningAreas.length },
+                        { name: 'grades', action: () => dbService.bulkPut('grades', sanitizedData.grades), count: sanitizedData.grades.length },
+                        { name: 'coreValues', action: () => dbService.bulkPut('coreValues', sanitizedData.coreValues), count: sanitizedData.coreValues.length },
+                        { name: 'coreValueGrades', action: () => dbService.bulkPut('coreValueGrades', sanitizedData.coreValueGrades), count: sanitizedData.coreValueGrades.length },
+                        { name: 'attendanceRecords', action: () => dbService.bulkPut('attendanceRecords', sanitizedData.attendanceRecords), count: sanitizedData.attendanceRecords.length },
+                        { name: 'teachers', action: () => dbService.bulkPut('teachers', sanitizedData.teachers), count: sanitizedData.teachers.length },
+                        { name: 'parents', action: () => dbService.bulkPut('parents', sanitizedData.parents), count: sanitizedData.parents.length },
+                        { name: 'sections', action: () => dbService.bulkPut('sections', sanitizedData.sections), count: sanitizedData.sections.length },
+                        { name: 'settings', action: () => dbService.put('settings', sanitizedData.settings), count: 1 },
+                        { name: 'substituteAssignments', action: () => dbService.bulkPut('substituteAssignments', sanitizedData.substituteAssignments), count: sanitizedData.substituteAssignments.length },
+                        { name: 'classSchedules', action: () => dbService.bulkPut('classSchedules', sanitizedData.classSchedules), count: sanitizedData.classSchedules.length },
+                        { name: 'assignments', action: () => dbService.bulkPut('assignments', sanitizedData.assignments), count: sanitizedData.assignments.length },
+                        { name: 'studentAssignmentGrades', action: () => dbService.bulkPut('studentAssignmentGrades', sanitizedData.studentAssignmentGrades), count: sanitizedData.studentAssignmentGrades.length },
+                        { name: 'lessonPlans', action: () => dbService.bulkPut('lessonPlans', sanitizedData.lessonPlans), count: sanitizedData.lessonPlans.length },
+                        { name: 'announcements', action: () => dbService.bulkPut('announcements', sanitizedData.announcements), count: sanitizedData.announcements.length },
+                    ];
+
+                    const writeErrors: string[] = [];
+                    for (const plan of storeWritePlan) {
+                        const start = performance.now();
+                        try {
+                            console.log(`[DataSync] Writing ${plan.count} records to store '${plan.name}'...`);
+                            await plan.action();
+                            const dur = (performance.now() - start).toFixed(1);
+                            console.log(`[DataSync] ✅ Store '${plan.name}' saved (${plan.count}) in ${dur}ms.`);
+                        } catch (e) {
+                            const msg = e instanceof Error ? e.message : String(e);
+                            console.error(`[DataSync] ❌ Failed writing store '${plan.name}': ${msg}`);
+                            writeErrors.push(`${plan.name}: ${msg}`);
+                        }
+                    }
+
+                    if (writeErrors.length) {
+                        console.warn('[DataSync] Completed with errors:', writeErrors);
+                    } else {
+                        console.log('Data fetched from Firestore and fully saved to IndexedDB.');
+                    }
+                    
+                    // Set the state from the data we just fetched
+                    setState({
+                        loading: false,
+                        error: null,
+                        students: sanitizedData.students,
+                        learningAreas: sanitizedData.learningAreas,
+                        grades: sanitizedData.grades,
+                        coreValues: sanitizedData.coreValues,
+                        coreValueGrades: sanitizedData.coreValueGrades,
+                        attendanceRecords: sanitizedData.attendanceRecords,
+                        teachers: sanitizedData.teachers,
+                        parents: sanitizedData.parents,
+                        sections: sanitizedData.sections,
+                        settings: sanitizedData.settings,
+                        substituteAssignments: sanitizedData.substituteAssignments,
+                        classSchedules: sanitizedData.classSchedules,
+                        assignments: sanitizedData.assignments,
+                        studentAssignmentGrades: sanitizedData.studentAssignmentGrades,
+                        lessonPlans: sanitizedData.lessonPlans,
+                        announcements: sanitizedData.announcements,
+                        monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG,
+                    });
                 }
             } catch (error) {
-                console.error("Failed to load data from IndexedDB, error:", error);
-                setState(prevState => ({ ...prevState, loading: false }));
+                console.error("Failed to load school data:", error);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                setState(prevState => ({ ...prevState, loading: false, error: errorMessage }));
             }
         };
+
+        startAutoSync(60_000);
         loadData();
     }, []);
 
-  useEffect(() => {
-    if (isOnline) { setIsSyncing(true); const timer = setTimeout(() => { console.log("Data synced with server."); setIsSyncing(false); }, 1500); return () => clearTimeout(timer); }
-  }, [isOnline]);
-
-  const login = useCallback(async (email: string, password: string, type: 'staff' | 'student' | 'parent'): Promise<{ user: AuthUser | StudentUser | ParentUser; type: 'staff' | 'student' | 'parent' } | null> => {
-    if (state.loading) return null;
-    const lowerEmail = email.toLowerCase();
-    if (type === 'staff') {
-        const user = state.teachers.find(t => t.email.toLowerCase() === lowerEmail);
-        if (user && user.password === password) { const { password: _, ...authUser } = user; return { user: authUser, type: 'staff' }; }
-    } else if (type === 'student') {
-        const user = state.students.find(s => s.email.toLowerCase() === lowerEmail);
-        if (user && user.password === password) { const { password: _, ...studentUser } = user; return { user: studentUser, type: 'student' }; }
-    } else {
-        const user = state.parents.find(p => p.email.toLowerCase() === lowerEmail);
-        if (user && user.password === password) { const { password: _, ...parentUser } = user; return { user: parentUser, type: 'parent' }; }
-    }
-    return null;
-  }, [state.loading, state.teachers, state.students, state.parents]);
-
-  const createMutation = <T extends any[]>(dbAction: (...args: T) => Promise<any>, stateUpdate: (...args: T) => void) => {
-    return useCallback(async (...args: T) => {
-        stateUpdate(...args); // Optimistic UI update
-        try {
-            await dbAction(...args);
-        } catch (error) {
-            console.error("Failed to persist change to DB:", error);
-            // Here you could implement a rollback mechanism if needed
-        }
-    }, [stateUpdate, dbAction]);
-  };
-  
-    // FIX: Update addStudent to return a success/error object for validation feedback in the UI.
-    const addStudent = useCallback((student: Omit<Student, 'id' | 'enrollmentDate'>): { success: boolean; message?: string } => {
-        if (state.students.some(s => s.email.toLowerCase() === student.email.toLowerCase())) {
-            return { success: false, message: 'A student with this email already exists.' };
-        }
-        const newStudent: Student = { ...student, id: `s${Date.now()}`, enrollmentDate: new Date().toISOString().split('T')[0], password: 'student123' };
-        dbService.add('students', newStudent).catch(console.error);
-        setState(prev => ({ ...prev, students: [...prev.students, newStudent] }));
-        return { success: true };
-    }, [state.students]);
-
-    const updateStudent = useCallback((updatedStudent: Student) => {
-        dbService.put('students', updatedStudent).catch(console.error);
-        setState(prev => ({ ...prev, students: prev.students.map(s => s.id === updatedStudent.id ? updatedStudent : s) }));
-    }, []);
-    const deleteStudent = useCallback((studentId: string) => {
-        // This is complex, involving multiple stores. Handle carefully.
-        dbService.remove('students', studentId).catch(console.error);
-        // Fire-and-forget deletion of related items
-        state.grades.filter(g => g.studentId === studentId).forEach(g => dbService.remove('grades', g.id).catch(console.error));
-        state.coreValueGrades.filter(cvg => cvg.studentId === studentId).forEach(cvg => dbService.remove('coreValueGrades', cvg.id).catch(console.error));
-        dbService.remove('attendanceRecords', studentId).catch(console.error);
-        
-        setState(prev => ({
-            ...prev,
-            students: prev.students.filter(s => s.id !== studentId),
-            grades: prev.grades.filter(g => g.studentId !== studentId),
-            coreValueGrades: prev.coreValueGrades.filter(cvg => cvg.studentId !== studentId),
-            attendanceRecords: prev.attendanceRecords.filter(ar => ar.studentId !== studentId),
-            parents: prev.parents.map(p => ({ ...p, studentIds: p.studentIds.filter(id => id !== studentId) })),
-        }));
-    }, [state.grades, state.coreValueGrades]);
-
-    const addParent = useCallback((parent: Omit<Parent, 'id'>) => {
-        const newParent: Parent = { ...parent, id: `p${Date.now()}`, password: 'parent123' };
-        dbService.add('parents', newParent).catch(console.error);
-        setState(prev => ({ ...prev, parents: [...prev.parents, newParent] }));
-    }, []);
-    const updateParent = useCallback((updatedParent: Parent) => {
-        dbService.put('parents', updatedParent).catch(console.error);
-        setState(prev => ({ ...prev, parents: prev.parents.map(p => p.id === updatedParent.id ? updatedParent : p) }));
-    }, []);
-    const deleteParent = useCallback((parentId: string) => {
-        dbService.remove('parents', parentId).catch(console.error);
-        setState(prev => ({ ...prev, parents: prev.parents.filter(p => p.id !== parentId) }));
-    }, []);
-    const assignStudentToParent = useCallback((parentId: string, studentId: string) => {
-        const parent = state.parents.find(p => p.id === parentId);
-        if(parent && !parent.studentIds.includes(studentId)) {
-            const updatedParent = { ...parent, studentIds: [...parent.studentIds, studentId] };
-            dbService.put('parents', updatedParent).catch(console.error);
-            setState(prev => ({...prev, parents: prev.parents.map(p => p.id === parentId ? updatedParent : p)}));
-        }
-    }, [state.parents]);
-    const unassignStudentFromParent = useCallback((parentId: string, studentId: string) => {
-        const parent = state.parents.find(p => p.id === parentId);
-        if(parent) {
-            const updatedParent = { ...parent, studentIds: parent.studentIds.filter(id => id !== studentId) };
-            dbService.put('parents', updatedParent).catch(console.error);
-            setState(prev => ({...prev, parents: prev.parents.map(p => p.id === parentId ? updatedParent : p)}));
-        }
-    }, [state.parents]);
-
-    const updateGrade = useCallback((studentId: string, learningAreaId: string, quarter: 'q1'|'q2'|'q3'|'q4', gradeValue: number|undefined, subSubject?: string) => {
-        let updatedGrade: Grade | undefined;
-        const newGrades = [...state.grades];
-        let gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.learningAreaId === learningAreaId);
-        if (gradeIndex === -1) { 
-            const newGradeEntry: Grade = { id: `g-${studentId}-${learningAreaId}`, studentId, learningAreaId };
-            newGrades.push(newGradeEntry);
-            gradeIndex = newGrades.length - 1;
-        }
-        updatedGrade = { ...newGrades[gradeIndex] };
-        const learningArea = state.learningAreas.find(la => la.id === learningAreaId);
-        if (learningArea?.isComposite && subSubject) {
-            const currentQuarterGrade = updatedGrade[quarter]; let newSubGrades: SubGradeRecord = {};
-            if (typeof currentQuarterGrade === 'object' && currentQuarterGrade !== null) { newSubGrades = { ...currentQuarterGrade }; }
-            if (gradeValue === undefined) { delete newSubGrades[subSubject]; } else { newSubGrades[subSubject] = gradeValue; }
-            updatedGrade[quarter] = newSubGrades;
-        } else if (!learningArea?.isComposite) {
-            if (gradeValue === undefined) { delete updatedGrade[quarter]; } else { updatedGrade[quarter] = gradeValue; }
-        }
-        const quarterAverages = [calculateQuarterAverage(updatedGrade.q1), calculateQuarterAverage(updatedGrade.q2), calculateQuarterAverage(updatedGrade.q3), calculateQuarterAverage(updatedGrade.q4)].filter(g => g !== undefined) as number[];
-        if (quarterAverages.length > 0) { const total = quarterAverages.reduce((acc, val) => acc + val, 0); const finalGrade = Math.round(total / quarterAverages.length); updatedGrade.finalGrade = finalGrade; updatedGrade.remarks = finalGrade >= 75 ? 'Passed' : 'Failed'; } else { delete updatedGrade.finalGrade; delete updatedGrade.remarks; }
-        newGrades[gradeIndex] = updatedGrade;
-
-        dbService.put('grades', updatedGrade).catch(console.error);
-        setState(prev => ({...prev, grades: newGrades}));
-    }, [state.grades, state.learningAreas]);
-
-    const updateAttendance = useCallback((studentId: string, date: string, status: AttendanceStatus) => {
-        const newRecords = [...state.attendanceRecords];
-        let recordIndex = newRecords.findIndex(r => r.studentId === studentId);
-        if (recordIndex === -1) { 
-            const newRecordEntry: AttendanceRecord = { studentId, dailyStatus: {} };
-            newRecords.push(newRecordEntry); 
-            recordIndex = newRecords.length - 1; 
-        }
-        const updatedRecord = { ...newRecords[recordIndex], dailyStatus: { ...newRecords[recordIndex].dailyStatus, [date]: status } };
-        newRecords[recordIndex] = updatedRecord;
-
-        dbService.put('attendanceRecords', updatedRecord).catch(console.error);
-        setState(prev => ({ ...prev, attendanceRecords: newRecords }));
-    }, [state.attendanceRecords]);
-    
-    // Simplified wrappers for other mutations
-    const createGenericMutations = <T extends {id: string}>(storeName: StoreName, stateKey: keyof SchoolDataState) => {
-        const add = (item: Omit<T, 'id'>) => {
-            const newItem = { ...item, id: `${storeName.slice(0,3)}-${Date.now()}` } as T;
-            dbService.add(storeName, newItem).catch(console.error);
-            // FIX: The type `prev[stateKey]` is a wide union. Cast to `unknown` first to satisfy TypeScript's strict checks.
-            setState(prev => ({ ...prev, [stateKey]: [...(prev[stateKey] as unknown as T[]), newItem] }));
-        };
-        const update = (updatedItem: T) => {
-            dbService.put(storeName, updatedItem).catch(console.error);
-            // FIX: The type `prev[stateKey]` is a wide union. Cast to `unknown` first to satisfy TypeScript's strict checks.
-            setState(prev => ({ ...prev, [stateKey]: (prev[stateKey] as unknown as T[]).map(i => i.id === updatedItem.id ? updatedItem : i) }));
-        };
-        const remove = (itemId: string) => {
-            dbService.remove(storeName, itemId).catch(console.error);
-            // FIX: The type `prev[stateKey]` is a wide union. Cast to `unknown` first to satisfy TypeScript's strict checks.
-            setState(prev => ({ ...prev, [stateKey]: (prev[stateKey] as unknown as T[]).filter(i => i.id !== itemId) }));
-        };
-        return { add, update, remove };
-    };
-
-    const { add: addLearningArea, remove: deleteLearningArea } = createGenericMutations<LearningArea>('learningAreas', 'learningAreas');
-    const { add: addTeacher, update: updateTeacher, remove: deleteTeacher } = createGenericMutations<Teacher>('teachers', 'teachers');
-    const { add: addSection, update: updateSection, remove: deleteSection } = createGenericMutations<Section>('sections', 'sections');
-    const { add: addSubstituteAssignment, update: updateSubstituteAssignment, remove: deleteSubstituteAssignment } = createGenericMutations<SubstituteAssignment>('substituteAssignments', 'substituteAssignments');
-    const { add: addSchedule, update: updateSchedule, remove: deleteSchedule } = createGenericMutations<ClassSchedule>('classSchedules', 'classSchedules');
-    const { add: addAssignment, update: updateAssignment, remove: deleteAssignment } = createGenericMutations<Assignment>('assignments', 'assignments');
-    const { add: addLessonPlan, update: updateLessonPlan, remove: deleteLessonPlan } = createGenericMutations<LessonPlan>('lessonPlans', 'lessonPlans');
-    const { add: addAnnouncement, update: updateAnnouncement, remove: deleteAnnouncement } = createGenericMutations<Announcement>('announcements', 'announcements');
-
-    // Custom mutations that don't fit the generic pattern
-    const updateCoreValueGrade = useCallback((studentId: string, coreValueId: string, quarter: 'q1'|'q2'|'q3'|'q4', behavior: string, marking: CoreValueMarking|'') => {
-        const newGrades = [...state.coreValueGrades];
-        let gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.coreValueId === coreValueId);
-        if (gradeIndex === -1) { newGrades.push({ id: `cvg-${studentId}-${coreValueId}`, studentId, coreValueId }); gradeIndex = newGrades.length - 1; }
-        const updatedGrade = { ...newGrades[gradeIndex] };
-        const newQuarterMarkings = { ...(updatedGrade[quarter] ?? {}) };
-        if (marking === '') { delete newQuarterMarkings[behavior]; } else { newQuarterMarkings[behavior] = marking; }
-        updatedGrade[quarter] = newQuarterMarkings;
-        newGrades[gradeIndex] = updatedGrade;
-        
-        dbService.put('coreValueGrades', updatedGrade).catch(console.error);
-        setState(prev => ({...prev, coreValueGrades: newGrades}));
-    }, [state.coreValueGrades]);
-
-    const updateSettings = useCallback((newSettings: SchoolSettings) => {
-        dbService.put('settings', newSettings).catch(console.error);
-        setState(prev => ({ ...prev, settings: newSettings }));
-    }, []);
-    
-    const updateAssignmentGrade = useCallback((studentId: string, assignmentId: string, score: number | null, feedback: string | null) => {
-        const newGrades = [...state.studentAssignmentGrades];
-        const gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.assignmentId === assignmentId);
-        const newGrade = gradeIndex > -1 ? { ...newGrades[gradeIndex], score, feedback } : { studentId, assignmentId, score, feedback, submissionDate: null, filePath: null };
-        if (gradeIndex > -1) { newGrades[gradeIndex] = newGrade; } else { newGrades.push(newGrade); }
-
-        dbService.put('studentAssignmentGrades', newGrade).catch(console.error);
-        setState(prev => ({ ...prev, studentAssignmentGrades: newGrades }));
-    }, [state.studentAssignmentGrades]);
-
-    const submitAssignment = useCallback((studentId: string, assignmentId: string, filePath: string) => {
-        const newGrades = [...state.studentAssignmentGrades];
-        const gradeIndex = newGrades.findIndex(g => g.studentId === studentId && g.assignmentId === assignmentId);
-        const submissionDate = new Date().toISOString().split('T')[0];
-        const newGrade = gradeIndex > -1 ? { ...newGrades[gradeIndex], filePath, submissionDate } : { studentId, assignmentId, score: null, feedback: null, submissionDate, filePath };
-        if (gradeIndex > -1) { newGrades[gradeIndex] = newGrade; } else { newGrades.push(newGrade); }
-
-        dbService.put('studentAssignmentGrades', newGrade).catch(console.error);
-        setState(prev => ({ ...prev, studentAssignmentGrades: newGrades }));
-    }, [state.studentAssignmentGrades]);
-    
-    // Custom logic for add/update schedule due to conflict checking
-    const addScheduleWithConflictCheck = useCallback((schedule: Omit<ClassSchedule, 'id'>): { success: boolean, message?: string } => {
-        const conflict = checkScheduleConflict(schedule, state.classSchedules);
-        if (conflict) return { success: false, message: conflict };
-        const newSchedule: ClassSchedule = { ...schedule, id: `cs${Date.now()}` };
-        dbService.add('classSchedules', newSchedule).catch(console.error);
-        setState(prev => ({ ...prev, classSchedules: [...prev.classSchedules, newSchedule] }));
-        return { success: true };
-    }, [state.classSchedules, state.teachers, state.sections]);
-    
-    const updateScheduleWithConflictCheck = useCallback((updatedSchedule: ClassSchedule): { success: boolean, message?: string } => {
-        const conflict = checkScheduleConflict(updatedSchedule, state.classSchedules, updatedSchedule.id);
-        if (conflict) return { success: false, message: conflict };
-        dbService.put('classSchedules', updatedSchedule).catch(console.error);
-        setState(prev => ({ ...prev, classSchedules: prev.classSchedules.map(s => s.id === updatedSchedule.id ? updatedSchedule : s) }));
-        return { success: true };
-    }, [state.classSchedules, state.teachers, state.sections]);
-
-    const checkScheduleConflict = (newSchedule: Omit<ClassSchedule, 'id'>, existingSchedules: ClassSchedule[], scheduleIdToIgnore?: string): string | null => {
-        const DAYS_ORDER: ClassSchedule['dayOfWeek'][] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-        const getDayIndex = (day: ClassSchedule['dayOfWeek']) => DAYS_ORDER.indexOf(day);
-        const { startTime: newStart, endTime: newEnd, dayOfWeek: newStartDay, endDayOfWeek: newEndDay, type, scope, sectionId, gradeLevel, teacherId } = newSchedule;
-        const newStartIndex = getDayIndex(newStartDay);
-        const newEndIndex = newEndDay ? getDayIndex(newEndDay) : newStartIndex;
-        if (newEndIndex < newStartIndex) { return "End day cannot be before start day."; }
-        const newScheduleSection = state.sections.find(s => s.id === sectionId);
-        for (const existing of existingSchedules) {
-            if (scheduleIdToIgnore && existing.id === scheduleIdToIgnore) continue;
-            const existingStartIndex = getDayIndex(existing.dayOfWeek);
-            const existingEndIndex = existing.endDayOfWeek ? getDayIndex(existing.endDayOfWeek) : existingStartIndex;
-            const daysOverlap = newStartIndex <= existingEndIndex && existingStartIndex <= newEndIndex;
-            if (!daysOverlap) continue;
-            const timesOverlap = newStart < existing.endTime && existing.startTime < newEnd;
-            if (!timesOverlap) continue;
-            if (type === 'academic' && existing.type === 'academic' && teacherId && existing.teacherId === teacherId) {
-                const teacher = state.teachers.find(t => t.id === teacherId);
-                return `Conflict: ${teacher?.name || 'Teacher'} is already scheduled at this time.`;
-            }
-            const existingSection = state.sections.find(s => s.id === existing.sectionId);
-            if (scope === 'all' || existing.scope === 'all') return `Conflict: A school-wide event is scheduled at this time.`;
-            if (scope === 'gradeLevel' && existing.scope === 'gradeLevel' && gradeLevel === existing.gradeLevel) return `Conflict: An event for Grade ${gradeLevel} is already scheduled.`;
-            if (scope === 'section' && existing.scope === 'section' && sectionId === existing.sectionId) {
-                const section = state.sections.find(s => s.id === sectionId);
-                return `Conflict: Section ${section?.name || ''} already has an event scheduled.`;
-            }
-            if (scope === 'gradeLevel' && existing.scope === 'section' && existingSection && gradeLevel === existingSection.gradeLevel) return `Conflict: Section ${existingSection.name} (Grade ${gradeLevel}) has a class, which conflicts with the grade-level event.`;
-            if (scope === 'section' && existing.scope === 'gradeLevel' && newScheduleSection && newScheduleSection.gradeLevel === existing.gradeLevel) return `Conflict: A grade-level event for Grade ${newScheduleSection.gradeLevel} is scheduled, which conflicts with this section's class.`;
-        }
-        return null;
-    };
-
-  return { 
-      ...state, login, addStudent, updateStudent, deleteStudent, 
-      addLearningArea, deleteLearningArea, addTeacher, updateTeacher, deleteTeacher, 
-      addSection, updateSection, deleteSection, updateGrade, updateCoreValueGrade, 
-      updateAttendance, updateSettings, addSubstituteAssignment, updateSubstituteAssignment, 
-      deleteSubstituteAssignment, addSchedule: addScheduleWithConflictCheck, updateSchedule: updateScheduleWithConflictCheck, 
-      deleteSchedule, addAssignment, updateAssignment, deleteAssignment, updateAssignmentGrade, 
-      submitAssignment, addLessonPlan, updateLessonPlan, deleteLessonPlan, addAnnouncement, 
-      updateAnnouncement, deleteAnnouncement, isSyncing, monthlySchoolDaysConfig: MONTHLY_SCHOOL_DAYS_CONFIG, 
-      addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent 
-    };
+    return { ...state, addStudent, updateStudent, deleteStudent, addSchedule, updateSchedule, deleteSchedule, updateGrade, updateCoreValueGrade, addLearningArea, deleteLearningArea, updateSettings, updateAttendance, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment };
 };
 
 export type SchoolDataHook = ReturnType<typeof useSchoolData>;
+
+const DEFAULT_LEARNING_AREAS: LearningArea[] = [
+    { id: 'la_filipino', name: 'Filipino', credits: 3 },
+    { id: 'la_english', name: 'English', credits: 3 },
+    { id: 'la_math', name: 'Mathematics', credits: 3 },
+    { id: 'la_science', name: 'Science', credits: 3 },
+    { id: 'la_ap', name: 'Araling Panlipunan', credits: 3 },
+    { id: 'la_epp', name: 'EPP/TLE', credits: 2 },
+    { id: 'la_mapeh', name: 'MAPEH', credits: 4, isComposite: true, subSubjects: ['Music', 'Arts', 'PE', 'Health'] },
+];
+
+// Default number of school days per month (Jun to Apr)
+const DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG: Record<string, number> = {
+    Jan: 22, Feb: 20, Mar: 22, Apr: 10, May: 0, Jun: 10, Jul: 22, Aug: 22, Sep: 21, Oct: 22, Nov: 21, Dec: 10,
+};

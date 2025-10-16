@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { AuthUser, StudentUser, ClassSchedule, Section, ParentUser } from '../types';
+import type { AuthUser, StudentUser, ClassSchedule, ParentUser } from '../types';
 import Modal from './Modal';
 import { TrashIcon, ChevronLeftIcon, ChevronRightIcon } from './icons';
 
@@ -64,6 +64,23 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     const [viewType, setViewType] = useState<'section' | 'teacher'>(getInitialViewType());
     const [selectedId, setSelectedId] = useState<string | null>(getInitialSelectedId());
     
+    // --- FILTER STATE ---
+    type FilterType = 'all' | 'academic' | 'extracurricular';
+    type FilterState = {
+        type: FilterType;
+        daySet: Set<ClassSchedule['dayOfWeek']>; // empty = all days
+        teacherIds: Set<string>; // empty = all
+        q?: string; // text search
+    };
+    const [filters, setFilters] = useState<FilterState>({ type: 'all', daySet: new Set(), teacherIds: new Set(), q: '' });
+
+    // Section view selectors
+    const [selectedGradeLevel, setSelectedGradeLevel] = useState<number | ''>(() => {
+        const sid = getInitialSelectedId();
+        const sec = sid ? sections.find(s => s.id === sid) : undefined;
+        return sec?.gradeLevel ?? '';
+    });
+    
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalData, setModalData] = useState<Partial<ClassSchedule> & { isEditing?: boolean }>({});
     const [modalError, setModalError] = useState<string | null>(null);
@@ -107,21 +124,75 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
         }
     }, [notification]);
 
-    const filteredSchedules = useMemo(() => {
-        if (!selectedId) return [];
-        if (viewType === 'teacher') {
-            return classSchedules.filter(s => s.teacherId === selectedId);
+    // --- Pre-index schedules for efficient filtering ---
+    const scheduleIndexes = useMemo(() => {
+        const bySection = new Map<string, ClassSchedule[]>();
+        const byTeacher = new Map<string, ClassSchedule[]>();
+        const byGradeLevel = new Map<number, ClassSchedule[]>();
+        const all: ClassSchedule[] = [];
+
+        const push = (map: Map<any, any[]>, key: any, s: ClassSchedule) => {
+            const arr = map.get(key);
+            if (arr) arr.push(s); else map.set(key, [s]);
+        };
+
+        for (const s of classSchedules) {
+            if (s.scope === 'all') all.push(s);
+            if (s.scope === 'section' && s.sectionId) push(bySection, s.sectionId, s);
+            if (s.scope === 'gradeLevel' && typeof s.gradeLevel === 'number') push(byGradeLevel, s.gradeLevel, s);
+            if (s.type === 'academic' && s.teacherId) push(byTeacher, s.teacherId, s);
         }
-        const selectedSection = sections.find(s => s.id === selectedId);
-        if (!selectedSection) return [];
-        
-        return classSchedules.filter(s => {
-            if (s.scope === 'all') return true;
-            if (s.scope === 'gradeLevel' && s.gradeLevel === selectedSection.gradeLevel) return true;
-            if (s.scope === 'section' && s.sectionId === selectedId) return true;
-            return false;
+        return { bySection, byTeacher, byGradeLevel, all };
+    }, [classSchedules]);
+
+    const sectionGradeMap = useMemo(() => new Map(sections.map(s => [s.id, s.gradeLevel])), [sections]);
+
+    const baseList = useMemo(() => {
+        if (!selectedId) return [] as ClassSchedule[];
+        if (viewType === 'teacher') {
+            return scheduleIndexes.byTeacher.get(selectedId) ?? [];
+        }
+        const gl = sectionGradeMap.get(selectedId);
+        const a = scheduleIndexes.all;
+        const b = gl != null ? (scheduleIndexes.byGradeLevel.get(gl) ?? []) : [];
+        const c = scheduleIndexes.bySection.get(selectedId) ?? [];
+        const seen = new Set<string>();
+        const out: ClassSchedule[] = [];
+        for (const arr of [a,b,c]) {
+            for (const s of arr) {
+                if (!seen.has(s.id)) { seen.add(s.id); out.push(s); }
+            }
+        }
+        return out;
+    }, [viewType, selectedId, scheduleIndexes, sectionGradeMap]);
+
+    // no time filter
+
+    const filteredSchedules = useMemo(() => {
+        const { type, daySet, teacherIds, q } = filters;
+        const qlc = (q || '').trim().toLowerCase();
+        const dayIndex = (d: ClassSchedule['dayOfWeek']) => DAYS.indexOf(d);
+        return baseList.filter(s => {
+            if (type !== 'all' && s.type !== type) return false;
+            if (daySet.size) {
+                const d0 = s.dayOfWeek; const d1 = s.endDayOfWeek ?? s.dayOfWeek;
+                const i0 = dayIndex(d0), i1 = dayIndex(d1);
+                let ok = false;
+                for (let i=i0;i<=i1;i++) { if (daySet.has(DAYS[i])) { ok = true; break; } }
+                if (!ok) return false;
+            }
+            if (teacherIds.size) {
+                if (!s.teacherId || !teacherIds.has(s.teacherId)) return false;
+            }
+            if (qlc) {
+                const sectionName = sections.find(sec => sec.id === s.sectionId)?.name || '';
+                const teacherName = teachers.find(t => t.id === s.teacherId)?.name || '';
+                const hay = `${s.title} ${sectionName} ${teacherName}`.toLowerCase();
+                if (!hay.includes(qlc)) return false;
+            }
+            return true;
         });
-    }, [classSchedules, selectedId, viewType, sections]);
+    }, [baseList, filters.type, filters.q, sections, teachers, Array.from(filters.daySet).join('|'), Array.from(filters.teacherIds).join('|')]);
     
     // --- Interaction Handlers ---
     const handleInteractionStart = (e: React.MouseEvent, type: 'drag' | 'resize-v' | 'resize-left' | 'resize-right', schedule: ClassSchedule) => {
@@ -370,32 +441,71 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                     <span className="block sm:inline ml-2">{notification}</span>
                 </div>
             )}
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm">
-                <div className="flex flex-wrap items-center gap-4">
-                    {!isStudentView && !isParentView && !isRegularTeacher && (
-                      <>
-                        <div className="flex items-center space-x-2">
-                            <label className="font-semibold">View by:</label>
-                            <select value={viewType} onChange={e => { setViewType(e.target.value as 'section' | 'teacher'); }} className="input-style">
-                                <option value="section">Class</option>
-                                <option value="teacher">Teacher</option>
-                            </select>
-                        </div>
-                         <div className="flex items-center space-x-2">
-                            <label htmlFor="view-select" className="font-semibold capitalize">{viewType}:</label>
-                            <select id="view-select" value={selectedId ?? ''} onChange={e => setSelectedId(e.target.value)} className="input-style min-w-[200px]">
-                               {options.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
-                            </select>
-                        </div>
-                      </>
-                    )}
+            <div className="flex flex-nowrap items-center justify-between gap-4 mb-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm">
+                <div className="flex items-center gap-4">
+                    {/* LEFT GROUP: View By + Filters (single line) */}
+                    <div className="flex items-center gap-3 flex-nowrap overflow-x-auto">
+                                        {!isStudentView && !isParentView && !isRegularTeacher && (
+                                            <>
+                                                <div className="flex items-center space-x-2 whitespace-nowrap">
+                                                        <label className="font-semibold whitespace-nowrap">View by:</label>
+                                                        <select value={viewType} onChange={e => { setViewType(e.target.value as 'section' | 'teacher'); }} className="input-style">
+                                                                <option value="section">Class</option>
+                                                                <option value="teacher">Teacher</option>
+                                                        </select>
+                                                </div>
+                                                {viewType === 'teacher' ? (
+                                                    <div className="flex items-center space-x-2">
+                                                        <label htmlFor="view-teacher" className="font-semibold">Teacher:</label>
+                                                        <select id="view-teacher" value={selectedId ?? ''} onChange={e => setSelectedId(e.target.value)} className="input-style min-w-[220px]">
+                                                             {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                                        </select>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <div className="flex items-center space-x-2">
+                                                                <label className="font-semibold">Grade:</label>
+                                                                <select value={selectedGradeLevel === '' ? '' : String(selectedGradeLevel)} onChange={e => {
+                                                                        const gl = e.target.value ? Number(e.target.value) : '';
+                                                                        setSelectedGradeLevel(gl);
+                                                                        if (gl === '') return;
+                                                                        const firstInGrade = sections.find(s => s.gradeLevel === gl);
+                                                                        setSelectedId(firstInGrade?.id || null);
+                                                                }} className="input-style min-w-[120px]">
+                                                                        <option value="">All</option>
+                                                                        {gradeLevels.map(gl => <option key={gl} value={gl}>{gl}</option>)}
+                                                                </select>
+                                                        </div>
+                                                        <div className="flex items-center space-x-2">
+                                                                <label htmlFor="view-section" className="font-semibold">Section:</label>
+                                                                <select id="view-section" value={selectedId ?? ''} onChange={e => setSelectedId(e.target.value)} className="input-style min-w-[220px]">
+                                                                     {sections.filter(s => selectedGradeLevel === '' || s.gradeLevel === selectedGradeLevel).map(s => (
+                                                                            <option key={s.id} value={s.id}>{`Grade ${s.gradeLevel} - ${s.name}`}</option>
+                                                                     ))}
+                                                                </select>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </>
+                                        )}
+                        {/* Filters: Search and Clear only (Type and Days removed) */}
+                    <div className="flex items-center space-x-2 min-w-[220px]">
+                        <label className="text-sm font-semibold">Search</label>
+                        <input type="text" className="input-style min-w-[160px]" placeholder="Title/Teacher/Class" value={filters.q ?? ''} onChange={e => setFilters(prev => ({ ...prev, q: e.target.value }))}/>
+                    </div>
+                    <div>
+                        <button type="button" className="text-xs px-3 py-2 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setFilters({ type: 'all', daySet: new Set(), teacherIds: new Set(), q: '' })}>Clear</button>
+                    </div>
                 </div>
-                <div className="flex items-center space-x-4">
-                    <button onClick={goToPreviousWeek} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700"><ChevronLeftIcon /></button>
-                    <h2 className="text-lg font-bold text-center whitespace-nowrap">{weekLabel}</h2>
-                    <button onClick={goToNextWeek} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700"><ChevronRightIcon /></button>
+                    {/* RIGHT: Date navigator */}
+                    <div className="flex items-center space-x-4 ml-auto">
+                        <button onClick={goToPreviousWeek} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700"><ChevronLeftIcon /></button>
+                        <h2 className="text-lg font-bold text-center whitespace-nowrap">{weekLabel}</h2>
+                        <button onClick={goToNextWeek} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700"><ChevronRightIcon /></button>
+                    </div>
                 </div>
             </div>
+
 
 
             <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg p-4 relative grid grid-cols-[auto_1fr] text-sm h-[75vh]">

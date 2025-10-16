@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { Parent, Student, AuthUser, StudentUser } from '../types';
+import type { Parent, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
-import { PencilIcon, TrashIcon, CloseIcon, PlusIcon } from './icons';
+import { PencilIcon, TrashIcon, CloseIcon } from './icons';
 import { useDebounce } from '../hooks/useDebounce';
 
 interface ParentsViewProps {
@@ -12,7 +12,7 @@ interface ParentsViewProps {
 
 const ITEMS_PER_PAGE = 25;
 
-const ParentsView: React.FC<ParentsViewProps> = ({ schoolData, session }) => {
+const ParentsView: React.FC<ParentsViewProps> = ({ schoolData }) => {
   const { 
     parents, students, 
     addParent, updateParent, deleteParent, 
@@ -36,7 +36,7 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData, session }) => {
   const [childSearchQuery, setChildSearchQuery] = useState('');
   const debouncedChildSearchQuery = useDebounce(childSearchQuery, 300);
   
-  const authUser = session.user as AuthUser;
+  // const authUser = session.user as AuthUser;
 
   const handleAddParent = (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,11 +153,11 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData, session }) => {
             {paginatedParents.map((parent) => (
               <tr key={parent.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                    <p className="text-slate-900 dark:text-white whitespace-no-wrap">{parent.name}</p>
+                    <p className="text-slate-900 dark:text-white whitespace-nowrap">{parent.name}</p>
                     <p className="text-slate-500 dark:text-slate-400 text-xs">{parent.email}</p>
                 </td>
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                    <p className="text-slate-600 dark:text-slate-300 whitespace-no-wrap">{parent.studentIds.length}</p>
+                    <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{parent.studentIds.length}</p>
                 </td>
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
                   <div className="flex items-center space-x-3">

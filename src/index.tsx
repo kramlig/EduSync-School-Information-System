@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from '../App.tsx';
+import './index.css';
 
 // Register the service worker for caching and offline support
 // Service worker registration is temporarily disabled during debugging to avoid cached assets
