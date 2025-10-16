@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { initializeFirestore, CACHE_SIZE_UNLIMITED, connectFirestoreEmulator } from 'firebase/firestore';
+import { initializeFirestore, CACHE_SIZE_UNLIMITED, connectFirestoreEmulator, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 
 // Read config from Vite env (VITE_ prefix)
@@ -26,30 +26,60 @@ const app = initializeApp(firebaseConfig);
 const db = initializeFirestore(app, {
   cacheSizeBytes: CACHE_SIZE_UNLIMITED,
 });
+// Attempt to enable multi-tab IndexedDB persistence for better cross-tab UX
+enableIndexedDbPersistence(db as any).catch((err) => {
+  // eslint-disable-next-line no-console
+  console.warn('[Firebase] Persistence not enabled:', err && err.message ? err.message : err);
+});
 const auth = getAuth(app);
 
-// Optional: connect to emulators if requested
+// Optional: connect to emulators if requested or auto-detected
 try {
-  const useFsEmu = String(import.meta.env.VITE_USE_FIREBASE_EMULATOR || '').toLowerCase() === 'true';
-  if (useFsEmu) {
-    const host = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST || 'localhost';
-    const portRaw = import.meta.env.VITE_FIRESTORE_EMULATOR_PORT || '8080';
-    const port = Number(portRaw);
+  const projId = import.meta.env.VITE_FIREBASE_PROJECT_ID || '';
+  const looksLocal = /(^|-)local$|demo/.test(projId);
+  // Firestore emulator
+  const useFsEmuFlag = String(import.meta.env.VITE_USE_FIREBASE_EMULATOR || '').toLowerCase() === 'true';
+  const fsHostEnv = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST as string | undefined; // may be host or host:port
+  const fsPortEnv = import.meta.env.VITE_FIRESTORE_EMULATOR_PORT as string | undefined;
+  const shouldUseFsEmu = useFsEmuFlag || !!fsHostEnv || looksLocal;
+  if (shouldUseFsEmu) {
+    let host = '127.0.0.1';
+    let port = 8080;
+    if (fsHostEnv && fsHostEnv.includes(':')) {
+      const [h, p] = fsHostEnv.split(':');
+      host = h || host;
+      const parsed = Number(p);
+      if (!Number.isNaN(parsed)) port = parsed;
+    } else {
+      host = fsHostEnv || host;
+      const parsed = Number(fsPortEnv || '8080');
+      if (!Number.isNaN(parsed)) port = parsed;
+    }
     connectFirestoreEmulator(db as any, host, port);
-    // eslint-disable-next-line no-console
-    console.info(`[Firebase] Connected Firestore emulator at ${host}:${port}`);
+    console.info(`[Firebase] Firestore emulator: ${host}:${port} (${projId || 'no-project-id-set'})`);
   }
-  const useAuthEmu = String(import.meta.env.VITE_USE_AUTH_EMULATOR || '').toLowerCase() === 'true';
-  if (useAuthEmu) {
-    const host = import.meta.env.VITE_AUTH_EMULATOR_HOST || 'localhost';
-    const portRaw = import.meta.env.VITE_AUTH_EMULATOR_PORT || '9099';
-    const port = Number(portRaw);
+  // Auth emulator
+  const useAuthFlag = String(import.meta.env.VITE_USE_AUTH_EMULATOR || '').toLowerCase() === 'true';
+  const authHostEnv = import.meta.env.VITE_AUTH_EMULATOR_HOST as string | undefined;
+  const authPortEnv = import.meta.env.VITE_AUTH_EMULATOR_PORT as string | undefined;
+  const shouldUseAuthEmu = useAuthFlag || !!authHostEnv || looksLocal;
+  if (shouldUseAuthEmu) {
+    let host = '127.0.0.1';
+    let port = 9099;
+    if (authHostEnv && authHostEnv.includes(':')) {
+      const [h, p] = authHostEnv.split(':');
+      host = h || host;
+      const parsed = Number(p);
+      if (!Number.isNaN(parsed)) port = parsed;
+    } else {
+      host = authHostEnv || host;
+      const parsed = Number(authPortEnv || '9099');
+      if (!Number.isNaN(parsed)) port = parsed;
+    }
     connectAuthEmulator(auth as any, `http://${host}:${port}`, { disableWarnings: true });
-    // eslint-disable-next-line no-console
-    console.info(`[Firebase] Connected Auth emulator at ${host}:${port}`);
+    console.info(`[Firebase] Auth emulator: ${host}:${port}`);
   }
 } catch (e) {
-  // eslint-disable-next-line no-console
   console.warn('[Firebase] Emulator connection failed or not configured:', e);
 }
 

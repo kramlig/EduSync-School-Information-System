@@ -148,6 +148,35 @@ const App: React.FC = () => {
             students={students}
             parentSelectedChildId={parentSelectedChildId}
             onParentChildChange={(id) => setParentSelectedChildId(id)}
+            onSyncClick={async (scope) => {
+              const path = window.location.pathname;
+              // Map route to store scopes when 'auto' is selected
+              const auto = () => {
+                if (path.includes('/grades') || path.includes('/gradebook')) return ['grades','students','learningAreas'] as const;
+                if (path.includes('/core-values')) return ['coreValues','coreValueGrades','students'] as const;
+                if (path.includes('/attendance')) return ['attendanceRecords','students'] as const;
+                if (path.includes('/assignments')) return ['assignments','studentAssignmentGrades','students','sections'] as const;
+                if (path.includes('/lesson-plan')) return ['lessonPlans','assignments','sections','learningAreas'] as const;
+                if (path.includes('/schedule')) return ['classSchedules','sections','teachers'] as const;
+                if (path.includes('/parents')) return ['parents','students'] as const;
+                if (path.includes('/teachers')) return ['teachers'] as const;
+                if (path.includes('/sections')) return ['sections','students'] as const;
+                if (path.includes('/announcements')) return ['announcements'] as const;
+                return 'all' as const;
+              };
+              const mapSingle = (s: string) => s as any;
+              const stores = scope === 'auto' ? auto() : scope === 'all' ? 'all' : [mapSingle(scope)];
+              try {
+                const res = await (schoolData as any).refreshStores(stores);
+                // eslint-disable-next-line no-console
+                console.info('[Sync] Refreshed', stores, res.updated);
+              } catch (e) {
+                // eslint-disable-next-line no-alert
+                alert('Sync failed. See console for details.');
+                // eslint-disable-next-line no-console
+                console.error('[Sync] error', e);
+              }
+            }}
           />
           <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-100 dark:bg-slate-900 p-6">
             <Routes>

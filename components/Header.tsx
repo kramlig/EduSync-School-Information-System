@@ -11,9 +11,10 @@ interface HeaderProps {
   schoolYear?: string;
   parentSelectedChildId?: string | null;
   onParentChildChange?: (id: string) => void;
+  onSyncClick?: (scope: 'auto' | 'students' | 'teachers' | 'grades' | 'coreValues' | 'coreValueGrades' | 'attendance' | 'sections' | 'assignments' | 'lessonPlans' | 'announcements' | 'classSchedules' | 'parents' | 'all') => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ session, onLogout, schoolName, students, schoolYear, parentSelectedChildId, onParentChildChange }) => {
+const Header: React.FC<HeaderProps> = ({ session, onLogout, schoolName, students, schoolYear, parentSelectedChildId, onParentChildChange, onSyncClick }) => {
   const userRole = session.type === 'staff' ? (session.user as AuthUser).role : session.type;
   
   // State for parent's selected child view
@@ -94,6 +95,18 @@ const Header: React.FC<HeaderProps> = ({ session, onLogout, schoolName, students
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-600 dark:text-slate-300">
               <ChevronDownIcon />
+            </div>
+          </div>
+        )}
+        {onSyncClick && (
+          <div className="relative group hidden sm:block">
+            <button title="Sync now" className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-300 dark:border-slate-600 rounded px-2 py-1">Sync</button>
+            <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition">
+              <div className="py-1 text-sm">
+                {['auto','announcements','grades','coreValues','coreValueGrades','attendance','assignments','lessonPlans','classSchedules','students','teachers','sections','parents','all'].map(s => (
+                  <button key={s} onClick={() => onSyncClick(s as any)} className="w-full text-left px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200">{String(s)}</button>
+                ))}
+              </div>
             </div>
           </div>
         )}

@@ -3,7 +3,9 @@ import type { Student, LearningArea, Grade, CoreValue, CoreValueGrade, Attendanc
 import * as dbService from '../src/services/dbService';
 import * as firestoreReader from '../src/services/firestoreReader';
 import type { StoreName } from '../src/services/dbService';
-import { enqueueWrite, startAutoSync } from '../src/services/firestoreSync';
+import { enqueueWrite, startAutoSync, flushQueue } from '../src/services/firestoreSync';
+import { getFirestoreInstance } from '../src/services/firestoreService';
+import { collection as fsCollection, onSnapshot } from 'firebase/firestore';
 
 const MOCK_SETTINGS: SchoolSettings = {
     schoolName: 'ENRIQUE URENCIA ELEMENTARY SCHOOL',
@@ -52,6 +54,11 @@ export const useSchoolData = (): SchoolDataState & {
     addSubstituteAssignment: (assignment: Omit<SubstituteAssignment, 'id'>) => void;
     updateSubstituteAssignment: (assignment: SubstituteAssignment) => void;
     deleteSubstituteAssignment: (assignmentId: string) => void;
+    // Announcements CRUD
+    addAnnouncement: (a: Omit<Announcement, 'id'>) => void;
+    updateAnnouncement: (a: Announcement) => void;
+    deleteAnnouncement: (id: string) => void;
+    refreshStores: (stores: StoreName[] | 'all') => Promise<{ updated: Record<string, number> }>;
 } => {
     const [state, setState] = useState<SchoolDataState & { loading: boolean; error: string | null }>({
         loading: true,
@@ -358,6 +365,84 @@ export const useSchoolData = (): SchoolDataState & {
         enqueueWrite('substituteAssignments', { id: assignmentId, __delete: true } as any).catch(() => {});
     };
 
+    // --- Announcements CRUD ---
+    const addAnnouncement = (a: Omit<Announcement, 'id'>) => {
+        const newAnnouncement: Announcement = {
+            id: `ann_${Date.now()}`,
+            title: a.title,
+            content: a.content,
+            authorId: a.authorId,
+            date: a.date || new Date().toISOString().split('T')[0],
+            target: a.target,
+        };
+        setState(prev => ({ ...prev, announcements: [newAnnouncement, ...prev.announcements] }));
+        try { dbService.put('announcements', newAnnouncement); } catch {}
+        enqueueWrite('announcements', newAnnouncement as any).catch(() => {});
+    };
+
+    const updateAnnouncement = (a: Announcement) => {
+        setState(prev => ({ ...prev, announcements: prev.announcements.map(x => x.id === a.id ? { ...a } : x) }));
+        try { dbService.put('announcements', a); } catch {}
+        enqueueWrite('announcements', a as any).catch(() => {});
+    };
+
+    const deleteAnnouncement = (id: string) => {
+        setState(prev => ({ ...prev, announcements: prev.announcements.filter(x => x.id !== id) }));
+        try { dbService.remove('announcements', id); } catch {}
+        enqueueWrite('announcements', { id, __delete: true } as any).catch(() => {});
+    };
+
+    // --- Manual selective refresh from Firestore ---
+    const refreshStores = async (stores: StoreName[] | 'all'): Promise<{ updated: Record<string, number> }> => {
+        try { await flushQueue(); } catch {}
+        const remote = await firestoreReader.fetchAllData();
+        const validate = (item: any, key: string | string[]): boolean => {
+            if (Array.isArray(key)) return key.every(k => item.hasOwnProperty(k) && item[k] !== undefined);
+            return item.hasOwnProperty(key) && item[key] !== undefined;
+        };
+        const sanitized = {
+            students: remote.students.filter(i => validate(i,'id')),
+            learningAreas: remote.learningAreas.filter(i => validate(i,'id')),
+            grades: remote.grades.filter(i => validate(i,'id')),
+            coreValues: remote.coreValues.filter(i => validate(i,'id')),
+            coreValueGrades: remote.coreValueGrades.filter(i => validate(i,'id')),
+            attendanceRecords: remote.attendanceRecords.filter(i => validate(i,'studentId')),
+            teachers: remote.teachers.filter(i => validate(i,'id')),
+            parents: remote.parents.filter(i => validate(i,'id')),
+            sections: remote.sections.filter(i => validate(i,'id')),
+            settings: remote.settings?.[0] || state.settings,
+            substituteAssignments: remote.substituteAssignments.filter(i => validate(i,'id')),
+            classSchedules: remote.classSchedules.filter(i => validate(i,'id')),
+            assignments: remote.assignments.filter(i => validate(i,'id')),
+            studentAssignmentGrades: remote.studentAssignmentGrades.filter(i => validate(i,['assignmentId','studentId'])),
+            lessonPlans: remote.lessonPlans.filter(i => validate(i,'id')),
+            announcements: remote.announcements.filter(i => validate(i,'id')),
+        } as const;
+
+        const names: StoreName[] = stores === 'all' ? [
+            'students','learningAreas','grades','coreValues','coreValueGrades','attendanceRecords','teachers','parents','sections','settings','substituteAssignments','classSchedules','assignments','studentAssignmentGrades','lessonPlans','announcements'
+        ] : stores;
+
+        const updated: Record<string, number> = {};
+        for (const name of names) {
+            try {
+                const value = (sanitized as any)[name];
+                if (name === 'settings') {
+                    await dbService.put('settings', value);
+                    setState(prev => ({ ...prev, settings: value }));
+                    updated[name] = 1;
+                } else {
+                    await dbService.bulkPut(name as any, value);
+                    setState(prev => ({ ...prev, [name]: value } as any));
+                    updated[name] = Array.isArray(value) ? value.length : 0;
+                }
+            } catch (e) {
+                console.warn(`[Refresh] Failed updating '${name}':`, e);
+            }
+        }
+        return { updated };
+    };
+
     // --- Class Schedule CRUD ---
     const DAYS: ClassSchedule['dayOfWeek'][] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
     const timeToMinutes = (time: string) => {
@@ -507,9 +592,10 @@ export const useSchoolData = (): SchoolDataState & {
                             console.error('[DataSync] Teacher backfill failed:', e);
                         }
                     } else {
-                        // Incremental merge: detect new remote teachers (e.g., newly provisioned admin) not yet in cache
+                        // Incremental merge: detect new remote teachers and announcements not yet in cache
                         try {
                             const remote = await firestoreReader.fetchAllData();
+                            // Teachers merge
                             const remoteTeachers = remote.teachers || [];
                             if (remoteTeachers.length) {
                                 const existingIds = new Set(teachers.map(t => t.id));
@@ -520,8 +606,19 @@ export const useSchoolData = (): SchoolDataState & {
                                     console.log(`[DataSync] Merged ${newTeachers.length} new teachers from Firestore (incremental).`);
                                 }
                             }
+                            // Announcements merge
+                            const remoteAnnouncements = remote.announcements || [];
+                            if (remoteAnnouncements.length) {
+                                const existingAnnIds = new Set(announcements.map(a => a.id));
+                                const newAnns = remoteAnnouncements.filter(ra => ra.id && !existingAnnIds.has(ra.id));
+                                if (newAnns.length) {
+                                    await dbService.bulkPut('announcements', newAnns);
+                                    announcements = [...announcements, ...newAnns];
+                                    console.log(`[DataSync] Merged ${newAnns.length} new announcements from Firestore (incremental).`);
+                                }
+                            }
                         } catch (e) {
-                            console.warn('[DataSync] Incremental teacher merge skipped due to error:', e);
+                            console.warn('[DataSync] Incremental merge (teachers/announcements) skipped due to error:', e);
                         }
                     }
 
@@ -554,6 +651,23 @@ export const useSchoolData = (): SchoolDataState & {
                         }
                     } catch (e) {
                         console.warn('[DataSync] Core Values merge skipped due to error:', e);
+                    }
+
+                    // Ensure Announcements are merged from Firestore when local cache exists
+                    try {
+                        const remote = await firestoreReader.fetchAllData();
+                        const remoteAnnouncements = remote.announcements || [];
+                        if (remoteAnnouncements.length) {
+                            const existingIds = new Set(announcements.map(a => a.id));
+                            const newOnes = remoteAnnouncements.filter(a => a.id && !existingIds.has(a.id));
+                            if (newOnes.length) {
+                                await dbService.bulkPut('announcements', newOnes);
+                                announcements = [...announcements, ...newOnes];
+                                console.log(`[DataSync] Merged ${newOnes.length} new announcements from Firestore.`);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[DataSync] Announcement merge skipped due to error:', e);
                     }
 
                     setState({ loading: false, error: null, students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings: settings[0] || MOCK_SETTINGS, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements, monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG });
@@ -681,9 +795,37 @@ export const useSchoolData = (): SchoolDataState & {
 
         startAutoSync(60_000);
         loadData();
+        // Realtime subscription for announcements (low volume, high freshness UX)
+        try {
+            const db = getFirestoreInstance();
+            const col = fsCollection(db as any, 'announcements');
+            const unsub = onSnapshot(col as any, async (snap: any) => {
+                const remote = (snap.docs as any[]).map((d: any) => ({ id: d.id, ...(d.data() || {}) }));
+                if (Array.isArray(remote) && remote.length >= 0) {
+                    // Merge new/updated docs
+                    const mapLocal = new Map(state.announcements.map(a => [a.id, a]));
+                    let changed = false;
+                    for (const doc of remote) {
+                        const prev = mapLocal.get(doc.id);
+                        if (!prev || JSON.stringify(prev) !== JSON.stringify(doc)) {
+                            mapLocal.set(doc.id, doc as any);
+                            changed = true;
+                        }
+                    }
+                    if (changed) {
+                        const merged = Array.from(mapLocal.values());
+                        setState(prev => ({ ...prev, announcements: merged }));
+                        try { await dbService.bulkPut('announcements', merged); } catch {}
+                    }
+                }
+            });
+            return () => { try { unsub(); } catch {} };
+        } catch (e) {
+            console.warn('[Realtime] Announcements onSnapshot failed:', e);
+        }
     }, []);
 
-    return { ...state, addStudent, updateStudent, deleteStudent, addSchedule, updateSchedule, deleteSchedule, updateGrade, updateCoreValueGrade, addLearningArea, deleteLearningArea, updateSettings, updateAttendance, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment };
+    return { ...state, addStudent, updateStudent, deleteStudent, addSchedule, updateSchedule, deleteSchedule, updateGrade, updateCoreValueGrade, addLearningArea, deleteLearningArea, updateSettings, updateAttendance, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addAnnouncement, updateAnnouncement, deleteAnnouncement, refreshStores };
 };
 
 export type SchoolDataHook = ReturnType<typeof useSchoolData>;
