@@ -8,6 +8,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { uploadStudentPhoto, deleteStudentPhoto, getPlaceholderAvatar } from '../src/services/studentPhotoService';
 import WebcamCapture from './WebcamCapture';
 import ImageCropModal from './ImageCropModal';
+import { usePaginatedStudents } from '../hooks/usePaginatedStudents';
 
 interface StudentListProps {
   schoolData: SchoolDataState & { 
@@ -47,17 +48,23 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   
   const authUser = session.user as AuthUser;
 
-  const visibleStudents = useMemo(() => {
-    if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
-      return students;
-    }
-    
-    const authorizedSectionIds = new Set<string>();
+  // Feature flag: Enable server-side pagination for large datasets
+  // Set to true to load students in batches (recommended for 1000+ students)
+  // Set to false to use traditional client-side pagination
+  const USE_SERVER_PAGINATION = students.length > 500;
 
+  // Determine authorized section IDs for teachers
+  const authorizedSectionIds = useMemo(() => {
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
+      return null; // null means all sections
+    }
+
+    const sectionIds = new Set<string>();
+    
     // 1. Sections where the user is the adviser
     const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
     if (teacherAdviserSection) {
-        authorizedSectionIds.add(teacherAdviserSection.id);
+      sectionIds.add(teacherAdviserSection.id);
     }
     
     // 2. Sections where the user is a substitute
@@ -69,34 +76,55 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     );
 
     if (activeSubAssignments.length > 0) {
-        const originalTeacherIds = activeSubAssignments.map(sub => sub.originalTeacherId);
-        
-        // Find sections where original teachers are advisers
-        sections.forEach(s => {
-            if (s.adviserId && originalTeacherIds.includes(s.adviserId)) {
-                authorizedSectionIds.add(s.id);
-            }
-        });
-
-        // Find sections where original teachers have classes scheduled
-        classSchedules.forEach(schedule => {
-            if (schedule.teacherId && schedule.sectionId && originalTeacherIds.includes(schedule.teacherId)) {
-                authorizedSectionIds.add(schedule.sectionId);
-            }
-        });
+      const originalTeacherIds = activeSubAssignments.map(sub => sub.originalTeacherId);
+      sections.forEach(s => {
+        if (s.adviserId && originalTeacherIds.includes(s.adviserId)) {
+          sectionIds.add(s.id);
+        }
+      });
+      classSchedules.forEach(schedule => {
+        if (schedule.teacherId && schedule.sectionId && originalTeacherIds.includes(schedule.teacherId)) {
+          sectionIds.add(schedule.sectionId);
+        }
+      });
     }
 
     // 3. Sections where the user is assigned as a subject teacher
     classSchedules.forEach(schedule => {
       if (schedule.teacherId === authUser.id && schedule.sectionId) {
-        authorizedSectionIds.add(schedule.sectionId);
+        sectionIds.add(schedule.sectionId);
       }
     });
+
+    return sectionIds.size > 0 ? sectionIds : new Set<string>();
+  }, [authUser, sections, substituteAssignments, classSchedules]);
+
+  // Use server-side pagination for large datasets
+  const paginatedData = usePaginatedStudents({
+    pageSize: 100,
+    searchQuery: debouncedSearchQuery,
+    enabled: USE_SERVER_PAGINATION
+  });
+
+  // Original client-side filtering logic (for small datasets or as fallback)
+  const visibleStudents = useMemo(() => {
+    // If using server pagination, return paginated students
+    if (USE_SERVER_PAGINATION) {
+      // Apply section filtering for teachers (server doesn't support this yet)
+      if (authorizedSectionIds && authorizedSectionIds.size > 0) {
+        return paginatedData.students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
+      }
+      return paginatedData.students;
+    }
+
+    // Traditional client-side filtering
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
+      return students;
+    }
     
-    if (authorizedSectionIds.size === 0) return [];
-    
+    if (!authorizedSectionIds || authorizedSectionIds.size === 0) return [];
     return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
-  }, [students, sections, substituteAssignments, classSchedules, authUser]);
+  }, [USE_SERVER_PAGINATION, paginatedData.students, students, authUser, authorizedSectionIds]);
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -112,6 +140,10 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       if (result.success) {
         setNewStudent({ name: '', email: '' });
         setIsAddModalOpen(false);
+        // Refresh paginated data if using server pagination
+        if (USE_SERVER_PAGINATION) {
+          paginatedData.refreshStudents();
+        }
       } else {
         setAddStudentError(result.message || 'An unknown error occurred.');
       }
@@ -135,6 +167,10 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       updateStudent(studentToEdit);
       setIsEditModalOpen(false);
       setStudentToEdit(null);
+      // Refresh paginated data if using server pagination
+      if (USE_SERVER_PAGINATION) {
+        paginatedData.refreshStudents();
+      }
     }
   };
   
@@ -155,6 +191,10 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       deleteStudent(studentToDelete.id);
       setIsDeleteModalOpen(false);
       setStudentToDelete(null);
+      // Refresh paginated data if using server pagination
+      if (USE_SERVER_PAGINATION) {
+        paginatedData.refreshStudents();
+      }
     }
   };
 
@@ -242,20 +282,34 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     }
   };
 
-  const filteredStudents = useMemo(() => visibleStudents.filter(student =>
-    student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-    student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-    (student.lrn && student.lrn.includes(debouncedSearchQuery))
-  ), [visibleStudents, debouncedSearchQuery]);
+  // Pagination Logic - works with both server-side and client-side modes
+  const filteredStudents = useMemo(() => {
+    // For server pagination, search is already handled by the hook
+    if (USE_SERVER_PAGINATION) {
+      return visibleStudents; // Already filtered and paginated
+    }
+    
+    // Client-side search filtering
+    return visibleStudents.filter(student =>
+      student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      (student.lrn && student.lrn.includes(debouncedSearchQuery))
+    );
+  }, [USE_SERVER_PAGINATION, visibleStudents, debouncedSearchQuery]);
 
-  // Pagination Logic
-  const totalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
+  const totalPages = USE_SERVER_PAGINATION ? paginatedData.totalPages : Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
+  const totalCount = USE_SERVER_PAGINATION ? paginatedData.totalCount : filteredStudents.length;
   
   const paginatedStudents = useMemo(() => {
+    if (USE_SERVER_PAGINATION) {
+      return filteredStudents; // Already paginated from server
+    }
+    
+    // Client-side pagination
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
     return filteredStudents.slice(startIndex, endIndex);
-  }, [filteredStudents, currentPage]);
+  }, [USE_SERVER_PAGINATION, filteredStudents, currentPage]);
 
   const closeAddModal = () => {
     setIsAddModalOpen(false);
@@ -351,22 +405,32 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             )})}
           </tbody>
         </table>
-        {totalPages > 1 && (
+        {(paginatedData.loading || totalPages > 1) && (
           <div className="px-5 py-3 bg-white dark:bg-slate-800 border-t flex flex-col xs:flex-row items-center xs:justify-between">
-            <span className="text-xs xs:text-sm text-slate-600 dark:text-slate-300">
-              Showing {Math.min(1 + (currentPage-1)*ITEMS_PER_PAGE, filteredStudents.length)} to {Math.min(currentPage*ITEMS_PER_PAGE, filteredStudents.length)} of {filteredStudents.length} Students
-            </span>
+            {paginatedData.loading ? (
+              <span className="text-xs xs:text-sm text-slate-600 dark:text-slate-300">Loading students...</span>
+            ) : (
+              <span className="text-xs xs:text-sm text-slate-600 dark:text-slate-300">
+                {USE_SERVER_PAGINATION ? (
+                  // Server pagination - show page-based info
+                  <>Page {paginatedData.currentPage} of {totalPages} ({totalCount} total students)</>
+                ) : (
+                  // Client pagination - show item-based info
+                  <>Showing {Math.min(1 + (currentPage-1)*ITEMS_PER_PAGE, filteredStudents.length)} to {Math.min(currentPage*ITEMS_PER_PAGE, filteredStudents.length)} of {filteredStudents.length} Students</>
+                )}
+              </span>
+            )}
             <div className="inline-flex mt-2 xs:mt-0">
               <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
+                onClick={() => USE_SERVER_PAGINATION ? paginatedData.loadPrevPage() : setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={paginatedData.loading || (USE_SERVER_PAGINATION ? paginatedData.currentPage === 1 : currentPage === 1)}
                 className="text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-l disabled:opacity-50"
               >
                 Prev
               </button>
               <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
+                onClick={() => USE_SERVER_PAGINATION ? paginatedData.loadNextPage() : setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={paginatedData.loading || (USE_SERVER_PAGINATION ? !paginatedData.hasMore && paginatedData.currentPage === totalPages : currentPage === totalPages)}
                 className="text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-r disabled:opacity-50"
               >
                 Next
