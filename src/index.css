@@ -27,3 +27,125 @@
 .animate-fade-in-down {
   animation: fadeInDown 0.3s ease-out;
 }
+
+/* Toast fade-in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Print optimizations for report cards */
+@media print {
+  /* Set page size explicitly */
+  @page {
+    size: letter landscape;
+    margin: 0.5in;
+  }
+  
+  /* Ensure exact colors are preserved */
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  
+  /* Hide everything during print */
+  body * {
+    visibility: hidden;
+  }
+  
+  /* Only show the print-content area */
+  #print-content,
+  #print-content * {
+    visibility: visible !important;
+  }
+  
+  /* Position print-content at top-left for printing */
+  #print-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  
+  /* Hide modal overlays, headers, footers, and UI elements */
+  .print\:hidden,
+  header,
+  nav,
+  .sticky,
+  button,
+  [role="dialog"] > div:first-child,
+  [role="dialog"] > div:last-child {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  
+  /* Force EXACT page dimensions - Letter landscape minus margins = 10in x 7.5in */
+  #page-1,
+  #page-2 {
+    display: block !important;
+    width: 10in !important;
+    height: 7.5in !important;
+    min-height: 7.5in !important;
+    max-height: 7.5in !important;
+    page-break-inside: avoid !important;
+    margin: 0 auto !important;
+    position: relative !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Force page break after page 1 */
+  #page-1 {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  
+  /* Force page break before page 2 */
+  #page-2 {
+    page-break-before: always !important;
+    break-before: page !important;
+    page-break-after: auto !important;
+  }
+  
+  /* Page break controls */
+  .page-break-before {
+    page-break-before: always;
+  }
+  
+  .page-break-after {
+    page-break-after: always;
+  }
+  
+  .page-break-avoid {
+    page-break-inside: avoid;
+  }
+  
+  /* Ensure page content prints at correct size */
+  .page-content {
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+  
+  /* Remove backgrounds and shadows for cleaner print */
+  * {
+    background: white !important;
+    box-shadow: none !important;
+  }
+  
+  /* Restore backgrounds for report elements that need them */
+  #print-content table,
+  #print-content .bg-gray-100,
+  #print-content th {
+    background: #f3f4f6 !important;
+  }
+}
