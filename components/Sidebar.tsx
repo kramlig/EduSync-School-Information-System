@@ -1,13 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
-import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, HeartIcon, ClipboardCheckIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChartPieIcon } from './icons';
+import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, HeartIcon, ClipboardCheckIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronLeftIcon, ChevronRightIcon, BuildingOfficeIcon } from './icons';
+import DepEdLogo from './DepEdLogo';
 
 interface SidebarProps {
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
+  schoolName?: string;
+  schoolYear?: string;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ session }) => {
+const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoolYear }) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
   
   const staffNavGroups = [
     {
@@ -89,7 +93,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session }) => {
               <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-white/90 rounded-r"></span>
             )}
             <span className="shrink-0">{icon}</span>
-            <span className="hidden md:inline ml-4 truncate">{label}</span>
+            <span className={`ml-4 truncate transition-opacity duration-200 ${isCollapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>{label}</span>
           </>
         )}
       </NavLink>
@@ -106,7 +110,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session }) => {
         }
         return (
           <React.Fragment key={group.title}>
-            <h3 className="px-6 pt-4 pb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hidden md:block">{group.title}</h3>
+            <h3 className={`px-6 pt-4 pb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider transition-opacity duration-200 ${isCollapsed ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'}`}>{group.title}</h3>
             {visibleItems.map(item => (
               <NavItem key={item.path} to={item.path} label={item.label} icon={item.icon} />
             ))}
@@ -124,18 +128,63 @@ const Sidebar: React.FC<SidebarProps> = ({ session }) => {
   };
 
   return (
-    <nav className="group w-16 md:w-64 hover:w-64 transition-all duration-200 bg-slate-800 dark:bg-slate-950 text-white flex flex-col print:hidden sticky top-0 self-start h-screen overflow-hidden">
-      <div className="flex-shrink-0 flex items-center justify-center md:justify-start md:pl-6 h-16 border-b border-slate-700">
-        <ChartPieIcon />
-        <span className="hidden md:inline ml-3 text-lg font-bold">EduSync</span>
+    <nav className={`transition-all duration-300 bg-slate-800 dark:bg-slate-950 text-white flex flex-col print:hidden sticky top-0 self-start h-screen overflow-hidden ${isCollapsed ? 'w-20' : 'w-64'}`}>
+      {/* Header with Logo, School Name & Toggle */}
+      <div className="flex-shrink-0 border-b border-slate-700">
+        <div className={`flex items-center h-20 px-4 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+          <div className={`flex items-center gap-3 ${isCollapsed ? 'flex-col' : 'flex-row'} min-w-0`}>
+            <DepEdLogo className={`flex-shrink-0 transition-all duration-300 ${isCollapsed ? 'h-8 w-8' : 'h-12 w-12'}`} />
+            <div className={`flex flex-col min-w-0 transition-all duration-200 ${isCollapsed ? 'opacity-0 w-0 h-0 overflow-hidden' : 'opacity-100'}`}>
+              <div className="text-base font-bold text-white leading-tight">EduSync</div>
+              <div className="text-xs text-slate-400 leading-tight flex items-center gap-1 truncate">
+                <BuildingOfficeIcon className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate" title={schoolName}>{schoolName}</span>
+              </div>
+              {schoolYear && (
+                <div className="text-xs text-slate-500 leading-tight">SY {schoolYear}</div>
+              )}
+            </div>
+          </div>
+          
+          {/* Toggle Button */}
+          {!isCollapsed && (
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="flex-shrink-0 p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+            >
+              <ChevronLeftIcon />
+            </button>
+          )}
+        </div>
+        
+        {/* Expand button when collapsed */}
+        {isCollapsed && (
+          <div className="flex justify-center pb-3">
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+            >
+              <ChevronRightIcon />
+            </button>
+          </div>
+        )}
       </div>
+      
+      {/* Navigation Items */}
       <ul className="flex-1 mt-2 overflow-y-auto no-scrollbar pr-1">
         {renderNavItems()}
       </ul>
-      <div className="p-4 border-t border-slate-700 text-center text-xs text-slate-400 hidden md:block flex-shrink-0">
+      
+      {/* Footer */}
+      <div className={`p-4 border-t border-slate-700 text-center text-xs text-slate-400 flex-shrink-0 transition-all duration-200 ${isCollapsed ? 'opacity-0 h-0 overflow-hidden p-0' : 'opacity-100'}`}>
         <p>&copy; 2024 EduSync Inc.</p>
         <p>Offline-First SIS</p>
       </div>
+      
       {/* Hide native scrollbars for a cleaner, app-like feel */}
       <style>{`
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
