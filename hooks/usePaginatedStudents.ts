@@ -1,9 +1,10 @@
 /**
  * Custom Hook for Paginated Student Loading
  * Optimized for large datasets (7K+ records)
+ * FIXED: Proper dependency management to prevent infinite loops
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { DocumentSnapshot } from 'firebase/firestore';
 import { getPaginatedCollection, getCollectionCount, PaginatedResult } from '../src/services/paginationService';
 import type { Student } from '../types';
@@ -45,12 +46,34 @@ export function usePaginatedStudents(
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageHistory, setPageHistory] = useState<(DocumentSnapshot | null)[]>([null]); // Track cursor for each page
+  const [pageHistory, setPageHistory] = useState<(DocumentSnapshot | null)[]>([null]);
+  
+  // Use refs to track if initial load has happened
+  const initialLoadDone = useRef(false);
+  const lastSearchQuery = useRef(searchQuery);
+  const lastSectionId = useRef(sectionId);
 
   // Calculate total pages
   const totalPages = Math.ceil(totalCount / pageSize);
 
-  // Load students with pagination
+  // Load total count - STABLE with all dependencies
+  const loadTotalCount = useCallback(async () => {
+    if (!enabled) return;
+
+    try {
+      const count = await getCollectionCount(
+        'students',
+        searchQuery.trim() ? 'name' : undefined,
+        searchQuery.trim() || undefined
+      );
+      setTotalCount(count);
+    } catch (err) {
+      console.warn('[usePaginatedStudents] Failed to load count:', err);
+      setTotalCount(0);
+    }
+  }, [enabled, searchQuery]); // All dependencies included
+
+  // Load students with pagination - STABLE with all dependencies
   const loadStudents = useCallback(async (
     pageNumber: number,
     lastDoc: DocumentSnapshot | null = null
@@ -109,38 +132,39 @@ export function usePaginatedStudents(
     } finally {
       setLoading(false);
     }
-  }, [enabled, pageSize, searchQuery, sectionId, pageHistory.length]);
+  }, [enabled, pageSize, searchQuery, sectionId, pageHistory.length]); // All dependencies included
 
-  // Load total count
-  const loadTotalCount = useCallback(async () => {
-    if (!enabled) return;
-
-    try {
-      const count = await getCollectionCount(
-        'students',
-        searchQuery.trim() ? 'name' : undefined,
-        searchQuery.trim() || undefined
-      );
-      setTotalCount(count);
-    } catch (err) {
-      console.warn('[usePaginatedStudents] Failed to load count:', err);
-      setTotalCount(0);
-    }
-  }, [enabled, searchQuery]);
-
-  // Initial load
+  // Initial load and search change detection
   useEffect(() => {
     if (!enabled) {
       setStudents([]);
+      initialLoadDone.current = false;
       return;
     }
 
-    loadTotalCount();
-    loadStudents(1, null);
-    setPageHistory([null]); // Reset page history
-  }, [enabled, searchQuery, sectionId]); // Note: loadStudents and loadTotalCount are stable
+    // Check if search or section changed
+    const searchChanged = lastSearchQuery.current !== searchQuery;
+    const sectionChanged = lastSectionId.current !== sectionId;
 
-  // Navigation functions
+    if (!initialLoadDone.current || searchChanged || sectionChanged) {
+      // Reset page history when search/section changes
+      if (searchChanged || sectionChanged) {
+        setPageHistory([null]);
+        setCurrentPage(1);
+      }
+
+      // Update refs
+      lastSearchQuery.current = searchQuery;
+      lastSectionId.current = sectionId;
+      initialLoadDone.current = true;
+
+      // Load data
+      loadTotalCount();
+      loadStudents(1, null);
+    }
+  }, [enabled, searchQuery, sectionId, loadStudents, loadTotalCount]);
+
+  // Navigation functions - NOW STABLE
   const loadNextPage = useCallback(async () => {
     if (!hasMore || loading) return;
 
@@ -187,6 +211,7 @@ export function usePaginatedStudents(
 
   const refreshStudents = useCallback(async () => {
     setPageHistory([null]);
+    initialLoadDone.current = false; // Force reload
     await loadTotalCount();
     await loadStudents(1, null);
   }, [loadStudents, loadTotalCount]);

@@ -48,11 +48,11 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   
   const authUser = session.user as AuthUser;
 
-  // Feature flag: Server-side pagination temporarily disabled
-  // Issue: Causing infinite re-render loop and log spamming
-  // TODO: Fix pagination hook dependencies before re-enabling
-  // When enabled, should only work for admin/principal/registrar roles
-  const USE_SERVER_PAGINATION = false;
+  // Feature flag: Enable server-side pagination for large datasets  
+  // FIXED: Hook now has proper dependency management to prevent infinite loops
+  // Only enabled for admin roles (teachers use client-side for section filtering)
+  const isAdminRole = ['admin', 'principal', 'registrar'].includes(authUser.role);
+  const USE_SERVER_PAGINATION = !schoolData.loading && students.length > 500 && isAdminRole;
 
   // Determine authorized section IDs for teachers
   const authorizedSectionIds = useMemo(() => {
