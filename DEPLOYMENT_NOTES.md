@@ -2,12 +2,15 @@
 
 **Date:** October 18, 2025  
 **Deployed by:** GitHub Copilot  
-**Project:** EduSync School Information System
+**Project:** EduSync School Information System  
+**Latest Deploy:** Redeployed with production Firestore configuration
 
 ## 🚀 Deployment Status
 
 ### ✅ Successfully Deployed
 - **Hosting:** https://edusync-sis.web.app
+- **Firestore:** Connected to production database (edusync-sis)
+- **Configuration:** Production environment active
 - **Firestore Rules:** Updated and deployed
 - **Application Build:** Production build completed
 - **Git Repository:** Committed and pushed to `revert/cd8a5fb` branch
@@ -159,7 +162,45 @@ src/services/firestoreService.ts  # Storage initialization
 
 ---
 
-## 🐛 Known Issues / Limitations
+## � Important: Environment Configuration
+
+### Switching Between Environments
+
+The application uses different environment files for local development vs production:
+
+- **Local Development (Emulators):**
+  ```bash
+  npm run env:emu
+  ```
+  Uses `.env.local.emu` → Connects to Firebase emulators
+
+- **Production:**
+  ```bash
+  npm run env:prod
+  ```
+  Uses `.env.local.prod` → Connects to production Firestore
+
+**⚠️ IMPORTANT:** Always run `npm run env:prod` before building for deployment!
+
+### Deployment Workflow
+
+```bash
+# 1. Switch to production environment
+npm run env:prod
+
+# 2. Build with production config
+npm run build
+
+# 3. Deploy to Firebase
+firebase deploy --only hosting
+
+# 4. (Optional) Switch back to emulator for local dev
+npm run env:emu
+```
+
+---
+
+## �🐛 Known Issues / Limitations
 
 1. **Storage Not Enabled:** Must manually enable in Firebase Console
 2. **Large Chunk Warning:** Vite build shows warning about bundle size (not critical)
