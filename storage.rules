@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// Firebase Storage Security Rules for EduSync SIS
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Student photos
+    match /students/{studentId}/profile.jpg {
+      // Allow any authenticated user to read student photos
+      allow read: if request.auth != null;
+      
+      // Allow admin, registrar, and principal to upload/update/delete photos
+      allow write: if request.auth != null && 
+        getUserRole() in ['admin', 'registrar', 'principal'];
+      
+      // File validation
+      allow write: if request.resource.size < 5 * 1024 * 1024 && // 5MB max
+        request.resource.contentType.matches('image/(jpeg|jpg|png)');
+    }
+    
+    // Helper function to get user role from Firestore
+    function getUserRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    // Deny all other access by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

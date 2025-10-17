@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { Student, Grade, Section, Teacher, AttendanceRecord, CoreValueGrade, AttendanceStatus } from '../types';
+import type { SchoolDataHook } from '../hooks/useSchoolData';
+import PrintableReport from './PrintableReport';
 import { 
   StarIcon, 
   CheckBadgeIcon, 
@@ -17,6 +19,7 @@ import {
 import BarChart from './BarChart';
 import ProgressRing from './ProgressRing';
 import Card from './Card';
+import { getPlaceholderAvatar } from '../src/services/studentPhotoService';
 
 interface StudentProfileProps {
   student: Student;
@@ -26,6 +29,7 @@ interface StudentProfileProps {
   sections: Section[];
   teachers: Teacher[];
   schoolYear: string;
+  schoolData: SchoolDataHook;
   onClose: () => void;
 }
 
@@ -39,9 +43,11 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
   sections,
   teachers,
   schoolYear,
+  schoolData,
   onClose
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [showPrintableReport, setShowPrintableReport] = useState(false);
 
   // Calculate student section and adviser
   const section = sections.find(s => s.id === student.sectionId);
@@ -160,8 +166,20 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
               {/* Avatar */}
-              <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center text-4xl font-bold border-4 border-white/30">
-                {student.name.charAt(0).toUpperCase()}
+              <div className="w-24 h-24 rounded-full overflow-hidden bg-white/20 flex items-center justify-center border-4 border-white/30">
+                {student.photoURL ? (
+                  <img 
+                    src={student.photoURL} 
+                    alt={student.name} 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <img 
+                    src={getPlaceholderAvatar(student.name)} 
+                    alt={student.name} 
+                    className="w-full h-full object-cover"
+                  />
+                )}
               </div>
               
               {/* Student Info */}
@@ -282,7 +300,11 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
           )}
 
           {activeTab === 'documents' && (
-            <DocumentsTab student={student} schoolYear={schoolYear} />
+            <DocumentsTab 
+              student={student} 
+              schoolYear={schoolYear}
+              onGenerateReportCard={() => setShowPrintableReport(true)}
+            />
           )}
 
           {activeTab === 'family' && (
@@ -323,6 +345,62 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Printable Report Modal - Enhanced Full Screen */}
+      {showPrintableReport && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full h-full sm:rounded-xl sm:shadow-2xl sm:max-w-[95vw] sm:max-h-[95vh] flex flex-col">
+            {/* Sticky Header with Actions */}
+            <div className="sticky top-0 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap sm:flex-nowrap justify-between items-center gap-3 z-20 shadow-lg sm:rounded-t-xl">
+              <div className="flex items-center gap-3">
+                <div className="bg-white bg-opacity-20 p-2 rounded-lg">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Report Card Preview</h2>
+                  <p className="text-xs sm:text-sm text-indigo-100">{student.name}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                <button
+                  onClick={() => setShowPrintableReport(false)}
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition-all shadow-md hover:shadow-lg text-sm sm:text-base"
+                  title="Close preview"
+                >
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span className="hidden sm:inline">Close</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Content Area - Ensure full content visibility */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-2 sm:p-4 print:p-0 print:overflow-visible">
+              <div className="w-full print:max-w-none">
+                <PrintableReport student={student} schoolData={schoolData} />
+              </div>
+            </div>
+
+            {/* Optional: Footer with Quick Info */}
+            <div className="sticky bottom-0 bg-gradient-to-r from-slate-100 to-slate-200 px-4 sm:px-6 py-2 sm:py-3 border-t flex justify-between items-center text-xs sm:text-sm text-slate-600 sm:rounded-b-xl print:hidden">
+              <div className="flex items-center gap-4">
+                <span className="font-medium">📊 School Year: {schoolData.settings.schoolYear}</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">Student ID: {student.id}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:inline text-slate-500">Scroll to view full report</span>
+                <svg className="w-4 h-4 text-slate-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -661,7 +739,8 @@ const BehaviorTab: React.FC<{
 const DocumentsTab: React.FC<{
   student: Student;
   schoolYear: string;
-}> = ({ student, schoolYear }) => (
+  onGenerateReportCard: () => void;
+}> = ({ student, schoolYear, onGenerateReportCard }) => (
   <div className="space-y-6">
     <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
       <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Student Documents</h3>
@@ -693,7 +772,7 @@ const DocumentsTab: React.FC<{
       <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Quick Actions</h3>
       <div className="grid grid-cols-2 gap-3">
         <button 
-          onClick={() => alert(`Generating Report Card for ${student.name}`)}
+          onClick={onGenerateReportCard}
           className="px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
         >
           📄 Generate Report Card

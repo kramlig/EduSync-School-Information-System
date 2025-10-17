@@ -6,6 +6,7 @@ import { jsPDF } from 'jspdf';
 import type { Student, Grade, SubGradeRecord } from '../types';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
 import { PrinterIcon } from './icons';
+import { getPlaceholderAvatar } from '../src/services/studentPhotoService';
 
 interface PrintableReportProps {
   student: Student;
@@ -47,6 +48,60 @@ const InfoField: React.FC<{ label: string; value: React.ReactNode, className?: s
 );
 
 // No runtime fallback needed since the asset is embedded; to change the logo, replace the file on disk.
+
+// Export PDF generation function for use in StudentProfile
+export const generateReportCardPDF = async (student: Student, schoolData: SchoolDataHook) => {
+  try {
+    const pdf = new jsPDF({
+      orientation: 'landscape',
+      unit: 'in',
+      format: 'letter'
+    });
+    
+    // Capture page 1
+    const page1Element = document.getElementById('page-1');
+    if (!page1Element) throw new Error('Page 1 element not found');
+    
+    const canvas1 = await html2canvas(page1Element, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff'
+    });
+    
+    const imgData1 = canvas1.toDataURL('image/png');
+    const imgWidth = 11;
+    const imgHeight = (canvas1.height * imgWidth) / canvas1.width;
+    
+    pdf.addImage(imgData1, 'PNG', 0, 0, imgWidth, imgHeight);
+    
+    // Capture page 2
+    const page2Element = document.getElementById('page-2');
+    if (page2Element) {
+      pdf.addPage();
+      
+      const canvas2 = await html2canvas(page2Element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData2 = canvas2.toDataURL('image/png');
+      const imgHeight2 = (canvas2.height * imgWidth) / canvas2.width;
+      
+      pdf.addImage(imgData2, 'PNG', 0, 0, imgWidth, imgHeight2);
+    }
+    
+    // Save PDF
+    const fileName = `Report-Card-${student.name.replace(/\s+/g, '-')}-${schoolData.settings.schoolYear}.pdf`;
+    pdf.save(fileName);
+    
+  } catch (error) {
+    console.error('PDF generation error:', error);
+    throw error;
+  }
+};
 
 const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }) => {
   const { grades, learningAreas, coreValues, coreValueGrades, attendanceRecords, monthlySchoolDaysConfig, teachers, sections, settings } = schoolData;
@@ -150,7 +205,7 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
 
       <div id="print-content" className="p-4 bg-gray-200 text-[10px]">
         {/* PAGE 1: Front Page */}
-  <div id="page-1" className="page-content bg-white shadow-lg p-8 mb-8 mx-auto" style={{width: '11in', minHeight: '8.5in'}}>
+  <div id="page-1" className="page-content bg-white shadow-lg p-8 mb-8 mx-auto" style={{width: '11in', minHeight: '8.5in', pageBreakAfter: 'always', breakAfter: 'page'}}>
           <div className="grid grid-cols-12 gap-4">
             {/* Left Column */}
             <div className="col-span-6">
@@ -192,7 +247,7 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
 
             {/* Right Column */}
             <div className="col-span-6">
-                <div className="flex justify-between items-start mb-4">
+                <div className="flex items-start justify-between mb-4">
                     <div className="text-left text-xs w-1/4">DepEd FORM 138</div>
                     <div className="text-center text-[10px] w-1/2">
                         <p>Republic of the Philippines</p>
@@ -202,9 +257,25 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
                         <p>{settings.district}</p>
                         <p className="font-bold text-xs mt-1">{settings.schoolName}</p>
                     </div>
-          <div className="w-1/4 flex justify-end">
-            <DepEdLogo className="w-24 h-24" />
-          </div>
+                    <div className="w-1/4 flex flex-col items-end gap-2">
+                        <DepEdLogo className="w-24 h-24" />
+                        {/* Student Photo */}
+                        <div className="w-24 h-24 rounded-lg overflow-hidden bg-slate-100 border-2 border-slate-300 shadow-sm">
+                            {student.photoURL ? (
+                                <img 
+                                    src={student.photoURL} 
+                                    alt={student.name}
+                                    className="w-full h-full object-cover"
+                                />
+                            ) : (
+                                <img 
+                                    src={getPlaceholderAvatar(student.name)} 
+                                    alt={student.name}
+                                    className="w-full h-full object-cover"
+                                />
+                            )}
+                        </div>
+                    </div>
                 </div>
                 <div className="space-y-2 text-[10px] mb-4">
                     <InfoField label="Name:" value={student.name} />
@@ -256,8 +327,11 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
           </div>
         </div>
         
+        {/* PAGE BREAK - Forces new page in print */}
+        <div style={{ pageBreakAfter: 'always', breakAfter: 'page', height: '0', display: 'block' }} className="print:block hidden" aria-hidden="true"></div>
+        
         {/* PAGE 2: Back Page */}
-  <div id="page-2" className="page-content bg-white shadow-lg p-8 mx-auto" style={{width: '11in', minHeight: '8.5in'}}>
+  <div id="page-2" className="page-content bg-white shadow-lg p-8 mx-auto" style={{width: '11in', minHeight: '8.5in', pageBreakBefore: 'always', breakBefore: 'page'}}>
             <div className="grid grid-cols-2 gap-8">
                 <div>
                     <h2 className="text-center font-bold text-xs mb-1">REPORT ON LEARNING PROGRESS ACHIEVEMENT</h2>

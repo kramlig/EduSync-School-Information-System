@@ -48,6 +48,7 @@ export const useSchoolData = (): SchoolDataState & {
     updateGrade: (studentId: string, learningAreaId: string, quarter: 'q1'|'q2'|'q3'|'q4', value?: number, subSubject?: string) => void;
     updateCoreValueGrade: (studentId: string, coreValueId: string, quarter: 'q1'|'q2'|'q3'|'q4', behavior: string, value: import('../types').CoreValueMarking | '') => void;
     addLearningArea: (area: Omit<LearningArea, 'id'>) => void;
+    updateLearningArea: (learningAreaId: string, area: Omit<LearningArea, 'id'>) => void;
     deleteLearningArea: (learningAreaId: string) => void;
         updateSettings: (settings: SchoolSettings) => void;
         updateAttendance: (studentId: string, date: string, status: AttendanceStatus) => void;
@@ -227,6 +228,20 @@ export const useSchoolData = (): SchoolDataState & {
         setState(prev => ({ ...prev, learningAreas: [...prev.learningAreas, newArea] }));
     dbService.put('learningAreas', newArea);
     try { const db = getFirestoreInstance(); const toWrite = { ...newArea, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'learningAreas', newArea.id) as any, toWrite).catch(() => {}); } catch {}
+    };
+
+    const updateLearningArea = (learningAreaId: string, area: Omit<LearningArea, 'id'>) => {
+        const updatedArea: LearningArea = { id: learningAreaId, ...area };
+        setState(prev => ({
+            ...prev,
+            learningAreas: prev.learningAreas.map(la => la.id === learningAreaId ? updatedArea : la)
+        }));
+        dbService.put('learningAreas', updatedArea);
+        try { 
+            const db = getFirestoreInstance(); 
+            const toWrite = { ...updatedArea, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; 
+            fsSetDoc(fsDoc(db as any, 'learningAreas', learningAreaId) as any, toWrite).catch(() => {}); 
+        } catch {}
     };
 
     const deleteLearningArea = (learningAreaId: string) => {
@@ -838,6 +853,75 @@ export const useSchoolData = (): SchoolDataState & {
                         console.warn('[DataSync] Announcement merge skipped due to error:', e);
                     }
 
+                    // MIGRATION: Fix grade levels for existing learning areas in IndexedDB
+                    const gradeLevelMigrationMap: Record<string, number[]> = {
+                        'la_filipino': [7, 8, 9, 10],
+                        'la_filipino_elem': [1, 2, 3, 4, 5, 6],
+                        'la_filipino_jhs': [7, 8, 9, 10],
+                        'la_english': [7, 8, 9, 10],
+                        'la_english_elem': [1, 2, 3, 4, 5, 6],
+                        'la_english_jhs': [7, 8, 9, 10],
+                        'la_math': [7, 8, 9, 10],
+                        'la_math_elem': [1, 2, 3, 4, 5, 6],
+                        'la_math_jhs': [7, 8, 9, 10],
+                        'la_science': [7, 8, 9, 10],
+                        'la_science_elem': [3, 4, 5, 6], // Science starts Grade 3
+                        'la_science_jhs': [7, 8, 9, 10],
+                        'la_ap': [7, 8, 9, 10],
+                        'la_ap_elem': [1, 2, 3, 4, 5, 6],
+                        'la_ap_jhs': [7, 8, 9, 10],
+                        'la_epp': [7, 8, 9, 10],
+                        'la_tle_jhs': [7, 8, 9, 10],
+                        'la_mapeh': [7, 8, 9, 10],
+                        'la_mapeh_elem': [1, 2, 3, 4, 5, 6],
+                        'la_mapeh_jhs': [7, 8, 9, 10],
+                        'la_esp_elem': [1, 2, 3, 4, 5, 6],
+                        'la_esp_jhs': [7, 8, 9, 10],
+                        'la_mtb_elem': [1, 2, 3], // MTB only Grades 1-3
+                    };
+                    
+                    let migratedCount = 0;
+                    const migratedAreas: LearningArea[] = [];
+                    for (const area of learningAreas) {
+                        if (gradeLevelMigrationMap[area.id]) {
+                            const correctGradeLevels = gradeLevelMigrationMap[area.id];
+                            const currentGradeLevels = area.gradeLevel || [];
+                            const needsMigration = JSON.stringify(currentGradeLevels.sort()) !== JSON.stringify(correctGradeLevels.sort());
+                            
+                            if (needsMigration) {
+                                migratedCount++;
+                                const migratedArea = { ...area, gradeLevel: correctGradeLevels };
+                                migratedAreas.push(migratedArea);
+                                console.log(`[Migration] Fixing grade levels for "${area.name}" (${area.id}): ${currentGradeLevels.join(', ')} → ${correctGradeLevels.join(', ')}`);
+                            }
+                        }
+                    }
+                    
+                    if (migratedCount > 0) {
+                        console.warn(`[Migration] Fixed grade levels for ${migratedCount} learning areas. Updating IndexedDB and Firestore...`);
+                        // Update IndexedDB
+                        try {
+                            await dbService.bulkPut('learningAreas', migratedAreas);
+                        } catch (e) {
+                            console.error('[Migration] Failed to update IndexedDB:', e);
+                        }
+                        // Update Firestore
+                        try {
+                            const db = getFirestoreInstance();
+                            for (const area of migratedAreas) {
+                                const toWrite = { ...area, updatedAt: fsServerTimestamp(), updatedBy: 'migration' } as any;
+                                await fsSetDoc(fsDoc(db as any, 'learningAreas', area.id) as any, toWrite);
+                            }
+                        } catch (e) {
+                            console.error('[Migration] Failed to update Firestore:', e);
+                        }
+                        // Update local state
+                        learningAreas = learningAreas.map(area => {
+                            const migrated = migratedAreas.find(m => m.id === area.id);
+                            return migrated || area;
+                        });
+                    }
+
                     setState({ loading: false, error: null, students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings: settings[0] || MOCK_SETTINGS, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements, monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG });
                 } else {
                     console.log("IndexedDB is empty. Fetching from Firestore...");
@@ -888,6 +972,53 @@ export const useSchoolData = (): SchoolDataState & {
                     if (sanitizedData.learningAreas.length === 0) {
                         sanitizedData.learningAreas = DEFAULT_LEARNING_AREAS;
                         console.warn('[DataSync] Seeded default learning areas (none found in Firestore).');
+                    }
+
+                    // MIGRATION: Fix grade levels for existing learning areas
+                    const gradeLevelMigrationMap: Record<string, number[]> = {
+                        'la_filipino': [7, 8, 9, 10],
+                        'la_filipino_elem': [1, 2, 3, 4, 5, 6],
+                        'la_filipino_jhs': [7, 8, 9, 10],
+                        'la_english': [7, 8, 9, 10],
+                        'la_english_elem': [1, 2, 3, 4, 5, 6],
+                        'la_english_jhs': [7, 8, 9, 10],
+                        'la_math': [7, 8, 9, 10],
+                        'la_math_elem': [1, 2, 3, 4, 5, 6],
+                        'la_math_jhs': [7, 8, 9, 10],
+                        'la_science': [7, 8, 9, 10],
+                        'la_science_elem': [3, 4, 5, 6], // Science starts Grade 3
+                        'la_science_jhs': [7, 8, 9, 10],
+                        'la_ap': [7, 8, 9, 10],
+                        'la_ap_elem': [1, 2, 3, 4, 5, 6],
+                        'la_ap_jhs': [7, 8, 9, 10],
+                        'la_epp': [7, 8, 9, 10],
+                        'la_tle_jhs': [7, 8, 9, 10],
+                        'la_mapeh': [7, 8, 9, 10],
+                        'la_mapeh_elem': [1, 2, 3, 4, 5, 6],
+                        'la_mapeh_jhs': [7, 8, 9, 10],
+                        'la_esp_elem': [1, 2, 3, 4, 5, 6],
+                        'la_esp_jhs': [7, 8, 9, 10],
+                        'la_mtb_elem': [1, 2, 3], // MTB only Grades 1-3
+                    };
+                    
+                    let migratedCount = 0;
+                    sanitizedData.learningAreas = sanitizedData.learningAreas.map(area => {
+                        if (gradeLevelMigrationMap[area.id]) {
+                            const correctGradeLevels = gradeLevelMigrationMap[area.id];
+                            const currentGradeLevels = area.gradeLevel || [];
+                            const needsMigration = JSON.stringify(currentGradeLevels.sort()) !== JSON.stringify(correctGradeLevels.sort());
+                            
+                            if (needsMigration) {
+                                migratedCount++;
+                                console.log(`[Migration] Fixing grade levels for "${area.name}" (${area.id}): ${currentGradeLevels.join(', ')} → ${correctGradeLevels.join(', ')}`);
+                                return { ...area, gradeLevel: correctGradeLevels };
+                            }
+                        }
+                        return area;
+                    });
+                    
+                    if (migratedCount > 0) {
+                        console.warn(`[Migration] Fixed grade levels for ${migratedCount} learning areas. Updating database...`);
                     }
 
                     // Incremental, instrumented writes so one failure doesn't abort all.
@@ -1064,19 +1195,211 @@ export const useSchoolData = (): SchoolDataState & {
         };
     }, []);
 
-    return { ...state, addStudent, updateStudent, deleteStudent, addSchedule, updateSchedule, deleteSchedule, addAssignment, updateAssignment, deleteAssignment, updateAssignmentGrade, submitAssignment, addLessonPlan, updateLessonPlan, deleteLessonPlan, updateGrade, updateCoreValueGrade, addLearningArea, deleteLearningArea, updateSettings, updateAttendance, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addAnnouncement, updateAnnouncement, deleteAnnouncement, refreshStores };
+    return { ...state, addStudent, updateStudent, deleteStudent, addSchedule, updateSchedule, deleteSchedule, addAssignment, updateAssignment, deleteAssignment, updateAssignmentGrade, submitAssignment, addLessonPlan, updateLessonPlan, deleteLessonPlan, updateGrade, updateCoreValueGrade, addLearningArea, updateLearningArea, deleteLearningArea, updateSettings, updateAttendance, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addAnnouncement, updateAnnouncement, deleteAnnouncement, refreshStores };
 };
 
 export type SchoolDataHook = ReturnType<typeof useSchoolData>;
 
 const DEFAULT_LEARNING_AREAS: LearningArea[] = [
-    { id: 'la_filipino', name: 'Filipino', credits: 3 },
-    { id: 'la_english', name: 'English', credits: 3 },
-    { id: 'la_math', name: 'Mathematics', credits: 3 },
-    { id: 'la_science', name: 'Science', credits: 3 },
-    { id: 'la_ap', name: 'Araling Panlipunan', credits: 3 },
-    { id: 'la_epp', name: 'EPP/TLE', credits: 2 },
-    { id: 'la_mapeh', name: 'MAPEH', credits: 4, isComposite: true, subSubjects: ['Music', 'Arts', 'PE', 'Health'] },
+    // ELEMENTARY (Grades 1-6)
+    { 
+        id: 'la_filipino_elem', 
+        name: 'Filipino', 
+        credits: 3,
+        category: 'core',
+        gradeLevel: [1, 2, 3, 4, 5, 6],
+        department: 'Language',
+        kToTwelveCode: 'FIL',
+        isActive: true,
+        order: 1,
+        description: 'Filipino for Elementary'
+    },
+    { 
+        id: 'la_english_elem', 
+        name: 'English', 
+        credits: 3,
+        category: 'core',
+        gradeLevel: [1, 2, 3, 4, 5, 6],
+        department: 'Language',
+        kToTwelveCode: 'ENG',
+        isActive: true,
+        order: 2,
+        description: 'English for Elementary'
+    },
+    { 
+        id: 'la_math_elem', 
+        name: 'Mathematics', 
+        credits: 3,
+        category: 'core',
+        gradeLevel: [1, 2, 3, 4, 5, 6],
+        department: 'STEM',
+        kToTwelveCode: 'MATH',
+        isActive: true,
+        order: 3,
+        description: 'Mathematics for Elementary'
+    },
+    { 
+        id: 'la_science_elem', 
+        name: 'Science', 
+        credits: 3,
+        category: 'core',
+        gradeLevel: [3, 4, 5, 6], // Science starts at Grade 3
+        department: 'STEM',
+        kToTwelveCode: 'SCI',
+        isActive: true,
+        order: 4,
+        description: 'Science for Elementary (Grades 3-6 only)'
+    },
+    { 
+        id: 'la_ap_elem', 
+        name: 'Araling Panlipunan', 
+        credits: 3,
+        category: 'core',
+        gradeLevel: [1, 2, 3, 4, 5, 6],
+        department: 'Humanities',
+        kToTwelveCode: 'AP',
+        isActive: true,
+        order: 5,
+        description: 'Araling Panlipunan for Elementary'
+    },
+    { 
+        id: 'la_esp_elem', 
+        name: 'Edukasyon sa Pagpapakatao (EsP)', 
+        credits: 2,
+        category: 'core',
+        gradeLevel: [1, 2, 3, 4, 5, 6],
+        department: 'Values Education',
+        kToTwelveCode: 'ESP',
+        isActive: true,
+        order: 6,
+        description: 'Values Education for Elementary'
+    },
+    { 
+        id: 'la_mapeh_elem', 
+        name: 'MAPEH', 
+        credits: 4, 
+        isComposite: true, 
+        subSubjects: ['Music', 'Arts', 'PE', 'Health'],
+        category: 'specialized',
+        gradeLevel: [1, 2, 3, 4, 5, 6],
+        department: 'Arts & Sports',
+        kToTwelveCode: 'MAPEH',
+        isActive: true,
+        order: 7,
+        description: 'Music, Arts, Physical Education, Health for Elementary'
+    },
+    { 
+        id: 'la_mtb_elem', 
+        name: 'Mother Tongue-Based Multilingual Education (MTB-MLE)', 
+        credits: 3,
+        category: 'core',
+        gradeLevel: [1, 2, 3], // MTB only for Grades 1-3
+        department: 'Language',
+        kToTwelveCode: 'MTB',
+        isActive: true,
+        order: 8,
+        description: 'Mother Tongue instruction for Grades 1-3'
+    },
+
+    // JUNIOR HIGH (Grades 7-10)
+    { 
+        id: 'la_filipino_jhs', 
+        name: 'Filipino', 
+        credits: 3,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Language',
+        kToTwelveCode: 'FIL',
+        isActive: true,
+        order: 11,
+        description: 'Filipino for Junior High School'
+    },
+    { 
+        id: 'la_english_jhs', 
+        name: 'English', 
+        credits: 3,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Language',
+        kToTwelveCode: 'ENG',
+        isActive: true,
+        order: 12,
+        description: 'English for Junior High School'
+    },
+    { 
+        id: 'la_math_jhs', 
+        name: 'Mathematics', 
+        credits: 3,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'STEM',
+        kToTwelveCode: 'MATH',
+        isActive: true,
+        order: 13,
+        description: 'Mathematics for Junior High School'
+    },
+    { 
+        id: 'la_science_jhs', 
+        name: 'Science', 
+        credits: 3,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'STEM',
+        kToTwelveCode: 'SCI',
+        isActive: true,
+        order: 14,
+        description: 'Science for Junior High School'
+    },
+    { 
+        id: 'la_ap_jhs', 
+        name: 'Araling Panlipunan', 
+        credits: 3,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Humanities',
+        kToTwelveCode: 'AP',
+        isActive: true,
+        order: 15,
+        description: 'Araling Panlipunan for Junior High School'
+    },
+    { 
+        id: 'la_tle_jhs', 
+        name: 'Technology and Livelihood Education (TLE)', 
+        credits: 2,
+        category: 'tle',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Technical-Vocational',
+        kToTwelveCode: 'TLE',
+        isActive: true,
+        order: 16,
+        description: 'TLE for Junior High School'
+    },
+    { 
+        id: 'la_mapeh_jhs', 
+        name: 'MAPEH', 
+        credits: 4, 
+        isComposite: true, 
+        subSubjects: ['Music', 'Arts', 'PE', 'Health'],
+        category: 'specialized',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Arts & Sports',
+        kToTwelveCode: 'MAPEH',
+        isActive: true,
+        order: 17,
+        description: 'Music, Arts, Physical Education, Health for Junior High School'
+    },
+    { 
+        id: 'la_esp_jhs', 
+        name: 'Edukasyon sa Pagpapakatao (EsP)', 
+        credits: 2,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Values Education',
+        kToTwelveCode: 'ESP',
+        isActive: true,
+        order: 18,
+        description: 'Values Education for Junior High School'
+    }
 ];
 
 // Default number of school days per month (Jun to Apr)

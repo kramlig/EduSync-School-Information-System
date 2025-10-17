@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { initializeFirestore, CACHE_SIZE_UNLIMITED, connectFirestoreEmulator, enableIndexedDbPersistence, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { getAuth, connectAuthEmulator, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 // Read config from Vite env (VITE_ prefix)
 const firebaseConfig = {
@@ -34,6 +35,7 @@ const db = initializeFirestore(app, {
   ...(forceLongPolling ? { experimentalForceLongPolling: true } : { experimentalAutoDetectLongPolling: true }),
 } as any);
 const auth = getAuth(app);
+const storage = getStorage(app);
 
 // Optional: connect to emulators if requested or auto-detected
 try {
@@ -80,6 +82,27 @@ try {
     }
     connectAuthEmulator(auth as any, `http://${host}:${port}`, { disableWarnings: true });
     console.info(`[Firebase] Auth emulator: ${host}:${port}`);
+  }
+  // Storage emulator
+  const useStorageFlag = String(import.meta.env.VITE_USE_STORAGE_EMULATOR || '').toLowerCase() === 'true';
+  const storageHostEnv = import.meta.env.VITE_STORAGE_EMULATOR_HOST as string | undefined;
+  const storagePortEnv = import.meta.env.VITE_STORAGE_EMULATOR_PORT as string | undefined;
+  const shouldUseStorageEmu = useStorageFlag || !!storageHostEnv || looksLocal;
+  if (shouldUseStorageEmu) {
+    let host = '127.0.0.1';
+    let port = 9199;
+    if (storageHostEnv && storageHostEnv.includes(':')) {
+      const [h, p] = storageHostEnv.split(':');
+      host = h || host;
+      const parsed = Number(p);
+      if (!Number.isNaN(parsed)) port = parsed;
+    } else {
+      host = storageHostEnv || host;
+      const parsed = Number(storagePortEnv || '9199');
+      if (!Number.isNaN(parsed)) port = parsed;
+    }
+    connectStorageEmulator(storage, host, port);
+    console.info(`[Firebase] Storage emulator: ${host}:${port}`);
   }
 } catch (e) {
   console.warn('[Firebase] Emulator connection failed or not configured:', e);
@@ -129,5 +152,5 @@ try {
 
 // Export services
 export const getFirestoreInstance = () => db;
-export { auth };
+export { auth, storage };
 export const waitForAuthReady = async () => { await authReady; };

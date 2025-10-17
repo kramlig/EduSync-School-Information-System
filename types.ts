@@ -10,6 +10,57 @@ export interface Student {
   lrn?: string;
   sectionId?: string;
   password?: string;
+  
+  // Phase 1 enhancements
+  status?: 'active' | 'inactive' | 'transferred' | 'graduated' | 'dropped';
+  parentIds?: string[];      // Link to parent accounts
+  remarks?: string;          // General notes/remarks about the student
+  middleName?: string;       // For complete name
+  lastName?: string;         // Separate last name
+  firstName?: string;        // Separate first name
+  
+  // Phase 2: Contact & Address Information
+  contactNumber?: string;    // Student's phone number
+  address?: string;          // Complete residential address
+  barangay?: string;         // Barangay/Village
+  city?: string;             // City/Municipality
+  province?: string;         // Province
+  zipCode?: string;          // Postal/ZIP code
+  
+  // Phase 2: Guardian Information
+  guardianName?: string;     // Primary guardian full name
+  guardianRelationship?: string; // Mother, Father, Grandparent, etc.
+  guardianContactNumber?: string;
+  guardianEmail?: string;
+  guardianOccupation?: string;
+  guardianAddress?: string;  // If different from student
+  
+  // Secondary guardian (optional)
+  guardian2Name?: string;
+  guardian2Relationship?: string;
+  guardian2ContactNumber?: string;
+  guardian2Email?: string;
+  
+  // Phase 2: Health & Special Needs
+  healthNotes?: string;      // Medical conditions, allergies, etc.
+  specialNeeds?: string;     // Learning accommodations, disabilities
+  bloodType?: string;        // A+, B+, O+, AB+, A-, B-, O-, AB-
+  
+  // Phase 2: Previous School Information
+  previousSchool?: string;   // Name of previous school
+  previousSchoolAddress?: string;
+  yearLastAttended?: string; // Last year attended previous school
+  
+  // Phase 2: Additional Academic Info
+  nationality?: string;      // Citizenship
+  religion?: string;         // Religious affiliation
+  motherTongue?: string;     // First language/dialect
+  placeOfBirth?: string;     // Birth place
+  
+  // Photo Management
+  photoURL?: string;         // Firebase Storage download URL
+  photoPath?: string;        // Storage path for deletion/update
+  photoUploadedAt?: string;  // ISO timestamp of last upload
 }
 
 export type StudentUser = Omit<Student, 'password'>;
@@ -49,11 +100,28 @@ export interface Section {
 }
 
 export interface LearningArea {
-  id:string;
+  id: string;
   name: string;
   credits: number;
   isComposite?: boolean;
   subSubjects?: string[];
+  
+  // Phase 1: Essential metadata for better organization
+  category?: 'core' | 'specialized' | 'elective' | 'tle' | 'sports';
+  gradeLevel?: number[];      // [7, 8, 9, 10] - applicable grade levels
+  isActive?: boolean;          // Soft delete - default true
+  department?: string;         // 'Language', 'STEM', 'Humanities', 'Arts', 'Sports'
+  order?: number;              // Display order in lists/reports
+  
+  // Phase 2: DepEd K-12 Curriculum compliance
+  kToTwelveCode?: string;      // Official DepEd code: "FIL7", "ENG8", etc.
+  semesterBased?: boolean;     // For SHS subjects (1st/2nd semester)
+  trackRequired?: string[];    // ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL'] for SHS
+  
+  // Phase 3: Advanced features
+  prerequisite?: string;       // ID of required prerequisite subject
+  description?: string;        // Full subject description
+  hoursPerWeek?: number;       // For scheduling
 }
 
 export type SubGradeRecord = Record<string, number>;
