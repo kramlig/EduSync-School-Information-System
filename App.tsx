@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
@@ -29,7 +29,20 @@ import LoginScreen from './components/LoginScreen';
 import FullScreenLoader from './components/FullScreenLoader';
 
 const App: React.FC = () => {
-  try { console.log('[App] mounted'); } catch {}
+  const mountCountRef = useRef(0);
+  const renderCountRef = useRef(0);
+  
+  useEffect(() => {
+    mountCountRef.current++;
+    console.log(`[App] MOUNTED - mount #${mountCountRef.current}`);
+    return () => {
+      console.log(`[App] UNMOUNTED - mount #${mountCountRef.current}`);
+    };
+  }, []);
+  
+  renderCountRef.current++;
+  console.log(`[App] render #${renderCountRef.current}`);
+  
   // Ensure we have a Firebase Auth user for Firestore writes (rules require request.auth != null)
   const [authReady, setAuthReady] = useState(false);
   useEffect(() => {
