@@ -140,12 +140,14 @@ export interface Assignment {
 }
 
 export interface StudentAssignmentGrade {
+  id?: string; // Firestore document id (composite: sag_{assignmentId}_{studentId})
   assignmentId: string;
   studentId: string;
   score: number | null;
   submissionDate: string | null;
   filePath: string | null;
   feedback: string | null;
+  updatedAt?: number; // client-side timestamp for last update
 }
 
 export interface LessonResource {

@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { initializeFirestore, CACHE_SIZE_UNLIMITED, connectFirestoreEmulator, enableIndexedDbPersistence } from 'firebase/firestore';
-import { getAuth, connectAuthEmulator, signInAnonymously } from 'firebase/auth';
+import { initializeFirestore, CACHE_SIZE_UNLIMITED, connectFirestoreEmulator, enableIndexedDbPersistence, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
+import { getAuth, connectAuthEmulator, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
 // Read config from Vite env (VITE_ prefix)
 const firebaseConfig = {
@@ -22,15 +22,17 @@ for (const key of required) {
 }
 
 // Initialize app
+// Ensure projectId is set (emulator requires a non-empty projectId)
+if (!firebaseConfig.projectId) {
+  (firebaseConfig as any).projectId = 'edusync-local';
+}
 const app = initializeApp(firebaseConfig);
+const forceLongPolling = String(import.meta.env.VITE_FIRESTORE_FORCE_LONG_POLLING || '').toLowerCase() === 'true';
 const db = initializeFirestore(app, {
   cacheSizeBytes: CACHE_SIZE_UNLIMITED,
-});
-// Attempt to enable multi-tab IndexedDB persistence for better cross-tab UX
-enableIndexedDbPersistence(db as any).catch((err) => {
-  // eslint-disable-next-line no-console
-  console.warn('[Firebase] Persistence not enabled:', err && err.message ? err.message : err);
-});
+  // When ad blockers or corporate proxies interfere with WebChannel, long-polling avoids blocks
+  ...(forceLongPolling ? { experimentalForceLongPolling: true } : { experimentalAutoDetectLongPolling: true }),
+} as any);
 const auth = getAuth(app);
 
 // Optional: connect to emulators if requested or auto-detected
@@ -44,7 +46,7 @@ try {
   const shouldUseFsEmu = useFsEmuFlag || !!fsHostEnv || looksLocal;
   if (shouldUseFsEmu) {
     let host = '127.0.0.1';
-    let port = 8080;
+    let port = 8085; // project default in firebase.json
     if (fsHostEnv && fsHostEnv.includes(':')) {
       const [h, p] = fsHostEnv.split(':');
       host = h || host;
@@ -52,7 +54,7 @@ try {
       if (!Number.isNaN(parsed)) port = parsed;
     } else {
       host = fsHostEnv || host;
-      const parsed = Number(fsPortEnv || '8080');
+      const parsed = Number(fsPortEnv || '8085');
       if (!Number.isNaN(parsed)) port = parsed;
     }
     connectFirestoreEmulator(db as any, host, port);
@@ -83,19 +85,49 @@ try {
   console.warn('[Firebase] Emulator connection failed or not configured:', e);
 }
 
-// Ensure we have an authenticated user for write-permission rules.
-// This uses anonymous auth to satisfy `request.auth != null` without affecting app roles.
-try {
-  if (!auth.currentUser) {
-    // Note: This requires Anonymous sign-in to be enabled in Firebase Console for non-emulator projects.
-    signInAnonymously(auth).catch((err) => {
-      console.warn('[Firebase] Anonymous sign-in failed (writes may 403 if rules require auth):', err?.message || err);
-    });
+// Attempt to enable multi-tab IndexedDB persistence for better cross-tab UX
+// Fallback to single-tab persistence if multi-tab is not available (e.g., private mode)
+(async () => {
+  try {
+    await enableMultiTabIndexedDbPersistence(db as any);
+    console.info('[Firebase] Multi-tab IndexedDB persistence enabled.');
+  } catch (e: any) {
+    try {
+      await enableIndexedDbPersistence(db as any);
+      console.info('[Firebase] Single-tab IndexedDB persistence enabled (multi-tab unavailable).');
+    } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.warn('[Firebase] Persistence not enabled:', err && err.message ? err.message : err);
+    }
   }
+})();
+
+// Ensure we have an authenticated user for write-permission rules.
+// Use a readiness promise so other modules can await before writing.
+let authReadyResolve: undefined | (() => void);
+let authReadyResolved = false;
+const authReady: Promise<void> = new Promise((resolve) => { authReadyResolve = () => { if (!authReadyResolved) { authReadyResolved = true; resolve(); console.info('[Firebase] Auth ready:', auth.currentUser?.uid || '(anon)'); } }; });
+
+try {
+  onAuthStateChanged(auth, (user) => {
+    if (user && authReadyResolve) { try { authReadyResolve(); } catch {} }
+  });
+  (async () => {
+    try {
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+    } catch (err) {
+      console.warn('[Firebase] Anonymous sign-in failed (writes may 403 if rules require auth):', (err as any)?.message || err);
+    } finally {
+      if (auth.currentUser && authReadyResolve) { try { authReadyResolve(); } catch {} }
+    }
+  })();
 } catch (e) {
-  console.warn('[Firebase] Anonymous auth check failed:', e);
+  console.warn('[Firebase] Anonymous auth setup failed:', e);
 }
 
 // Export services
 export const getFirestoreInstance = () => db;
 export { auth };
+export const waitForAuthReady = async () => { await authReady; };

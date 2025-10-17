@@ -10,6 +10,7 @@
     "@google/genai": "^0.14.0",
     "cors": "^2.8.5",
     "edusync-functions": "file:",
+    "edusync-prod": "file:..",
     "firebase-admin": "^11.10.1",
     "firebase-functions": "^5.1.0"
   }

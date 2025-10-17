@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { Assignment, Section, LearningArea, Student, StudentAssignmentGrade, AuthUser, StudentUser, ParentUser } from '../types';
+import type { Assignment, StudentAssignmentGrade, AuthUser, StudentUser, ParentUser } from '../types';
 import Modal from './Modal';
 import { PencilIcon, TrashIcon, DocumentArrowDownIcon, DocumentArrowUpIcon } from './icons';
 
@@ -56,7 +56,7 @@ const AssignmentsView: React.FC<{
     const visibleSections = useMemo(() => {
         if (!isStaff) return [];
         if (['admin', 'principal', 'registrar'].includes(authUser.role)) return sections;
-        const teacherAdviserSectionId = sections.find(s => s.adviserId === authUser.id)?.id;
+    // const teacherAdviserSectionId = sections.find(s => s.adviserId === authUser.id)?.id;
         const assignedLearningAreaIds = new Set(authUser.assignments?.map(a => a.learningAreaId));
         return sections.filter(s => s.adviserId === authUser.id || assignedLearningAreaIds.size > 0);
     }, [sections, authUser, isStaff]);
@@ -129,7 +129,7 @@ const AssignmentsView: React.FC<{
         e.preventDefault();
         if (!assignmentToEdit) return;
         
-        const { id, title, description, totalPoints, dueDate, sectionId, learningAreaId } = assignmentToEdit;
+    const { id, title, totalPoints, dueDate, sectionId, learningAreaId } = assignmentToEdit;
         if (!title || !totalPoints || !dueDate || !sectionId || !learningAreaId) {
             alert('Please fill all fields'); return;
         }
@@ -246,6 +246,7 @@ const AssignmentsView: React.FC<{
                                                     </td>
                                                     <td className="p-2 text-center">
                                                         <input
+                                                            key={`${selectedAssignment.id}-${student.id}-${grade?.score ?? ''}`}
                                                             type="number"
                                                             defaultValue={grade?.score ?? ''}
                                                             onBlur={(e) => handleScoreChange(student.id, e.target.value === '' ? null : parseInt(e.target.value), grade?.feedback ?? null)}
@@ -333,7 +334,7 @@ const AssignmentsView: React.FC<{
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {laAssignments.map(assignment => {
+                                    {laAssignments.map((assignment: Assignment) => {
                                         const grade = studentGradeMap.get(assignment.id);
                                         const status = getStatus(assignment, grade);
                                         return (

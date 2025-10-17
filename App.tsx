@@ -27,8 +27,10 @@ import StudentDashboard from './components/StudentDashboard';
 import ParentDashboard from './components/ParentDashboard';
 import LoginScreen from './components/LoginScreen';
 import FullScreenLoader from './components/FullScreenLoader';
+import DevSyncStatus from './components/DevSyncStatus';
 
 const App: React.FC = () => {
+  try { console.log('[App] mounted'); } catch {}
   // Ensure we have a Firebase Auth user for Firestore writes (rules require request.auth != null)
   const [authReady, setAuthReady] = useState(false);
   useEffect(() => {
@@ -225,6 +227,9 @@ const App: React.FC = () => {
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </main>
+          {String((import.meta as any).env?.VITE_USE_FIREBASE_EMULATOR || '').toLowerCase() === 'true' && (
+            <DevSyncStatus />
+          )}
         </div>
       </div>
     </Router>
