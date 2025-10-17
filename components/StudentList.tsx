@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { SchoolDataState } from '../hooks/useSchoolData';
 import type { Student, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
+import StudentProfile from './StudentProfile';
 import { UserCircleIcon, PencilIcon, TrashIcon } from './icons';
 import { useDebounce } from '../hooks/useDebounce';
 
@@ -15,22 +16,10 @@ interface StudentListProps {
   session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
-const calculateAge = (dateOfBirth?: string): number | string => {
-  if (!dateOfBirth) return 'N/A';
-  const birthDate = new Date(dateOfBirth);
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const m = today.getMonth() - birthDate.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
-  }
-  return age;
-};
-
 const ITEMS_PER_PAGE = 25;
 
 const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
-  const { students, teachers, sections, addStudent, settings, updateStudent, deleteStudent, substituteAssignments, classSchedules } = schoolData;
+  const { students, teachers, sections, addStudent, settings, updateStudent, deleteStudent, grades, attendanceRecords, coreValueGrades, substituteAssignments, classSchedules } = schoolData;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -293,26 +282,19 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
         </div>
       </Modal>
 
-       {selectedStudent && (() => {
-          const section = sections.find(s => s.id === selectedStudent.sectionId);
-          const adviser = teachers.find(t => t.id === section?.adviserId);
-          return (
-            <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Student Profile" size="lg">
-              <div className="space-y-3">
-                <div className="flex justify-between"><span className="font-semibold text-slate-500">Name:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.name}</span></div>
-                <div className="flex justify-between"><span className="font-semibold text-slate-500">Email:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.email}</span></div>
-                <div className="flex justify-between"><span className="font-semibold text-slate-500">LRN:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.lrn ?? 'N/A'}</span></div>
-                <div className="flex justify-between"><span className="font-semibold text-slate-500">Class:</span> <span className="text-slate-800 dark:text-slate-200">{section ? `Grade ${section.gradeLevel} - ${section.name}` : 'N/A'}</span></div>
-                <div className="flex justify-between"><span className="font-semibold text-slate-500">Class Adviser:</span> <span className="text-slate-800 dark:text-slate-200">{adviser?.name ?? 'N/A'}</span></div>
-                <div className="flex justify-between"><span className="font-semibold text-slate-500">Age:</span> <span className="text-slate-800 dark:text-slate-200">{calculateAge(selectedStudent.dateOfBirth)}</span></div>
-                <div className="flex justify-between"><span className="font-semibold text-slate-500">Sex:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.sex ?? 'N/A'}</span></div>
-                <div className="flex justify-between"><span className="font-semibold text-slate-500">School Year:</span> <span className="text-slate-800 dark:text-slate-200">{settings.schoolYear}</span></div>
-                <div className="flex justify-between"><span className="font-semibold text-slate-500">Enrollment Date:</span> <span className="text-slate-800 dark:text-slate-200">{selectedStudent.enrollmentDate}</span></div>
-              </div>
-              <div className="flex justify-end mt-6"><button onClick={() => setIsViewModalOpen(false)} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Close</button></div>
-            </Modal>
-          )
-       })()}
+      {/* Enhanced Student Profile */}
+      {isViewModalOpen && selectedStudent && (
+        <StudentProfile
+          student={selectedStudent}
+          grades={grades}
+          attendanceRecords={attendanceRecords}
+          coreValueGrades={coreValueGrades}
+          sections={sections}
+          teachers={teachers}
+          schoolYear={settings.schoolYear}
+          onClose={() => setIsViewModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

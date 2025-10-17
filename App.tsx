@@ -27,7 +27,6 @@ import StudentDashboard from './components/StudentDashboard';
 import ParentDashboard from './components/ParentDashboard';
 import LoginScreen from './components/LoginScreen';
 import FullScreenLoader from './components/FullScreenLoader';
-import DevSyncStatus from './components/DevSyncStatus';
 
 const App: React.FC = () => {
   try { console.log('[App] mounted'); } catch {}
@@ -140,10 +139,13 @@ const App: React.FC = () => {
   return (
     <Router>
       <div className="flex h-screen bg-slate-100 dark:bg-slate-900">
-        <Sidebar session={session} />
+        <Sidebar 
+          session={session} 
+          schoolName={settings.schoolName}
+          schoolYear={settings.schoolYear}
+        />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header
-            schoolName={settings.schoolName}
             schoolYear={settings.schoolYear}
             session={session}
             onLogout={handleLogout}
@@ -227,9 +229,6 @@ const App: React.FC = () => {
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </main>
-          {String((import.meta as any).env?.VITE_USE_FIREBASE_EMULATOR || '').toLowerCase() === 'true' && (
-            <DevSyncStatus />
-          )}
         </div>
       </div>
     </Router>
