@@ -51,7 +51,8 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   // Feature flag: Enable server-side pagination for large datasets
   // Set to true to load students in batches (recommended for 1000+ students)
   // Set to false to use traditional client-side pagination
-  const USE_SERVER_PAGINATION = students.length > 500;
+  // TEMPORARILY DISABLED - Testing with client-side pagination first
+  const USE_SERVER_PAGINATION = false; // Change to true after testing
 
   // Determine authorized section IDs for teachers
   const authorizedSectionIds = useMemo(() => {
