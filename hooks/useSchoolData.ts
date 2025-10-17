@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Student, LearningArea, Grade, CoreValue, CoreValueGrade, AttendanceRecord, Teacher, Section, SchoolSettings, SubstituteAssignment, ClassSchedule, Assignment, StudentAssignmentGrade, LessonPlan, Parent, Announcement, AttendanceStatus } from '../types';
 import * as dbService from '../src/services/dbService';
 import * as firestoreReader from '../src/services/firestoreReader';
 import type { StoreName } from '../src/services/dbService';
-import { enqueueWrite, startAutoSync, flushQueue } from '../src/services/firestoreSync';
-import { getFirestoreInstance } from '../src/services/firestoreService';
-import { collection as fsCollection, onSnapshot } from 'firebase/firestore';
+import { getFirestoreInstance, auth } from '../src/services/firestoreService';
+import { collection as fsCollection, onSnapshot, getDocs, doc as fsDoc, setDoc as fsSetDoc, deleteDoc as fsDeleteDoc, serverTimestamp as fsServerTimestamp } from 'firebase/firestore';
+import { subscribeCollection, unsubscribeAll } from '../src/services/realtimeStore';
+import { subscribe as bcSubscribe } from '../src/services/broadcast';
 
 const MOCK_SETTINGS: SchoolSettings = {
     schoolName: 'ENRIQUE URENCIA ELEMENTARY SCHOOL',
@@ -70,6 +71,38 @@ export const useSchoolData = (): SchoolDataState & {
     deleteAnnouncement: (id: string) => void;
     refreshStores: (stores: StoreName[] | 'all') => Promise<{ updated: Record<string, number> }>;
 } => {
+    // Track local optimistic edits to avoid being overwritten by polling or snapshots
+    const dirtyGradesRef = useRef<Map<string, number>>(new Map());
+    const dirtySAGRef = useRef<Map<string, number>>(new Map());
+
+    const mergeGrades = (prev: Grade[], incoming: Grade[]): Grade[] => {
+        const prevById = new Map(prev.map(g => [g.id, g] as const));
+        const dirty = dirtyGradesRef.current;
+        const merged = incoming.map(g => dirty.has(g.id) ? (prevById.get(g.id) || g) : g);
+        // include any prev-only docs not present in incoming (defensive)
+        const incomingIds = new Set(incoming.map(g => g.id));
+        for (const g of prev) { if (!incomingIds.has(g.id)) merged.push(g); }
+        return merged;
+    };
+
+    const mergeSAG = (prev: StudentAssignmentGrade[], incoming: StudentAssignmentGrade[]): StudentAssignmentGrade[] => {
+        const prevById = new Map(prev.map(g => [g.id as string, g] as const));
+        const dirty = dirtySAGRef.current;
+        const merged = incoming.map(g => dirty.has(g.id as string) ? (prevById.get(g.id as string) || g) : g);
+        const incomingIds = new Set(incoming.map(g => g.id as string));
+        for (const g of prev) { const id = g.id as string; if (!incomingIds.has(id)) merged.push(g); }
+        return merged;
+    };
+    try {
+        // Mount-time visibility log for debugging
+        const env = (import.meta as any).env || {};
+        console.log('[useSchoolData] mounted', {
+            VITE_USE_FIREBASE_EMULATOR: String(env?.VITE_USE_FIREBASE_EMULATOR || ''),
+            VITE_POLL_SAG: String(env?.VITE_POLL_SAG || ''),
+            VITE_FIRESTORE_FORCE_LONG_POLLING: String(env?.VITE_FIRESTORE_FORCE_LONG_POLLING || ''),
+            DEV: String(env?.DEV || ''),
+        });
+    } catch {}
     const [state, setState] = useState<SchoolDataState & { loading: boolean; error: string | null }>({
         loading: true,
         error: null,
@@ -95,7 +128,11 @@ export const useSchoolData = (): SchoolDataState & {
         const newStudents = [...state.students, newStudent];
         setState(prevState => ({ ...prevState, students: newStudents }));
     dbService.put('students', newStudent); // Add to IndexedDB
-    enqueueWrite('students', newStudent).catch(() => {});
+    try {
+        const db = getFirestoreInstance();
+        const toWrite = { ...newStudent, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any;
+        fsSetDoc(fsDoc(db as any, 'students', newStudent.id) as any, toWrite).catch(() => {});
+    } catch {}
 
         return { success: true };
     };
@@ -104,7 +141,11 @@ export const useSchoolData = (): SchoolDataState & {
         const newStudents = state.students.map(s => s.id === student.id ? student : s);
         setState(prevState => ({ ...prevState, students: newStudents }));
     dbService.put('students', student); // Update in IndexedDB
-    enqueueWrite('students', student).catch(() => {});
+    try {
+        const db = getFirestoreInstance();
+        const toWrite = { ...student, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any;
+        fsSetDoc(fsDoc(db as any, 'students', student.id) as any, toWrite).catch(() => {});
+    } catch {}
     };
 
     const deleteStudent = (studentId: string) => {
@@ -125,9 +166,9 @@ export const useSchoolData = (): SchoolDataState & {
         dbService.remove('students', studentId);
         // Also remove related data from IndexedDB
         dbService.deleteGradesForStudent(studentId);
-        dbService.deleteCoreValueGradesForStudent(studentId);
-        dbService.deleteAttendanceForStudent(studentId);
-        enqueueWrite('students', { id: studentId, __delete: true } as any).catch(() => {});
+    dbService.deleteCoreValueGradesForStudent(studentId);
+    dbService.deleteAttendanceForStudent(studentId);
+    try { const db = getFirestoreInstance(); fsDeleteDoc(fsDoc(db as any, 'students', studentId) as any).catch(() => {}); } catch {}
     };
 
     const computeFinalAndRemarks = (g: Grade): { finalGrade?: number; remarks?: 'Passed'|'Failed' } => {
@@ -166,10 +207,17 @@ export const useSchoolData = (): SchoolDataState & {
             const calc = computeFinalAndRemarks(existing);
             existing.finalGrade = calc.finalGrade;
             existing.remarks = calc.remarks;
+            (existing as any).updatedAt = Date.now();
 
             const nextGrades = [...prev.grades.filter(g => !(g.studentId === studentId && g.learningAreaId === learningAreaId)), existing];
+            try { dirtyGradesRef.current.set(existing.id, Date.now()); } catch {}
             dbService.put('grades', existing);
-            enqueueWrite('grades', existing).catch(() => {});
+            // Direct Firestore write with serverTimestamp and updatedBy
+            try {
+                const db = getFirestoreInstance();
+                const toWrite = { ...existing, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any;
+                fsSetDoc(fsDoc(db as any, 'grades', existing.id) as any, toWrite).catch(() => {});
+            } catch {}
             return { ...prev, grades: nextGrades };
         });
     };
@@ -177,8 +225,8 @@ export const useSchoolData = (): SchoolDataState & {
     const addLearningArea = (area: Omit<LearningArea, 'id'>) => {
         const newArea: LearningArea = { id: `la_${Date.now()}`, ...area };
         setState(prev => ({ ...prev, learningAreas: [...prev.learningAreas, newArea] }));
-        dbService.put('learningAreas', newArea);
-        enqueueWrite('learningAreas', newArea).catch(() => {});
+    dbService.put('learningAreas', newArea);
+    try { const db = getFirestoreInstance(); const toWrite = { ...newArea, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'learningAreas', newArea.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const deleteLearningArea = (learningAreaId: string) => {
@@ -189,7 +237,7 @@ export const useSchoolData = (): SchoolDataState & {
             if ((dbService as any).deleteGradesForLearningArea) {
                 (dbService as any).deleteGradesForLearningArea(learningAreaId);
             }
-            enqueueWrite('learningAreas', { id: learningAreaId, __delete: true } as any).catch(() => {});
+            try { const db = getFirestoreInstance(); fsDeleteDoc(fsDoc(db as any, 'learningAreas', learningAreaId) as any).catch(() => {}); } catch {}
             return { ...prev, learningAreas: nextAreas, grades: nextGrades };
         });
     };
@@ -203,9 +251,9 @@ export const useSchoolData = (): SchoolDataState & {
                 dbService.remove('settings', prevKey).catch(() => {});
             }
         } catch {}
-        dbService.put('settings', next).catch(() => {});
-        // Use deterministic id for remote settings document
-        enqueueWrite('settings', { id: 'default', ...next }).catch(() => {});
+    dbService.put('settings', next).catch(() => {});
+    // Use deterministic id for remote settings document
+    try { const db = getFirestoreInstance(); const toWrite = { id: 'default', ...next, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'settings', 'default') as any, toWrite).catch(() => {}); } catch {}
     };
 
     const updateCoreValueGrade = (studentId: string, coreValueId: string, quarter: 'q1'|'q2'|'q3'|'q4', behavior: string, value: import('../types').CoreValueMarking | '') => {
@@ -231,7 +279,7 @@ export const useSchoolData = (): SchoolDataState & {
             });
             const next = replaced ? updatedList : [...prev.coreValueGrades, nextRecord];
             try { dbService.put('coreValueGrades', nextRecord); } catch {}
-            enqueueWrite('coreValueGrades', nextRecord as any).catch(() => {});
+            try { const db = getFirestoreInstance(); const toWrite = { ...nextRecord, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'coreValueGrades', nextRecord.id) as any, toWrite).catch(() => {}); } catch {}
             return { ...prev, coreValueGrades: next };
         });
     };
@@ -251,7 +299,7 @@ export const useSchoolData = (): SchoolDataState & {
                 record,
             ];
             try { dbService.put('attendanceRecords', record); } catch {}
-            enqueueWrite('attendanceRecords', record as any).catch(() => {});
+            try { const db = getFirestoreInstance(); const toWrite = { ...record, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'attendanceRecords', record.studentId) as any, toWrite).catch(() => {}); } catch {}
             return { ...prev, attendanceRecords: nextRecords };
         });
     };
@@ -260,8 +308,8 @@ export const useSchoolData = (): SchoolDataState & {
     const addParent = (parent: Omit<Parent, 'id'>) => {
         const newParent: Parent = { id: `p_${Date.now()}`, ...parent };
         setState(prev => ({ ...prev, parents: [...prev.parents, newParent] }));
-        try { dbService.put('parents', newParent); } catch {}
-        enqueueWrite('parents', newParent as any).catch(() => {});
+    try { dbService.put('parents', newParent); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...newParent, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'parents', newParent.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const updateParent = (parent: Parent) => {
@@ -269,14 +317,14 @@ export const useSchoolData = (): SchoolDataState & {
             ...prev,
             parents: prev.parents.map(p => p.id === parent.id ? parent : p)
         }));
-        try { dbService.put('parents', parent); } catch {}
-        enqueueWrite('parents', parent as any).catch(() => {});
+    try { dbService.put('parents', parent); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...parent, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'parents', parent.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const deleteParent = (parentId: string) => {
         setState(prev => ({ ...prev, parents: prev.parents.filter(p => p.id !== parentId) }));
-        try { dbService.remove('parents', parentId); } catch {}
-        enqueueWrite('parents', { id: parentId, __delete: true } as any).catch(() => {});
+    try { dbService.remove('parents', parentId); } catch {}
+    try { const db = getFirestoreInstance(); fsDeleteDoc(fsDoc(db as any, 'parents', parentId) as any).catch(() => {}); } catch {}
     };
 
     const assignStudentToParent = (parentId: string, studentId: string) => {
@@ -289,7 +337,7 @@ export const useSchoolData = (): SchoolDataState & {
             };
             const nextParents = prev.parents.map(p => p.id === parentId ? nextParent : p);
             try { dbService.put('parents', nextParent); } catch {}
-            enqueueWrite('parents', nextParent as any).catch(() => {});
+            try { const db = getFirestoreInstance(); const toWrite = { ...nextParent, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'parents', nextParent.id) as any, toWrite).catch(() => {}); } catch {}
             return { ...prev, parents: nextParents };
         });
     };
@@ -304,7 +352,7 @@ export const useSchoolData = (): SchoolDataState & {
             };
             const nextParents = prev.parents.map(p => p.id === parentId ? nextParent : p);
             try { dbService.put('parents', nextParent); } catch {}
-            enqueueWrite('parents', nextParent as any).catch(() => {});
+            try { const db = getFirestoreInstance(); const toWrite = { ...nextParent, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'parents', nextParent.id) as any, toWrite).catch(() => {}); } catch {}
             return { ...prev, parents: nextParents };
         });
     };
@@ -313,34 +361,34 @@ export const useSchoolData = (): SchoolDataState & {
     const addTeacher = (teacher: Omit<Teacher, 'id'>) => {
         const newTeacher: Teacher = { id: `t_${Date.now()}`, ...teacher } as Teacher;
         setState(prev => ({ ...prev, teachers: [...prev.teachers, newTeacher] }));
-        try { dbService.put('teachers', newTeacher); } catch {}
-        enqueueWrite('teachers', newTeacher as any).catch(() => {});
+    try { dbService.put('teachers', newTeacher); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...newTeacher, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'teachers', newTeacher.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const updateTeacher = (teacher: Teacher) => {
         setState(prev => ({ ...prev, teachers: prev.teachers.map(t => t.id === teacher.id ? teacher : t) }));
-        try { dbService.put('teachers', teacher); } catch {}
-        enqueueWrite('teachers', teacher as any).catch(() => {});
+    try { dbService.put('teachers', teacher); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...teacher, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'teachers', teacher.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const deleteTeacher = (teacherId: string) => {
         setState(prev => ({ ...prev, teachers: prev.teachers.filter(t => t.id !== teacherId) }));
-        try { dbService.remove('teachers', teacherId); } catch {}
-        enqueueWrite('teachers', { id: teacherId, __delete: true } as any).catch(() => {});
+    try { dbService.remove('teachers', teacherId); } catch {}
+    try { const db = getFirestoreInstance(); fsDeleteDoc(fsDoc(db as any, 'teachers', teacherId) as any).catch(() => {}); } catch {}
     };
 
     // Section CRUD
     const addSection = (section: Omit<Section, 'id'>) => {
         const newSection: Section = { id: `sec_${Date.now()}`, ...section } as Section;
         setState(prev => ({ ...prev, sections: [...prev.sections, newSection] }));
-        try { dbService.put('sections', newSection); } catch {}
-        enqueueWrite('sections', newSection as any).catch(() => {});
+    try { dbService.put('sections', newSection); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...newSection, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'sections', newSection.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const updateSection = (section: Section) => {
         setState(prev => ({ ...prev, sections: prev.sections.map(s => s.id === section.id ? section : s) }));
-        try { dbService.put('sections', section); } catch {}
-        enqueueWrite('sections', section as any).catch(() => {});
+    try { dbService.put('sections', section); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...section, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'sections', section.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const deleteSection = (sectionId: string) => {
@@ -350,7 +398,7 @@ export const useSchoolData = (): SchoolDataState & {
             // Persist updates
             try { dbService.remove('sections', sectionId); } catch {}
             updatedStudents.forEach(stu => { try { dbService.put('students', stu); } catch {} });
-            enqueueWrite('sections', { id: sectionId, __delete: true } as any).catch(() => {});
+            try { const db = getFirestoreInstance(); fsDeleteDoc(fsDoc(db as any, 'sections', sectionId) as any).catch(() => {}); } catch {}
             return { ...prev, sections: nextSections, students: updatedStudents };
         });
     };
@@ -359,14 +407,14 @@ export const useSchoolData = (): SchoolDataState & {
     const addAssignment = (assignment: Omit<Assignment, 'id'>) => {
         const newAssignment: Assignment = { id: `asg_${Date.now()}`, ...assignment } as Assignment;
         setState(prev => ({ ...prev, assignments: [...prev.assignments, newAssignment] }));
-        try { dbService.put('assignments', newAssignment); } catch {}
-        enqueueWrite('assignments', newAssignment as any).catch(() => {});
+    try { dbService.put('assignments', newAssignment); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...newAssignment, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'assignments', newAssignment.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const updateAssignment = (assignment: Assignment) => {
         setState(prev => ({ ...prev, assignments: prev.assignments.map(a => a.id === assignment.id ? { ...assignment } : a) }));
-        try { dbService.put('assignments', assignment); } catch {}
-        enqueueWrite('assignments', assignment as any).catch(() => {});
+    try { dbService.put('assignments', assignment); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...assignment, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'assignments', assignment.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const deleteAssignment = (assignmentId: string) => {
@@ -381,7 +429,7 @@ export const useSchoolData = (): SchoolDataState & {
                     try { (dbService as any).remove('studentAssignmentGrades', [assignmentId, sg.studentId] as any); } catch {}
                 }
             }
-            enqueueWrite('assignments', { id: assignmentId, __delete: true } as any).catch(() => {});
+            try { const db = getFirestoreInstance(); fsDeleteDoc(fsDoc(db as any, 'assignments', assignmentId) as any).catch(() => {}); } catch {}
             return { ...prev, assignments: nextAssignments, studentAssignmentGrades: nextGrades };
         });
     };
@@ -390,18 +438,26 @@ export const useSchoolData = (): SchoolDataState & {
         setState(prev => {
             const existing = prev.studentAssignmentGrades.find(g => g.assignmentId === assignmentId && g.studentId === studentId);
             const nextRecord: StudentAssignmentGrade = {
+                id: `sag_${assignmentId}_${studentId}` as any,
                 assignmentId,
                 studentId,
                 score: score ?? null,
                 feedback: feedback ?? null,
                 submissionDate: existing?.submissionDate ?? null,
                 filePath: existing?.filePath ?? null,
+                // client-side timestamp for ordering; can be replaced with serverTimestamp in future
+                updatedAt: Date.now() as any,
             };
             const updated = existing
                 ? prev.studentAssignmentGrades.map(g => (g.assignmentId === assignmentId && g.studentId === studentId) ? nextRecord : g)
                 : [...prev.studentAssignmentGrades, nextRecord];
+            try { dirtySAGRef.current.set(nextRecord.id as string, Date.now()); } catch {}
             try { dbService.put('studentAssignmentGrades', nextRecord as any); } catch {}
-            enqueueWrite('studentAssignmentGrades', nextRecord as any).catch(() => {});
+            try {
+                const db = getFirestoreInstance();
+                const toWrite = { ...nextRecord, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any;
+                fsSetDoc(fsDoc(db as any, 'studentAssignmentGrades', String(nextRecord.id)) as any, toWrite).catch(() => {});
+            } catch {}
             return { ...prev, studentAssignmentGrades: updated };
         });
     };
@@ -411,18 +467,25 @@ export const useSchoolData = (): SchoolDataState & {
             const existing = prev.studentAssignmentGrades.find(g => g.assignmentId === assignmentId && g.studentId === studentId);
             const today = new Date().toISOString().split('T')[0];
             const nextRecord: StudentAssignmentGrade = {
+                id: `sag_${assignmentId}_${studentId}` as any,
                 assignmentId,
                 studentId,
                 score: existing?.score ?? null,
                 feedback: existing?.feedback ?? null,
                 submissionDate: today,
                 filePath: filePath || existing?.filePath || null,
+                updatedAt: Date.now() as any,
             };
             const updated = existing
                 ? prev.studentAssignmentGrades.map(g => (g.assignmentId === assignmentId && g.studentId === studentId) ? nextRecord : g)
                 : [...prev.studentAssignmentGrades, nextRecord];
+            try { dirtySAGRef.current.set(nextRecord.id as string, Date.now()); } catch {}
             try { dbService.put('studentAssignmentGrades', nextRecord as any); } catch {}
-            enqueueWrite('studentAssignmentGrades', nextRecord as any).catch(() => {});
+            try {
+                const db = getFirestoreInstance();
+                const toWrite = { ...nextRecord, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any;
+                fsSetDoc(fsDoc(db as any, 'studentAssignmentGrades', String(nextRecord.id)) as any, toWrite).catch(() => {});
+            } catch {}
             return { ...prev, studentAssignmentGrades: updated };
         });
     };
@@ -431,40 +494,40 @@ export const useSchoolData = (): SchoolDataState & {
     const addLessonPlan = (plan: Omit<LessonPlan, 'id'>) => {
         const newPlan: LessonPlan = { id: `lp_${Date.now()}`, ...plan } as LessonPlan;
         setState(prev => ({ ...prev, lessonPlans: [newPlan, ...prev.lessonPlans] }));
-        try { dbService.put('lessonPlans', newPlan); } catch {}
-        enqueueWrite('lessonPlans', newPlan as any).catch(() => {});
+    try { dbService.put('lessonPlans', newPlan); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...newPlan, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'lessonPlans', newPlan.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const updateLessonPlan = (plan: LessonPlan) => {
         setState(prev => ({ ...prev, lessonPlans: prev.lessonPlans.map(p => p.id === plan.id ? { ...plan } : p) }));
-        try { dbService.put('lessonPlans', plan); } catch {}
-        enqueueWrite('lessonPlans', plan as any).catch(() => {});
+    try { dbService.put('lessonPlans', plan); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...plan, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'lessonPlans', plan.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const deleteLessonPlan = (planId: string) => {
         setState(prev => ({ ...prev, lessonPlans: prev.lessonPlans.filter(p => p.id !== planId) }));
-        try { dbService.remove('lessonPlans', planId); } catch {}
-        enqueueWrite('lessonPlans', { id: planId, __delete: true } as any).catch(() => {});
+    try { dbService.remove('lessonPlans', planId); } catch {}
+    try { const db = getFirestoreInstance(); fsDeleteDoc(fsDoc(db as any, 'lessonPlans', planId) as any).catch(() => {}); } catch {}
     };
 
     // SubstituteAssignment CRUD
     const addSubstituteAssignment = (assignment: Omit<SubstituteAssignment, 'id'>) => {
         const newAssignment: SubstituteAssignment = { id: `sub_${Date.now()}`, ...assignment } as SubstituteAssignment;
         setState(prev => ({ ...prev, substituteAssignments: [newAssignment, ...prev.substituteAssignments] }));
-        try { dbService.put('substituteAssignments', newAssignment); } catch {}
-        enqueueWrite('substituteAssignments', newAssignment as any).catch(() => {});
+    try { dbService.put('substituteAssignments', newAssignment); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...newAssignment, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'substituteAssignments', newAssignment.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const updateSubstituteAssignment = (assignment: SubstituteAssignment) => {
         setState(prev => ({ ...prev, substituteAssignments: prev.substituteAssignments.map(sa => sa.id === assignment.id ? assignment : sa) }));
-        try { dbService.put('substituteAssignments', assignment); } catch {}
-        enqueueWrite('substituteAssignments', assignment as any).catch(() => {});
+    try { dbService.put('substituteAssignments', assignment); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...assignment, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'substituteAssignments', assignment.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const deleteSubstituteAssignment = (assignmentId: string) => {
         setState(prev => ({ ...prev, substituteAssignments: prev.substituteAssignments.filter(sa => sa.id !== assignmentId) }));
-        try { dbService.remove('substituteAssignments', assignmentId); } catch {}
-        enqueueWrite('substituteAssignments', { id: assignmentId, __delete: true } as any).catch(() => {});
+    try { dbService.remove('substituteAssignments', assignmentId); } catch {}
+    try { const db = getFirestoreInstance(); fsDeleteDoc(fsDoc(db as any, 'substituteAssignments', assignmentId) as any).catch(() => {}); } catch {}
     };
 
     // --- Announcements CRUD ---
@@ -478,25 +541,24 @@ export const useSchoolData = (): SchoolDataState & {
             target: a.target,
         };
         setState(prev => ({ ...prev, announcements: [newAnnouncement, ...prev.announcements] }));
-        try { dbService.put('announcements', newAnnouncement); } catch {}
-        enqueueWrite('announcements', newAnnouncement as any).catch(() => {});
+    try { dbService.put('announcements', newAnnouncement); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...newAnnouncement, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'announcements', newAnnouncement.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const updateAnnouncement = (a: Announcement) => {
         setState(prev => ({ ...prev, announcements: prev.announcements.map(x => x.id === a.id ? { ...a } : x) }));
-        try { dbService.put('announcements', a); } catch {}
-        enqueueWrite('announcements', a as any).catch(() => {});
+    try { dbService.put('announcements', a); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...a, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'announcements', a.id) as any, toWrite).catch(() => {}); } catch {}
     };
 
     const deleteAnnouncement = (id: string) => {
         setState(prev => ({ ...prev, announcements: prev.announcements.filter(x => x.id !== id) }));
-        try { dbService.remove('announcements', id); } catch {}
-        enqueueWrite('announcements', { id, __delete: true } as any).catch(() => {});
+    try { dbService.remove('announcements', id); } catch {}
+    try { const db = getFirestoreInstance(); fsDeleteDoc(fsDoc(db as any, 'announcements', id) as any).catch(() => {}); } catch {}
     };
 
     // --- Manual selective refresh from Firestore ---
     const refreshStores = async (stores: StoreName[] | 'all'): Promise<{ updated: Record<string, number> }> => {
-        try { await flushQueue(); } catch {}
         const remote = await firestoreReader.fetchAllData();
         const validate = (item: any, key: string | string[]): boolean => {
             if (Array.isArray(key)) return key.every(k => item.hasOwnProperty(k) && item[k] !== undefined);
@@ -606,8 +668,8 @@ export const useSchoolData = (): SchoolDataState & {
         if (!v.ok) return { success: false, message: v.message };
         const newSchedule: ClassSchedule = { id: `sch_${Date.now()}`, ...sched } as ClassSchedule;
         setState(prev => ({ ...prev, classSchedules: [...prev.classSchedules, newSchedule] }));
-        try { dbService.put('classSchedules', newSchedule); } catch {}
-        enqueueWrite('classSchedules', newSchedule as any).catch(() => {});
+    try { dbService.put('classSchedules', newSchedule); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...newSchedule, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'classSchedules', newSchedule.id) as any, toWrite).catch(() => {}); } catch {}
         return { success: true };
     };
 
@@ -615,15 +677,15 @@ export const useSchoolData = (): SchoolDataState & {
         const v = validateSchedule(sched, sched.id);
         if (!v.ok) return { success: false, message: v.message };
         setState(prev => ({ ...prev, classSchedules: prev.classSchedules.map(s => s.id === sched.id ? { ...sched } : s) }));
-        try { dbService.put('classSchedules', sched); } catch {}
-        enqueueWrite('classSchedules', sched as any).catch(() => {});
+    try { dbService.put('classSchedules', sched); } catch {}
+    try { const db = getFirestoreInstance(); const toWrite = { ...sched, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'anon' } as any; fsSetDoc(fsDoc(db as any, 'classSchedules', sched.id) as any, toWrite).catch(() => {}); } catch {}
         return { success: true };
     };
 
     const deleteSchedule = (scheduleId: string) => {
         setState(prev => ({ ...prev, classSchedules: prev.classSchedules.filter(s => s.id !== scheduleId) }));
-        try { dbService.remove('classSchedules', scheduleId); } catch {}
-        enqueueWrite('classSchedules', { id: scheduleId, __delete: true } as any).catch(() => {});
+    try { dbService.remove('classSchedules', scheduleId); } catch {}
+    try { const db = getFirestoreInstance(); fsDeleteDoc(fsDoc(db as any, 'classSchedules', scheduleId) as any).catch(() => {}); } catch {}
     };
 
 
@@ -680,9 +742,13 @@ export const useSchoolData = (): SchoolDataState & {
                                     };
                                     try {
                                         await dbService.bulkPut('teachers', [seedAdmin as any]);
-                                        // also enqueue to remote emulator for visibility
-                                        enqueueWrite('teachers', seedAdmin as any).catch(() => {});
-                                        enqueueWrite('users', { ...seedAdmin } as any).catch(() => {});
+                                        // also write to remote emulator for visibility
+                                        try {
+                                            const db = getFirestoreInstance();
+                                            const toWrite = { ...seedAdmin, updatedAt: fsServerTimestamp(), updatedBy: auth.currentUser?.uid || 'seeder' } as any;
+                                            fsSetDoc(fsDoc(db as any, 'teachers', seedAdmin.id) as any, toWrite).catch(() => {});
+                                            fsSetDoc(fsDoc(db as any, 'users', seedAdmin.id) as any, { ...toWrite }).catch(() => {});
+                                        } catch {}
                                         teachers = [seedAdmin as any];
                                         console.info('[DataSync] Seeded default admin into Firestore emulator and local cache.');
                                     } catch (e) {
@@ -895,9 +961,70 @@ export const useSchoolData = (): SchoolDataState & {
             }
         };
 
-        startAutoSync(60_000);
-        loadData();
+    loadData();
+        // Cross-tab broadcast listener: refresh affected stores when another tab flushes writes
+        const offBc = bcSubscribe(async (evt) => {
+            try { console.log('[Broadcast] event received in useSchoolData:', evt); } catch {}
+            if (evt.type === 'writeFlushed') {
+                const col = evt.payload.collection as StoreName | string;
+                try {
+                    const db = getFirestoreInstance();
+                    if (col === 'studentAssignmentGrades') {
+                        const snap = await getDocs(fsCollection(db as any, 'studentAssignmentGrades') as any);
+                        const latest = (snap.docs as any[]).map(d => ({ id: d.id, ...(d.data()||{}) })) as StudentAssignmentGrade[];
+                        // Clear dirty flags if ids provided
+                        try { (evt.payload.ids || []).forEach(id => dirtySAGRef.current.delete(id)); } catch {}
+                        setState(prev => ({ ...prev, studentAssignmentGrades: mergeSAG(prev.studentAssignmentGrades, latest) }));
+                        try { await dbService.bulkPut('studentAssignmentGrades', latest as any); } catch {}
+                    } else if (col === 'grades') {
+                        const snap = await getDocs(fsCollection(db as any, 'grades') as any);
+                        const latest = (snap.docs as any[]).map(d => ({ id: d.id, ...(d.data()||{}) })) as Grade[];
+                        try { (evt.payload.ids || []).forEach(id => dirtyGradesRef.current.delete(id)); } catch {}
+                        setState(prev => ({ ...prev, grades: mergeGrades(prev.grades, latest) }));
+                        try { await dbService.bulkPut('grades', latest as any); } catch {}
+                    }
+                } catch (e) {
+                    console.warn('[Broadcast] refresh failed for', col, e);
+                }
+            }
+        });
+        // Realtime: subject grades live updates across users
+        try {
+            const key = 'grades:all';
+            const stopGrades = subscribeCollection<Grade>(key, 'grades', async (items) => {
+                setState(prev => ({ ...prev, grades: mergeGrades(prev.grades, items) }));
+                try { await dbService.bulkPut('grades', items as any); } catch {}
+            });
+            (window as any).__rt_cleanup_grades = () => { try { stopGrades(); } catch {} };
+        } catch (e) {
+            console.warn('[Realtime] grades onSnapshot failed:', e);
+        }
+        // Realtime: studentAssignmentGrades live updates across users
+        try {
+            const key = 'studentAssignmentGrades:all';
+            const stop = subscribeCollection<StudentAssignmentGrade>(key, 'studentAssignmentGrades', async (items) => {
+                // Deduplicate by composite key in case of older cached docs
+                const map = new Map<string, StudentAssignmentGrade>();
+                for (const it of items) {
+                    const k = `${it.assignmentId}|${it.studentId}`;
+                    const prev = map.get(k);
+                    if (!prev || (it.updatedAt ?? 0) >= (prev.updatedAt ?? 0)) {
+                        map.set(k, it);
+                    }
+                }
+                const merged = Array.from(map.values());
+                setState(prev => ({ ...prev, studentAssignmentGrades: mergeSAG(prev.studentAssignmentGrades, merged) }));
+                try { await dbService.bulkPut('studentAssignmentGrades', merged as any); } catch {}
+            });
+            // Ensure cleanup on unmount
+            const cleanup = () => { try { stop(); } catch {} };
+            // We'll return a composite cleanup below; keep reference
+            (window as any).__rt_cleanup_sag = cleanup;
+        } catch (e) {
+            console.warn('[Realtime] studentAssignmentGrades onSnapshot failed:', e);
+        }
         // Realtime subscription for announcements (low volume, high freshness UX)
+        let annUnsub: undefined | (() => void);
         try {
             const db = getFirestoreInstance();
             const col = fsCollection(db as any, 'announcements');
@@ -921,10 +1048,20 @@ export const useSchoolData = (): SchoolDataState & {
                     }
                 }
             });
-            return () => { try { unsub(); } catch {} };
+            annUnsub = () => { try { unsub(); } catch {} };
         } catch (e) {
             console.warn('[Realtime] Announcements onSnapshot failed:', e);
         }
+        // Optional dev fallback: poll Firestore for grades/SAG if snapshots are blocked (ad blockers)
+        // Removed dev polling: rely on Firestore onSnapshot for real-time updates
+        // Final overall cleanup (unsub all realtimeStore listeners we created)
+        return () => {
+            try { const f = (window as any).__rt_cleanup_sag; if (typeof f === 'function') f(); } catch {}
+            try { const f2 = (window as any).__rt_cleanup_grades; if (typeof f2 === 'function') f2(); } catch {}
+            try { unsubscribeAll(); } catch {}
+            try { offBc && offBc(); } catch {}
+            try { annUnsub && annUnsub(); } catch {}
+        };
     }, []);
 
     return { ...state, addStudent, updateStudent, deleteStudent, addSchedule, updateSchedule, deleteSchedule, addAssignment, updateAssignment, deleteAssignment, updateAssignmentGrade, submitAssignment, addLessonPlan, updateLessonPlan, deleteLessonPlan, updateGrade, updateCoreValueGrade, addLearningArea, deleteLearningArea, updateSettings, updateAttendance, addParent, updateParent, deleteParent, assignStudentToParent, unassignStudentFromParent, addTeacher, updateTeacher, deleteTeacher, addSection, updateSection, deleteSection, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment, addAnnouncement, updateAnnouncement, deleteAnnouncement, refreshStores };

@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test:inspector": "playwright test scripts/tests/playwright --project=chromium",
     "test:e2e": "playwright test scripts/tests/playwright/crud.spec.js --project=chromium",
+    "test:realtime": "playwright test scripts/tests/playwright/realtime-cross-tab.spec.ts --project=chromium",
     "emu:seed:small": "node scripts/emu-exec-seed.cjs --projectId=edusync-local --teachers=8 --parents=20 --sections=4 --students=40 --noExport=true",
     "emu:seed:big": "node scripts/emu-exec-seed.cjs --projectId=edusync-local --teachers=300 --parents=2000 --sections=50 --students=3000 --noExport=true",
     "emu:seed:export": "node scripts/emu-exec-seed.cjs --projectId=edusync-local --teachers=8 --parents=20 --sections=4 --students=40",
@@ -17,8 +18,10 @@
     "env:prod": "node scripts/switch-env.cjs prod",
     "emu:up": "node scripts/emu-up.cjs",
     "emu:seed:admin": "node scripts/emu-seed-and-admin.cjs",
-    "dev:emu": "npm run env:emu && npm run emu:up && timeout /t 5 > NUL && npm run emu:seed:admin && node scripts/kill-port.cjs 5173 && vite --port 5173 --strictPort",
-    "dev:prod": "npm run env:prod && node scripts/kill-port.cjs 5173 && vite --port 5173 --strictPort"
+    "dev:emu": "npm run env:emu && npm run emu:up && node scripts/emu-wait.cjs 127.0.0.1 8085 --timeout=60000 && npm run emu:seed:admin && node scripts/kill-port.cjs 5173 && npx vite --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:emu:serve": "npm run env:emu && node scripts/kill-port.cjs 5173 && npx vite --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:serve": "node scripts/kill-port.cjs 5173 && npx vite --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:prod": "npm run env:prod && node scripts/kill-port.cjs 5173 && npx vite --host 127.0.0.1 --port 5173 --strictPort"
   },
   "dependencies": {
     "@google-cloud/firestore": "^7.11.6",
