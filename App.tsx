@@ -79,19 +79,25 @@ const App: React.FC = () => {
   const [parentSelectedChildId, setParentSelectedChildId] = useState<string | null>(null);
   
   // Use ref to track previous values and avoid infinite loops
-  const prevSessionRef = useRef(session);
+  const prevSessionTypeRef = useRef(session?.type);
   const prevStudentsLengthRef = useRef(students.length);
+  const parentSelectedChildIdRef = useRef(parentSelectedChildId);
+  
+  // Keep ref in sync
+  useEffect(() => {
+    parentSelectedChildIdRef.current = parentSelectedChildId;
+  }, [parentSelectedChildId]);
 
   useEffect(() => {
-    // Only run if session changed or students count changed (not just array reference)
-    const sessionChanged = prevSessionRef.current !== session;
+    // Only run if session TYPE changed or students count changed
+    const sessionTypeChanged = prevSessionTypeRef.current !== session?.type;
     const studentsCountChanged = prevStudentsLengthRef.current !== students.length;
     
-    if (!sessionChanged && !studentsCountChanged) {
+    if (!sessionTypeChanged && !studentsCountChanged) {
       return; // Skip if neither changed meaningfully
     }
     
-    prevSessionRef.current = session;
+    prevSessionTypeRef.current = session?.type;
     prevStudentsLengthRef.current = students.length;
     
     if (session?.type === 'parent') {
@@ -99,13 +105,13 @@ const App: React.FC = () => {
       const children = students.filter(s => parent.studentIds.includes(s.id));
       if (children.length === 0) {
         setParentSelectedChildId(null);
-      } else if (!parentSelectedChildId || !children.some(c => c.id === parentSelectedChildId)) {
+      } else if (!parentSelectedChildIdRef.current || !children.some(c => c.id === parentSelectedChildIdRef.current)) {
         setParentSelectedChildId(children[0].id);
       }
-    } else if (parentSelectedChildId !== null) {
+    } else if (parentSelectedChildIdRef.current !== null) {
       setParentSelectedChildId(null);
     }
-  }, [session, students, parentSelectedChildId]);
+  }, [session, students]); // Removed parentSelectedChildId from deps
 
   const handleLogin = (user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => {
     setSession({ user, type });
