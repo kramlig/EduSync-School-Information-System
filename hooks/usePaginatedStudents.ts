@@ -58,7 +58,7 @@ export function usePaginatedStudents(
 
   // Load total count - STABLE with all dependencies
   const loadTotalCount = useCallback(async () => {
-    if (!enabled) return;
+    if (!enabled) return; // Exit early if disabled
 
     try {
       const count = await getCollectionCount(
@@ -79,8 +79,7 @@ export function usePaginatedStudents(
     lastDoc: DocumentSnapshot | null = null
   ) => {
     if (!enabled) {
-      setStudents([]);
-      return;
+      return; // Exit early if disabled - don't even clear students
     }
 
     setLoading(true);
@@ -136,9 +135,8 @@ export function usePaginatedStudents(
 
   // Initial load and search change detection
   useEffect(() => {
+    // CRITICAL: Early return if disabled, don't even check anything else
     if (!enabled) {
-      setStudents([]);
-      initialLoadDone.current = false;
       return;
     }
 
