@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
@@ -77,8 +77,23 @@ const App: React.FC = () => {
 
   // Track selected child for parent sessions and pass to views
   const [parentSelectedChildId, setParentSelectedChildId] = useState<string | null>(null);
+  
+  // Use ref to track previous values and avoid infinite loops
+  const prevSessionRef = useRef(session);
+  const prevStudentsLengthRef = useRef(students.length);
 
   useEffect(() => {
+    // Only run if session changed or students count changed (not just array reference)
+    const sessionChanged = prevSessionRef.current !== session;
+    const studentsCountChanged = prevStudentsLengthRef.current !== students.length;
+    
+    if (!sessionChanged && !studentsCountChanged) {
+      return; // Skip if neither changed meaningfully
+    }
+    
+    prevSessionRef.current = session;
+    prevStudentsLengthRef.current = students.length;
+    
     if (session?.type === 'parent') {
       const parent = session.user as ParentUser;
       const children = students.filter(s => parent.studentIds.includes(s.id));
@@ -90,7 +105,7 @@ const App: React.FC = () => {
     } else if (parentSelectedChildId !== null) {
       setParentSelectedChildId(null);
     }
-  }, [session, students]);
+  }, [session, students, parentSelectedChildId]);
 
   const handleLogin = (user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => {
     setSession({ user, type });
