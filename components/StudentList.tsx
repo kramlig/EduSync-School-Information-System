@@ -8,7 +8,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { uploadStudentPhoto, deleteStudentPhoto, getPlaceholderAvatar } from '../src/services/studentPhotoService';
 import WebcamCapture from './WebcamCapture';
 import ImageCropModal from './ImageCropModal';
-import { usePaginatedStudents } from '../hooks/usePaginatedStudents';
+// import { usePaginatedStudents } from '../hooks/usePaginatedStudents'; // DISABLED - causing infinite loops
 
 interface StudentListProps {
   schoolData: SchoolDataState & { 
@@ -99,13 +99,33 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     return sectionIds.size > 0 ? sectionIds : new Set<string>();
   }, [authUser, sections, substituteAssignments, classSchedules]);
 
-  // Use server-side pagination for large datasets
-  // IMPORTANT: Hook is always called (React rules), but data fetch is controlled by 'enabled' flag
-  const paginatedData = usePaginatedStudents({
-    pageSize: 100,
-    searchQuery: USE_SERVER_PAGINATION ? debouncedSearchQuery : '', // Only pass search when enabled
-    enabled: USE_SERVER_PAGINATION
-  });
+  // DON'T use the pagination hook at all - it's causing issues
+  // Keeping this stub for when we fix it properly
+  const paginatedData: {
+    students: Student[];
+    loading: boolean;
+    error: string | null;
+    hasMore: boolean;
+    totalCount: number;
+    currentPage: number;
+    totalPages: number;
+    loadNextPage: () => Promise<void>;
+    loadPrevPage: () => Promise<void>;
+    goToPage: (page: number) => Promise<void>;
+    refreshStudents: () => Promise<void>;
+  } = {
+    students: [],
+    loading: false,
+    error: null,
+    hasMore: false,
+    totalCount: 0,
+    currentPage: 1,
+    totalPages: 0,
+    loadNextPage: async () => {},
+    loadPrevPage: async () => {},
+    goToPage: async () => {},
+    refreshStudents: async () => {}
+  };
 
   // Original client-side filtering logic (for small datasets or as fallback)
   const visibleStudents = useMemo(() => {
