@@ -48,15 +48,11 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   
   const authUser = session.user as AuthUser;
 
-  // Feature flag: Enable server-side pagination for large datasets
-  // Automatically enabled when:
-  // 1. Initial data loading is complete (!schoolData.loading)
-  // 2. Student count exceeds 500 (students.length > 500)
-  // 3. User is admin/principal/registrar (teachers need section filtering which requires composite index)
-  // This prevents circular dependency issues during initial load
-  // while optimizing performance for large datasets
-  const isAdminRole = ['admin', 'principal', 'registrar'].includes(authUser.role);
-  const USE_SERVER_PAGINATION = !schoolData.loading && students.length > 500 && isAdminRole;
+  // Feature flag: Server-side pagination temporarily disabled
+  // Issue: Causing infinite re-render loop and log spamming
+  // TODO: Fix pagination hook dependencies before re-enabling
+  // When enabled, should only work for admin/principal/registrar roles
+  const USE_SERVER_PAGINATION = false;
 
   // Determine authorized section IDs for teachers
   const authorizedSectionIds = useMemo(() => {
