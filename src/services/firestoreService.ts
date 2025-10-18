@@ -69,7 +69,7 @@ try {
   const useAuthFlag = String(import.meta.env.VITE_USE_AUTH_EMULATOR || '').toLowerCase() === 'true';
   const authHostEnv = import.meta.env.VITE_AUTH_EMULATOR_HOST as string | undefined;
   const authPortEnv = import.meta.env.VITE_AUTH_EMULATOR_PORT as string | undefined;
-  const shouldUseAuthEmu = useAuthFlag || !!authHostEnv || looksLocal;
+  const shouldUseAuthEmu = useAuthFlag && (!!authHostEnv || looksLocal);
   if (shouldUseAuthEmu) {
     let host = '127.0.0.1';
     let port = 9099;
