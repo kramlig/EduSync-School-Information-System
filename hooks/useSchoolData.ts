@@ -717,6 +717,60 @@ export const useSchoolData = (): SchoolDataState & {
         
         const loadData = async () => {
             try {
+                // TEMPORARY FIX: Skip IndexedDB entirely due to persistent hanging issues
+                // TODO: Debug why IndexedDB operations deadlock
+                const BYPASS_INDEXEDDB = true;
+                
+                if (BYPASS_INDEXEDDB) {
+                    console.log("⚠️ BYPASSING IndexedDB - Loading directly from Firestore...");
+                    const firestoreData = await firestoreReader.fetchAllData();
+                    
+                    const sanitizedData = {
+                        students: firestoreData.students || [],
+                        learningAreas: firestoreData.learningAreas?.length ? firestoreData.learningAreas : DEFAULT_LEARNING_AREAS,
+                        grades: firestoreData.grades || [],
+                        coreValues: firestoreData.coreValues || [],
+                        coreValueGrades: firestoreData.coreValueGrades || [],
+                        attendanceRecords: firestoreData.attendanceRecords || [],
+                        teachers: firestoreData.teachers || [],
+                        parents: firestoreData.parents || [],
+                        sections: firestoreData.sections || [],
+                        settings: firestoreData.settings?.[0] || MOCK_SETTINGS,
+                        substituteAssignments: firestoreData.substituteAssignments || [],
+                        classSchedules: firestoreData.classSchedules || [],
+                        assignments: firestoreData.assignments || [],
+                        studentAssignmentGrades: firestoreData.studentAssignmentGrades || [],
+                        lessonPlans: firestoreData.lessonPlans || [],
+                        announcements: firestoreData.announcements || [],
+                    };
+                    
+                    console.log(`✅ Loaded ${sanitizedData.students.length} students, ${sanitizedData.teachers.length} teachers from Firestore`);
+                    
+                    clearTimeout(emergencyTimeout);
+                    setState({
+                        loading: false,
+                        error: null,
+                        students: sanitizedData.students,
+                        learningAreas: sanitizedData.learningAreas,
+                        grades: sanitizedData.grades,
+                        coreValues: sanitizedData.coreValues,
+                        coreValueGrades: sanitizedData.coreValueGrades,
+                        attendanceRecords: sanitizedData.attendanceRecords,
+                        teachers: sanitizedData.teachers,
+                        parents: sanitizedData.parents,
+                        sections: sanitizedData.sections,
+                        settings: sanitizedData.settings,
+                        substituteAssignments: sanitizedData.substituteAssignments,
+                        classSchedules: sanitizedData.classSchedules,
+                        assignments: sanitizedData.assignments,
+                        studentAssignmentGrades: sanitizedData.studentAssignmentGrades,
+                        lessonPlans: sanitizedData.lessonPlans,
+                        announcements: sanitizedData.announcements,
+                        monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG,
+                    });
+                    return; // Exit early
+                }
+                
                 const studentCount = await dbService.count('students');
                 if (studentCount > 0) {
                     console.log("Loading data from IndexedDB...");
