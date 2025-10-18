@@ -13,6 +13,8 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+console.log('[Firebase] Initializing with config:', firebaseConfig);
+
 // Validate minimal config to avoid cryptic runtime errors
 const required = ['apiKey','authDomain','projectId','appId'] as const;
 for (const key of required) {
