@@ -171,6 +171,8 @@ const App: React.FC = () => {
     return [];
   };
 
+  console.log('[App] Loading check:', { authReady, loading, studentsCount: students.length });
+  
   if (!authReady || loading) {
     return <FullScreenLoader message="Loading school data..." />;
   }
