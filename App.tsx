@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
@@ -29,19 +29,7 @@ import LoginScreen from './components/LoginScreen';
 import FullScreenLoader from './components/FullScreenLoader';
 
 const App: React.FC = () => {
-  const mountCountRef = useRef(0);
-  const renderCountRef = useRef(0);
-  
-  useEffect(() => {
-    mountCountRef.current++;
-    console.log(`[App] MOUNTED - mount #${mountCountRef.current}`);
-    return () => {
-      console.log(`[App] UNMOUNTED - mount #${mountCountRef.current}`);
-    };
-  }, []);
-  
-  renderCountRef.current++;
-  console.log(`[App] render #${renderCountRef.current}`);
+  console.log('[App] Rendering');
   
   // Ensure we have a Firebase Auth user for Firestore writes (rules require request.auth != null)
   const [authReady, setAuthReady] = useState(false);
@@ -50,10 +38,7 @@ const App: React.FC = () => {
       if (!user) {
         // Trigger anonymous sign-in; wait for next auth state change before proceeding
         signInAnonymously(auth).catch((e) => {
-          // eslint-disable-next-line no-console
           console.error('[Auth] Anonymous sign-in failed:', e);
-          // If the Anonymous provider is disabled (auth/admin-restricted-operation),
-          // allow the app to render in read-only mode rather than blocking indefinitely.
           setAuthReady(true);
         });
         return;
@@ -62,7 +47,9 @@ const App: React.FC = () => {
     });
     return () => unsub();
   }, []);
+  
   const [session, setSession] = useState<{ user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' } | null>(null);
+  
   // Load session from localStorage once
   useEffect(() => {
     try {
@@ -84,77 +71,31 @@ const App: React.FC = () => {
       localStorage.removeItem('edusync_session');
     }
   }, [session]);
+  
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
-  // Get raw data from hook
-  const schoolDataRaw = useSchoolData();
-  
-  // Memoize to prevent creating new object reference on every render
-  // Only create new object when actual data counts change
-  const schoolData = useMemo(() => {
-    console.log('[App] schoolData memo recalculating');
-    return schoolDataRaw;
-  }, [
-    schoolDataRaw.loading,
-    schoolDataRaw.error,
-    schoolDataRaw.students.length,
-    schoolDataRaw.teachers.length,
-    schoolDataRaw.parents.length,
-    schoolDataRaw.sections.length,
-    schoolDataRaw.grades.length,
-    schoolDataRaw.learningAreas.length,
-    schoolDataRaw.classSchedules.length,
-    schoolDataRaw.attendanceRecords.length,
-    schoolDataRaw.assignments.length,
-    schoolDataRaw.studentAssignmentGrades.length,
-    schoolDataRaw.announcements.length,
-    schoolDataRaw.coreValues.length,
-    schoolDataRaw.coreValueGrades.length,
-    schoolDataRaw.lessonPlans.length,
-    schoolDataRaw.substituteAssignments.length,
-    schoolDataRaw.settings.schoolName,
-    schoolDataRaw.settings.schoolYear,
-  ]);
+  // Get data from simplified hook - no memoization needed!
+  const schoolData = useSchoolData();
   
   const { loading, error, settings, students, teachers, parents } = schoolData;
 
-  // Track selected child for parent sessions and pass to views
+  // Track selected child for parent sessions
   const [parentSelectedChildId, setParentSelectedChildId] = useState<string | null>(null);
   
-  // Use ref to track previous values and avoid infinite loops
-  const prevSessionTypeRef = useRef(session?.type);
-  const prevStudentsLengthRef = useRef(students.length);
-  const parentSelectedChildIdRef = useRef(parentSelectedChildId);
-  
-  // Keep ref in sync
+  // Auto-select first child for parent sessions (simplified)
   useEffect(() => {
-    parentSelectedChildIdRef.current = parentSelectedChildId;
-  }, [parentSelectedChildId]);
-
-  useEffect(() => {
-    // Only run if session TYPE changed or students count changed
-    const sessionTypeChanged = prevSessionTypeRef.current !== session?.type;
-    const studentsCountChanged = prevStudentsLengthRef.current !== students.length;
-    
-    if (!sessionTypeChanged && !studentsCountChanged) {
-      return; // Skip if neither changed meaningfully
-    }
-    
-    prevSessionTypeRef.current = session?.type;
-    prevStudentsLengthRef.current = students.length;
-    
     if (session?.type === 'parent') {
       const parent = session.user as ParentUser;
       const children = students.filter(s => parent.studentIds.includes(s.id));
-      if (children.length === 0) {
-        setParentSelectedChildId(null);
-      } else if (!parentSelectedChildIdRef.current || !children.some(c => c.id === parentSelectedChildIdRef.current)) {
+      if (children.length > 0 && !parentSelectedChildId) {
         setParentSelectedChildId(children[0].id);
+      } else if (children.length === 0) {
+        setParentSelectedChildId(null);
       }
-    } else if (parentSelectedChildIdRef.current !== null) {
+    } else {
       setParentSelectedChildId(null);
     }
-  }, [session, students]); // Removed parentSelectedChildId from deps
+  }, [session, students, parentSelectedChildId]);
 
   const handleLogin = (user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => {
     setSession({ user, type });
@@ -218,35 +159,6 @@ const App: React.FC = () => {
             students={students}
             parentSelectedChildId={parentSelectedChildId}
             onParentChildChange={(id) => setParentSelectedChildId(id)}
-            onSyncClick={async (scope) => {
-              const path = window.location.pathname;
-              // Map route to store scopes when 'auto' is selected
-              const auto = () => {
-                if (path.includes('/grades') || path.includes('/gradebook')) return ['grades','students','learningAreas'] as const;
-                if (path.includes('/core-values')) return ['coreValues','coreValueGrades','students'] as const;
-                if (path.includes('/attendance')) return ['attendanceRecords','students'] as const;
-                if (path.includes('/assignments')) return ['assignments','studentAssignmentGrades','students','sections'] as const;
-                if (path.includes('/lesson-plan')) return ['lessonPlans','assignments','sections','learningAreas'] as const;
-                if (path.includes('/schedule')) return ['classSchedules','sections','teachers'] as const;
-                if (path.includes('/parents')) return ['parents','students'] as const;
-                if (path.includes('/teachers')) return ['teachers'] as const;
-                if (path.includes('/sections')) return ['sections','students'] as const;
-                if (path.includes('/announcements')) return ['announcements'] as const;
-                return 'all' as const;
-              };
-              const mapSingle = (s: string) => s as any;
-              const stores = scope === 'auto' ? auto() : scope === 'all' ? 'all' : [mapSingle(scope)];
-              try {
-                const res = await (schoolData as any).refreshStores(stores);
-                // eslint-disable-next-line no-console
-                console.info('[Sync] Refreshed', stores, res.updated);
-              } catch (e) {
-                // eslint-disable-next-line no-alert
-                alert('Sync failed. See console for details.');
-                // eslint-disable-next-line no-console
-                console.error('[Sync] error', e);
-              }
-            }}
           />
           <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-100 dark:bg-slate-900 p-6">
             <Routes>
