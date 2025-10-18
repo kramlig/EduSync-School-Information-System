@@ -85,7 +85,37 @@ const App: React.FC = () => {
     }
   }, [session]);
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
-  const schoolData = useSchoolData();
+  
+  // Get raw data from hook
+  const schoolDataRaw = useSchoolData();
+  
+  // Memoize to prevent creating new object reference on every render
+  // Only create new object when actual data counts change
+  const schoolData = useMemo(() => {
+    console.log('[App] schoolData memo recalculating');
+    return schoolDataRaw;
+  }, [
+    schoolDataRaw.loading,
+    schoolDataRaw.error,
+    schoolDataRaw.students.length,
+    schoolDataRaw.teachers.length,
+    schoolDataRaw.parents.length,
+    schoolDataRaw.sections.length,
+    schoolDataRaw.grades.length,
+    schoolDataRaw.learningAreas.length,
+    schoolDataRaw.classSchedules.length,
+    schoolDataRaw.attendanceRecords.length,
+    schoolDataRaw.assignments.length,
+    schoolDataRaw.studentAssignmentGrades.length,
+    schoolDataRaw.announcements.length,
+    schoolDataRaw.coreValues.length,
+    schoolDataRaw.coreValueGrades.length,
+    schoolDataRaw.lessonPlans.length,
+    schoolDataRaw.substituteAssignments.length,
+    schoolDataRaw.settings.schoolName,
+    schoolDataRaw.settings.schoolYear,
+  ]);
+  
   const { loading, error, settings, students, teachers, parents } = schoolData;
 
   // Track selected child for parent sessions and pass to views
