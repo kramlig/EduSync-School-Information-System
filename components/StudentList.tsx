@@ -13,7 +13,7 @@ import ImageCropModal from './ImageCropModal';
 interface StudentListProps {
   schoolData: SchoolDataState & { 
     loading: boolean;
-    addStudent: (student: Omit<Student, 'id' | 'enrollmentDate'>) => { success: boolean; message?: string; };
+    addStudent: (student: Omit<Student, 'id' | 'enrollmentDate'>) => Promise<{ success: boolean; message?: string; }>;
     updateStudent: (student: Student) => void;
     deleteStudent: (studentId: string) => void;
   };
@@ -153,20 +153,24 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     setNewStudent(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleAddStudent = (e: React.FormEvent) => {
+  const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddStudentError(null);
     if (newStudent.name && newStudent.email && newStudent.sectionId) {
-      const result = addStudent(newStudent);
-      if (result.success) {
-        setNewStudent({ name: '', email: '' });
-        setIsAddModalOpen(false);
-        // Refresh paginated data if using server pagination
-        if (USE_SERVER_PAGINATION) {
-          paginatedData.refreshStudents();
+      try {
+        const result = await addStudent(newStudent);
+        if (result.success) {
+          setNewStudent({ name: '', email: '' });
+          setIsAddModalOpen(false);
+          // Refresh paginated data if using server pagination
+          if (USE_SERVER_PAGINATION) {
+            paginatedData.refreshStudents();
+          }
+        } else {
+          setAddStudentError(result.message || 'An unknown error occurred.');
         }
-      } else {
-        setAddStudentError(result.message || 'An unknown error occurred.');
+      } catch (err: any) {
+        setAddStudentError(err?.message || 'An unknown error occurred.');
       }
     }
   };

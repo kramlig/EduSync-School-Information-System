@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { ChevronDownIcon, WifiIcon, WifiSlashIcon, BellIcon, ArrowPathIcon, Bars3Icon, XMarkIcon } from './icons';
+import React, { useMemo, useState, useEffect } from 'react';
+import { ChevronDownIcon, WifiIcon, WifiSlashIcon, BellIcon, Bars3Icon, XMarkIcon } from './icons';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
 import { SchoolDataState } from '../hooks/useSchoolData';
 
@@ -10,10 +10,7 @@ interface HeaderProps {
   schoolYear?: string;
   parentSelectedChildId?: string | null;
   onParentChildChange?: (id: string) => void;
-  onSyncClick?: (scope: 'auto' | 'students' | 'teachers' | 'grades' | 'coreValues' | 'coreValueGrades' | 'attendance' | 'sections' | 'assignments' | 'lessonPlans' | 'announcements' | 'classSchedules' | 'parents' | 'all') => void;
   unreadCount?: number;
-  lastSyncTime?: Date | null;
-  isSyncing?: boolean;
 }
 
 const Header: React.FC<HeaderProps> = ({ 
@@ -23,20 +20,15 @@ const Header: React.FC<HeaderProps> = ({
   schoolYear, 
   parentSelectedChildId, 
   onParentChildChange, 
-  onSyncClick,
-  unreadCount = 0,
-  lastSyncTime,
-  isSyncing = false
+  unreadCount = 0
 }) => {
   const userRole = session.type === 'staff' ? (session.user as AuthUser).role : session.type;
   
   // State for parent's selected child view
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [syncMenuOpen, setSyncMenuOpen] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
-  const syncMenuRef = useRef<HTMLDivElement>(null);
 
   const parentChildren = useMemo(() => {
     if (session.type === 'parent') {
@@ -59,18 +51,7 @@ const Header: React.FC<HeaderProps> = ({
     }
   }, [session, parentSelectedChildId, parentChildren, selectedChildId]);
 
-  // Close sync menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (syncMenuRef.current && !syncMenuRef.current.contains(e.target as Node)) {
-        setSyncMenuOpen(false);
-      }
-    };
-    if (syncMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [syncMenuOpen]);
+
 
   // Simple online indicator using navigator.onLine; can be replaced by a prop later
   const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
@@ -86,20 +67,7 @@ const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  // Format last sync time
-  const getLastSyncText = () => {
-    if (!lastSyncTime) return 'Never synced';
-    const now = new Date();
-    const diffMs = now.getTime() - lastSyncTime.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'Just now';
-    if (diffMins === 1) return '1 min ago';
-    if (diffMins < 60) return `${diffMins} mins ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours === 1) return '1 hour ago';
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    return 'Over a day ago';
-  };
+
 
   const showToastNotification = (message: string) => {
     setToastMessage(message);
@@ -127,13 +95,7 @@ const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const handleSyncClick = (scope: any) => {
-    setSyncMenuOpen(false);
-    if (onSyncClick) {
-      onSyncClick(scope);
-      showToastNotification(`Syncing ${scope}...`);
-    }
-  };
+
 
   return (
     <>
@@ -155,7 +117,7 @@ const Header: React.FC<HeaderProps> = ({
           {/* Online/Offline Status */}
           <div 
             className={`hidden sm:flex items-center px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${isOnline ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200' : 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200'}`}
-            title={lastSyncTime ? `Last synced: ${getLastSyncText()}` : 'No sync data'}
+            title={isOnline ? 'Online' : 'Offline'}
           >
             {isOnline ? <WifiIcon className="h-3.5 w-3.5 mr-1" /> : <WifiSlashIcon className="h-3.5 w-3.5 mr-1" />}
             <span>{isOnline ? 'Online' : 'Offline'}</span>
@@ -201,38 +163,7 @@ const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Sync Menu */}
-          {onSyncClick && (
-            <div className="relative hidden sm:block" ref={syncMenuRef}>
-              <button
-                onClick={() => setSyncMenuOpen(!syncMenuOpen)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${isSyncing ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20' : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-400'}`}
-                aria-label="Sync data"
-                aria-expanded={syncMenuOpen}
-              >
-                <ArrowPathIcon className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span className="hidden md:inline">Sync</span>
-              </button>
-              {syncMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50">
-                  <div className="py-1 text-sm max-h-80 overflow-y-auto">
-                    <div className="px-3 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-                      Sync Options
-                    </div>
-                    {['auto','announcements','grades','coreValues','coreValueGrades','attendance','assignments','lessonPlans','classSchedules','students','teachers','sections','parents','all'].map(s => (
-                      <button 
-                        key={s} 
-                        onClick={() => handleSyncClick(s)} 
-                        className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
-                      >
-                        {s === 'auto' ? '🔄 Auto Sync' : s.charAt(0).toUpperCase() + s.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+
 
           {/* Clear Cache (Desktop only) */}
           <button 
@@ -281,21 +212,7 @@ const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
             
-            {lastSyncTime && (
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                Last synced: {getLastSyncText()}
-              </div>
-            )}
 
-            {onSyncClick && (
-              <button
-                onClick={() => { handleSyncClick('auto'); setMobileMenuOpen(false); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600"
-              >
-                <ArrowPathIcon className={isSyncing ? 'animate-spin' : ''} />
-                Sync Now
-              </button>
-            )}
 
             <button
               onClick={() => { clearLocalCache(); setMobileMenuOpen(false); }}
