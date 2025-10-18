@@ -113,6 +113,10 @@ export const useSchoolData = (): SchoolDataState & {
         lessonPlans: [], announcements: [],
         monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG,
     });
+    
+    // Guard to prevent multiple simultaneous data loads
+    const loadingRef = useRef(false);
+    const loadedRef = useRef(false);
 
     const addStudent = (student: Omit<Student, 'id' | 'enrollmentDate'>): { success: boolean; message?: string } => {
         // Basic validation
@@ -705,9 +709,19 @@ export const useSchoolData = (): SchoolDataState & {
 
 
     useEffect(() => {
+        // Prevent multiple loads - critical guard
+        if (loadingRef.current || loadedRef.current) {
+            console.log('[useSchoolData] Load already in progress or completed, skipping duplicate');
+            return;
+        }
+        
+        loadingRef.current = true;
+        console.log('[useSchoolData] Starting data load...');
+        
         // Emergency timeout - force loading complete after 15 seconds
         const emergencyTimeout = setTimeout(() => {
             console.error('[useSchoolData] EMERGENCY: Forcing loading complete after 15s timeout');
+            loadingRef.current = false; // Reset for retry
             setState(prev => ({ 
                 ...prev, 
                 loading: false,
@@ -746,6 +760,8 @@ export const useSchoolData = (): SchoolDataState & {
                     
                     console.log(`✅ Loaded ${sanitizedData.students.length} students, ${sanitizedData.teachers.length} teachers from Firestore`);
                     
+                    loadedRef.current = true; // Mark as successfully loaded
+                    loadingRef.current = false;
                     clearTimeout(emergencyTimeout);
                     setState({
                         loading: false,
