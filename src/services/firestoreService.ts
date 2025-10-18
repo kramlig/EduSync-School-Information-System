@@ -40,7 +40,9 @@ const storage = getStorage(app);
 // Optional: connect to emulators if requested or auto-detected
 try {
   const projId = import.meta.env.VITE_FIREBASE_PROJECT_ID || '';
-  const looksLocal = /(^|-)local$|demo/.test(projId);
+  // DISABLED auto-detection - causing issues in production
+  // const looksLocal = /(^|-)local$|demo/.test(projId);
+  const looksLocal = false; // Force disable emulator auto-detection
   // Firestore emulator
   const useFsEmuFlag = String(import.meta.env.VITE_USE_FIREBASE_EMULATOR || '').toLowerCase() === 'true';
   const fsHostEnv = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST as string | undefined; // may be host or host:port
