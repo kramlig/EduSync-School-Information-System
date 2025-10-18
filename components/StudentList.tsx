@@ -8,22 +8,24 @@ import { useDebounce } from '../hooks/useDebounce';
 import { uploadStudentPhoto, deleteStudentPhoto, getPlaceholderAvatar } from '../src/services/studentPhotoService';
 import WebcamCapture from './WebcamCapture';
 import ImageCropModal from './ImageCropModal';
-// import { usePaginatedStudents } from '../hooks/usePaginatedStudents'; // DISABLED - causing infinite loops
 
 interface StudentListProps {
   schoolData: SchoolDataState & { 
     loading: boolean;
+    error: string | null;
+    refresh: () => void; // Added refresh
     addStudent: (student: Omit<Student, 'id' | 'enrollmentDate'>) => Promise<{ success: boolean; message?: string; }>;
     updateStudent: (student: Student) => void;
     deleteStudent: (studentId: string) => void;
+    fetchMoreStudents: () => Promise<void>; // Added pagination functions
+    hasMoreStudents: boolean; // Added pagination state
+    isFetchingStudents: boolean; // Added pagination state
   };
   session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
-const ITEMS_PER_PAGE = 25;
-
 const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
-  const { students, teachers, sections, addStudent, settings, updateStudent, deleteStudent, grades, attendanceRecords, coreValueGrades, substituteAssignments, classSchedules, parents } = schoolData;
+  const { students, teachers, sections, addStudent, settings, updateStudent, deleteStudent, grades, attendanceRecords, coreValueGrades, substituteAssignments, classSchedules, parents, fetchMoreStudents, hasMoreStudents, isFetchingStudents } = schoolData;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -43,15 +45,12 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   
   const [newStudent, setNewStudent] = useState<Omit<Student, 'id' | 'enrollmentDate'>>({ name: '', email: '' });
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   
   const authUser = session.user as AuthUser;
 
-  // Feature flag: Server-side pagination DISABLED
-  // Still has issues causing infinite loops - needs more investigation
-  // Keeping infrastructure in place for future fix
-  const USE_SERVER_PAGINATION = false;
+  // Feature flag: Server-side pagination is now ENABLED
+  const USE_SERVER_PAGINATION = true;
 
   // Determine authorized section IDs for teachers
   const authorizedSectionIds = useMemo(() => {
@@ -99,53 +98,14 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     return sectionIds.size > 0 ? sectionIds : new Set<string>();
   }, [authUser, sections, substituteAssignments, classSchedules]);
 
-  // DON'T use the pagination hook at all - it's causing issues
-  // Keeping this stub for when we fix it properly
-  const paginatedData: {
-    students: Student[];
-    loading: boolean;
-    error: string | null;
-    hasMore: boolean;
-    totalCount: number;
-    currentPage: number;
-    totalPages: number;
-    loadNextPage: () => Promise<void>;
-    loadPrevPage: () => Promise<void>;
-    goToPage: (page: number) => Promise<void>;
-    refreshStudents: () => Promise<void>;
-  } = {
-    students: [],
-    loading: false,
-    error: null,
-    hasMore: false,
-    totalCount: 0,
-    currentPage: 1,
-    totalPages: 0,
-    loadNextPage: async () => {},
-    loadPrevPage: async () => {},
-    goToPage: async () => {},
-    refreshStudents: async () => {}
-  };
-
-  // Original client-side filtering logic (for small datasets or as fallback)
+  // Now directly use students from schoolData, which is paginated
   const visibleStudents = useMemo(() => {
-    // If using server pagination, return paginated students
-    if (USE_SERVER_PAGINATION) {
-      // Apply section filtering for teachers (server doesn't support this yet)
-      if (authorizedSectionIds && authorizedSectionIds.size > 0) {
-        return paginatedData.students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
-      }
-      return paginatedData.students;
+    // Apply section filtering for teachers
+    if (authorizedSectionIds && authorizedSectionIds.size > 0) {
+      return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
     }
-
-    // Traditional client-side filtering
-    if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
-      return students;
-    }
-    
-    if (!authorizedSectionIds || authorizedSectionIds.size === 0) return [];
-    return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
-  }, [USE_SERVER_PAGINATION, paginatedData.students, students, authUser, authorizedSectionIds]);
+    return students;
+  }, [students, authorizedSectionIds]);
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -162,10 +122,8 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
         if (result.success) {
           setNewStudent({ name: '', email: '' });
           setIsAddModalOpen(false);
-          // Refresh paginated data if using server pagination
-          if (USE_SERVER_PAGINATION) {
-            paginatedData.refreshStudents();
-          }
+          // Refresh paginated data
+          schoolData.refresh();
         } else {
           setAddStudentError(result.message || 'An unknown error occurred.');
         }
@@ -192,10 +150,8 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       updateStudent(studentToEdit);
       setIsEditModalOpen(false);
       setStudentToEdit(null);
-      // Refresh paginated data if using server pagination
-      if (USE_SERVER_PAGINATION) {
-        paginatedData.refreshStudents();
-      }
+      // Refresh paginated data
+      schoolData.refresh();
     }
   };
   
@@ -216,10 +172,8 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       deleteStudent(studentToDelete.id);
       setIsDeleteModalOpen(false);
       setStudentToDelete(null);
-      // Refresh paginated data if using server pagination
-      if (USE_SERVER_PAGINATION) {
-        paginatedData.refreshStudents();
-      }
+      // Refresh paginated data
+      schoolData.refresh();
     }
   };
 
@@ -307,34 +261,15 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     }
   };
 
-  // Pagination Logic - works with both server-side and client-side modes
-  const filteredStudents = useMemo(() => {
-    // For server pagination, search is already handled by the hook
-    if (USE_SERVER_PAGINATION) {
-      return visibleStudents; // Already filtered and paginated
-    }
-    
-    // Client-side search filtering
+  // Pagination Logic - now fully server-side
+  const filteredAndPaginatedStudents = useMemo(() => {
+    // Apply client-side search filtering to the already paginated students
     return visibleStudents.filter(student =>
       student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
       student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
       (student.lrn && student.lrn.includes(debouncedSearchQuery))
     );
-  }, [USE_SERVER_PAGINATION, visibleStudents, debouncedSearchQuery]);
-
-  const totalPages = USE_SERVER_PAGINATION ? paginatedData.totalPages : Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
-  const totalCount = USE_SERVER_PAGINATION ? paginatedData.totalCount : filteredStudents.length;
-  
-  const paginatedStudents = useMemo(() => {
-    if (USE_SERVER_PAGINATION) {
-      return filteredStudents; // Already paginated from server
-    }
-    
-    // Client-side pagination
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    return filteredStudents.slice(startIndex, endIndex);
-  }, [USE_SERVER_PAGINATION, filteredStudents, currentPage]);
+  }, [visibleStudents, debouncedSearchQuery]);
 
   const closeAddModal = () => {
     setIsAddModalOpen(false);
@@ -353,7 +288,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       </div>
       
       <div className="mb-4">
-        <input type="text" placeholder="Search by name, email, or LRN..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }} className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"/>
+        <input type="text" placeholder="Search by name, email, or LRN..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); }} className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"/>
       </div>
 
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
@@ -368,7 +303,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             </tr>
           </thead>
           <tbody>
-            {paginatedStudents.map((student) => {
+            {filteredAndPaginatedStudents.map((student) => {
               const section = sections.find(s => s.id === student.sectionId);
               const status = student.status || 'active';
               const statusColors = {
@@ -430,35 +365,22 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             )})}
           </tbody>
         </table>
-        {(paginatedData.loading || totalPages > 1) && (
+        {(schoolData.loading || hasMoreStudents) && (
           <div className="px-5 py-3 bg-white dark:bg-slate-800 border-t flex flex-col xs:flex-row items-center xs:justify-between">
-            {paginatedData.loading ? (
+            {schoolData.loading ? (
               <span className="text-xs xs:text-sm text-slate-600 dark:text-slate-300">Loading students...</span>
             ) : (
               <span className="text-xs xs:text-sm text-slate-600 dark:text-slate-300">
-                {USE_SERVER_PAGINATION ? (
-                  // Server pagination - show page-based info
-                  <>Page {paginatedData.currentPage} of {totalPages} ({totalCount} total students)</>
-                ) : (
-                  // Client pagination - show item-based info
-                  <>Showing {Math.min(1 + (currentPage-1)*ITEMS_PER_PAGE, filteredStudents.length)} to {Math.min(currentPage*ITEMS_PER_PAGE, filteredStudents.length)} of {filteredStudents.length} Students</>
-                )}
+                Showing {filteredAndPaginatedStudents.length} of {filteredAndPaginatedStudents.length} Students
               </span>
             )}
             <div className="inline-flex mt-2 xs:mt-0">
               <button
-                onClick={() => USE_SERVER_PAGINATION ? paginatedData.loadPrevPage() : setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={paginatedData.loading || (USE_SERVER_PAGINATION ? paginatedData.currentPage === 1 : currentPage === 1)}
-                className="text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-l disabled:opacity-50"
+                onClick={fetchMoreStudents}
+                disabled={!hasMoreStudents || isFetchingStudents}
+                className="text-sm bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
               >
-                Prev
-              </button>
-              <button
-                onClick={() => USE_SERVER_PAGINATION ? paginatedData.loadNextPage() : setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={paginatedData.loading || (USE_SERVER_PAGINATION ? !paginatedData.hasMore && paginatedData.currentPage === totalPages : currentPage === totalPages)}
-                className="text-sm bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-semibold py-2 px-4 rounded-r disabled:opacity-50"
-              >
-                Next
+                {isFetchingStudents ? 'Loading More...' : 'Load More'}
               </button>
             </div>
           </div>

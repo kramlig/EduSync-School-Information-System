@@ -83,6 +83,7 @@ async function run() {
   }
 
   const db = getFirestore();
+  console.log(`[Seeder] Initialized Firestore with projectId: ${projectId} and emulator host: ${process.env.FIRESTORE_EMULATOR_HOST}`);
 
   // Seed teachers
   const roles = ['teacher','teacher','teacher','teacher','registrar','principal'];
@@ -147,11 +148,13 @@ async function run() {
         sectionId: section.id,
       });
     }
+    console.log(`[Seeder] Attempting to commit ${studentDocs.length} student documents...`);
     for (const group of chunk(studentDocs, 400)) {
       const batch = db.batch();
       for (const s of group) batch.set(db.collection('students').doc(s.id), s, { merge: true });
       await batch.commit();
     }
+    console.log(`[Seeder] Successfully committed ${studentDocs.length} student documents.`);
   }
 
   // Connect parents to 1-3 students each (if students exist)

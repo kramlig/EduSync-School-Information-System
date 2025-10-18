@@ -11,7 +11,7 @@
  * This removes the infinite loop issues and makes the data flow predictable.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import type { 
     Student, LearningArea, Grade, CoreValue, CoreValueGrade, AttendanceRecord, 
@@ -22,7 +22,7 @@ import type {
 import { getFirestoreInstance, auth } from '../src/services/firestoreService';
 import { 
     collection, getDocs, doc, setDoc, deleteDoc, 
-    serverTimestamp, onSnapshot 
+    serverTimestamp, onSnapshot, query, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData
 } from 'firebase/firestore';
 
 const MOCK_SETTINGS: SchoolSettings = {
@@ -57,14 +57,48 @@ export type SchoolDataState = {
     monthlySchoolDaysConfig: Record<string, number>;
 };
 
-// Helper: Fetch a single collection from Firestore
+// Helper: Fetch a single collection from Firestore with pagination
+async function fetchPaginatedCollection<T>(
+    collectionName: string, 
+    limitCount: number, 
+    lastDoc: QueryDocumentSnapshot<DocumentData> | null = null
+): Promise<{ data: T[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
+    try {
+        console.log(`[Firestore] Fetching paginated collection: ${collectionName}, limit: ${limitCount}, lastDoc: ${lastDoc ? 'present' : 'null'}`);
+        const db = getFirestoreInstance();
+        console.log(`[Firestore] Inside fetchPaginatedCollection, db instance:`, db);
+        console.log(`[Firestore] Querying collection: ${collectionName}`);
+        let q = query(collection(db, collectionName), orderBy('id'), limit(limitCount)); // Reverted to original pagination logic
+        const snapshot = await getDocs(q);
+        console.log(`[Firestore] Snapshot for ${collectionName}: empty=${snapshot.empty}, docs.length=${snapshot.docs.length}`);
+        const data = snapshot.docs.map(doc => {
+            const docData = doc.data();
+            console.log(`[Firestore] Raw document data for ${collectionName} (ID: ${doc.id}):`, docData);
+            const typedData = { id: doc.id, ...docData } as T;
+            console.log(`[Firestore] Mapped document data for ${collectionName} (ID: ${doc.id}):`, typedData);
+            return typedData;
+        });
+        const newLastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+        console.log(`[Firestore] Finished fetching paginated collection: ${collectionName}, fetched ${data.length} documents.`);
+        return { data, lastDoc: newLastDoc };
+    } catch (error) {
+        console.error(`[Firestore] Failed to fetch paginated ${collectionName}:`, error);
+        return { data: [], lastDoc: null };
+    }
+}
+
+// Helper: Fetch a single collection from Firestore (non-paginated)
 async function fetchCollection<T>(collectionName: string): Promise<T[]> {
     try {
+        console.log(`[Firestore] Fetching collection: ${collectionName}`);
         const db = getFirestoreInstance();
         const snapshot = await getDocs(collection(db, collectionName));
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
+        console.log(`[Firestore] Snapshot for ${collectionName}: empty=${snapshot.empty}, docs.length=${snapshot.docs.length}`);
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
+        console.log(`[Firestore] Finished fetching collection: ${collectionName}, fetched ${data.length} documents.`);
+        return data;
     } catch (error) {
-        console.error(`Failed to fetch ${collectionName}:`, error);
+        console.error(`[Firestore] Failed to fetch ${collectionName}:`, error);
         return [];
     }
 }
@@ -89,7 +123,7 @@ async function deleteFromFirestore(collectionName: string, id: string) {
     try {
         const db = getFirestoreInstance();
         await deleteDoc(doc(db, collectionName, id));
-    } catch (error) {
+    }  catch (error) {
         console.error(`Failed to delete from ${collectionName}:`, error);
     }
 }
@@ -97,11 +131,61 @@ async function deleteFromFirestore(collectionName: string, id: string) {
 
 // Main hook function
 export function useSchoolData(): SchoolDataHook {
-    // React Query: fetch all collections in parallel
     const queryClient = useQueryClient();
+    const STUDENTS_PER_PAGE = 50; // Define pagination limit
+
+    // State for paginated students
+    const [allStudents, setAllStudents] = useState<Student[]>([]);
+    const [lastStudentDoc, setLastStudentDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+    const [hasMoreStudents, setHasMoreStudents] = useState(true);
+
+    // Fetch initial students
+    const { 
+        data: initialStudentsData, 
+        isLoading: isLoadingStudents, 
+        isFetching: isFetchingStudents, 
+        error: studentsError, 
+        refetch: refetchStudents 
+    } = useQuery({
+        queryKey: ['students', 'initial'],
+        queryFn: () => fetchPaginatedCollection<Student>('students', STUDENTS_PER_PAGE),
+        staleTime: 5 * 60 * 1000, // 5 minutes
+    });
+
+    console.log("[useSchoolData] useQuery result - data:", initialStudentsData, "isLoading:", isLoadingStudents, "isFetching:", isFetchingStudents, "error:", studentsError);
+
+    // Update student state when initialStudentsData changes
+    useEffect(() => {
+        console.log("[useSchoolData] useEffect triggered. initialStudentsData:", initialStudentsData, "studentsError:", studentsError);
+        if (initialStudentsData) {
+            console.log("[useSchoolData] Processing initialStudentsData.data:", initialStudentsData.data);
+            setAllStudents(initialStudentsData.data);
+            setLastStudentDoc(initialStudentsData.lastDoc);
+            setHasMoreStudents(initialStudentsData.data.length === STUDENTS_PER_PAGE);
+            if (initialStudentsData.data.length === 0) {
+                console.error("[useSchoolData] Initial student data fetch returned empty results.");
+            }
+        } else if (studentsError) {
+            console.error("[useSchoolData] Error fetching initial students:", studentsError);
+        } else {
+            console.error("[useSchoolData] initialStudentsData is null/undefined after fetch attempt.");
+        }
+    }, [initialStudentsData, STUDENTS_PER_PAGE, studentsError]);
+
+    // Fetch more students
+    const fetchMoreStudents = useCallback(async () => {
+        if (!hasMoreStudents || isFetchingStudents) return;
+
+        const { data, lastDoc: newLastDoc } = await fetchPaginatedCollection<Student>('students', STUDENTS_PER_PAGE, lastStudentDoc);
+        setAllStudents(prev => [...prev, ...data]);
+        setLastStudentDoc(newLastDoc);
+        setHasMoreStudents(data.length === STUDENTS_PER_PAGE);
+    }, [hasMoreStudents, isFetchingStudents, lastStudentDoc, STUDENTS_PER_PAGE]);
+
+    // Other collections (non-paginated for now)
     const queries = useQueries({
       queries: [
-        { queryKey: ['students'], queryFn: () => fetchCollection<Student>('students') },
+        // { queryKey: ['students'], queryFn: () => fetchCollection<Student>('students') }, // Commented out to isolate student pagination
         { queryKey: ['learningAreas'], queryFn: () => fetchCollection<LearningArea>('learningAreas') },
         { queryKey: ['grades'], queryFn: () => fetchCollection<Grade>('grades') },
         { queryKey: ['coreValues'], queryFn: () => fetchCollection<CoreValue>('coreValues') },
@@ -120,12 +204,13 @@ export function useSchoolData(): SchoolDataHook {
       ]
     });
 
-    const loading = queries.some(q => q.isLoading);
-    const error = queries.find(q => q.error)?.error as string | null;
-    // Manual refresh: refetch all queries
+    const loading = isLoadingStudents || queries.some(q => q.isLoading);
+    const error = studentsError || queries.find(q => q.error)?.error as string | null;
+    
     const refresh = useCallback(() => {
+      refetchStudents();
       queries.forEach(q => q.refetch && q.refetch());
-    }, [queries]);
+    }, [refetchStudents, queries]);
 
     // Helper to invalidate a query after mutation
     const invalidate = (key: string) => queryClient.invalidateQueries({ queryKey: [key] });
@@ -485,22 +570,22 @@ export function useSchoolData(): SchoolDataHook {
 
     // Compose the state from queries and return from the hook
     return {
-        students: queries[0]?.data ?? [],
-        learningAreas: (queries[1]?.data?.length ? queries[1].data : DEFAULT_LEARNING_AREAS) ?? [],
-        grades: queries[2]?.data ?? [],
-        coreValues: queries[3]?.data ?? [],
-        coreValueGrades: queries[4]?.data ?? [],
-        attendanceRecords: queries[5]?.data ?? [],
-        teachers: queries[6]?.data ?? [],
-        parents: queries[7]?.data ?? [],
-        sections: queries[8]?.data ?? [],
-        settings: queries[9]?.data?.[0] ?? MOCK_SETTINGS,
-        substituteAssignments: queries[10]?.data ?? [],
-        classSchedules: queries[11]?.data ?? [],
-        assignments: queries[12]?.data ?? [],
-        studentAssignmentGrades: queries[13]?.data ?? [],
-        lessonPlans: queries[14]?.data ?? [],
-        announcements: queries[15]?.data ?? [],
+        students: allStudents, // Now using paginated students
+        learningAreas: (queries[0]?.data?.length ? queries[0].data : DEFAULT_LEARNING_AREAS) ?? [],
+        grades: queries[1]?.data ?? [],
+        coreValues: queries[2]?.data ?? [],
+        coreValueGrades: queries[3]?.data ?? [],
+        attendanceRecords: queries[4]?.data ?? [],
+        teachers: queries[5]?.data ?? [],
+        parents: queries[6]?.data ?? [],
+        sections: queries[7]?.data ?? [],
+        settings: queries[8]?.data?.[0] ?? MOCK_SETTINGS,
+        substituteAssignments: queries[9]?.data ?? [],
+        classSchedules: queries[10]?.data ?? [],
+        assignments: queries[11]?.data ?? [],
+        studentAssignmentGrades: queries[12]?.data ?? [],
+        lessonPlans: queries[13]?.data ?? [],
+        announcements: queries[14]?.data ?? [],
         monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG,
         loading,
         error: error ? (typeof error === 'string' ? error : JSON.stringify(error)) : null,
@@ -543,54 +628,77 @@ export function useSchoolData(): SchoolDataHook {
         addAnnouncement,
         updateAnnouncement,
         deleteAnnouncement,
+        // New pagination exports
+        fetchMoreStudents,
+        hasMoreStudents,
+        isFetchingStudents,
     }
 }
 
-// Move type alias after export
-
 // Explicit type for consumers (matches the return shape of useSchoolData)
-export interface SchoolDataHook extends SchoolDataState {
+export interface SchoolDataHook {
+    students: Student[];
+    learningAreas: LearningArea[];
+    grades: Grade[];
+    coreValues: CoreValue[];
+    coreValueGrades: CoreValueGrade[];
+    attendanceRecords: AttendanceRecord[];
+    teachers: Teacher[];
+    parents: Parent[];
+    sections: Section[];
+    settings: SchoolSettings;
+    substituteAssignments: SubstituteAssignment[];
+    classSchedules: ClassSchedule[];
+    assignments: Assignment[];
+    studentAssignmentGrades: StudentAssignmentGrade[];
+    lessonPlans: LessonPlan[];
+    announcements: Announcement[];
+    monthlySchoolDaysConfig: Record<string, number>;
     loading: boolean;
     error: string | null;
     refresh: () => void;
-    addStudent: any;
-    updateStudent: any;
-    deleteStudent: any;
-    updateGrade: any;
-    updateCoreValueGrade: any;
-    addLearningArea: any;
-    updateLearningArea: any;
-    deleteLearningArea: any;
-    updateSettings: any;
-    updateAttendance: any;
-    addParent: any;
-    updateParent: any;
-    deleteParent: any;
-    assignStudentToParent: any;
-    unassignStudentFromParent: any;
-    addTeacher: any;
-    updateTeacher: any;
-    deleteTeacher: any;
-    addSection: any;
-    updateSection: any;
-    deleteSection: any;
-    addSubstituteAssignment: any;
-    updateSubstituteAssignment: any;
-    deleteSubstituteAssignment: any;
-    addSchedule: any;
-    updateSchedule: any;
-    deleteSchedule: any;
-    addAssignment: any;
-    updateAssignment: any;
-    deleteAssignment: any;
-    updateAssignmentGrade: any;
-    submitAssignment: any;
-    addLessonPlan: any;
-    updateLessonPlan: any;
-    deleteLessonPlan: any;
-    addAnnouncement: any;
-    updateAnnouncement: any;
-    deleteAnnouncement: any;
+    addStudent: (student: Omit<Student, 'id' | 'enrollmentDate'>) => Promise<{ success: boolean }>;
+    updateStudent: (student: Student) => Promise<void>;
+    deleteStudent: (studentId: string) => Promise<void>;
+    updateGrade: (studentId: string, learningAreaId: string, quarter: 'q1' | 'q2' | 'q3' | 'q4', value?: number, subSubject?: string) => Promise<void>;
+    updateCoreValueGrade: (studentId: string, coreValueId: string, quarter: 'q1' | 'q2' | 'q3' | 'q4', behavior: string, value: CoreValueMarking | '') => Promise<void>;
+    addLearningArea: (area: Omit<LearningArea, 'id'>) => Promise<void>;
+    updateLearningArea: (learningAreaId: string, area: Omit<LearningArea, 'id'>) => Promise<void>;
+    deleteLearningArea: (learningAreaId: string) => Promise<void>;
+    updateSettings: (settings: SchoolSettings) => Promise<void>;
+    updateAttendance: (studentId: string, date: string, status: AttendanceStatus) => Promise<void>;
+    addParent: (parent: Omit<Parent, 'id'>) => Promise<void>;
+    updateParent: (parent: Parent) => Promise<void>;
+    deleteParent: (parentId: string) => Promise<void>;
+    assignStudentToParent: (parentId: string, studentId: string) => Promise<void>;
+    unassignStudentFromParent: (parentId: string, studentId: string) => Promise<void>;
+    addTeacher: (teacher: Omit<Teacher, 'id'>) => Promise<void>;
+    updateTeacher: (teacher: Teacher) => Promise<void>;
+    deleteTeacher: (teacherId: string) => Promise<void>;
+    addSection: (section: Omit<Section, 'id'>) => Promise<void>;
+    updateSection: (section: Section) => Promise<void>;
+    deleteSection: (sectionId: string) => Promise<void>;
+    addSubstituteAssignment: (assignment: Omit<SubstituteAssignment, 'id'>) => Promise<void>;
+    updateSubstituteAssignment: (assignment: SubstituteAssignment) => Promise<void>;
+    deleteSubstituteAssignment: (assignmentId: string) => Promise<void>;
+    addSchedule: (sched: Omit<ClassSchedule, 'id'>) => Promise<{ success: boolean }>;
+    updateSchedule: (sched: ClassSchedule) => Promise<{ success: boolean }>;
+    deleteSchedule: (scheduleId: string) => Promise<void>;
+    addAssignment: (assignment: Omit<Assignment, 'id'>) => Promise<void>;
+    updateAssignment: (assignment: Assignment) => Promise<void>;
+    deleteAssignment: (assignmentId: string) => Promise<void>;
+    updateAssignmentGrade: (studentId: string, assignmentId: string, score: number | null, feedback: string | null) => Promise<void>;
+    submitAssignment: (studentId: string, assignmentId: string, filePath: string) => Promise<void>;
+    addLessonPlan: (plan: Omit<LessonPlan, 'id'>) => Promise<void>;
+    updateLessonPlan: (plan: LessonPlan) => Promise<void>;
+    deleteLessonPlan: (planId: string) => Promise<void>;
+    addAnnouncement: (announcement: Omit<Announcement, 'id'>) => Promise<void>;
+    updateAnnouncement: (announcement: Announcement) => Promise<void>;
+    deleteAnnouncement: (id: string) => Promise<void>;
+    // New pagination exports
+    fetchMoreStudents: () => Promise<void>;
+    hasMoreStudents: boolean;
+    isFetchingStudents: boolean;
 }
 
 // Default learning areas (same as original)
