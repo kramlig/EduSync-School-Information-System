@@ -48,6 +48,7 @@ try {
   const fsHostEnv = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST as string | undefined; // may be host or host:port
   const fsPortEnv = import.meta.env.VITE_FIRESTORE_EMULATOR_PORT as string | undefined;
   const shouldUseFsEmu = useFsEmuFlag || !!fsHostEnv || looksLocal;
+  console.log(`[Firebase] Emulator config check: useFsEmuFlag=${useFsEmuFlag}, fsHostEnv=${fsHostEnv}, fsPortEnv=${fsPortEnv}, shouldUseFsEmu=${shouldUseFsEmu}`);
   if (shouldUseFsEmu) {
     let host = '127.0.0.1';
     let port = 8085; // project default in firebase.json
@@ -62,7 +63,7 @@ try {
       if (!Number.isNaN(parsed)) port = parsed;
     }
     connectFirestoreEmulator(db as any, host, port);
-    console.info(`[Firebase] Firestore emulator: ${host}:${port} (${projId || 'no-project-id-set'})`);
+    console.info(`[Firebase] Firestore emulator connected: ${host}:${port} (projectId=${projId || 'no-project-id-set'})`);
   }
   // Auth emulator
   const useAuthFlag = String(import.meta.env.VITE_USE_AUTH_EMULATOR || '').toLowerCase() === 'true';
@@ -153,6 +154,9 @@ try {
 }
 
 // Export services
-export const getFirestoreInstance = () => db;
+export const getFirestoreInstance = () => {
+  console.log("[Firebase] getFirestoreInstance called, returning db:", db);
+  return db;
+};
 export { auth, storage };
 export const waitForAuthReady = async () => { await authReady; };
