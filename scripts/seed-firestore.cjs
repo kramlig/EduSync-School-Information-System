@@ -1,7 +1,10 @@
 const admin = require('firebase-admin');
 admin.initializeApp({
+  projectId: 'edusync-sis', // Explicitly set production project ID
   // In Cloud Functions this uses ADC automatically. Locally, set GOOGLE_APPLICATION_CREDENTIALS or use firebase login emulators.
 });
+
+console.log('[Firebase Admin] Initializing with project ID:', admin.app().options.projectId);
 
 const db = admin.firestore();
 

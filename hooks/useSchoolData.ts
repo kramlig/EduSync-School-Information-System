@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useState, useEffect } from 'react';
-import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useQueryClient, QueryKey } from '@tanstack/react-query';
 import type { 
     Student, LearningArea, Grade, CoreValue, CoreValueGrade, AttendanceRecord, 
     Teacher, Section, SchoolSettings, SubstituteAssignment, ClassSchedule, 
@@ -68,7 +68,7 @@ async function fetchPaginatedCollection<T>(
         const db = getFirestoreInstance();
         console.log(`[Firestore] Inside fetchPaginatedCollection, db instance:`, db);
         console.log(`[Firestore] Querying collection: ${collectionName}`);
-        let q = query(collection(db, collectionName), orderBy('id'), limit(limitCount)); // Reverted to original pagination logic
+        let q = query(collection(db, collectionName), orderBy('id', 'desc'), limit(limitCount)); // Order by ID descending to show new students first
         const snapshot = await getDocs(q);
         console.log(`[Firestore] Snapshot for ${collectionName}: empty=${snapshot.empty}, docs.length=${snapshot.docs.length}`);
         const data = snapshot.docs.map(doc => {
@@ -213,7 +213,7 @@ export function useSchoolData(): SchoolDataHook {
     }, [refetchStudents, queries]);
 
     // Helper to invalidate a query after mutation
-    const invalidate = (key: string) => queryClient.invalidateQueries({ queryKey: [key] });
+    const invalidate = (key: QueryKey) => queryClient.invalidateQueries({ queryKey: key });
 
     // === CRUD OPERATIONS ===
     // Students
@@ -224,21 +224,22 @@ export function useSchoolData(): SchoolDataHook {
             enrollmentDate: new Date().toISOString().split('T')[0],
         };
         await writeToFirestore('students', newStudent.id, newStudent);
-        await invalidate('students');
+        await invalidate(['students']); // Invalidate the general 'students' key
+        await invalidate(['students', 'initial']); // Invalidate the specific initial students query
         return { success: true };
     }, []);
 
     const updateStudent = useCallback(async (student: Student) => {
         await writeToFirestore('students', student.id, student);
-        await invalidate('students');
+        await invalidate(['students']);
     }, []);
 
     const deleteStudent = useCallback(async (studentId: string) => {
         await deleteFromFirestore('students', studentId);
-        await invalidate('students');
-        await invalidate('grades');
-        await invalidate('coreValueGrades');
-        await invalidate('attendanceRecords');
+        await invalidate(['students']);
+        await invalidate(['grades']);
+        await invalidate(['coreValueGrades']);
+        await invalidate(['attendanceRecords']);
     }, []);
 
     // Grades
@@ -288,7 +289,7 @@ export function useSchoolData(): SchoolDataHook {
         existing.finalGrade = calc.finalGrade;
         existing.remarks = calc.remarks;
         await writeToFirestore('grades', existing.id, existing);
-        await invalidate('grades');
+        await invalidate(['grades']);
     }, []);
 
     // Core Values
@@ -313,7 +314,7 @@ export function useSchoolData(): SchoolDataHook {
             (nextRecord as any)[quarter][behavior] = value;
         }
         await writeToFirestore('coreValueGrades', nextRecord.id, nextRecord);
-        await invalidate('coreValueGrades');
+        await invalidate(['coreValueGrades']);
     }, []);
 
     // Attendance
@@ -327,60 +328,60 @@ export function useSchoolData(): SchoolDataHook {
             const newRecord: AttendanceRecord = { studentId, dailyStatus: { [date]: status } };
             await writeToFirestore('attendanceRecords', studentId, newRecord);
         }
-        await invalidate('attendanceRecords');
+        await invalidate(['attendanceRecords']);
     }, []);
 
     // Learning Areas
     const addLearningArea = useCallback(async (area: Omit<LearningArea, 'id'>) => {
         const newArea: LearningArea = { id: `la_${Date.now()}`, ...area };
         await writeToFirestore('learningAreas', newArea.id, newArea);
-        await invalidate('learningAreas');
+        await invalidate(['learningAreas']);
     }, []);
 
     const updateLearningArea = useCallback(async (learningAreaId: string, area: Omit<LearningArea, 'id'>) => {
         const updatedArea: LearningArea = { id: learningAreaId, ...area };
         await writeToFirestore('learningAreas', learningAreaId, updatedArea);
-        await invalidate('learningAreas');
+        await invalidate(['learningAreas']);
     }, []);
 
     const deleteLearningArea = useCallback(async (learningAreaId: string) => {
         await deleteFromFirestore('learningAreas', learningAreaId);
-        await invalidate('learningAreas');
-        await invalidate('grades');
+        await invalidate(['learningAreas']);
+        await invalidate(['grades']);
     }, []);
 
     // Teachers
     const addTeacher = useCallback(async (teacher: Omit<Teacher, 'id'>) => {
         const newTeacher: Teacher = { id: `t_${Date.now()}`, ...teacher };
         await writeToFirestore('teachers', newTeacher.id, newTeacher);
-        await invalidate('teachers');
+        await invalidate(['teachers']);
     }, []);
 
     const updateTeacher = useCallback(async (teacher: Teacher) => {
         await writeToFirestore('teachers', teacher.id, teacher);
-        await invalidate('teachers');
+        await invalidate(['teachers']);
     }, []);
 
     const deleteTeacher = useCallback(async (teacherId: string) => {
         await deleteFromFirestore('teachers', teacherId);
-        await invalidate('teachers');
+        await invalidate(['teachers']);
     }, []);
 
     // Parents
     const addParent = useCallback(async (parent: Omit<Parent, 'id'>) => {
         const newParent: Parent = { id: `p_${Date.now()}`, ...parent };
         await writeToFirestore('parents', newParent.id, newParent);
-        await invalidate('parents');
+        await invalidate(['parents']);
     }, []);
 
     const updateParent = useCallback(async (parent: Parent) => {
         await writeToFirestore('parents', parent.id, parent);
-        await invalidate('parents');
+        await invalidate(['parents']);
     }, []);
 
     const deleteParent = useCallback(async (parentId: string) => {
         await deleteFromFirestore('parents', parentId);
-        await invalidate('parents');
+        await invalidate(['parents']);
     }, []);
 
     const assignStudentToParent = useCallback(async (parentId: string, studentId: string) => {
@@ -389,7 +390,7 @@ export function useSchoolData(): SchoolDataHook {
         if (parent) {
             const updated = { ...parent, studentIds: [...(parent.studentIds || []), studentId] };
             await writeToFirestore('parents', parentId, updated);
-            await invalidate('parents');
+            await invalidate(['parents']);
         }
     }, []);
 
@@ -399,7 +400,7 @@ export function useSchoolData(): SchoolDataHook {
         if (parent) {
             const updated = { ...parent, studentIds: (parent.studentIds || []).filter(id => id !== studentId) };
             await writeToFirestore('parents', parentId, updated);
-            await invalidate('parents');
+            await invalidate(['parents']);
         }
     }, []);
 
@@ -407,77 +408,77 @@ export function useSchoolData(): SchoolDataHook {
     const addSection = useCallback(async (section: Omit<Section, 'id'>) => {
         const newSection: Section = { id: `sec_${Date.now()}`, ...section };
         await writeToFirestore('sections', newSection.id, newSection);
-        await invalidate('sections');
+        await invalidate(['sections']);
     }, []);
 
     const updateSection = useCallback(async (section: Section) => {
         await writeToFirestore('sections', section.id, section);
-        await invalidate('sections');
+        await invalidate(['sections']);
     }, []);
 
     const deleteSection = useCallback(async (sectionId: string) => {
         await deleteFromFirestore('sections', sectionId);
-        await invalidate('sections');
+        await invalidate(['sections']);
     }, []);
 
     // Settings
     const updateSettings = useCallback(async (settings: SchoolSettings) => {
         await writeToFirestore('settings', 'default', settings);
-        await invalidate('settings');
+        await invalidate(['settings']);
     }, []);
 
     // Substitute Assignments
     const addSubstituteAssignment = useCallback(async (assignment: Omit<SubstituteAssignment, 'id'>) => {
         const newAssignment: SubstituteAssignment = { id: `sa_${Date.now()}`, ...assignment };
         await writeToFirestore('substituteAssignments', newAssignment.id, newAssignment);
-        await invalidate('substituteAssignments');
+        await invalidate(['substituteAssignments']);
     }, []);
 
     const updateSubstituteAssignment = useCallback(async (assignment: SubstituteAssignment) => {
         await writeToFirestore('substituteAssignments', assignment.id, assignment);
-        await invalidate('substituteAssignments');
+        await invalidate(['substituteAssignments']);
     }, []);
 
     const deleteSubstituteAssignment = useCallback(async (assignmentId: string) => {
         await deleteFromFirestore('substituteAssignments', assignmentId);
-        await invalidate('substituteAssignments');
+        await invalidate(['substituteAssignments']);
     }, []);
 
     // Class Schedules
     const addSchedule = useCallback(async (sched: Omit<ClassSchedule, 'id'>) => {
         const newSchedule: ClassSchedule = { id: `cs_${Date.now()}`, ...sched };
         await writeToFirestore('classSchedules', newSchedule.id, newSchedule);
-        await invalidate('classSchedules');
+        await invalidate(['classSchedules']);
         return { success: true };
     }, []);
 
     const updateSchedule = useCallback(async (sched: ClassSchedule) => {
         await writeToFirestore('classSchedules', sched.id, sched);
-        await invalidate('classSchedules');
+        await invalidate(['classSchedules']);
         return { success: true };
     }, []);
 
     const deleteSchedule = useCallback(async (scheduleId: string) => {
         await deleteFromFirestore('classSchedules', scheduleId);
-        await invalidate('classSchedules');
+        await invalidate(['classSchedules']);
     }, []);
 
     // Assignments
     const addAssignment = useCallback(async (assignment: Omit<Assignment, 'id'>) => {
         const newAssignment: Assignment = { id: `a_${Date.now()}`, ...assignment };
         await writeToFirestore('assignments', newAssignment.id, newAssignment);
-        await invalidate('assignments');
+        await invalidate(['assignments']);
     }, []);
 
     const updateAssignment = useCallback(async (assignment: Assignment) => {
         await writeToFirestore('assignments', assignment.id, assignment);
-        await invalidate('assignments');
+        await invalidate(['assignments']);
     }, []);
 
     const deleteAssignment = useCallback(async (assignmentId: string) => {
         await deleteFromFirestore('assignments', assignmentId);
-        await invalidate('assignments');
-        await invalidate('studentAssignmentGrades');
+        await invalidate(['assignments']);
+        await invalidate(['studentAssignmentGrades']);
     }, []);
 
     const updateAssignmentGrade = useCallback(async (
@@ -504,7 +505,7 @@ export function useSchoolData(): SchoolDataHook {
             };
             await writeToFirestore('studentAssignmentGrades', newGrade.id!, newGrade);
         }
-        await invalidate('studentAssignmentGrades');
+        await invalidate(['studentAssignmentGrades']);
     }, []);
 
     const submitAssignment = useCallback(async (studentId: string, assignmentId: string, filePath: string) => {
@@ -531,41 +532,41 @@ export function useSchoolData(): SchoolDataHook {
             };
             await writeToFirestore('studentAssignmentGrades', newGrade.id!, newGrade);
         }
-        await invalidate('studentAssignmentGrades');
+        await invalidate(['studentAssignmentGrades']);
     }, []);
 
     // Lesson Plans
     const addLessonPlan = useCallback(async (plan: Omit<LessonPlan, 'id'>) => {
         const newPlan: LessonPlan = { id: `lp_${Date.now()}`, ...plan };
         await writeToFirestore('lessonPlans', newPlan.id, newPlan);
-        await invalidate('lessonPlans');
+        await invalidate(['lessonPlans']);
     }, []);
 
     const updateLessonPlan = useCallback(async (plan: LessonPlan) => {
         await writeToFirestore('lessonPlans', plan.id, plan);
-        await invalidate('lessonPlans');
+        await invalidate(['lessonPlans']);
     }, []);
 
     const deleteLessonPlan = useCallback(async (planId: string) => {
         await deleteFromFirestore('lessonPlans', planId);
-        await invalidate('lessonPlans');
+        await invalidate(['lessonPlans']);
     }, []);
 
     // Announcements
     const addAnnouncement = useCallback(async (announcement: Omit<Announcement, 'id'>) => {
         const newAnnouncement: Announcement = { id: `ann_${Date.now()}`, ...announcement };
         await writeToFirestore('announcements', newAnnouncement.id, newAnnouncement);
-        await invalidate('announcements');
+        await invalidate(['announcements']);
     }, []);
 
     const updateAnnouncement = useCallback(async (announcement: Announcement) => {
         await writeToFirestore('announcements', announcement.id, announcement);
-        await invalidate('announcements');
+        await invalidate(['announcements']);
     }, []);
 
     const deleteAnnouncement = useCallback(async (id: string) => {
         await deleteFromFirestore('announcements', id);
-        await invalidate('announcements');
+        await invalidate(['announcements']);
     }, []);
 
     // Compose the state from queries and return from the hook

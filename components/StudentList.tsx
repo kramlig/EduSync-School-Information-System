@@ -219,26 +219,32 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
 
     setShowCropModal(false);
     setImageToCrop(null);
-    setPhotoError(null);
+    setPhotoError(null); // Clear previous errors
     setPhotoUploading(true);
 
     try {
       // Convert blob to file
-      const file = new File([croppedBlob], 'photo.jpg', { type: 'image/jpeg' });
+      const file = new File([croppedBlob], 'profile.jpg', { type: 'image/jpeg' }); // Ensure consistent filename
       const { url, path } = await uploadStudentPhoto(studentToEdit.id, file);
       
       // Update student with new photo
-      setStudentToEdit({
+      const updatedStudent = {
         ...studentToEdit,
         photoURL: url,
         photoPath: path,
         photoUploadedAt: new Date().toISOString(),
-      });
+      };
+      setStudentToEdit(updatedStudent);
+      
+      // IMPORTANT: Persist the photoURL and photoPath to Firestore
+      // This assumes updateStudent handles partial updates correctly
+      updateStudent(updatedStudent); 
 
       // Clear captured blob
       setCapturedBlob(null);
     } catch (error: any) {
-      setPhotoError(error.message || 'Failed to upload photo');
+      console.error('Error uploading student photo:', error); // Log error for debugging
+      setPhotoError(error.message || 'Failed to upload photo. Please try again.');
     } finally {
       setPhotoUploading(false);
     }
@@ -248,6 +254,8 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setPhotoError(null); // Clear previous errors on new file selection
 
     // Create URL for cropping
     const imageUrl = URL.createObjectURL(file);
