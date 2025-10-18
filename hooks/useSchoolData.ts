@@ -705,6 +705,16 @@ export const useSchoolData = (): SchoolDataState & {
 
 
     useEffect(() => {
+        // Emergency timeout - force loading complete after 15 seconds
+        const emergencyTimeout = setTimeout(() => {
+            console.error('[useSchoolData] EMERGENCY: Forcing loading complete after 15s timeout');
+            setState(prev => ({ 
+                ...prev, 
+                loading: false,
+                error: 'Data loading timed out. Using cached data if available.'
+            }));
+        }, 15000);
+        
         const loadData = async () => {
             try {
                 const studentCount = await dbService.count('students');
@@ -922,6 +932,7 @@ export const useSchoolData = (): SchoolDataState & {
                         });
                     }
 
+                    clearTimeout(emergencyTimeout); // Clear timeout on successful load
                     setState({ loading: false, error: null, students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings: settings[0] || MOCK_SETTINGS, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements, monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG });
                 } else {
                     console.log("IndexedDB is empty. Fetching from Firestore...");
@@ -1063,6 +1074,7 @@ export const useSchoolData = (): SchoolDataState & {
                     }
                     
                     // Set the state from the data we just fetched
+                    clearTimeout(emergencyTimeout); // Clear timeout on successful load
                     setState({
                         loading: false,
                         error: null,
@@ -1088,6 +1100,7 @@ export const useSchoolData = (): SchoolDataState & {
             } catch (error) {
                 console.error("Failed to load school data:", error);
                 const errorMessage = error instanceof Error ? error.message : String(error);
+                clearTimeout(emergencyTimeout); // Clear timeout on error
                 setState(prevState => ({ ...prevState, loading: false, error: errorMessage }));
             }
         };
@@ -1193,6 +1206,7 @@ export const useSchoolData = (): SchoolDataState & {
         // Removed dev polling: rely on Firestore onSnapshot for real-time updates
         // Final overall cleanup (unsub all realtimeStore listeners we created)
         return () => {
+            clearTimeout(emergencyTimeout); // Clear emergency timeout
             try { const f = (window as any).__rt_cleanup_sag; if (typeof f === 'function') f(); } catch {}
             try { const f2 = (window as any).__rt_cleanup_grades; if (typeof f2 === 'function') f2(); } catch {}
             try { unsubscribeAll(); } catch {}
