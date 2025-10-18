@@ -720,16 +720,81 @@ export const useSchoolData = (): SchoolDataState & {
                 const studentCount = await dbService.count('students');
                 if (studentCount > 0) {
                     console.log("Loading data from IndexedDB...");
-                    let [ students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements ] = await Promise.all([
-                        dbService.getAll<Student>('students'), dbService.getAll<LearningArea>('learningAreas'),
-                        dbService.getAll<Grade>('grades'), dbService.getAll<CoreValue>('coreValues'),
-                        dbService.getAll<CoreValueGrade>('coreValueGrades'), dbService.getAll<AttendanceRecord>('attendanceRecords'),
-                        dbService.getAll<Teacher>('teachers'), dbService.getAll<Parent>('parents'),
-                        dbService.getAll<Section>('sections'), dbService.getAll<SchoolSettings>('settings'),
-                        dbService.getAll<SubstituteAssignment>('substituteAssignments'), dbService.getAll<ClassSchedule>('classSchedules'),
-                        dbService.getAll<Assignment>('assignments'), dbService.getAll<StudentAssignmentGrade>('studentAssignmentGrades'),
-                        dbService.getAll<LessonPlan>('lessonPlans'), dbService.getAll<Announcement>('announcements'),
-                    ]);
+                    
+                    try {
+                        // Add timeout to IndexedDB operations (10 seconds)
+                        const loadPromise = Promise.all([
+                            dbService.getAll<Student>('students'), dbService.getAll<LearningArea>('learningAreas'),
+                            dbService.getAll<Grade>('grades'), dbService.getAll<CoreValue>('coreValues'),
+                            dbService.getAll<CoreValueGrade>('coreValueGrades'), dbService.getAll<AttendanceRecord>('attendanceRecords'),
+                            dbService.getAll<Teacher>('teachers'), dbService.getAll<Parent>('parents'),
+                            dbService.getAll<Section>('sections'), dbService.getAll<SchoolSettings>('settings'),
+                            dbService.getAll<SubstituteAssignment>('substituteAssignments'), dbService.getAll<ClassSchedule>('classSchedules'),
+                            dbService.getAll<Assignment>('assignments'), dbService.getAll<StudentAssignmentGrade>('studentAssignmentGrades'),
+                            dbService.getAll<LessonPlan>('lessonPlans'), dbService.getAll<Announcement>('announcements'),
+                        ]);
+                        
+                        const timeoutPromise = new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('IndexedDB load timeout after 10s')), 10000)
+                        );
+                        
+                        var [ students, learningAreas, grades, coreValues, coreValueGrades, attendanceRecords, teachers, parents, sections, settings, substituteAssignments, classSchedules, assignments, studentAssignmentGrades, lessonPlans, announcements ] = await Promise.race([
+                            loadPromise,
+                            timeoutPromise
+                        ]) as any;
+                    } catch (indexedDBError) {
+                        console.error('[DataSync] IndexedDB load failed or timed out:', indexedDBError);
+                        console.warn('[DataSync] Bypassing IndexedDB cache - fetching fresh from Firestore...');
+                        
+                        // Force fresh Firestore load by setting studentCount to 0
+                        // This will make the code below think IndexedDB is empty
+                        console.log("IndexedDB is empty or corrupted. Fetching from Firestore...");
+                        const firestoreData = await firestoreReader.fetchAllData();
+                        
+                        // Jump directly to Firestore data processing (copy from else block below)
+                        const sanitizedData = {
+                            students: firestoreData.students || [],
+                            learningAreas: firestoreData.learningAreas?.length ? firestoreData.learningAreas : DEFAULT_LEARNING_AREAS,
+                            grades: firestoreData.grades || [],
+                            coreValues: firestoreData.coreValues || [],
+                            coreValueGrades: firestoreData.coreValueGrades || [],
+                            attendanceRecords: firestoreData.attendanceRecords || [],
+                            teachers: firestoreData.teachers || [],
+                            parents: firestoreData.parents || [],
+                            sections: firestoreData.sections || [],
+                            settings: firestoreData.settings?.[0] || MOCK_SETTINGS,
+                            substituteAssignments: firestoreData.substituteAssignments || [],
+                            classSchedules: firestoreData.classSchedules || [],
+                            assignments: firestoreData.assignments || [],
+                            studentAssignmentGrades: firestoreData.studentAssignmentGrades || [],
+                            lessonPlans: firestoreData.lessonPlans || [],
+                            announcements: firestoreData.announcements || [],
+                        };
+                        
+                        clearTimeout(emergencyTimeout);
+                        setState({
+                            loading: false,
+                            error: null,
+                            students: sanitizedData.students,
+                            learningAreas: sanitizedData.learningAreas,
+                            grades: sanitizedData.grades,
+                            coreValues: sanitizedData.coreValues,
+                            coreValueGrades: sanitizedData.coreValueGrades,
+                            attendanceRecords: sanitizedData.attendanceRecords,
+                            teachers: sanitizedData.teachers,
+                            parents: sanitizedData.parents,
+                            sections: sanitizedData.sections,
+                            settings: sanitizedData.settings,
+                            substituteAssignments: sanitizedData.substituteAssignments,
+                            classSchedules: sanitizedData.classSchedules,
+                            assignments: sanitizedData.assignments,
+                            studentAssignmentGrades: sanitizedData.studentAssignmentGrades,
+                            lessonPlans: sanitizedData.lessonPlans,
+                            announcements: sanitizedData.announcements,
+                            monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG,
+                        });
+                        return; // Exit early - data loaded
+                    }
 
                     if (teachers.length === 0) {
                         console.warn('[DataSync] No teachers found in IndexedDB. Attempting Firestore backfill.');
