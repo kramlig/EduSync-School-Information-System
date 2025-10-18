@@ -1119,70 +1119,76 @@ export const useSchoolData = (): SchoolDataState & {
                 }
             }
         });
+        // TEMPORARY FIX: Disable real-time sync due to connection limits with 7K+ records
+        // Real-time listeners were causing infinite reconnection loop
+        // TODO: Re-enable with proper throttling and connection pooling
+        console.log('[Realtime] Real-time sync DISABLED - use manual refresh instead');
+        
         // Realtime: subject grades live updates across users
-        try {
-            const key = 'grades:all';
-            const stopGrades = subscribeCollection<Grade>(key, 'grades', async (items) => {
-                setState(prev => ({ ...prev, grades: mergeGrades(prev.grades, items) }));
-                try { await dbService.bulkPut('grades', items as any); } catch {}
-            });
-            (window as any).__rt_cleanup_grades = () => { try { stopGrades(); } catch {} };
-        } catch (e) {
-            console.warn('[Realtime] grades onSnapshot failed:', e);
-        }
+        // try {
+        //     const key = 'grades:all';
+        //     const stopGrades = subscribeCollection<Grade>(key, 'grades', async (items) => {
+        //         setState(prev => ({ ...prev, grades: mergeGrades(prev.grades, items) }));
+        //         try { await dbService.bulkPut('grades', items as any); } catch {}
+        //     });
+        //     (window as any).__rt_cleanup_grades = () => { try { stopGrades(); } catch {} };
+        // } catch (e) {
+        //     console.warn('[Realtime] grades onSnapshot failed:', e);
+        // }
         // Realtime: studentAssignmentGrades live updates across users
-        try {
-            const key = 'studentAssignmentGrades:all';
-            const stop = subscribeCollection<StudentAssignmentGrade>(key, 'studentAssignmentGrades', async (items) => {
-                // Deduplicate by composite key in case of older cached docs
-                const map = new Map<string, StudentAssignmentGrade>();
-                for (const it of items) {
-                    const k = `${it.assignmentId}|${it.studentId}`;
-                    const prev = map.get(k);
-                    if (!prev || (it.updatedAt ?? 0) >= (prev.updatedAt ?? 0)) {
-                        map.set(k, it);
-                    }
-                }
-                const merged = Array.from(map.values());
-                setState(prev => ({ ...prev, studentAssignmentGrades: mergeSAG(prev.studentAssignmentGrades, merged) }));
-                try { await dbService.bulkPut('studentAssignmentGrades', merged as any); } catch {}
-            });
-            // Ensure cleanup on unmount
-            const cleanup = () => { try { stop(); } catch {} };
-            // We'll return a composite cleanup below; keep reference
-            (window as any).__rt_cleanup_sag = cleanup;
-        } catch (e) {
-            console.warn('[Realtime] studentAssignmentGrades onSnapshot failed:', e);
-        }
+        // try {
+        //     const key = 'studentAssignmentGrades:all';
+        //     const stop = subscribeCollection<StudentAssignmentGrade>(key, 'studentAssignmentGrades', async (items) => {
+        //         // Deduplicate by composite key in case of older cached docs
+        //         const map = new Map<string, StudentAssignmentGrade>();
+        //         for (const it of items) {
+        //             const k = `${it.assignmentId}|${it.studentId}`;
+        //             const prev = map.get(k);
+        //             if (!prev || (it.updatedAt ?? 0) >= (prev.updatedAt ?? 0)) {
+        //                 map.set(k, it);
+        //             }
+        //         }
+        //         const merged = Array.from(map.values());
+        //         setState(prev => ({ ...prev, studentAssignmentGrades: mergeSAG(prev.studentAssignmentGrades, merged) }));
+        //         try { await dbService.bulkPut('studentAssignmentGrades', merged as any); } catch {}
+        //     });
+        //     // Ensure cleanup on unmount
+        //     const cleanup = () => { try { stop(); } catch {} };
+        //     // We'll return a composite cleanup below; keep reference
+        //     (window as any).__rt_cleanup_sag = cleanup;
+        // } catch (e) {
+        //     console.warn('[Realtime] studentAssignmentGrades onSnapshot failed:', e);
+        // }
         // Realtime subscription for announcements (low volume, high freshness UX)
+        // DISABLED - part of real-time sync temporary disable
         let annUnsub: undefined | (() => void);
-        try {
-            const db = getFirestoreInstance();
-            const col = fsCollection(db as any, 'announcements');
-            const unsub = onSnapshot(col as any, async (snap: any) => {
-                const remote = (snap.docs as any[]).map((d: any) => ({ id: d.id, ...(d.data() || {}) }));
-                if (Array.isArray(remote) && remote.length >= 0) {
-                    // Merge new/updated docs
-                    const mapLocal = new Map(state.announcements.map(a => [a.id, a]));
-                    let changed = false;
-                    for (const doc of remote) {
-                        const prev = mapLocal.get(doc.id);
-                        if (!prev || JSON.stringify(prev) !== JSON.stringify(doc)) {
-                            mapLocal.set(doc.id, doc as any);
-                            changed = true;
-                        }
-                    }
-                    if (changed) {
-                        const merged = Array.from(mapLocal.values());
-                        setState(prev => ({ ...prev, announcements: merged }));
-                        try { await dbService.bulkPut('announcements', merged); } catch {}
-                    }
-                }
-            });
-            annUnsub = () => { try { unsub(); } catch {} };
-        } catch (e) {
-            console.warn('[Realtime] Announcements onSnapshot failed:', e);
-        }
+        // try {
+        //     const db = getFirestoreInstance();
+        //     const col = fsCollection(db as any, 'announcements');
+        //     const unsub = onSnapshot(col as any, async (snap: any) => {
+        //         const remote = (snap.docs as any[]).map((d: any) => ({ id: d.id, ...(d.data() || {}) }));
+        //         if (Array.isArray(remote) && remote.length >= 0) {
+        //             // Merge new/updated docs
+        //             const mapLocal = new Map(state.announcements.map(a => [a.id, a]));
+        //             let changed = false;
+        //             for (const doc of remote) {
+        //                 const prev = mapLocal.get(doc.id);
+        //                 if (!prev || JSON.stringify(prev) !== JSON.stringify(doc)) {
+        //                     mapLocal.set(doc.id, doc as any);
+        //                     changed = true;
+        //                 }
+        //             }
+        //             if (changed) {
+        //                 const merged = Array.from(mapLocal.values());
+        //                 setState(prev => ({ ...prev, announcements: merged }));
+        //                 try { await dbService.bulkPut('announcements', merged); } catch {}
+        //             }
+        //         }
+        //     });
+        //     annUnsub = () => { try { unsub(); } catch {} };
+        // } catch (e) {
+        //     console.warn('[Realtime] Announcements onSnapshot failed:', e);
+        // }
         // Optional dev fallback: poll Firestore for grades/SAG if snapshots are blocked (ad blockers)
         // Removed dev polling: rely on Firestore onSnapshot for real-time updates
         // Final overall cleanup (unsub all realtimeStore listeners we created)
