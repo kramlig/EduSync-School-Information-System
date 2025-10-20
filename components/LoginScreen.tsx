@@ -32,17 +32,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users, loginType, se
     console.log(`Attempting login with type: "${loginType}", email: "${email}"`);
 
     // This is a simplified, mock authentication.
-    setTimeout(() => {
-      const user = users.find(u => u.email.trim().toLowerCase() === email.trim().toLowerCase());
+    const user = users.find(u => u.email.trim().toLowerCase() === email.trim().toLowerCase());
 
-      if (user && (allowAnyPassword || password === 'password')) {
-        console.log('[AuthDebug] Login success for', user.email, 'type', loginType);
-        onLogin(user, loginType);
-      } else {
-        setError('Invalid email or password.');
-      }
-      setIsLoading(false);
-    }, 500);
+    if (user && (allowAnyPassword || password === 'password')) {
+      console.log('[AuthDebug] Login success for', user.email, 'type', loginType);
+      onLogin(user, loginType);
+    } else {
+      setError('Invalid email or password.');
+    }
+    setIsLoading(false);
   };
 
   const handleQuickLogin = () => {

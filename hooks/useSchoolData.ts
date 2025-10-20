@@ -11,7 +11,7 @@
  * This removes the infinite loop issues and makes the data flow predictable.
  */
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueries, useQueryClient, QueryKey } from '@tanstack/react-query';
 import type { 
     Student, LearningArea, Grade, CoreValue, CoreValueGrade, AttendanceRecord, 
@@ -19,10 +19,10 @@ import type {
     Assignment, StudentAssignmentGrade, LessonPlan, Parent, Announcement, 
     AttendanceStatus, CoreValueMarking 
 } from '../types';
-import { getFirestoreInstance, auth } from '../src/services/firestoreService';
+import { getFirestoreInstance, auth, waitForAuthReady } from '../src/services/firestoreService';
 import { 
-    collection, getDocs, doc, setDoc, deleteDoc, 
-    serverTimestamp, onSnapshot, query, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData
+    collection, getDocs, doc, getDoc, setDoc, deleteDoc, 
+    serverTimestamp, onSnapshot, query, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, QuerySnapshot
 } from 'firebase/firestore';
 
 const MOCK_SETTINGS: SchoolSettings = {
@@ -64,25 +64,28 @@ async function fetchPaginatedCollection<T>(
     lastDoc: QueryDocumentSnapshot<DocumentData> | null = null
 ): Promise<{ data: T[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
     try {
-        console.log(`[Firestore] Fetching paginated collection: ${collectionName}, limit: ${limitCount}, lastDoc: ${lastDoc ? 'present' : 'null'}`);
+        console.log(`[Firestore] 🔍 Fetching paginated collection: ${collectionName}, limit: ${limitCount}`);
+        
+        // Wait for auth before fetching
+        await waitForAuthReady();
+        
         const db = getFirestoreInstance();
-        console.log(`[Firestore] Inside fetchPaginatedCollection, db instance:`, db);
-        console.log(`[Firestore] Querying collection: ${collectionName}`);
-        let q = query(collection(db, collectionName), orderBy('id', 'desc'), limit(limitCount)); // Order by ID descending to show new students first
+        
+        // Simple query without orderBy to avoid index requirements  
+        let q = query(collection(db, collectionName), limit(limitCount));
+        
+        console.log(`[Firestore] ⏱️ Executing getDocs() for ${collectionName}...`);
         const snapshot = await getDocs(q);
-        console.log(`[Firestore] Snapshot for ${collectionName}: empty=${snapshot.empty}, docs.length=${snapshot.docs.length}`);
-        const data = snapshot.docs.map(doc => {
-            const docData = doc.data();
-            console.log(`[Firestore] Raw document data for ${collectionName} (ID: ${doc.id}):`, docData);
-            const typedData = { id: doc.id, ...docData } as T;
-            console.log(`[Firestore] Mapped document data for ${collectionName} (ID: ${doc.id}):`, typedData);
-            return typedData;
+        console.log(`[Firestore] ✅ Fetched ${collectionName}: ${snapshot.docs.length} documents`);
+        
+        const data = snapshot.docs.map((doc: any) => {
+            return { id: doc.id, ...doc.data() } as T;
         });
+        
         const newLastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
-        console.log(`[Firestore] Finished fetching paginated collection: ${collectionName}, fetched ${data.length} documents.`);
         return { data, lastDoc: newLastDoc };
     } catch (error) {
-        console.error(`[Firestore] Failed to fetch paginated ${collectionName}:`, error);
+        console.error(`[Firestore] ❌ Failed to fetch paginated ${collectionName}:`, error);
         return { data: [], lastDoc: null };
     }
 }
@@ -90,15 +93,25 @@ async function fetchPaginatedCollection<T>(
 // Helper: Fetch a single collection from Firestore (non-paginated)
 async function fetchCollection<T>(collectionName: string): Promise<T[]> {
     try {
-        console.log(`[Firestore] Fetching collection: ${collectionName}`);
+        console.log(`[Firestore] 🔍 Fetching collection: ${collectionName}`);
+        
+        // Wait for auth to be ready before fetching
+        await waitForAuthReady();
+        
         const db = getFirestoreInstance();
-        const snapshot = await getDocs(collection(db, collectionName));
-        console.log(`[Firestore] Snapshot for ${collectionName}: empty=${snapshot.empty}, docs.length=${snapshot.docs.length}`);
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as T));
-        console.log(`[Firestore] Finished fetching collection: ${collectionName}, fetched ${data.length} documents.`);
+        const collectionRef = collection(db, collectionName);
+        const snapshot = await getDocs(collectionRef);
+        
+        console.log(`[Firestore] ✅ Fetched ${collectionName}: ${snapshot.docs.length} documents`);
+        
+        const data = snapshot.docs.map(doc => {
+            const docData = { id: doc.id, ...doc.data() } as T;
+            return docData;
+        });
+        
         return data;
     } catch (error) {
-        console.error(`[Firestore] Failed to fetch ${collectionName}:`, error);
+        console.error(`[Firestore] ❌ Failed to fetch ${collectionName}:`, error);
         return [];
     }
 }
@@ -130,87 +143,175 @@ async function deleteFromFirestore(collectionName: string, id: string) {
 
 
 // Main hook function
-export function useSchoolData(): SchoolDataHook {
+export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     const queryClient = useQueryClient();
-    const STUDENTS_PER_PAGE = 50; // Define pagination limit
+    const STUDENTS_PER_PAGE = 10; // Reduced to 10 for faster initial load with 7496 students
+
+    // Memoize shouldFetch to prevent excessive re-computation
+    const shouldFetch = useCallback((collectionName: string) => {
+        const result = !collectionsToFetch || collectionsToFetch.length === 0 || collectionsToFetch.includes(collectionName);
+        // Only log on changes, not every render
+        return result;
+    }, [collectionsToFetch]);
 
     // State for paginated students
     const [allStudents, setAllStudents] = useState<Student[]>([]);
     const [lastStudentDoc, setLastStudentDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
     const [hasMoreStudents, setHasMoreStudents] = useState(true);
 
-    // Fetch initial students
-    const { 
-        data: initialStudentsData, 
-        isLoading: isLoadingStudents, 
-        isFetching: isFetchingStudents, 
-        error: studentsError, 
-        refetch: refetchStudents 
-    } = useQuery({
-        queryKey: ['students', 'initial'],
-        queryFn: () => fetchPaginatedCollection<Student>('students', STUDENTS_PER_PAGE),
-        staleTime: 5 * 60 * 1000, // 5 minutes
+    // Other collections (including students for now - we'll add pagination later if needed)
+    const collectionConfigs = [
+        { name: 'students', fetchFn: async () => {
+            console.log('[useSchoolData] 🚀 Students fetchFn EXECUTING!');
+            try {
+                // Fetch initial students with pagination support
+                await waitForAuthReady();
+                const db = getFirestoreInstance();
+                console.log('[Firestore] 🔍 Fetching initial students with limit(10)...');
+                
+                const studentsCol = collection(db, 'students');
+                const q = query(studentsCol, limit(10));
+                
+                console.log('[Firestore] ⏱️ Calling getDocs...');
+                const snapshot = await getDocs(q);
+                console.log('[Firestore] ✅ SUCCESS! Fetched', snapshot.docs.length, 'students');
+                
+                // Save the last document for pagination
+                if (snapshot.docs.length > 0) {
+                    setLastStudentDoc(snapshot.docs[snapshot.docs.length - 1]);
+                    setHasMoreStudents(snapshot.docs.length === 10);
+                } else {
+                    setHasMoreStudents(false);
+                }
+                
+                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+                return data;
+            } catch (error) {
+                console.error('[Firestore] ❌ Students fetch error:', error);
+                return [];
+            }
+        }},
+        { name: 'grades', fetchFn: () => fetchCollection<Grade>('grades') },
+        { name: 'coreValues', fetchFn: () => fetchCollection<CoreValue>('coreValues') },
+        { name: 'coreValueGrades', fetchFn: () => fetchCollection<CoreValueGrade>('coreValueGrades') },
+        { name: 'attendanceRecords', fetchFn: () => fetchCollection<AttendanceRecord>('attendanceRecords') },
+        { name: 'teachers', fetchFn: () => fetchCollection<Teacher>('teachers') },
+        { name: 'parents', fetchFn: () => fetchCollection<Parent>('parents') },
+        { name: 'sections', fetchFn: () => fetchCollection<Section>('sections') },
+        { name: 'settings', fetchFn: async () => {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = doc(db, 'settings', 'default');
+            const docSnap = await getDoc(docRef);
+            console.log('[Firestore] ✅ Fetched settings:', docSnap.exists());
+            return docSnap.exists() ? [docSnap.data() as SchoolSettings] : [];
+        }},
+        { name: 'substituteAssignments', fetchFn: () => fetchCollection<SubstituteAssignment>('substituteAssignments') },
+        { name: 'classSchedules', fetchFn: () => fetchCollection<ClassSchedule>('classSchedules') },
+        { name: 'assignments', fetchFn: () => fetchCollection<Assignment>('assignments') },
+        { name: 'studentAssignmentGrades', fetchFn: () => fetchCollection<StudentAssignmentGrade>('studentAssignmentGrades') },
+        { name: 'lessonPlans', fetchFn: () => fetchCollection<LessonPlan>('lessonPlans') },
+        { name: 'announcements', fetchFn: () => fetchCollection<Announcement>('announcements') },
+    ];
+
+    const queries = useQueries({
+      queries: collectionConfigs
+        .filter(config => shouldFetch(config.name))
+        .map(config => ({
+          queryKey: [config.name],
+          queryFn: config.fetchFn,
+          staleTime: 5 * 60 * 1000, // 5 minutes
+        }))
     });
 
-    console.log("[useSchoolData] useQuery result - data:", initialStudentsData, "isLoading:", isLoadingStudents, "isFetching:", isFetchingStudents, "error:", studentsError);
-
-    // Update student state when initialStudentsData changes
+    // Log query states after they potentially update
     useEffect(() => {
-        console.log("[useSchoolData] useEffect triggered. initialStudentsData:", initialStudentsData, "studentsError:", studentsError);
+        console.log('[useSchoolData] 📊 Queries state update:', queries.map(q => ({
+            isLoading: q.isLoading,
+            isFetching: q.isFetching,
+            isSuccess: q.isSuccess,
+            dataLength: Array.isArray(q.data) ? q.data.length : 'not-array'
+        })));
+    }, [queries]);
+
+    // Extract students query (first one in collectionConfigs)
+    const studentsQuery = queries[0];
+    const isLoadingStudents = studentsQuery?.isLoading || false;
+    const isFetchingStudents = studentsQuery?.isFetching || false;
+    const studentsError = studentsQuery?.error as string | null;
+    const initialStudentsData = studentsQuery?.data as Student[] | undefined;
+
+    // Update student state when data changes
+    useEffect(() => {
         if (initialStudentsData) {
-            console.log("[useSchoolData] Processing initialStudentsData.data:", initialStudentsData.data);
-            setAllStudents(initialStudentsData.data);
-            setLastStudentDoc(initialStudentsData.lastDoc);
-            setHasMoreStudents(initialStudentsData.data.length === STUDENTS_PER_PAGE);
-            if (initialStudentsData.data.length === 0) {
-                console.error("[useSchoolData] Initial student data fetch returned empty results.");
-            }
-        } else if (studentsError) {
-            console.error("[useSchoolData] Error fetching initial students:", studentsError);
-        } else {
-            console.error("[useSchoolData] initialStudentsData is null/undefined after fetch attempt.");
+            console.log(`[useSchoolData] ✅ Setting allStudents to ${initialStudentsData.length} items`);
+            setAllStudents(initialStudentsData);
+            setHasMoreStudents(initialStudentsData.length === STUDENTS_PER_PAGE);
         }
-    }, [initialStudentsData, STUDENTS_PER_PAGE, studentsError]);
+    }, [initialStudentsData, STUDENTS_PER_PAGE]);
 
-    // Fetch more students
+    // Fetch more students (pagination)
     const fetchMoreStudents = useCallback(async () => {
-        if (!hasMoreStudents || isFetchingStudents) return;
-
-        const { data, lastDoc: newLastDoc } = await fetchPaginatedCollection<Student>('students', STUDENTS_PER_PAGE, lastStudentDoc);
-        setAllStudents(prev => [...prev, ...data]);
-        setLastStudentDoc(newLastDoc);
-        setHasMoreStudents(data.length === STUDENTS_PER_PAGE);
+        if (!hasMoreStudents || isFetchingStudents || !lastStudentDoc) {
+            console.log('[useSchoolData] ⚠️ Cannot fetch more:', { hasMoreStudents, isFetchingStudents, hasLastDoc: !!lastStudentDoc });
+            return;
+        }
+        
+        try {
+            console.log('[useSchoolData] 📄 Fetching next page of students...');
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            const studentsCol = collection(db, 'students');
+            const q = query(studentsCol, startAfter(lastStudentDoc), limit(STUDENTS_PER_PAGE));
+            
+            const snapshot = await getDocs(q);
+            console.log('[useSchoolData] ✅ Fetched', snapshot.docs.length, 'more students');
+            
+            const newStudents = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })) as Student[];
+            
+            // Update state
+            setAllStudents(prev => [...prev, ...newStudents]);
+            
+            if (snapshot.docs.length > 0) {
+                setLastStudentDoc(snapshot.docs[snapshot.docs.length - 1]);
+            }
+            
+            setHasMoreStudents(snapshot.docs.length === STUDENTS_PER_PAGE);
+        } catch (error) {
+            console.error('[useSchoolData] ❌ Error fetching more students:', error);
+        }
     }, [hasMoreStudents, isFetchingStudents, lastStudentDoc, STUDENTS_PER_PAGE]);
 
-    // Other collections (non-paginated for now)
-    const queries = useQueries({
-      queries: [
-        // { queryKey: ['students'], queryFn: () => fetchCollection<Student>('students') }, // Commented out to isolate student pagination
-        { queryKey: ['learningAreas'], queryFn: () => fetchCollection<LearningArea>('learningAreas') },
-        { queryKey: ['grades'], queryFn: () => fetchCollection<Grade>('grades') },
-        { queryKey: ['coreValues'], queryFn: () => fetchCollection<CoreValue>('coreValues') },
-        { queryKey: ['coreValueGrades'], queryFn: () => fetchCollection<CoreValueGrade>('coreValueGrades') },
-        { queryKey: ['attendanceRecords'], queryFn: () => fetchCollection<AttendanceRecord>('attendanceRecords') },
-        { queryKey: ['teachers'], queryFn: () => fetchCollection<Teacher>('teachers') },
-        { queryKey: ['parents'], queryFn: () => fetchCollection<Parent>('parents') },
-        { queryKey: ['sections'], queryFn: () => fetchCollection<Section>('sections') },
-        { queryKey: ['settings'], queryFn: () => fetchCollection<SchoolSettings>('settings') },
-        { queryKey: ['substituteAssignments'], queryFn: () => fetchCollection<SubstituteAssignment>('substituteAssignments') },
-        { queryKey: ['classSchedules'], queryFn: () => fetchCollection<ClassSchedule>('classSchedules') },
-        { queryKey: ['assignments'], queryFn: () => fetchCollection<Assignment>('assignments') },
-        { queryKey: ['studentAssignmentGrades'], queryFn: () => fetchCollection<StudentAssignmentGrade>('studentAssignmentGrades') },
-        { queryKey: ['lessonPlans'], queryFn: () => fetchCollection<LessonPlan>('lessonPlans') },
-        { queryKey: ['announcements'], queryFn: () => fetchCollection<Announcement>('announcements') },
-      ]
-    });
+    const loading = queries.some(q => q.isLoading);
+    const error = queries.find(q => q.error)?.error as string | null;
 
-    const loading = isLoadingStudents || queries.some(q => q.isLoading);
-    const error = studentsError || queries.find(q => q.error)?.error as string | null;
+    const queryResultsMap = useMemo(() => {
+        // Don't build map while still loading - return empty to avoid premature empty arrays
+        if (loading) {
+            return {};
+        }
+        
+        const map = collectionConfigs
+            .filter(config => shouldFetch(config.name))
+            .reduce((acc, config, index) => {
+                const queryResult = queries[index];
+                if (queryResult) {
+                    acc[config.name] = queryResult.data || [];
+                }
+                return acc;
+            }, {} as Record<string, any>);
+        
+        console.log('[useSchoolData] ✅ Data loaded - Teachers:', map.teachers?.length, 'Parents:', map.parents?.length, 'Students:', allStudents.length);
+        return map;
+    }, [queries, collectionConfigs, shouldFetch, loading]);
     
     const refresh = useCallback(() => {
-      refetchStudents();
+      // Refetch students by triggering the query
+      studentsQuery?.refetch();
+      // Refetch all other queries
       queries.forEach(q => q.refetch && q.refetch());
-    }, [refetchStudents, queries]);
+    }, [studentsQuery, queries]);
 
     // Helper to invalidate a query after mutation
     const invalidate = (key: QueryKey) => queryClient.invalidateQueries({ queryKey: key });
@@ -572,21 +673,21 @@ export function useSchoolData(): SchoolDataHook {
     // Compose the state from queries and return from the hook
     return {
         students: allStudents, // Now using paginated students
-        learningAreas: (queries[0]?.data?.length ? queries[0].data : DEFAULT_LEARNING_AREAS) ?? [],
-        grades: queries[1]?.data ?? [],
-        coreValues: queries[2]?.data ?? [],
-        coreValueGrades: queries[3]?.data ?? [],
-        attendanceRecords: queries[4]?.data ?? [],
-        teachers: queries[5]?.data ?? [],
-        parents: queries[6]?.data ?? [],
-        sections: queries[7]?.data ?? [],
-        settings: queries[8]?.data?.[0] ?? MOCK_SETTINGS,
-        substituteAssignments: queries[9]?.data ?? [],
-        classSchedules: queries[10]?.data ?? [],
-        assignments: queries[11]?.data ?? [],
-        studentAssignmentGrades: queries[12]?.data ?? [],
-        lessonPlans: queries[13]?.data ?? [],
-        announcements: queries[14]?.data ?? [],
+        learningAreas: DEFAULT_LEARNING_AREAS,
+        grades: queryResultsMap.grades ?? [],
+        coreValues: queryResultsMap.coreValues ?? [],
+        coreValueGrades: queryResultsMap.coreValueGrades ?? [],
+        attendanceRecords: queryResultsMap.attendanceRecords ?? [],
+        teachers: queryResultsMap.teachers ?? [],
+        parents: queryResultsMap.parents ?? [],
+        sections: queryResultsMap.sections ?? [],
+        settings: queryResultsMap.settings?.[0] || MOCK_SETTINGS,
+        substituteAssignments: queryResultsMap.substituteAssignments ?? [],
+        classSchedules: queryResultsMap.classSchedules ?? [],
+        assignments: queryResultsMap.assignments ?? [],
+        studentAssignmentGrades: queryResultsMap.studentAssignmentGrades ?? [],
+        lessonPlans: queryResultsMap.lessonPlans ?? [],
+        announcements: queryResultsMap.announcements ?? [],
         monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG,
         loading,
         error: error ? (typeof error === 'string' ? error : JSON.stringify(error)) : null,
@@ -640,20 +741,20 @@ export function useSchoolData(): SchoolDataHook {
 export interface SchoolDataHook {
     students: Student[];
     learningAreas: LearningArea[];
-    grades: Grade[];
-    coreValues: CoreValue[];
-    coreValueGrades: CoreValueGrade[];
-    attendanceRecords: AttendanceRecord[];
+    grades?: Grade[];
+    coreValues?: CoreValue[];
+    coreValueGrades?: CoreValueGrade[];
+    attendanceRecords?: AttendanceRecord[];
     teachers: Teacher[];
     parents: Parent[];
-    sections: Section[];
+    sections?: Section[];
     settings: SchoolSettings;
-    substituteAssignments: SubstituteAssignment[];
-    classSchedules: ClassSchedule[];
-    assignments: Assignment[];
-    studentAssignmentGrades: StudentAssignmentGrade[];
-    lessonPlans: LessonPlan[];
-    announcements: Announcement[];
+    substituteAssignments?: SubstituteAssignment[];
+    classSchedules?: ClassSchedule[];
+    assignments?: Assignment[];
+    studentAssignmentGrades?: StudentAssignmentGrade[];
+    lessonPlans?: LessonPlan[];
+    announcements?: Announcement[];
     monthlySchoolDaysConfig: Record<string, number>;
     loading: boolean;
     error: string | null;

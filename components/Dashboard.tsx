@@ -17,7 +17,10 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
-  const { students, learningAreas, grades, sections, substituteAssignments, classSchedules } = schoolData;
+  const { 
+    students, learningAreas, 
+    grades = [], sections = [], substituteAssignments = [], classSchedules = [] 
+  } = schoolData;
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
   
