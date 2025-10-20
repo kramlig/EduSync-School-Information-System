@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
@@ -6,27 +6,29 @@ import { useSchoolData } from './hooks/useSchoolData';
 import type { AuthUser, StudentUser, ParentUser } from './types';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import Dashboard from './components/Dashboard';
-import StudentList from './components/StudentList';
-import TeacherList from './components/TeacherList';
-import ParentsView from './components/ParentsView';
-import SectionsView from './components/SectionsView';
-import GradesView from './components/GradesView';
-import GradebookView from './components/GradebookView';
-import CoreValuesView from './components/CoreValuesView';
-import CoreValuesGradebookView from './components/CoreValuesGradebookView';
-import AttendanceView from './components/AttendanceView';
-import SchedulerView from './components/SchedulerView';
-import SubstituteView from './components/SubstituteView';
-import AssignmentsView from './components/AssignmentsView';
-import LessonPlanView from './components/LessonPlanView';
-import AnnouncementsView from './components/AnnouncementsView';
-import SettingsView from './components/SettingsView';
-import CourseList from './components/CourseList';
-import StudentDashboard from './components/StudentDashboard';
-import ParentDashboard from './components/ParentDashboard';
 import LoginScreen from './components/LoginScreen';
 import FullScreenLoader from './components/FullScreenLoader';
+
+// Lazy load heavy components for better code splitting
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const StudentList = lazy(() => import('./components/StudentList'));
+const TeacherList = lazy(() => import('./components/TeacherList'));
+const ParentsView = lazy(() => import('./components/ParentsView'));
+const SectionsView = lazy(() => import('./components/SectionsView'));
+const GradesView = lazy(() => import('./components/GradesView'));
+const GradebookView = lazy(() => import('./components/GradebookView'));
+const CoreValuesView = lazy(() => import('./components/CoreValuesView'));
+const CoreValuesGradebookView = lazy(() => import('./components/CoreValuesGradebookView'));
+const AttendanceView = lazy(() => import('./components/AttendanceView'));
+const SchedulerView = lazy(() => import('./components/SchedulerView'));
+const SubstituteView = lazy(() => import('./components/SubstituteView'));
+const AssignmentsView = lazy(() => import('./components/AssignmentsView'));
+const LessonPlanView = lazy(() => import('./components/LessonPlanView'));
+const AnnouncementsView = lazy(() => import('./components/AnnouncementsView'));
+const SettingsView = lazy(() => import('./components/SettingsView'));
+const CourseList = lazy(() => import('./components/CourseList'));
+const StudentDashboard = lazy(() => import('./components/StudentDashboard'));
+const ParentDashboard = lazy(() => import('./components/ParentDashboard'));
 
 const App: React.FC = () => {
   console.log('[App] Rendering');
@@ -75,9 +77,16 @@ const App: React.FC = () => {
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
   // Get data from simplified hook - no memoization needed!
-  const schoolData = useSchoolData();
+  // Initially fetch only essential collections for login and basic app functionality
+  const schoolData = useSchoolData(['settings', 'teachers', 'students', 'parents']);
   
-  const { loading, error, settings, students, teachers, parents } = schoolData;
+  const { 
+    loading, error, settings, students, teachers, parents,
+    grades = [], coreValues = [], coreValueGrades = [], attendanceRecords = [],
+    sections = [], substituteAssignments = [], classSchedules = [],
+    assignments = [], studentAssignmentGrades = [], lessonPlans = [],
+    announcements = []
+  } = schoolData;
 
   // Track selected child for parent sessions
   const [parentSelectedChildId, setParentSelectedChildId] = useState<string | null>(null);
@@ -97,20 +106,20 @@ const App: React.FC = () => {
     }
   }, [session, students, parentSelectedChildId]);
 
-  const handleLogin = (user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => {
+  const handleLogin = useCallback((user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => {
     setSession({ user, type });
-  };
+  }, []);
   
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     setSession(null);
-  };
+  }, []);
 
-  const getUsersForLogin = () => {
+  const getUsersForLogin = useMemo(() => {
     if (loginType === 'staff') return teachers;
     if (loginType === 'student') return students;
     if (loginType === 'parent') return parents;
     return [];
-  };
+  }, [loginType, teachers, students, parents]);
 
   console.log('[App] Loading check:', { authReady, loading, studentsCount: students.length });
   
@@ -133,7 +142,7 @@ const App: React.FC = () => {
   if (!session) {
     return <LoginScreen 
       onLogin={handleLogin} 
-      users={getUsersForLogin()}
+      users={getUsersForLogin}
       loginType={loginType}
       setLoginType={setLoginType}
     />;
@@ -161,7 +170,8 @@ const App: React.FC = () => {
             onParentChildChange={(id) => setParentSelectedChildId(id)}
           />
           <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-100 dark:bg-slate-900 p-6">
-            <Routes>
+            <Suspense fallback={<FullScreenLoader message="Loading page..." />}>
+              <Routes>
                 {session.type === 'staff' && (
                     <>
                         <Route path="/" element={<Dashboard schoolData={schoolData} session={staffSession} />} />
@@ -206,6 +216,7 @@ const App: React.FC = () => {
         )}
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
+            </Suspense>
           </main>
         </div>
       </div>

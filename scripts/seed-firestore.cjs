@@ -1,6 +1,8 @@
 const admin = require('firebase-admin');
+// Dynamically get projectId from environment variables for emulator
+const projectId = process.env.VITE_FIREBASE_PROJECT_ID || 'edusync-local'; 
 admin.initializeApp({
-  projectId: 'edusync-sis', // Explicitly set production project ID
+  projectId: projectId,
   // In Cloud Functions this uses ADC automatically. Locally, set GOOGLE_APPLICATION_CREDENTIALS or use firebase login emulators.
 });
 
