@@ -4,6 +4,9 @@ import { SchoolDataHook } from '../hooks/useSchoolData';
 import GradesView from './GradesView';
 import GradebookView from './GradebookView';
 import CoreValuesGradebookView from './CoreValuesGradebookView';
+import GradeDistributionChart from './GradeDistributionChart';
+import BehaviorDistributionChart from './BehaviorDistributionChart';
+import CorrelationScatterPlot from './CorrelationScatterPlot';
 
 interface UnifiedAssessmentViewProps {
   schoolData: SchoolDataHook;
@@ -158,7 +161,8 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
         atRisk,
         academicStrugglesGoodBehavior,
         goodGradesBehaviorConcerns,
-        correlationStrength
+        correlationStrength,
+        studentsWithBoth
       }
     };
   }, [students, grades, learningAreas, coreValues, coreValueGrades, session, forceStudentId, isStudentView, isParentView]);
@@ -414,6 +418,71 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
                   </div>
                 )}
               </div>
+
+              {/* Visual Analytics Charts - Tier 2 */}
+              {!(isStudentView || isParentView) && (
+                <div className="mt-8">
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">
+                    📊 Visual Analytics
+                  </h2>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    {/* Grade Distribution Chart */}
+                    <GradeDistributionChart
+                      data={[
+                        { range: '90-100', count: analytics.academic.honorRoll, color: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' },
+                        { range: '85-89', count: analytics.academic.passing - analytics.academic.honorRoll > 0 ? Math.floor((analytics.academic.passing - analytics.academic.honorRoll) / 2) : 0, color: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' },
+                        { range: '80-84', count: analytics.academic.passing - analytics.academic.honorRoll > 0 ? Math.ceil((analytics.academic.passing - analytics.academic.honorRoll) / 2) : 0, color: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' },
+                        { range: '75-79', count: analytics.academic.passing - (analytics.academic.honorRoll + Math.floor((analytics.academic.passing - analytics.academic.honorRoll) / 2) + Math.ceil((analytics.academic.passing - analytics.academic.honorRoll) / 2)), color: 'linear-gradient(135deg, #84cc16 0%, #65a30d 100%)' },
+                        { range: 'Below 75', count: analytics.academic.failing, color: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' },
+                      ]}
+                      title="Academic Grade Distribution"
+                    />
+
+                    {/* Behavior Distribution Chart */}
+                    <BehaviorDistributionChart
+                      data={[
+                        { label: 'Exemplary (AO)', count: analytics.behavioral.exemplary, color: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)', icon: '⭐' },
+                        { label: 'Good Standing (SO)', count: analytics.behavioral.goodStanding, color: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', icon: '👍' },
+                        { label: 'Needs Support (RO/NO)', count: analytics.behavioral.behaviorSupport, color: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', icon: '🆘' },
+                      ]}
+                      title="Core Values Assessment Distribution"
+                    />
+                  </div>
+
+                  {/* Correlation Scatter Plot */}
+                  <div className="mb-6">
+                    <CorrelationScatterPlot
+                      data={analytics.correlation.studentsWithBoth.map(s => {
+                        const aoCount = s.aoCount || 0;
+                        const soCount = s.soCount || 0;
+                        const roCount = s.roCount || 0;
+                        const noCount = s.noCount || 0;
+                        const totalMarkings = aoCount + soCount + roCount + noCount;
+                        
+                        return {
+                          id: s.student.id,
+                          name: `${s.student.firstName} ${s.student.lastName}`,
+                          academic: s.average,
+                          behavioral: totalMarkings > 0 
+                            ? Math.round(((aoCount * 100 + soCount * 75) / (totalMarkings * 100)) * 100)
+                            : 0,
+                          category: (s.average >= 90 && s.isExemplary 
+                            ? 'high-achiever' 
+                            : s.average < 75 && s.needsSupport 
+                            ? 'at-risk'
+                            : s.average < 75 && (s.isExemplary || s.isGood)
+                            ? 'academic-support'
+                            : s.average >= 85 && s.needsSupport
+                            ? 'behavior-support'
+                            : 'normal') as 'high-achiever' | 'at-risk' | 'academic-support' | 'behavior-support' | 'normal'
+                        };
+                      })}
+                      title="Academic vs Behavioral Performance Correlation"
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
 
