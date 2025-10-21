@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type { Student, Grade, LearningArea, SubGradeRecord, AuthUser, StudentUser, ParentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { generateStudentReport } from '../services/geminiService';
@@ -7,6 +7,7 @@ import Spinner from './Spinner';
 import { ChevronDownIcon, ChevronRightIcon, PrinterIcon } from './icons';
 import PrintableReport from './PrintableReport';
 import { useDebounce } from '../hooks/useDebounce';
+import Toast from './Toast';
 
 interface GradesViewProps {
   schoolData: SchoolDataHook;
@@ -14,12 +15,24 @@ interface GradesViewProps {
   forceStudentId?: string; // For parent view
 }
 
+type ToastType = 'success' | 'error' | 'info';
+type FilterType = 'all' | 'honor' | 'needs-improvement' | 'incomplete';
+type SortType = 'name' | 'average' | 'completion';
+
 const getGradeColor = (gradeValue: number) => {
   if (gradeValue >= 90) return 'text-green-500';
   if (gradeValue >= 80) return 'text-lime-500';
   if (gradeValue >= 70) return 'text-yellow-500';
   if (gradeValue >= 60) return 'text-amber-500';
   return 'text-red-500';
+};
+
+const getGradeBgColor = (gradeValue: number) => {
+  if (gradeValue >= 90) return 'bg-green-500';
+  if (gradeValue >= 80) return 'bg-lime-500';
+  if (gradeValue >= 70) return 'bg-yellow-500';
+  if (gradeValue >= 60) return 'bg-amber-500';
+  return 'bg-red-500';
 };
 
 const getRemarksColor = (remarks: 'Passed' | 'Failed') => {
@@ -33,6 +46,84 @@ const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): nu
   if (subGrades.length === 0) return undefined;
   const total = subGrades.reduce((acc, val) => acc + val, 0);
   return Math.round(total / subGrades.length);
+};
+
+// Priority 1: Visual grade progress bar component
+const GradeProgressBar: React.FC<{ grade: number; max?: number }> = ({ grade, max = 100 }) => {
+  const percentage = (grade / max) * 100;
+  const color = getGradeBgColor(grade);
+  
+  return (
+    <div className="relative w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+      <div 
+        className={`absolute left-0 top-0 h-full ${color} transition-all duration-300`}
+        style={{ width: `${percentage}%` }}
+      />
+    </div>
+  );
+};
+
+// Priority 1: Performance badge component
+const PerformanceBadge: React.FC<{ average: number }> = ({ average }) => {
+  if (average >= 95) {
+    return <span className="inline-flex items-center px-2 py-1 text-xs font-bold bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 rounded-full">🏆 With Highest Honors</span>;
+  }
+  if (average >= 90) {
+    return <span className="inline-flex items-center px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">⭐ With High Honors</span>;
+  }
+  if (average >= 85) {
+    return <span className="inline-flex items-center px-2 py-1 text-xs font-bold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full">✨ With Honors</span>;
+  }
+  if (average >= 75) {
+    return <span className="inline-flex items-center px-2 py-1 text-xs font-bold bg-lime-100 text-lime-800 dark:bg-lime-900 dark:text-lime-200 rounded-full">✓ Passed</span>;
+  }
+  return <span className="inline-flex items-center px-2 py-1 text-xs font-bold bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-full">⚠ Needs Attention</span>;
+};
+
+// Priority 1: Mini sparkline chart for grade trends
+const GradeTrendSparkline: React.FC<{ studentId: string; grades: Grade[]; learningAreas: LearningArea[] }> = ({ studentId, grades }) => {
+  const studentGrades = grades.filter(g => g.studentId === studentId);
+  if (studentGrades.length === 0) return <span className="text-slate-400 text-xs">No data</span>;
+  
+  // Calculate average grade for each quarter across all subjects
+  const quarterAverages: (number | undefined)[] = ['q1', 'q2', 'q3', 'q4'].map(quarter => {
+    const quarterGrades = studentGrades
+      .map(g => {
+        const gradeValue = g[quarter as keyof Grade];
+        if (typeof gradeValue === 'number') return gradeValue;
+        if (gradeValue && typeof gradeValue === 'object') {
+          // SubGradeRecord - calculate average
+          const subGrades = Object.values(gradeValue).filter(sg => typeof sg === 'number') as number[];
+          if (subGrades.length === 0) return undefined;
+          return Math.round(subGrades.reduce((sum, val) => sum + val, 0) / subGrades.length);
+        }
+        return undefined;
+      })
+      .filter(g => g !== undefined) as number[];
+    
+    if (quarterGrades.length === 0) return undefined;
+    return Math.round(quarterGrades.reduce((sum, val) => sum + val, 0) / quarterGrades.length);
+  });
+  
+  const validGrades = quarterAverages.filter(g => g !== undefined) as number[];
+  if (validGrades.length === 0) return <span className="text-slate-400 text-xs">No data</span>;
+  
+  const max = Math.max(...validGrades);
+  const min = Math.min(...validGrades);
+  const range = max - min || 1;
+  
+  return (
+    <div className="flex items-end gap-0.5 h-6">
+      {quarterAverages.map((grade, i) => {
+        if (grade === undefined) {
+          return <div key={i} className="w-1 h-1 bg-slate-200 dark:bg-slate-700 rounded-full" />;
+        }
+        const height = ((grade - min) / range) * 100;
+        const color = getGradeBgColor(grade);
+        return <div key={i} className={`w-1.5 ${color} rounded-t`} style={{ height: `${Math.max(height, 20)}%` }} title={`Q${i+1}: ${grade}%`} />;
+      })}
+    </div>
+  );
 };
 
 // Sub-component for MAPEH grade entry modal
@@ -240,6 +331,18 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
   const [page, setPage] = useState(1);
   const pageSize = 25;
   
+  // Priority 2: Advanced filtering and sorting
+  const [performanceFilter, setPerformanceFilter] = useState<FilterType>('all');
+  const [sortBy, setSortBy] = useState<SortType>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  
+  // Priority 3: Bulk selection
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  
+  // Priority 1 & 4: Toast notifications
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  
   const isReadOnly = isStudentView || isParentView || (session.user as AuthUser).role === 'principal';
 
   const visibleStudents = useMemo(() => {
@@ -318,16 +421,85 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
     setIsPrintModalOpen(true);
   };
   
+  // Helper: Calculate student's overall average and completion rate
+  const calculateStudentStats = useCallback((student: Student) => {
+    const studentGrades = grades.filter(g => g.studentId === student.id);
+    if (studentGrades.length === 0) return { average: 0, completion: 0, hasIncomplete: true };
+    
+    let totalGrades = 0;
+    let gradeCount = 0;
+    let totalQuarters = learningAreas.length * 4;
+    let completedQuarters = 0;
+    
+    learningAreas.forEach(la => {
+      const grade = studentGrades.find(g => g.learningAreaId === la.id);
+      (['q1', 'q2', 'q3', 'q4'] as const).forEach(q => {
+        const qGrade = calculateQuarterAverage(grade?.[q]);
+        if (qGrade !== undefined) {
+          totalGrades += qGrade;
+          gradeCount++;
+          completedQuarters++;
+        }
+      });
+    });
+    
+    const average = gradeCount > 0 ? Math.round(totalGrades / gradeCount) : 0;
+    const completion = totalQuarters > 0 ? Math.round((completedQuarters / totalQuarters) * 100) : 0;
+    const hasIncomplete = completion < 100;
+    
+    return { average, completion, hasIncomplete };
+  }, [grades, learningAreas]);
+  
   const filteredStudents = useMemo(() => {
-    const base = (isStudentView || isParentView)
+    let base = (isStudentView || isParentView)
       ? visibleStudents
       : visibleStudents.filter(student =>
           student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
           student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
         );
+    
+    // Filter by section
     const bySection = selectedSectionId === 'all' ? base : base.filter(s => s.sectionId === selectedSectionId);
-    return bySection;
-  }, [visibleStudents, debouncedSearchQuery, isStudentView, isParentView, selectedSectionId]);
+    
+    // Priority 2: Performance filter
+    let filtered = bySection;
+    if (performanceFilter !== 'all') {
+      filtered = bySection.filter(student => {
+        const stats = calculateStudentStats(student);
+        switch (performanceFilter) {
+          case 'honor':
+            return stats.average >= 90;
+          case 'needs-improvement':
+            return stats.average < 75 && stats.average > 0;
+          case 'incomplete':
+            return stats.hasIncomplete;
+          default:
+            return true;
+        }
+      });
+    }
+    
+    // Priority 2: Sorting
+    const sorted = [...filtered].sort((a, b) => {
+      let comparison = 0;
+      
+      if (sortBy === 'name') {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortBy === 'average') {
+        const statsA = calculateStudentStats(a);
+        const statsB = calculateStudentStats(b);
+        comparison = statsA.average - statsB.average;
+      } else if (sortBy === 'completion') {
+        const statsA = calculateStudentStats(a);
+        const statsB = calculateStudentStats(b);
+        comparison = statsA.completion - statsB.completion;
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+    
+    return sorted;
+  }, [visibleStudents, debouncedSearchQuery, isStudentView, isParentView, selectedSectionId, performanceFilter, sortBy, sortOrder, calculateStudentStats]);
 
   const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
   const pagedStudents = useMemo(() => {
@@ -336,36 +508,551 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
   }, [filteredStudents, page]);
 
   // Reset page when filters change
-  React.useEffect(() => { setPage(1); }, [debouncedSearchQuery, selectedSectionId]);
+  React.useEffect(() => { setPage(1); }, [debouncedSearchQuery, selectedSectionId, performanceFilter, sortBy]);
+  
+  // Priority 1: Calculate class statistics
+  const classStats = useMemo(() => {
+    const allStats = filteredStudents.map(s => calculateStudentStats(s));
+    const withGrades = allStats.filter(s => s.average > 0);
+    
+    return {
+      total: filteredStudents.length,
+      honors: allStats.filter(s => s.average >= 90).length,
+      passed: allStats.filter(s => s.average >= 75 && s.average < 90).length,
+      needsImprovement: allStats.filter(s => s.average < 75 && s.average > 0).length,
+      incomplete: allStats.filter(s => s.hasIncomplete).length,
+      avgGrade: withGrades.length > 0 ? Math.round(withGrades.reduce((sum, s) => sum + s.average, 0) / withGrades.length) : 0,
+      avgCompletion: allStats.length > 0 ? Math.round(allStats.reduce((sum, s) => sum + s.completion, 0) / allStats.length) : 0,
+    };
+  }, [filteredStudents, calculateStudentStats]);
+  
+  // Priority 3: Bulk actions handlers
+  const toggleStudentSelection = (studentId: string) => {
+    setSelectedStudentIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(studentId)) {
+        newSet.delete(studentId);
+      } else {
+        newSet.add(studentId);
+      }
+      return newSet;
+    });
+  };
+  
+  const toggleSelectAll = () => {
+    if (selectedStudentIds.size === pagedStudents.length) {
+      setSelectedStudentIds(new Set());
+    } else {
+      setSelectedStudentIds(new Set(pagedStudents.map(s => s.id)));
+    }
+  };
+  
+  const handleBulkPrint = () => {
+    setToast({ message: `Preparing to print ${selectedStudentIds.size} reports...`, type: 'info' });
+    
+    // Get selected students
+    const selectedStudents = filteredStudents.filter(s => selectedStudentIds.has(s.id));
+    
+    // Create a printable view with all selected student reports
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setToast({ message: 'Please allow popups to print reports', type: 'error' });
+      return;
+    }
+    
+    // Build HTML with proper DepEd Form 138 format
+    let printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Student Grade Reports - Bulk Print</title>
+        <style>
+          @page { size: landscape; margin: 0.5in; }
+          @media print {
+            .page-break { page-break-before: always; break-before: page; }
+            body { margin: 0; padding: 0; }
+          }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Times New Roman', serif; font-size: 10px; line-height: 1.3; background: white; }
+          .report-page { width: 100%; max-width: 11in; min-height: 8.5in; padding: 0.5in; margin: 0 auto; background: white; }
+          .header { text-align: center; margin-bottom: 15px; }
+          .header-grid { display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px; }
+          .header-left { font-size: 9px; text-align: left; width: 20%; }
+          .header-center { text-align: center; width: 50%; font-size: 10px; }
+          .header-center .school-name { font-weight: bold; font-size: 11px; margin-top: 4px; }
+          .header-right { width: 25%; text-align: right; }
+          .student-info { margin: 15px 0; }
+          .info-row { display: flex; margin-bottom: 5px; align-items: baseline; }
+          .info-label { font-weight: bold; margin-right: 5px; }
+          .info-value { flex: 1; border-bottom: 1px solid black; text-align: center; font-weight: 600; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+          
+          table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 9px; }
+          th, td { border: 1px solid black; padding: 4px; text-align: center; }
+          th { background-color: #f0f0f0; font-weight: bold; }
+          td.text-left { text-align: left; padding-left: 6px; }
+          td.grade-cell { font-weight: 600; }
+          .section-title { font-weight: bold; text-align: center; font-size: 10px; margin: 15px 0 8px; }
+          .signature-section { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px; text-align: center; }
+          .signature-line { border-bottom: 1px solid black; margin: 20px auto 5px; width: 80%; font-weight: bold; padding-top: 2px; }
+          .remarks { font-size: 9px; margin-top: 10px; padding: 8px; background: #f9f9f9; border: 1px solid #ddd; }
+        </style>
+      </head>
+      <body>
+    `;
+    
+    selectedStudents.forEach((student, index) => {
+      const studentGrades = grades.filter(g => g.studentId === student.id);
+      const section = sections.find(s => s.id === student.sectionId);
+      const adviser = schoolData.teachers.find(t => t.id === section?.adviserId);
+      const principal = schoolData.teachers.find(t => t.role === 'principal');
+      const stats = calculateStudentStats(student);
+      
+      // Calculate age
+      const age = student.dateOfBirth ? (() => {
+        const birthDate = new Date(student.dateOfBirth);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+        return age;
+      })() : '';
+      
+      printContent += `
+        ${index > 0 ? '<div class="page-break"></div>' : ''}
+        <div class="report-page">
+          <!-- Header Section -->
+          <div class="header-grid">
+            <div class="header-left">DepEd FORM 138</div>
+            <div class="header-center">
+              <div>Republic of the Philippines</div>
+              <div>Department of Education</div>
+              <div>${schoolData.settings.region || 'Region'}</div>
+              <div>${schoolData.settings.division || 'Division'}</div>
+              <div>${schoolData.settings.district || 'District'}</div>
+              <div class="school-name">${schoolData.settings.schoolName || 'School Name'}</div>
+            </div>
+            <div class="header-right">
+              ${student.photoURL ? 
+                `<img src="${student.photoURL}" style="width: 80px; height: 80px; border: 2px solid #ccc; border-radius: 4px; object-fit: cover;" />` : 
+                '<div style="width: 80px; height: 80px; border: 2px solid #ccc; background: #f0f0f0; display: flex; align-items: center; justify-content: center; font-size: 36px; color: #999;">👤</div>'
+              }
+            </div>
+          </div>
+          
+          <!-- Student Information -->
+          <div class="student-info">
+            <div class="info-row">
+              <span class="info-label">Name:</span>
+              <span class="info-value">${student.name}</span>
+            </div>
+            <div class="info-grid">
+              <div class="info-row">
+                <span class="info-label">Age:</span>
+                <span class="info-value">${age}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Sex:</span>
+                <span class="info-value">${student.sex || 'N/A'}</span>
+              </div>
+            </div>
+            <div class="info-grid">
+              <div class="info-row">
+                <span class="info-label">Grade:</span>
+                <span class="info-value">${section?.gradeLevel || 'N/A'}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Section:</span>
+                <span class="info-value">${section?.name || 'N/A'}</span>
+              </div>
+            </div>
+            <div class="info-grid">
+              <div class="info-row">
+                <span class="info-label">School Year:</span>
+                <span class="info-value">${schoolData.settings.schoolYear || new Date().getFullYear()}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">LRN:</span>
+                <span class="info-value">${student.lrn || 'N/A'}</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Grades Table -->
+          <div class="section-title">REPORT ON LEARNING PROGRESS AND ACHIEVEMENT</div>
+          <table>
+            <thead>
+              <tr>
+                <th rowspan="2" style="width: 35%;">Learning Areas</th>
+                <th colspan="4">Quarter</th>
+                <th rowspan="2">Final Grade</th>
+                <th rowspan="2">Remarks</th>
+              </tr>
+              <tr>
+                <th>1</th>
+                <th>2</th>
+                <th>3</th>
+                <th>4</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${learningAreas.map(la => {
+                const grade = studentGrades.find(g => g.learningAreaId === la.id);
+                const q1 = calculateQuarterAverage(grade?.q1);
+                const q2 = calculateQuarterAverage(grade?.q2);
+                const q3 = calculateQuarterAverage(grade?.q3);
+                const q4 = calculateQuarterAverage(grade?.q4);
+                const final = grade?.finalGrade || (q1 && q2 && q3 && q4 ? Math.round((Number(q1) + Number(q2) + Number(q3) + Number(q4)) / 4) : '');
+                const remarks = final ? (Number(final) >= 75 ? 'Passed' : 'Failed') : 'Incomplete';
+                
+                return `
+                  <tr>
+                    <td class="text-left">${la.name}</td>
+                    <td class="grade-cell">${q1 || '-'}</td>
+                    <td class="grade-cell">${q2 || '-'}</td>
+                    <td class="grade-cell">${q3 || '-'}</td>
+                    <td class="grade-cell">${q4 || '-'}</td>
+                    <td class="grade-cell" style="background: #e8f4f8;">${final || '-'}</td>
+                    <td><strong>${remarks}</strong></td>
+                  </tr>
+                `;
+              }).join('')}
+              <tr style="background: #f0f0f0;">
+                <td class="text-left"><strong>General Average</strong></td>
+                <td colspan="5"></td>
+                <td class="grade-cell"><strong>${stats.average > 0 ? stats.average : '-'}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <!-- Dear Parent Note -->
+          <div class="remarks">
+            <p style="font-weight: bold; margin-bottom: 5px;">Dear Parent:</p>
+            <p style="text-align: justify; text-indent: 20px;">
+              This report card shows the ability and progress your child has made in the different learning areas. 
+              Overall Average: <strong>${stats.average}%</strong> | Completion: <strong>${stats.completion}%</strong>
+            </p>
+          </div>
+          
+          <!-- Signatures -->
+          <div class="signature-section">
+            <div>
+              <div class="signature-line">${principal?.name || ''}</div>
+              <div>School Principal</div>
+            </div>
+            <div>
+              <div class="signature-line">${adviser?.name || ''}</div>
+              <div>Class Adviser</div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    printContent += `
+      </body>
+      </html>
+    `;
+    
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    
+    // Wait for content to load, then trigger print
+    setTimeout(() => {
+      printWindow.print();
+      setToast({ message: `${selectedStudentIds.size} reports ready to print!`, type: 'success' });
+      setSelectedStudentIds(new Set());
+      setShowBulkActions(false);
+    }, 500);
+  };
+  
+  const handleBulkReports = async () => {
+    setToast({ message: `Generating ${selectedStudentIds.size} AI reports...`, type: 'info' });
+    
+    try {
+      const selectedStudents = filteredStudents.filter(s => selectedStudentIds.has(s.id));
+      let successCount = 0;
+      
+      // Generate reports sequentially to avoid rate limits
+      for (const student of selectedStudents) {
+        try {
+          await handleGenerateReport(student);
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to generate report for ${student.name}:`, error);
+        }
+      }
+      
+      if (successCount === selectedStudentIds.size) {
+        setToast({ message: `Successfully generated ${successCount} reports!`, type: 'success' });
+      } else {
+        setToast({ message: `Generated ${successCount}/${selectedStudentIds.size} reports (some failed)`, type: 'error' });
+      }
+      setSelectedStudentIds(new Set());
+      setShowBulkActions(false);
+    } catch (error) {
+      setToast({ message: 'Failed to generate bulk reports', type: 'error' });
+    }
+  };
+  
+  // Priority 4: Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only for admin/teacher view with bulk actions enabled
+      if (isStudentView || isParentView || !showBulkActions) return;
+      
+      // Ctrl/Cmd + A: Select all visible students
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        toggleSelectAll();
+      }
+      
+      // Escape: Clear selection
+      if (e.key === 'Escape' && selectedStudentIds.size > 0) {
+        setSelectedStudentIds(new Set());
+      }
+      
+      // Ctrl/Cmd + P: Bulk print
+      if ((e.ctrlKey || e.metaKey) && e.key === 'p' && selectedStudentIds.size > 0) {
+        e.preventDefault();
+        handleBulkPrint();
+      }
+      
+      // Ctrl/Cmd + R: Bulk generate reports
+      if ((e.ctrlKey || e.metaKey) && e.key === 'r' && selectedStudentIds.size > 0) {
+        e.preventDefault();
+        handleBulkReports();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showBulkActions, selectedStudentIds, isStudentView, isParentView, toggleSelectAll, handleBulkPrint, handleBulkReports]);
   
   const title = isStudentView ? 'My Grades' : (isParentView ? `Grades for ${filteredStudents[0]?.name}` : 'Manage Grades');
 
   return (
     <div>
+      {/* Priority 1 & 4: Toast Notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+      
       <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
 
-      {!(isStudentView || isParentView) && (
-        <div className="mb-4 flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <label className="font-semibold">Class:</label>
-            <select
-              value={selectedSectionId}
-              onChange={(e) => setSelectedSectionId(e.target.value as any)}
-              className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700"
-            >
-              <option value="all">All</option>
-              {visibleSections.map(s => (
-                <option key={s.id} value={s.id}>{`Grade ${s.gradeLevel} - ${s.name}`}</option>
-              ))}
-            </select>
+      {/* Priority 1: Summary Cards */}
+      {!(isStudentView || isParentView) && classStats.total > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg p-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm font-medium">Total Students</p>
+                <p className="text-3xl font-bold mt-1">{classStats.total}</p>
+              </div>
+              <div className="bg-blue-400/30 rounded-full p-3">
+                <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                </svg>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center text-sm">
+              <span className="text-blue-100">Average: {classStats.avgGrade}%</span>
+            </div>
           </div>
-          <input
-            type="text"
-            placeholder="Search students by name or email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
-          />
+
+          <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg p-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-100 text-sm font-medium">Honor Roll</p>
+                <p className="text-3xl font-bold mt-1">{classStats.honors}</p>
+              </div>
+              <div className="bg-green-400/30 rounded-full p-3">
+                <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                </svg>
+              </div>
+            </div>
+            <div className="mt-2 text-sm text-green-100">≥90% average</div>
+          </div>
+
+          <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-lg p-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-amber-100 text-sm font-medium">Needs Attention</p>
+                <p className="text-3xl font-bold mt-1">{classStats.needsImprovement}</p>
+              </div>
+              <div className="bg-amber-400/30 rounded-full p-3">
+                <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+            <div className="mt-2 text-sm text-amber-100">&lt;75% average</div>
+          </div>
+
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg p-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-purple-100 text-sm font-medium">Completion Rate</p>
+                <p className="text-3xl font-bold mt-1">{classStats.avgCompletion}%</p>
+              </div>
+              <div className="bg-purple-400/30 rounded-full p-3">
+                <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+            <div className="mt-2 text-sm text-purple-100">{classStats.incomplete} incomplete</div>
+          </div>
+        </div>
+      )}
+
+      {/* Priority 2 & 3: Enhanced Filters and Controls */}
+      {!(isStudentView || isParentView) && (
+        <div className="mb-4 space-y-4">
+          {/* Filter Chips */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Filter:</span>
+            <button
+              onClick={() => setPerformanceFilter('all')}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                performanceFilter === 'all'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+              }`}
+            >
+              All ({filteredStudents.length})
+            </button>
+            <button
+              onClick={() => setPerformanceFilter('honor')}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                performanceFilter === 'honor'
+                  ? 'bg-green-600 text-white shadow-md'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+              }`}
+            >
+              🏆 Honor Roll ({classStats.honors})
+            </button>
+            <button
+              onClick={() => setPerformanceFilter('needs-improvement')}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                performanceFilter === 'needs-improvement'
+                  ? 'bg-amber-600 text-white shadow-md'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+              }`}
+            >
+              ⚠️ Needs Attention ({classStats.needsImprovement})
+            </button>
+            <button
+              onClick={() => setPerformanceFilter('incomplete')}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                performanceFilter === 'incomplete'
+                  ? 'bg-red-600 text-white shadow-md'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+              }`}
+            >
+              📝 Incomplete ({classStats.incomplete})
+            </button>
+          </div>
+
+          {/* Section, Search, and Sort Controls */}
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">Class:</label>
+              <select
+                value={selectedSectionId}
+                onChange={(e) => setSelectedSectionId(e.target.value as any)}
+                className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="all">All</option>
+                {visibleSections.map(s => (
+                  <option key={s.id} value={s.id}>{`Grade ${s.gradeLevel} - ${s.name}`}</option>
+                ))}
+              </select>
+            </div>
+            
+            <input
+              type="text"
+              placeholder="Search students by name or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 min-w-[250px] px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
+            />
+
+            <div className="flex items-center gap-2">
+              <label className="font-semibold text-slate-700 dark:text-slate-300">Sort:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortType)}
+                className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="name">Name</option>
+                <option value="average">Average Grade</option>
+                <option value="completion">Completion</option>
+              </select>
+              <button
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-white transition-colors"
+                title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
+              >
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
+
+            {/* Priority 3: Bulk Selection Toggle */}
+            <button
+              onClick={() => {
+                setShowBulkActions(!showBulkActions);
+                if (showBulkActions) setSelectedStudentIds(new Set());
+              }}
+              className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                showBulkActions
+                  ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+              }`}
+            >
+              {showBulkActions ? '✓ Bulk Mode' : 'Bulk Actions'}
+            </button>
+          </div>
+
+          {/* Priority 3: Bulk Action Toolbar */}
+          {showBulkActions && selectedStudentIds.size > 0 && (
+            <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-indigo-900 dark:text-indigo-100">
+                  {selectedStudentIds.size} student{selectedStudentIds.size !== 1 ? 's' : ''} selected
+                </span>
+                <button
+                  onClick={() => setSelectedStudentIds(new Set())}
+                  className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 font-medium"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleBulkReports}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                  </svg>
+                  Generate Reports
+                </button>
+                <button
+                  onClick={handleBulkPrint}
+                  className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-md font-medium transition-colors flex items-center gap-2"
+                >
+                  <PrinterIcon />
+                  Print All
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       
@@ -373,46 +1060,97 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
         <table className="min-w-full leading-normal">
           <thead className="bg-slate-100 dark:bg-slate-900">
             <tr>
+              {/* Priority 3: Bulk Selection Checkbox */}
+              {showBulkActions && !(isStudentView || isParentView) && (
+                <th className="w-12 px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900">
+                  <input
+                    type="checkbox"
+                    checked={selectedStudentIds.size === pagedStudents.length && pagedStudents.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 text-indigo-600 bg-white border-slate-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600 cursor-pointer"
+                  />
+                </th>
+              )}
               <th className="w-12 px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider" aria-label="expand" />
               <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Student Name</th>
+              {/* Priority 1: Performance Column */}
+              {!(isStudentView || isParentView) && (
+                <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Performance</th>
+              )}
               <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {pagedStudents.map((student) => (
-              <React.Fragment key={student.id}>
-                <tr className={`${!(isStudentView || isParentView) && 'cursor-pointer'} hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700`} onClick={() => toggleStudentExpansion(student.id)}>
-                  <td className="pl-4 py-4 text-slate-500">
-                    {expandedStudents.has(student.id) ? <ChevronDownIcon /> : <ChevronRightIcon />}
-                  </td>
-                  <td className="px-5 py-4 text-sm font-medium text-slate-900 dark:text-white">
-                    {student.name}
-                  </td>
-                  <td className="px-5 py-4 text-sm">
-                    <div className="flex items-center space-x-4">
-                       <button onClick={(e) => { e.stopPropagation(); handleGenerateReport(student); }} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-semibold text-xs">Generate Report</button>
-                       <button onClick={(e) => { e.stopPropagation(); handlePrintReport(student); }} className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold text-xs">
-                         <PrinterIcon />
-                         <span className="ml-1">Print Report</span>
-                       </button>
-                    </div>
-                  </td>
-                </tr>
-                {expandedStudents.has(student.id) && (
-                  <tr>
-                    <td colSpan={3} className="p-0">
-                      <StudentGradeDetails
-                        student={student}
-                        learningAreas={learningAreas}
-                        grades={grades}
-                        updateGrade={schoolData.updateGrade}
-                        isReadOnly={isReadOnly}
-                      />
+            {pagedStudents.map((student) => {
+              const stats = calculateStudentStats(student);
+              return (
+                <React.Fragment key={student.id}>
+                  <tr className={`${!(isStudentView || isParentView) && 'cursor-pointer'} hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700`} onClick={() => toggleStudentExpansion(student.id)}>
+                    {/* Priority 3: Student Checkbox */}
+                    {showBulkActions && !(isStudentView || isParentView) && (
+                      <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedStudentIds.has(student.id)}
+                          onChange={() => toggleStudentSelection(student.id)}
+                          className="w-4 h-4 text-indigo-600 bg-white border-slate-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600 cursor-pointer"
+                        />
+                      </td>
+                    )}
+                    <td className="pl-4 py-4 text-slate-500">
+                      {expandedStudents.has(student.id) ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                    </td>
+                    <td className="px-5 py-4 text-sm font-medium text-slate-900 dark:text-white">
+                      {student.name}
+                    </td>
+                    {/* Priority 1: Performance Indicators */}
+                    {!(isStudentView || isParentView) && (
+                      <td className="px-5 py-4 text-sm">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <PerformanceBadge average={stats.average} />
+                            <span className="text-slate-600 dark:text-slate-400 font-medium">
+                              {stats.average > 0 ? `${stats.average}%` : 'No grades'}
+                            </span>
+                          </div>
+                          {stats.average > 0 && (
+                            <>
+                              <div className="space-y-1">
+                                <GradeProgressBar grade={stats.completion} max={100} />
+                                <span className="text-xs text-slate-500 dark:text-slate-400">{stats.completion}% complete</span>
+                              </div>
+                              <GradeTrendSparkline studentId={student.id} grades={grades} learningAreas={learningAreas} />
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                    <td className="px-5 py-4 text-sm">
+                      <div className="flex items-center space-x-4">
+                         <button onClick={(e) => { e.stopPropagation(); handleGenerateReport(student); }} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-semibold text-xs">Generate Report</button>
+                         <button onClick={(e) => { e.stopPropagation(); handlePrintReport(student); }} className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold text-xs">
+                           <PrinterIcon />
+                           <span className="ml-1">Print Report</span>
+                         </button>
+                      </div>
                     </td>
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
+                  {expandedStudents.has(student.id) && (
+                    <tr>
+                      <td colSpan={showBulkActions && !(isStudentView || isParentView) ? 5 : 4} className="p-0">
+                        <StudentGradeDetails
+                          student={student}
+                          learningAreas={learningAreas}
+                          grades={grades}
+                          updateGrade={schoolData.updateGrade}
+                          isReadOnly={isReadOnly}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

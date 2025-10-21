@@ -294,17 +294,37 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                 return;
             }
             
-            const updatedSchedule = {
+            const updatedSchedule: ClassSchedule = {
                 ...activeInteraction.schedule,
                 dayOfWeek: indicator.startDay as ClassSchedule['dayOfWeek'],
-                endDayOfWeek: indicator.endDay === indicator.startDay ? undefined : indicator.endDay as ClassSchedule['dayOfWeek'],
                 startTime: indicator.startTime,
                 endTime: indicator.endTime,
             };
+            
+            // Only add endDayOfWeek if it's different from startDay
+            if (indicator.endDay !== indicator.startDay) {
+                updatedSchedule.endDayOfWeek = indicator.endDay as ClassSchedule['dayOfWeek'];
+            } else {
+                // Remove endDayOfWeek field if start and end are the same
+                delete (updatedSchedule as any).endDayOfWeek;
+            }
 
-            const result = updateSchedule(updatedSchedule);
+            // Check for conflicts before updating
+            const conflict = checkScheduleConflict(updatedSchedule, updatedSchedule.id);
+            if (conflict.hasConflict) {
+                const conflictInfo = conflict.conflictingSchedule!;
+                const conflictSection = sections.find(s => s.id === conflictInfo.sectionId);
+                const conflictTeacher = teachers.find(t => t.id === conflictInfo.teacherId);
+                const conflictResource = conflictSection?.name || conflictTeacher?.name || `Grade ${conflictInfo.gradeLevel}` || 'Unknown';
+                setNotification(`Cannot move here! This time slot is already occupied by "${conflictInfo.title}" for ${conflictResource}.`);
+                setActiveInteraction(null);
+                setIndicator(null);
+                return;
+            }
+
+            const result = await updateSchedule(updatedSchedule);
             if (!result.success) {
-                setNotification(result.message || 'Failed to update schedule.');
+                setNotification('Failed to update schedule.');
             }
             
             setActiveInteraction(null);
@@ -348,19 +368,95 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
         setIsModalOpen(true);
     };
 
-    const handleModalSave = (e: React.FormEvent) => {
+    // Check if a schedule conflicts with existing schedules
+    const checkScheduleConflict = (scheduleToCheck: any, excludeId?: string): { hasConflict: boolean; conflictingSchedule?: ClassSchedule } => {
+        const checkStartTime = timeToMinutes(scheduleToCheck.startTime);
+        const checkEndTime = timeToMinutes(scheduleToCheck.endTime);
+        const checkStartDay = scheduleToCheck.dayOfWeek;
+        const checkEndDay = scheduleToCheck.endDayOfWeek || scheduleToCheck.dayOfWeek;
+        
+        // Get the day indices
+        const checkStartDayIndex = DAYS.indexOf(checkStartDay);
+        const checkEndDayIndex = DAYS.indexOf(checkEndDay);
+        
+        for (const existing of classSchedules) {
+            // Skip if checking against itself (when editing)
+            if (excludeId && existing.id === excludeId) continue;
+            
+            const existingStartTime = timeToMinutes(existing.startTime);
+            const existingEndTime = timeToMinutes(existing.endTime);
+            const existingStartDay = existing.dayOfWeek;
+            const existingEndDay = existing.endDayOfWeek || existing.dayOfWeek;
+            
+            const existingStartDayIndex = DAYS.indexOf(existingStartDay);
+            const existingEndDayIndex = DAYS.indexOf(existingEndDay);
+            
+            // Check if days overlap
+            const daysOverlap = !(checkEndDayIndex < existingStartDayIndex || checkStartDayIndex > existingEndDayIndex);
+            
+            if (!daysOverlap) continue;
+            
+            // Check if times overlap
+            const timesOverlap = !(checkEndTime <= existingStartTime || checkStartTime >= existingEndTime);
+            
+            if (!timesOverlap) continue;
+            
+            // Check if they share the same resource (section, teacher, or grade level)
+            let resourceConflict = false;
+            
+            // If both are for the same section
+            if (scheduleToCheck.sectionId && existing.sectionId && scheduleToCheck.sectionId === existing.sectionId) {
+                resourceConflict = true;
+            }
+            
+            // If both are for the same teacher
+            if (scheduleToCheck.teacherId && existing.teacherId && scheduleToCheck.teacherId === existing.teacherId) {
+                resourceConflict = true;
+            }
+            
+            // If both are for the same grade level
+            if (scheduleToCheck.gradeLevel && existing.gradeLevel && scheduleToCheck.gradeLevel === existing.gradeLevel) {
+                resourceConflict = true;
+            }
+            
+            if (resourceConflict) {
+                return { hasConflict: true, conflictingSchedule: existing };
+            }
+        }
+        
+        return { hasConflict: false };
+    };
+
+    const handleModalSave = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        const dataToSave: Omit<ClassSchedule, 'id'> & { endDayOfWeek?: ClassSchedule['dayOfWeek'] } = {
-            title: modalData.title!, type: modalData.type!, scope: modalData.scope!,
+        const dataToSave: any = {
+            title: modalData.title!, 
+            type: modalData.type!, 
+            scope: modalData.scope!,
             dayOfWeek: modalData.dayOfWeek!, 
-            endDayOfWeek: modalData.endDayOfWeek === modalData.dayOfWeek ? undefined : modalData.endDayOfWeek,
-            startTime: modalData.startTime!, endTime: modalData.endTime!,
-            sectionId: modalData.scope === 'section' ? modalData.sectionId : undefined,
-            gradeLevel: modalData.scope === 'gradeLevel' ? modalData.gradeLevel : undefined,
-            learningAreaId: modalData.type === 'academic' ? modalData.learningAreaId : undefined,
-            teacherId: modalData.type === 'academic' ? modalData.teacherId : undefined,
+            startTime: modalData.startTime!, 
+            endTime: modalData.endTime!,
         };
+        
+        // Only add endDayOfWeek if it's different from dayOfWeek
+        if (modalData.endDayOfWeek && modalData.endDayOfWeek !== modalData.dayOfWeek) {
+            dataToSave.endDayOfWeek = modalData.endDayOfWeek;
+        }
+        
+        // Add optional fields only if they have values
+        if (modalData.scope === 'section' && modalData.sectionId) {
+            dataToSave.sectionId = modalData.sectionId;
+        }
+        if (modalData.scope === 'gradeLevel' && modalData.gradeLevel) {
+            dataToSave.gradeLevel = modalData.gradeLevel;
+        }
+        if (modalData.type === 'academic' && modalData.learningAreaId) {
+            dataToSave.learningAreaId = modalData.learningAreaId;
+        }
+        if (modalData.type === 'academic' && modalData.teacherId) {
+            dataToSave.teacherId = modalData.teacherId;
+        }
         
         if (!dataToSave.title || (dataToSave.type === 'academic' && (!dataToSave.learningAreaId || !dataToSave.teacherId || !dataToSave.sectionId))) {
             setModalError('Please fill all required fields for the selected event type.'); return;
@@ -372,8 +468,21 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
             setModalError('End day cannot be before start day.'); return;
         }
         
-        let result = modalData.isEditing ? updateSchedule({ ...dataToSave, id: modalData.id! } as ClassSchedule) : addSchedule(dataToSave as Omit<ClassSchedule, 'id'>);
-        if (result.success) setIsModalOpen(false); else setModalError(result.message || 'An unknown error occurred.');
+        // Check for scheduling conflicts
+        const conflict = checkScheduleConflict(dataToSave, modalData.isEditing ? modalData.id : undefined);
+        if (conflict.hasConflict) {
+            const conflictInfo = conflict.conflictingSchedule!;
+            const conflictSection = sections.find(s => s.id === conflictInfo.sectionId);
+            const conflictTeacher = teachers.find(t => t.id === conflictInfo.teacherId);
+            const conflictResource = conflictSection?.name || conflictTeacher?.name || `Grade ${conflictInfo.gradeLevel}` || 'Unknown';
+            setModalError(`Schedule conflict! This time slot is already occupied by "${conflictInfo.title}" for ${conflictResource} on ${conflictInfo.dayOfWeek} at ${conflictInfo.startTime}-${conflictInfo.endTime}.`);
+            return;
+        }
+        
+        let result = modalData.isEditing 
+            ? await updateSchedule({ ...dataToSave, id: modalData.id! } as ClassSchedule) 
+            : await addSchedule(dataToSave as Omit<ClassSchedule, 'id'>);
+        if (result.success) setIsModalOpen(false); else setModalError('An error occurred while saving the schedule.');
     };
     
     const handleModalDelete = () => {

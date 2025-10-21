@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { SchoolDataState } from '../hooks/useSchoolData';
 import type { Student, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
@@ -20,12 +20,15 @@ interface StudentListProps {
     fetchMoreStudents: () => Promise<void>; // Added pagination functions
     hasMoreStudents: boolean; // Added pagination state
     isFetchingStudents: boolean; // Added pagination state
+    searchStudents: (query: string) => Promise<Student[]>; // Added search function
+    isSearching: boolean; // Added search state
   };
   session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
 }
 
 const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
-  const { students, teachers, sections, addStudent, settings, updateStudent, deleteStudent, grades, attendanceRecords, coreValueGrades, substituteAssignments, classSchedules, parents, fetchMoreStudents, hasMoreStudents, isFetchingStudents } = schoolData;
+  const { students, teachers, sections, addStudent, settings, updateStudent, deleteStudent, grades, attendanceRecords, coreValueGrades, substituteAssignments, classSchedules, parents, fetchMoreStudents, hasMoreStudents, isFetchingStudents, searchStudents, isSearching } = schoolData;
+  
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -46,6 +49,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   const [newStudent, setNewStudent] = useState<Omit<Student, 'id' | 'enrollmentDate'>>({ name: '', email: '' });
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
+  const [searchResults, setSearchResults] = useState<Student[] | null>(null);
   
   const authUser = session.user as AuthUser;
 
@@ -98,14 +102,33 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     return sectionIds.size > 0 ? sectionIds : new Set<string>();
   }, [authUser, sections, substituteAssignments, classSchedules]);
 
+  // Server-side search effect
+  useEffect(() => {
+    const performSearch = async () => {
+      if (debouncedSearchQuery.trim()) {
+        console.log(`[StudentList] 🔍 Triggering server-side search: "${debouncedSearchQuery}"`);
+        const results = await searchStudents(debouncedSearchQuery);
+        setSearchResults(results);
+      } else {
+        // Clear search results when query is empty
+        setSearchResults(null);
+      }
+    };
+
+    performSearch();
+  }, [debouncedSearchQuery, searchStudents]);
+
   // Now directly use students from schoolData, which is paginated
   const visibleStudents = useMemo(() => {
+    // If searching, use search results instead of paginated students
+    const sourceStudents = searchResults !== null ? searchResults : students;
+    
     // Apply section filtering for teachers
     if (authorizedSectionIds && authorizedSectionIds.size > 0) {
-      return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
+      return sourceStudents.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
     }
-    return students;
-  }, [students, authorizedSectionIds]);
+    return sourceStudents;
+  }, [students, authorizedSectionIds, searchResults]);
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -190,12 +213,23 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       await deleteStudentPhoto(studentToEdit.photoPath);
       
       // Update student to remove photo
-      setStudentToEdit({
+      const updatedStudent = {
         ...studentToEdit,
         photoURL: undefined,
         photoPath: undefined,
         photoUploadedAt: undefined,
-      });
+      };
+      setStudentToEdit(updatedStudent);
+      
+      // Persist to Firestore
+      await updateStudent(updatedStudent);
+      
+      // Update search results if we're currently showing search results
+      if (searchResults) {
+        setSearchResults(prevResults => 
+          prevResults ? prevResults.map(s => s.id === updatedStudent.id ? updatedStudent : s) : null
+        );
+      }
     } catch (error: any) {
       setPhotoError(error.message || 'Failed to remove photo');
     } finally {
@@ -238,7 +272,14 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       
       // IMPORTANT: Persist the photoURL and photoPath to Firestore
       // This assumes updateStudent handles partial updates correctly
-      updateStudent(updatedStudent); 
+      await updateStudent(updatedStudent);
+      
+      // Update search results if we're currently showing search results
+      if (searchResults) {
+        setSearchResults(prevResults => 
+          prevResults ? prevResults.map(s => s.id === updatedStudent.id ? updatedStudent : s) : null
+        );
+      }
 
       // Clear captured blob
       setCapturedBlob(null);
@@ -295,8 +336,26 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
         )}
       </div>
       
-      <div className="mb-4">
-        <input type="text" placeholder="Search by name, email, or LRN..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); }} className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"/>
+      <div className="mb-4 flex items-center gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <input 
+            type="text" 
+            placeholder="Search ALL students by name, email, or LRN..." 
+            value={searchQuery} 
+            onChange={(e) => { setSearchQuery(e.target.value); }} 
+            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
+          />
+          {isSearching && (
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+              <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+            </div>
+          )}
+        </div>
+        {searchResults !== null && (
+          <span className="text-sm text-slate-600 dark:text-slate-400">
+            Found {visibleStudents.length} student{visibleStudents.length !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
@@ -311,8 +370,9 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredAndPaginatedStudents.map((student) => {
+            {filteredAndPaginatedStudents.map((student, index) => {
               const section = sections.find(s => s.id === student.sectionId);
+              
               const status = student.status || 'active';
               const statusColors = {
                 active: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
@@ -347,7 +407,9 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
                   <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{student.lrn ?? 'N/A'}</p>
                 </td>
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                  <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{section ? `Grade ${section.gradeLevel} - ${section.name}` : 'N/A'}</p>
+                  <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                    {section ? `Grade ${section.gradeLevel} - ${section.name}` : 'N/A'}
+                  </p>
                 </td>
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
                   <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[status]}`}>

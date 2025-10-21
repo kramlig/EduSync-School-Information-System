@@ -18,7 +18,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users, loginType, se
   const allowAnyPassword = true; // DEBUG ONLY
   const enableQuickLogin = true; // DEBUG ONLY
 
-  console.log(`Login screen received ${users.length} users for type "${loginType}".`);
+  console.log(`[LoginScreen] 🖥️ RENDERING LoginScreen component - users: ${users.length}, type: "${loginType}"`);
   if (users.length && (window as any).__dumpedUsers !== true) {
     console.log('[AuthDebug] First 10 user emails:', users.slice(0,10).map(u => u.email));
     (window as any).__dumpedUsers = true;
@@ -29,15 +29,21 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users, loginType, se
     setError('');
     setIsLoading(true);
 
-    console.log(`Attempting login with type: "${loginType}", email: "${email}"`);
+    console.log(`[LoginScreen] 🔐 Attempting login with type: "${loginType}", email: "${email}"`);
+    console.log(`[LoginScreen] 📋 Available users count: ${users.length}`);
 
     // This is a simplified, mock authentication.
     const user = users.find(u => u.email.trim().toLowerCase() === email.trim().toLowerCase());
 
+    console.log(`[LoginScreen] 🔍 User found: ${!!user}`);
+    
     if (user && (allowAnyPassword || password === 'password')) {
-      console.log('[AuthDebug] Login success for', user.email, 'type', loginType);
+      console.log('[LoginScreen] ✅ Login success for', user.email, 'type', loginType);
+      console.log('[LoginScreen] 🚀 Calling onLogin callback...');
       onLogin(user, loginType);
+      console.log('[LoginScreen] ✅ onLogin callback completed');
     } else {
+      console.log('[LoginScreen] ❌ Login failed - user:', !!user, 'passwordCheck:', allowAnyPassword || password === 'password');
       setError('Invalid email or password.');
     }
     setIsLoading(false);
@@ -109,7 +115,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users, loginType, se
             
             <div className="space-y-2">
                 <button
-                    type="submit" disabled={isLoading}
+                    type="submit" 
+                    disabled={isLoading}
                     className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
                 >
                     {isLoading ? 'Signing in...' : 'Sign in'}

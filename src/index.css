@@ -44,6 +44,22 @@
   animation: fadeIn 0.3s ease-out;
 }
 
+/* Toast slide-in from right animation */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
 /* Print optimizations for report cards */
 @media print {
   /* Set page size explicitly */
