@@ -18,6 +18,17 @@ const getMarkingColor = (marking: CoreValueMarking | undefined) => {
 const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: AuthUser | StudentUser, type: 'staff' | 'student' }; }> = ({ schoolData, session }) => {
     const { students, coreValues, coreValueGrades, sections, substituteAssignments, classSchedules, updateCoreValueGrade } = schoolData;
     
+    // Debug logging
+    useEffect(() => {
+        console.log('[CoreValuesGradebook] 📦 Data received:', {
+            studentsCount: students.length,
+            coreValuesCount: coreValues.length,
+            coreValueGradesCount: coreValueGrades.length,
+            sectionsCount: sections.length,
+            coreValueGradesSample: coreValueGrades.slice(0, 3)
+        });
+    }, [students, coreValues, coreValueGrades, sections]);
+    
     const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
     const [selectedCoreValueId, setSelectedCoreValueId] = useState<string | null>(null);
     const [selectedQuarter, setSelectedQuarter] = useState<'q1' | 'q2' | 'q3' | 'q4'>('q1');
@@ -137,6 +148,14 @@ const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: {
 
     // Top Reassessment calculation
     const topReassessmentData = useMemo(() => {
+        console.log('[CoreValues] 🔍 Top Reassessment Calculation:', {
+            selectedSectionId,
+            studentsInSectionCount: studentsInSection.length,
+            coreValuesCount: coreValues.length,
+            coreValueGradesCount: coreValueGrades.length,
+            gradeMapSize: gradeMap.size
+        });
+        
         if (!selectedSectionId) return [];
         
         return studentsInSection.map(student => {
@@ -149,6 +168,16 @@ const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: {
             // For each core value
             coreValues.forEach(cv => {
                 const gradeRecord = gradeMap.get(`${student.id}-${cv.id}`);
+                
+                if (gradeRecord) {
+                    console.log('[CoreValues] 📊 Found grade record:', {
+                        studentId: student.id,
+                        studentName: student.name,
+                        coreValueId: cv.id,
+                        coreValueName: cv.name,
+                        gradeRecord
+                    });
+                }
                 
                 // For each quarter
                 (['q1', 'q2', 'q3', 'q4'] as const).forEach(quarter => {
@@ -176,7 +205,7 @@ const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: {
             
             return studentData;
         });
-    }, [studentsInSection, coreValues, gradeMap, selectedSectionId]);
+    }, [studentsInSection, coreValues, gradeMap, selectedSectionId, coreValueGrades]);
 
     const [showTopReassessment, setShowTopReassessment] = useState(true);
 
