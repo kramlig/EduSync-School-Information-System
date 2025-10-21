@@ -19,6 +19,12 @@ type TabType = 'overview' | 'academic-gradebook' | 'core-values-gradebook' | 're
 const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolData, session, forceStudentId }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  
+  // Tier 2: Filter State
+  const [filterSection, setFilterSection] = useState<string>('all');
+  const [filterQuarter, setFilterQuarter] = useState<string>('all');
+  const [filterPerformance, setFilterPerformance] = useState<string>('all');
+  
   const { students = [], grades = [], learningAreas = [], coreValues = [], coreValueGrades = [] } = schoolData;
   
   const isStudentView = session.type === 'student';
@@ -62,19 +68,209 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
     }
   };
 
+  // Tier 2: Export Functions
+  const exportToPDF = () => {
+    // Create a printable version of the analytics
+    const printContent = document.createElement('div');
+    printContent.innerHTML = `
+      <html>
+        <head>
+          <title>Assessment Analytics Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { color: #4f46e5; border-bottom: 2px solid #4f46e5; padding-bottom: 10px; }
+            h2 { color: #374151; margin-top: 20px; }
+            .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 20px 0; }
+            .stat-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; }
+            .stat-label { font-size: 14px; color: #6b7280; }
+            .stat-value { font-size: 28px; font-weight: bold; color: #111827; margin: 5px 0; }
+            .stat-detail { font-size: 12px; color: #9ca3af; }
+            table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+            th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
+            th { background-color: #f3f4f6; font-weight: 600; }
+            .footer { margin-top: 30px; padding-top: 15px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+          </style>
+        </head>
+        <body>
+          <h1>📊 Assessment Analytics Report</h1>
+          <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+          <p><strong>School Year:</strong> ${new Date().getFullYear()}</p>
+          
+          <h2>📚 Academic Performance Summary</h2>
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="stat-label">Total Students</div>
+              <div class="stat-value">${analytics.academic.totalStudents}</div>
+              <div class="stat-detail">Average: ${analytics.academic.avgGrade}%</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Honor Roll (≥90%)</div>
+              <div class="stat-value">${analytics.academic.honorRoll}</div>
+              <div class="stat-detail">${analytics.academic.totalStudents > 0 ? Math.round((analytics.academic.honorRoll / analytics.academic.totalStudents) * 100) : 0}% of class</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Passing (≥75%)</div>
+              <div class="stat-value">${analytics.academic.passing}</div>
+              <div class="stat-detail">Meeting standards</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Completion Rate</div>
+              <div class="stat-value">${analytics.academic.avgCompletion}%</div>
+              <div class="stat-detail">${analytics.academic.totalStudents - analytics.academic.passing - analytics.academic.failing} incomplete</div>
+            </div>
+          </div>
+          
+          <h2>🌟 Behavioral Performance Summary</h2>
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="stat-label">Total Assessed</div>
+              <div class="stat-value">${analytics.behavior.totalAssessed}</div>
+              <div class="stat-detail">Out of ${analytics.academic.totalStudents}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Exemplary (AO)</div>
+              <div class="stat-value">${analytics.behavior.exemplary}</div>
+              <div class="stat-detail">${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.exemplary / analytics.behavior.totalAssessed) * 100) : 0}%</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Good Standing (SO)</div>
+              <div class="stat-value">${analytics.behavior.goodStanding}</div>
+              <div class="stat-detail">${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.goodStanding / analytics.behavior.totalAssessed) * 100) : 0}%</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Needs Support</div>
+              <div class="stat-value">${analytics.behavior.needsSupport}</div>
+              <div class="stat-detail">${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.needsSupport / analytics.behavior.totalAssessed) * 100) : 0}%</div>
+            </div>
+          </div>
+          
+          <div class="footer">
+            <p>EduSync School Information System • Generated on ${new Date().toLocaleDateString()}</p>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    if (printWindow) {
+      printWindow.document.write(printContent.innerHTML);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+    }
+  };
+
+  const exportToExcel = () => {
+    // Prepare CSV data
+    const csvRows: string[] = [];
+    
+    // Header
+    csvRows.push('Assessment Analytics Report');
+    csvRows.push(`Generated: ${new Date().toLocaleString()}`);
+    csvRows.push(`School Year: ${new Date().getFullYear()}`);
+    csvRows.push('');
+    
+    // Academic Performance
+    csvRows.push('Academic Performance');
+    csvRows.push('Metric,Value,Details');
+    csvRows.push(`Total Students,${analytics.academic.totalStudents},Average: ${analytics.academic.avgGrade}%`);
+    csvRows.push(`Honor Roll,${analytics.academic.honorRoll},${analytics.academic.totalStudents > 0 ? Math.round((analytics.academic.honorRoll / analytics.academic.totalStudents) * 100) : 0}% of class`);
+    csvRows.push(`Passing,${analytics.academic.passing},≥75% average`);
+    csvRows.push(`Failing,${analytics.academic.failing},<75% average`);
+    csvRows.push(`Completion Rate,${analytics.academic.avgCompletion}%,Average completion`);
+    csvRows.push('');
+    
+    // Behavioral Performance
+    csvRows.push('Behavioral Performance');
+    csvRows.push('Metric,Value,Details');
+    csvRows.push(`Total Assessed,${analytics.behavior.totalAssessed},Out of ${analytics.academic.totalStudents}`);
+    csvRows.push(`Exemplary (AO),${analytics.behavior.exemplary},${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.exemplary / analytics.behavior.totalAssessed) * 100) : 0}%`);
+    csvRows.push(`Good Standing (SO),${analytics.behavior.goodStanding},${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.goodStanding / analytics.behavior.totalAssessed) * 100) : 0}%`);
+    csvRows.push(`Needs Support,${analytics.behavior.needsSupport},${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.needsSupport / analytics.behavior.totalAssessed) * 100) : 0}%`);
+    csvRows.push('');
+    
+    // Student Details
+    csvRows.push('Student Details');
+    csvRows.push('Student Name,LRN,Academic Average,Completion %,Behavioral Rating');
+    
+    visibleStudents.forEach(student => {
+      const studentGrades = grades.filter(g => g.studentId === student.id);
+      const finalGrades = studentGrades
+        .map(g => g.finalGrade)
+        .filter((g): g is number => typeof g === 'number');
+      
+      const average = finalGrades.length > 0
+        ? Math.round(finalGrades.reduce((sum, g) => sum + g, 0) / finalGrades.length)
+        : 0;
+      
+      const totalPossibleGrades = (learningAreas?.length || 0) * 4;
+      const completedGrades = studentGrades.reduce((sum, g) => {
+        return sum + ['q1', 'q2', 'q3', 'q4'].filter(q => g[q as keyof typeof g] !== undefined).length;
+      }, 0);
+      const completion = totalPossibleGrades > 0 
+        ? Math.round((completedGrades / totalPossibleGrades) * 100)
+        : 0;
+      
+      const studentCVGrades = coreValueGrades.filter(cvg => cvg.studentId === student.id);
+      const avgBehavior = studentCVGrades.length > 0
+        ? Math.round(studentCVGrades.reduce((sum, cvg) => {
+            const coreValue = coreValues.find(cv => cv.id === cvg.coreValueId);
+            if (!coreValue || !coreValue.behaviors) return sum;
+            const totalBehaviors = coreValue.behaviors.length;
+            const markedBehaviors = Object.values(cvg.markings || {}).filter((m: any) => m?.marking).length;
+            return sum + (totalBehaviors > 0 ? (markedBehaviors / totalBehaviors) * 100 : 0);
+          }, 0) / studentCVGrades.length)
+        : 0;
+      
+      const behaviorRating = avgBehavior >= 75 ? 'Exemplary' : avgBehavior >= 60 ? 'Good Standing' : 'Needs Support';
+      
+      csvRows.push(`"${student.name}",${student.lrn || 'N/A'},${average}%,${completion}%,${behaviorRating}`);
+    });
+    
+    // Create and download CSV
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `assessment-analytics-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Calculate analytics for Tier 1
   const analytics = useMemo(() => {
-    const visibleStudents = isStudentView 
+    let visibleStudents = isStudentView 
       ? students.filter(s => s.id === session.user.id)
       : isParentView 
       ? students.filter(s => s.id === forceStudentId)
       : students;
 
+    // Apply Tier 2 Filters
+    // Filter by section
+    if (filterSection !== 'all') {
+      visibleStudents = visibleStudents.filter(s => s.sectionId === filterSection);
+    }
+
     // Academic Performance Metrics
     const studentsWithGrades = visibleStudents.map(student => {
       const studentGrades = grades.filter(g => g.studentId === student.id);
-      const finalGrades = studentGrades
+      
+      // Filter by quarter if specified
+      let relevantGrades = studentGrades;
+      if (filterQuarter !== 'all') {
+        relevantGrades = studentGrades.filter(g => {
+          const quarterKey = filterQuarter as 'q1' | 'q2' | 'q3' | 'q4';
+          return g[quarterKey] !== undefined;
+        });
+      }
+      
+      const finalGrades = relevantGrades
         .map(g => g.finalGrade)
         .filter((g): g is number => typeof g === 'number');
       
@@ -93,15 +289,27 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       return { student, average, completion, hasGrades: finalGrades.length > 0 };
     });
 
+    // Apply performance filter
+    let filteredStudentsWithGrades = studentsWithGrades;
+    if (filterPerformance !== 'all') {
+      if (filterPerformance === 'honor') {
+        filteredStudentsWithGrades = studentsWithGrades.filter(s => s.average >= 90);
+      } else if (filterPerformance === 'passing') {
+        filteredStudentsWithGrades = studentsWithGrades.filter(s => s.average >= 75 && s.average < 90);
+      } else if (filterPerformance === 'failing') {
+        filteredStudentsWithGrades = studentsWithGrades.filter(s => s.average < 75 && s.average > 0);
+      }
+    }
+
     const totalStudents = visibleStudents.length;
-    const honorRoll = studentsWithGrades.filter(s => s.average >= 90).length;
-    const passing = studentsWithGrades.filter(s => s.average >= 75 && s.average > 0).length;
-    const failing = studentsWithGrades.filter(s => s.average < 75 && s.average > 0).length;
-    const avgGrade = studentsWithGrades.filter(s => s.hasGrades).length > 0
-      ? Math.round(studentsWithGrades.filter(s => s.hasGrades).reduce((sum, s) => sum + s.average, 0) / studentsWithGrades.filter(s => s.hasGrades).length)
+    const honorRoll = filteredStudentsWithGrades.filter(s => s.average >= 90).length;
+    const passing = filteredStudentsWithGrades.filter(s => s.average >= 75 && s.average > 0).length;
+    const failing = filteredStudentsWithGrades.filter(s => s.average < 75 && s.average > 0).length;
+    const avgGrade = filteredStudentsWithGrades.filter(s => s.hasGrades).length > 0
+      ? Math.round(filteredStudentsWithGrades.filter(s => s.hasGrades).reduce((sum, s) => sum + s.average, 0) / filteredStudentsWithGrades.filter(s => s.hasGrades).length)
       : 0;
     const avgCompletion = totalStudents > 0
-      ? Math.round(studentsWithGrades.reduce((sum, s) => sum + s.completion, 0) / totalStudents)
+      ? Math.round(filteredStudentsWithGrades.reduce((sum, s) => sum + s.completion, 0) / totalStudents)
       : 0;
 
     // Core Values Performance Metrics
@@ -205,7 +413,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
         studentsWithBoth
       }
     };
-  }, [students, grades, learningAreas, coreValues, coreValueGrades, session, forceStudentId, isStudentView, isParentView]);
+  }, [students, grades, learningAreas, coreValues, coreValueGrades, session, forceStudentId, isStudentView, isParentView, filterSection, filterQuarter, filterPerformance]);
 
   const tabs = [
     { id: 'overview' as TabType, label: 'Overview & Analytics', icon: '📊' },
@@ -239,6 +447,117 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       {/* Tab Content */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {/* Tier 2: Filter Controls & Export Actions */}
+          {!(isStudentView || isParentView) && (
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-4">
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+                {/* Filters */}
+                <div className="flex flex-wrap gap-3 items-center">
+                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">🔍 Filters:</span>
+                  
+                  {/* Section Filter */}
+                  <select
+                    value={filterSection}
+                    onChange={(e) => setFilterSection(e.target.value)}
+                    className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="all">All Sections</option>
+                    {Array.from(new Set(students.map(s => s.sectionId).filter(Boolean))).map(sectionId => (
+                      <option key={sectionId} value={sectionId}>
+                        {schoolData.sections?.find(sec => sec.id === sectionId)?.name || sectionId}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Quarter Filter */}
+                  <select
+                    value={filterQuarter}
+                    onChange={(e) => setFilterQuarter(e.target.value)}
+                    className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="all">All Quarters</option>
+                    <option value="q1">Quarter 1</option>
+                    <option value="q2">Quarter 2</option>
+                    <option value="q3">Quarter 3</option>
+                    <option value="q4">Quarter 4</option>
+                  </select>
+
+                  {/* Performance Filter */}
+                  <select
+                    value={filterPerformance}
+                    onChange={(e) => setFilterPerformance(e.target.value)}
+                    className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="all">All Performance Levels</option>
+                    <option value="honor">🏆 Honor Roll (≥90%)</option>
+                    <option value="passing">✅ Passing (75-89%)</option>
+                    <option value="failing">⚠️ Needs Support (&lt;75%)</option>
+                  </select>
+
+                  {/* Reset Filters Button */}
+                  {(filterSection !== 'all' || filterQuarter !== 'all' || filterPerformance !== 'all') && (
+                    <button
+                      onClick={() => {
+                        setFilterSection('all');
+                        setFilterQuarter('all');
+                        setFilterPerformance('all');
+                      }}
+                      className="px-3 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-md transition-colors"
+                    >
+                      ↺ Reset
+                    </button>
+                  )}
+                </div>
+
+                {/* Export Actions */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={exportToPDF}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors shadow-sm"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
+                    </svg>
+                    <span className="hidden sm:inline">Export PDF</span>
+                  </button>
+                  <button
+                    onClick={exportToExcel}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium transition-colors shadow-sm"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                    <span className="hidden sm:inline">Export Excel</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Active Filters Display */}
+              {(filterSection !== 'all' || filterQuarter !== 'all' || filterPerformance !== 'all') && (
+                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Active filters:</span>
+                    {filterSection !== 'all' && (
+                      <span className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs rounded-full">
+                        Section: {schoolData.sections?.find(sec => sec.id === filterSection)?.name || filterSection}
+                      </span>
+                    )}
+                    {filterQuarter !== 'all' && (
+                      <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded-full">
+                        {filterQuarter.toUpperCase()}
+                      </span>
+                    )}
+                    {filterPerformance !== 'all' && (
+                      <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
+                        {filterPerformance === 'honor' ? 'Honor Roll' : filterPerformance === 'passing' ? 'Passing' : 'Needs Support'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
           {/* Tier 1 Analytics - Summary Cards */}
           {!(isStudentView || isParentView) && (
             <>
