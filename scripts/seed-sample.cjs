@@ -216,25 +216,20 @@ async function run() {
 
   // --- Seed Core Values (deterministic IDs to prevent duplicates) ---
   const defaultCoreValues = [
-    { id: 'cv_makadiyos', name: 'Maka-Diyos', behaviors: [
-      'Expresses spiritual beliefs with respect for others',
-      'Shows respect for religious beliefs and traditions',
-      'Participates in spiritual or reflective activities',
+    { id: 'cv_makadiyos', name: 'MAKADIYOS', behaviors: [
+      "Expresses one's spiritual beliefs while respecting the spiritual beliefs of others",
+      'Shows adherence to ethical principles by upholding truth',
     ]},
-    { id: 'cv_makatao', name: 'Maka-tao', behaviors: [
-      'Demonstrates empathy and compassion',
-      'Shows respect and courtesy towards others',
-      'Observes fairness and justice in actions',
+    { id: 'cv_makatao', name: 'MAKATAO', behaviors: [
+      'Is sensitive to individual, social, and cultural differences',
+      'Demonstrates contributions toward solidarity',
     ]},
-    { id: 'cv_makakalikasan', name: 'Makakalikasan', behaviors: [
-      'Cares for the environment and school surroundings',
-      'Practices proper waste segregation and disposal',
-      'Conserves water, energy, and resources',
+    { id: 'cv_makakalikasan', name: 'MAKAKALIKASAN', behaviors: [
+      'Cares for the environment and utilizes resources wisely, judiciously, and economically',
     ]},
-    { id: 'cv_makabansa', name: 'Makabansa', behaviors: [
-      'Shows love of country and community',
-      'Respects the flag and national symbols',
-      'Upholds school rules and the law',
+    { id: 'cv_makabansa', name: 'MAKABANSA', behaviors: [
+      'Demonstrates pride in being a Filipino; exercises the rights and responsibilities of a Filipino citizen',
+      'Demonstrates appropriate behavior in carrying out activities in the school, community, and country',
     ]},
   ];
 
