@@ -225,9 +225,10 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
       queries: collectionConfigs
         .filter(config => shouldFetch(config.name))
         .map(config => ({
-          queryKey: [config.name],
+          queryKey: [config.name, 'v2'], // Cache buster - increment when data structure changes
           queryFn: config.fetchFn,
-          staleTime: 5 * 60 * 1000, // 5 minutes
+          staleTime: 0, // Force refetch - was 5 * 60 * 1000
+          cacheTime: 0, // Don't cache - force fresh data
         }))
     });
 
@@ -522,8 +523,25 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
     // Helper to invalidate and refetch a query after mutation
     const invalidate = async (key: QueryKey) => {
-        await queryClient.invalidateQueries({ queryKey: key });
-        await queryClient.refetchQueries({ queryKey: key });
+        // Use predicate to match keys with version suffix
+        await queryClient.invalidateQueries({ 
+            predicate: (query) => {
+                const queryKey = query.queryKey;
+                if (Array.isArray(key) && Array.isArray(queryKey)) {
+                    return queryKey[0] === key[0]; // Match first element (collection name)
+                }
+                return false;
+            }
+        });
+        await queryClient.refetchQueries({ 
+            predicate: (query) => {
+                const queryKey = query.queryKey;
+                if (Array.isArray(key) && Array.isArray(queryKey)) {
+                    return queryKey[0] === key[0];
+                }
+                return false;
+            }
+        });
     };
 
     // === CRUD OPERATIONS ===

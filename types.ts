@@ -116,6 +116,7 @@ export interface LearningArea {
   // Phase 2: DepEd K-12 Curriculum compliance
   kToTwelveCode?: string;      // Official DepEd code: "FIL7", "ENG8", etc.
   semesterBased?: boolean;     // For SHS subjects (1st/2nd semester)
+  semester?: 1 | 2;            // Which semester (1st or 2nd) for SHS
   trackRequired?: string[];    // ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL'] for SHS
   
   // Phase 3: Advanced features
@@ -126,6 +127,14 @@ export interface LearningArea {
 
 export type SubGradeRecord = Record<string, number>;
 
+// Semester grading for Senior High School
+export interface SemesterGrade {
+  midterm: number;
+  final: number;
+  average: number;
+}
+
+// Base grade interface for quarterly grading (Elementary & JHS)
 export interface Grade {
   id: string;
   studentId: string;
@@ -137,6 +146,20 @@ export interface Grade {
   finalGrade?: number;
   remarks?: 'Passed' | 'Failed';
 }
+
+// Senior High School grade interface (semester-based)
+export interface GradeSHS {
+  id: string;
+  studentId: string;
+  learningAreaId: string;
+  semester1?: SemesterGrade;
+  semester2?: SemesterGrade;
+  finalGrade?: number;
+  remarks?: 'Passed' | 'Failed';
+}
+
+// Union type for all grade types
+export type GradeInput = Grade | GradeSHS;
 
 export interface CoreValue {
   id: string;

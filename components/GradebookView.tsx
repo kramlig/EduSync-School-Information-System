@@ -68,6 +68,24 @@ const MapehGradeModal: React.FC<{
   );
 };
 
+// Auto-detect current quarter based on Philippine school year calendar
+const getCurrentQuarter = (): 'all' | 'q1' | 'q2' | 'q3' | 'q4' => {
+  const now = new Date();
+  const month = now.getMonth() + 1; // 1-12
+  
+  // Philippine School Year: June - March
+  // Q1: June - August (months 6, 7, 8)
+  // Q2: September - November (months 9, 10, 11)
+  // Q3: December - February (months 12, 1, 2)
+  // Q4: March - May (months 3, 4, 5)
+  
+  if (month >= 6 && month <= 8) return 'q1';
+  if (month >= 9 && month <= 11) return 'q2';
+  if (month === 12 || month === 1 || month === 2) return 'q3';
+  if (month >= 3 && month <= 5) return 'q4';
+  
+  return 'all'; // fallback
+};
 
 const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: AuthUser | StudentUser, type: 'staff' | 'student' }; }> = ({ schoolData, session }) => {
   const { students, grades, learningAreas, sections, substituteAssignments, classSchedules, updateGrade } = schoolData;
@@ -94,7 +112,7 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
   }
   
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
-  const [quarterFilter, setQuarterFilter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>('all');
+  const [quarterFilter, setQuarterFilter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>(getCurrentQuarter());
   const [mapehModalState, setMapehModalState] = useState<{ isOpen: boolean, student?: Student, quarter?: 'q1'|'q2'|'q3'|'q4', la?: LearningArea }>({ isOpen: false });
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
@@ -189,8 +207,58 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
         if (!map.has(g.studentId)) map.set(g.studentId, new Map());
         map.get(g.studentId)!.set(g.learningAreaId, g);
     });
+    
+    // DEBUG: Log gradeMap contents
+    console.log('[GradebookView] 🗺️ GradeMap built with', map.size, 'students');
+    if (map.size > 0) {
+      const firstStudentId = Array.from(map.keys())[0];
+      const firstStudentGrades = map.get(firstStudentId);
+      console.log('[GradebookView] Sample student grades for', firstStudentId, ':', 
+        Array.from(firstStudentGrades?.entries() || []).map(([laId, grade]) => ({
+          learningAreaId: laId,
+          q1: grade.q1,
+          q2: grade.q2,
+          q3: grade.q3,
+          q4: grade.q4
+        }))
+      );
+    }
+    
     return map;
   }, [grades]);
+
+  // Group sections by level for better UX
+  const groupedSections = useMemo(() => {
+    const groups = {
+      elementary: [] as typeof visibleSections,
+      juniorHigh: [] as typeof visibleSections,
+      seniorHigh: [] as typeof visibleSections
+    };
+
+    visibleSections.forEach(section => {
+      if (section.gradeLevel <= 6) groups.elementary.push(section);
+      else if (section.gradeLevel <= 10) groups.juniorHigh.push(section);
+      else groups.seniorHigh.push(section);
+    });
+
+    // Sort within each group by grade level
+    groups.elementary.sort((a, b) => a.gradeLevel - b.gradeLevel);
+    groups.juniorHigh.sort((a, b) => a.gradeLevel - b.gradeLevel);
+    groups.seniorHigh.sort((a, b) => a.gradeLevel - b.gradeLevel);
+
+    return groups;
+  }, [visibleSections]);
+
+  // Calculate student count per section
+  const sectionStudentCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    students.forEach(student => {
+      if (student.sectionId) {
+        counts.set(student.sectionId, (counts.get(student.sectionId) || 0) + 1);
+      }
+    });
+    return counts;
+  }, [students]);
 
   const studentsInSection = useMemo(() => {
     if (!selectedSectionId) return [];
@@ -622,7 +690,52 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
               className="p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
           >
               <option value="" disabled>-- Select a Class --</option>
-              {visibleSections.map(s => <option key={s.id} value={s.id}>Grade {s.gradeLevel} - {s.name}</option>)}
+              
+              {/* Elementary Section Group */}
+              {groupedSections.elementary.length > 0 && (
+                <optgroup label="📚 ELEMENTARY (Grades 1-6)">
+                  {groupedSections.elementary.map(s => {
+                    const studentCount = sectionStudentCounts.get(s.id) || 0;
+                    const sectionName = s.name.replace(`Grade ${s.gradeLevel} - `, '');
+                    return (
+                      <option key={s.id} value={s.id}>
+                        Grade {s.gradeLevel} {sectionName} ({studentCount} students)
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              )}
+              
+              {/* Junior High Section Group */}
+              {groupedSections.juniorHigh.length > 0 && (
+                <optgroup label="🎓 JUNIOR HIGH (Grades 7-10)">
+                  {groupedSections.juniorHigh.map(s => {
+                    const studentCount = sectionStudentCounts.get(s.id) || 0;
+                    const sectionName = s.name.replace(`Grade ${s.gradeLevel} - `, '');
+                    return (
+                      <option key={s.id} value={s.id}>
+                        Grade {s.gradeLevel} {sectionName} ({studentCount} students)
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              )}
+              
+              {/* Senior High Section Group */}
+              {groupedSections.seniorHigh.length > 0 && (
+                <optgroup label="🏆 SENIOR HIGH (Grades 11-12)">
+                  {groupedSections.seniorHigh.map(s => {
+                    const studentCount = sectionStudentCounts.get(s.id) || 0;
+                    // Extract track from section name (e.g., "Grade 11 - STEM" -> "STEM")
+                    const sectionName = s.name.replace(`Grade ${s.gradeLevel} - `, '');
+                    return (
+                      <option key={s.id} value={s.id}>
+                        Grade {s.gradeLevel} {sectionName} ({studentCount} students)
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              )}
           </select>
         </div>
         <div>
@@ -840,6 +953,21 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                     const studentGrades = gradeMap.get(student.id);
                     const currentGrade = studentGrades?.get(col.learningArea.id);
                     const gradeValue: number | string = (currentGrade?.[col.quarter] as number) ?? '';
+                    
+                    // DEBUG: Log first student's first column only to avoid spam
+                    if (rowIndex === 0 && colIndex === 0) {
+                      console.log('[GradebookView] 🎯 First cell render:', {
+                        studentId: student.id,
+                        studentName: student.name,
+                        learningAreaId: col.learningArea.id,
+                        learningAreaName: col.learningArea.name,
+                        quarter: col.quarter,
+                        currentGrade: currentGrade,
+                        gradeValue: gradeValue,
+                        hasStudentGrades: !!studentGrades,
+                        studentGradesSize: studentGrades?.size
+                      });
+                    }
                     
                     if (col.learningArea.isComposite) {
                         const quarterAvg = calculateQuarterAverage(currentGrade?.[col.quarter]);
