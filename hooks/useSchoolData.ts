@@ -200,7 +200,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         }},
         { name: 'grades', fetchFn: () => fetchCollection<Grade>('grades') },
         { name: 'coreValues', fetchFn: () => fetchCollection<CoreValue>('coreValues') },
-        { name: 'coreValueGrades', fetchFn: () => fetchCollection<CoreValueGrade>('corevaluesgrades') },
+        { name: 'coreValueGrades', fetchFn: () => fetchCollection<CoreValueGrade>('coreValueGrades') },
         { name: 'attendanceRecords', fetchFn: () => fetchCollection<AttendanceRecord>('attendanceRecords') },
         { name: 'teachers', fetchFn: () => fetchCollection<Teacher>('teachers') },
         { name: 'parents', fetchFn: () => fetchCollection<Parent>('parents') },
@@ -634,7 +634,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         } else {
             (nextRecord as any)[quarter][behavior] = value;
         }
-        await writeToFirestore('corevaluesgrades', nextRecord.id, nextRecord);
+        await writeToFirestore('coreValueGrades', nextRecord.id, nextRecord);
         await invalidate(['coreValueGrades']);
     }, []);
 
