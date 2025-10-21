@@ -14,7 +14,7 @@ interface UnifiedAssessmentViewProps {
   forceStudentId?: string;
 }
 
-type TabType = 'overview' | 'academic-gradebook' | 'core-values-gradebook' | 'report-cards';
+type TabType = 'overview' | 'academic-gradebook' | 'core-values-gradebook' | 'report-cards' | 'deep-analytics';
 
 const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolData, session, forceStudentId }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -415,11 +415,269 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
     };
   }, [students, grades, learningAreas, coreValues, coreValueGrades, session, forceStudentId, isStudentView, isParentView, filterSection, filterQuarter, filterPerformance]);
 
+  // Tier 3: Deep Analytics Calculations
+  const deepAnalytics = useMemo(() => {
+    let visibleStudents = isStudentView 
+      ? students.filter(s => s.id === session.user.id)
+      : isParentView 
+      ? students.filter(s => s.id === forceStudentId)
+      : students;
+
+    if (filterSection !== 'all') {
+      visibleStudents = visibleStudents.filter(s => s.sectionId === filterSection);
+    }
+
+    // Quarterly Trend Analysis
+    const quarterlyTrends = ['q1', 'q2', 'q3', 'q4'].map(quarter => {
+      const quarterKey = quarter as 'q1' | 'q2' | 'q3' | 'q4';
+      const quarterGrades = visibleStudents.map(student => {
+        const studentGrades = grades.filter(g => g.studentId === student.id);
+        const quarterGradesOnly = studentGrades
+          .map(g => g[quarterKey])
+          .filter((g): g is number => typeof g === 'number');
+        
+        return quarterGradesOnly.length > 0
+          ? Math.round(quarterGradesOnly.reduce((sum, g) => sum + g, 0) / quarterGradesOnly.length)
+          : 0;
+      }).filter(avg => avg > 0);
+
+      const average = quarterGrades.length > 0
+        ? Math.round(quarterGrades.reduce((sum, g) => sum + g, 0) / quarterGrades.length)
+        : 0;
+
+      const passing = quarterGrades.filter(g => g >= 75).length;
+      const failing = quarterGrades.filter(g => g < 75).length;
+
+      return {
+        quarter,
+        average,
+        passing,
+        failing,
+        total: quarterGrades.length
+      };
+    });
+
+    // Calculate quarter-over-quarter growth
+    const growthRates = quarterlyTrends.slice(1).map((current, index) => {
+      const previous = quarterlyTrends[index];
+      const growth = previous.average > 0 
+        ? Math.round(((current.average - previous.average) / previous.average) * 100)
+        : 0;
+      return {
+        from: previous.quarter,
+        to: current.quarter,
+        growth,
+        direction: growth > 0 ? 'up' : growth < 0 ? 'down' : 'stable'
+      };
+    });
+
+    // Risk Assessment - Students at risk of failing
+    const atRiskStudents = visibleStudents.map(student => {
+      const studentGrades = grades.filter(g => g.studentId === student.id);
+      const recentGrades = [
+        studentGrades.map(g => g.q3).filter((g): g is number => typeof g === 'number'),
+        studentGrades.map(g => g.q4).filter((g): g is number => typeof g === 'number')
+      ].flat();
+
+      const recentAvg = recentGrades.length > 0
+        ? Math.round(recentGrades.reduce((sum, g) => sum + g, 0) / recentGrades.length)
+        : 0;
+
+      const allGrades = ['q1', 'q2', 'q3', 'q4'].flatMap(q => {
+        const qKey = q as 'q1' | 'q2' | 'q3' | 'q4';
+        return studentGrades.map(g => g[qKey]).filter((g): g is number => typeof g === 'number');
+      });
+
+      const overallAvg = allGrades.length > 0
+        ? Math.round(allGrades.reduce((sum, g) => sum + g, 0) / allGrades.length)
+        : 0;
+
+      // Declining trend detection
+      const q1Avg = studentGrades.map(g => g.q1).filter((g): g is number => typeof g === 'number');
+      const q4Avg = studentGrades.map(g => g.q4).filter((g): g is number => typeof g === 'number');
+      const q1Average = q1Avg.length > 0 ? q1Avg.reduce((sum, g) => sum + g, 0) / q1Avg.length : 0;
+      const q4Average = q4Avg.length > 0 ? q4Avg.reduce((sum, g) => sum + g, 0) / q4Avg.length : 0;
+      const isDeclining = q1Average > 0 && q4Average > 0 && q4Average < q1Average - 5;
+
+      const riskLevel = recentAvg < 70 ? 'critical' : recentAvg < 75 ? 'high' : isDeclining ? 'moderate' : 'low';
+
+      return {
+        student,
+        recentAvg,
+        overallAvg,
+        riskLevel,
+        isDeclining,
+        needsIntervention: riskLevel === 'critical' || riskLevel === 'high'
+      };
+    });
+
+    const criticalRisk = atRiskStudents.filter(s => s.riskLevel === 'critical').length;
+    const highRisk = atRiskStudents.filter(s => s.riskLevel === 'high').length;
+    const moderateRisk = atRiskStudents.filter(s => s.riskLevel === 'moderate').length;
+    const decliningStudents = atRiskStudents.filter(s => s.isDeclining).length;
+
+    // Performance Predictions for next quarter
+    const predictions = visibleStudents.map(student => {
+      const studentGrades = grades.filter(g => g.studentId === student.id);
+      const quarterAverages = ['q1', 'q2', 'q3', 'q4'].map(q => {
+        const qKey = q as 'q1' | 'q2' | 'q3' | 'q4';
+        const qGrades = studentGrades.map(g => g[qKey]).filter((g): g is number => typeof g === 'number');
+        return qGrades.length > 0 ? qGrades.reduce((sum, g) => sum + g, 0) / qGrades.length : 0;
+      }).filter(avg => avg > 0);
+
+      if (quarterAverages.length < 2) {
+        return { student, predicted: 0, confidence: 'low', trend: 'insufficient data' };
+      }
+
+      // Simple linear regression for trend
+      const sum = quarterAverages.reduce((acc, val) => acc + val, 0);
+      const avg = sum / quarterAverages.length;
+      const lastTwo = quarterAverages.slice(-2);
+      const trend = lastTwo[1] > lastTwo[0] ? 'improving' : lastTwo[1] < lastTwo[0] ? 'declining' : 'stable';
+      const trendRate = lastTwo[0] > 0 ? ((lastTwo[1] - lastTwo[0]) / lastTwo[0]) * 100 : 0;
+
+      const predicted = Math.max(0, Math.min(100, Math.round(quarterAverages[quarterAverages.length - 1] + trendRate)));
+      const confidence = quarterAverages.length >= 3 ? 'high' : 'moderate';
+
+      return { student, predicted, confidence, trend, currentAvg: Math.round(avg) };
+    });
+
+    const predictedPassing = predictions.filter(p => p.predicted >= 75).length;
+    const predictedFailing = predictions.filter(p => p.predicted < 75 && p.predicted > 0).length;
+    const improving = predictions.filter(p => p.trend === 'improving').length;
+    const declining = predictions.filter(p => p.trend === 'declining').length;
+
+    // Subject-wise Performance Analysis
+    const subjectPerformance = learningAreas.map(la => {
+      const subjectGrades = grades.filter(g => g.learningAreaId === la.id);
+      const allQuarterGrades = ['q1', 'q2', 'q3', 'q4'].flatMap(q => {
+        const qKey = q as 'q1' | 'q2' | 'q3' | 'q4';
+        return subjectGrades.map(g => g[qKey]).filter((g): g is number => typeof g === 'number');
+      });
+
+      const average = allQuarterGrades.length > 0
+        ? Math.round(allQuarterGrades.reduce((sum, g) => sum + g, 0) / allQuarterGrades.length)
+        : 0;
+
+      const passing = subjectGrades.filter(g => {
+        const finalGrade = g.finalGrade;
+        return typeof finalGrade === 'number' && finalGrade >= 75;
+      }).length;
+
+      const failing = subjectGrades.filter(g => {
+        const finalGrade = g.finalGrade;
+        return typeof finalGrade === 'number' && finalGrade < 75;
+      }).length;
+
+      return {
+        subject: la.name,
+        average,
+        passing,
+        failing,
+        total: subjectGrades.length,
+        difficulty: average < 75 ? 'high' : average < 85 ? 'moderate' : 'low'
+      };
+    }).sort((a, b) => a.average - b.average); // Sort by difficulty
+
+    // Improvement Tracking
+    const improvementTracking = visibleStudents.map(student => {
+      const studentGrades = grades.filter(g => g.studentId === student.id);
+      const q1Grades = studentGrades.map(g => g.q1).filter((g): g is number => typeof g === 'number');
+      const q4Grades = studentGrades.map(g => g.q4).filter((g): g is number => typeof g === 'number');
+
+      const q1Avg = q1Grades.length > 0 ? q1Grades.reduce((sum, g) => sum + g, 0) / q1Grades.length : 0;
+      const q4Avg = q4Grades.length > 0 ? q4Grades.reduce((sum, g) => sum + g, 0) / q4Grades.length : 0;
+
+      const improvement = q1Avg > 0 && q4Avg > 0 ? Math.round(q4Avg - q1Avg) : 0;
+      const improvementPercent = q1Avg > 0 ? Math.round((improvement / q1Avg) * 100) : 0;
+
+      return {
+        student,
+        q1Avg: Math.round(q1Avg),
+        q4Avg: Math.round(q4Avg),
+        improvement,
+        improvementPercent,
+        category: improvement > 5 ? 'significant' : improvement > 0 ? 'modest' : improvement < -5 ? 'declining' : 'stable'
+      };
+    }).sort((a, b) => b.improvement - a.improvement);
+
+    const significantImprovement = improvementTracking.filter(i => i.category === 'significant').length;
+    const decliningPerformance = improvementTracking.filter(i => i.category === 'declining').length;
+
+    // Smart Recommendations
+    const recommendations: Array<{ type: string; priority: string; message: string; count: number }> = [];
+
+    if (criticalRisk > 0) {
+      recommendations.push({
+        type: 'intervention',
+        priority: 'critical',
+        message: `${criticalRisk} student(s) at critical risk - immediate intervention required`,
+        count: criticalRisk
+      });
+    }
+
+    if (decliningStudents > 3) {
+      recommendations.push({
+        type: 'monitoring',
+        priority: 'high',
+        message: `${decliningStudents} student(s) showing declining trends - implement monitoring`,
+        count: decliningStudents
+      });
+    }
+
+    const hardestSubjects = subjectPerformance.filter(s => s.difficulty === 'high');
+    if (hardestSubjects.length > 0) {
+      recommendations.push({
+        type: 'curriculum',
+        priority: 'moderate',
+        message: `${hardestSubjects.length} subject(s) need curriculum review: ${hardestSubjects.map(s => s.subject).join(', ')}`,
+        count: hardestSubjects.length
+      });
+    }
+
+    if (improving > declining) {
+      recommendations.push({
+        type: 'positive',
+        priority: 'low',
+        message: `Positive trend: ${improving} student(s) improving vs ${declining} declining`,
+        count: improving
+      });
+    }
+
+    return {
+      quarterlyTrends,
+      growthRates,
+      riskAssessment: {
+        criticalRisk,
+        highRisk,
+        moderateRisk,
+        decliningStudents,
+        atRiskStudents: atRiskStudents.filter(s => s.needsIntervention)
+      },
+      predictions: {
+        predictedPassing,
+        predictedFailing,
+        improving,
+        declining,
+        topPredictions: predictions.sort((a, b) => b.predicted - a.predicted).slice(0, 10)
+      },
+      subjectPerformance,
+      improvementTracking: {
+        significantImprovement,
+        decliningPerformance,
+        topImprovers: improvementTracking.slice(0, 10),
+        needsSupport: improvementTracking.filter(i => i.category === 'declining').slice(0, 10)
+      },
+      recommendations
+    };
+  }, [students, grades, learningAreas, session, forceStudentId, isStudentView, isParentView, filterSection]);
+
   const tabs = [
     { id: 'overview' as TabType, label: 'Overview & Analytics', icon: '📊' },
     { id: 'academic-gradebook' as TabType, label: 'Academic Gradebook', icon: '📚' },
     { id: 'core-values-gradebook' as TabType, label: 'Core Values Gradebook', icon: '🌟' },
-    { id: 'report-cards' as TabType, label: 'Report Cards', icon: '📄' }
+    { id: 'report-cards' as TabType, label: 'Report Cards', icon: '📄' },
+    { id: 'deep-analytics' as TabType, label: 'Deep Analytics', icon: '🔬' }
   ];
 
   return (
@@ -1102,6 +1360,383 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
                 }).length}
               </div>
               <div className="text-sm text-slate-600 dark:text-slate-400">Incomplete Grades</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deep Analytics Tab - Tier 3 */}
+      {activeTab === 'deep-analytics' && !(isStudentView || isParentView) && (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg shadow-lg p-6">
+            <h2 className="text-2xl font-bold mb-2">🔬 Deep Analytics & Insights</h2>
+            <p className="text-purple-100">Advanced analytics, predictions, and AI-powered recommendations</p>
+          </div>
+
+          {/* Quarterly Trend Analysis */}
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+              📈 Quarterly Trend Analysis
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              {deepAnalytics.quarterlyTrends.map((qt, idx) => (
+                <div key={qt.quarter} className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-700 dark:to-slate-600 rounded-lg p-4">
+                  <div className="text-sm font-semibold text-indigo-600 dark:text-indigo-300 mb-2">
+                    {qt.quarter.toUpperCase()}
+                  </div>
+                  <div className="text-3xl font-bold text-slate-800 dark:text-white mb-1">
+                    {qt.average}%
+                  </div>
+                  <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                    <div>✅ Passing: {qt.passing}</div>
+                    <div>⚠️ Failing: {qt.failing}</div>
+                    <div>👥 Total: {qt.total}</div>
+                  </div>
+                  {idx > 0 && deepAnalytics.growthRates[idx - 1] && (
+                    <div className={`mt-2 text-xs font-semibold ${
+                      deepAnalytics.growthRates[idx - 1].direction === 'up' ? 'text-green-600' :
+                      deepAnalytics.growthRates[idx - 1].direction === 'down' ? 'text-red-600' :
+                      'text-slate-600'
+                    }`}>
+                      {deepAnalytics.growthRates[idx - 1].direction === 'up' && '↗️'}
+                      {deepAnalytics.growthRates[idx - 1].direction === 'down' && '↘️'}
+                      {deepAnalytics.growthRates[idx - 1].direction === 'stable' && '→'}
+                      {' '}{deepAnalytics.growthRates[idx - 1].growth > 0 ? '+' : ''}{deepAnalytics.growthRates[idx - 1].growth}%
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Growth Chart Visualization */}
+            <div className="bg-slate-50 dark:bg-slate-700 rounded-lg p-4">
+              <div className="flex items-end gap-2 h-48">
+                {deepAnalytics.quarterlyTrends.map((qt, idx) => {
+                  const maxAvg = Math.max(...deepAnalytics.quarterlyTrends.map(q => q.average));
+                  const height = maxAvg > 0 ? (qt.average / maxAvg) * 100 : 0;
+                  return (
+                    <div key={qt.quarter} className="flex-1 flex flex-col items-center gap-2">
+                      <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                        {qt.average}%
+                      </div>
+                      <div 
+                        className="w-full bg-gradient-to-t from-indigo-500 to-indigo-400 rounded-t-lg transition-all hover:from-indigo-600 hover:to-indigo-500"
+                        style={{ height: `${height}%` }}
+                      />
+                      <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                        {qt.quarter.toUpperCase()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Risk Assessment Dashboard */}
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+              ⚠️ Student Risk Assessment
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-lg p-4">
+                <div className="text-sm font-medium opacity-90">Critical Risk</div>
+                <div className="text-4xl font-bold my-2">{deepAnalytics.riskAssessment.criticalRisk}</div>
+                <div className="text-xs opacity-75">Immediate intervention needed</div>
+              </div>
+              <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-lg p-4">
+                <div className="text-sm font-medium opacity-90">High Risk</div>
+                <div className="text-4xl font-bold my-2">{deepAnalytics.riskAssessment.highRisk}</div>
+                <div className="text-xs opacity-75">Close monitoring required</div>
+              </div>
+              <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white rounded-lg p-4">
+                <div className="text-sm font-medium opacity-90">Moderate Risk</div>
+                <div className="text-4xl font-bold my-2">{deepAnalytics.riskAssessment.moderateRisk}</div>
+                <div className="text-xs opacity-75">Support recommended</div>
+              </div>
+              <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg p-4">
+                <div className="text-sm font-medium opacity-90">Declining Trends</div>
+                <div className="text-4xl font-bold my-2">{deepAnalytics.riskAssessment.decliningStudents}</div>
+                <div className="text-xs opacity-75">Performance dropping</div>
+              </div>
+            </div>
+
+            {/* At-Risk Students List */}
+            {deepAnalytics.riskAssessment.atRiskStudents.length > 0 && (
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                  Students Requiring Intervention ({deepAnalytics.riskAssessment.atRiskStudents.length})
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
+                  {deepAnalytics.riskAssessment.atRiskStudents.slice(0, 12).map(student => (
+                    <div 
+                      key={student.student.id}
+                      className={`p-3 rounded-lg border-l-4 ${
+                        student.riskLevel === 'critical' ? 'bg-red-50 border-red-500 dark:bg-red-900/20' :
+                        'bg-orange-50 border-orange-500 dark:bg-orange-900/20'
+                      }`}
+                    >
+                      <div className="font-medium text-sm text-slate-800 dark:text-white">
+                        {student.student.name}
+                      </div>
+                      <div className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                        Recent: {student.recentAvg}% | Overall: {student.overallAvg}%
+                      </div>
+                      <div className={`text-xs font-semibold mt-1 ${
+                        student.riskLevel === 'critical' ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'
+                      }`}>
+                        {student.riskLevel.toUpperCase()} RISK
+                        {student.isDeclining && ' • DECLINING'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Performance Predictions */}
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+              🔮 Performance Predictions (Next Quarter)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg p-4">
+                <div className="text-sm font-medium opacity-90">Predicted Passing</div>
+                <div className="text-4xl font-bold my-2">{deepAnalytics.predictions.predictedPassing}</div>
+                <div className="text-xs opacity-75">Expected to pass (≥75%)</div>
+              </div>
+              <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-lg p-4">
+                <div className="text-sm font-medium opacity-90">Predicted Failing</div>
+                <div className="text-4xl font-bold my-2">{deepAnalytics.predictions.predictedFailing}</div>
+                <div className="text-xs opacity-75">May need intervention</div>
+              </div>
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg p-4">
+                <div className="text-sm font-medium opacity-90">Improving</div>
+                <div className="text-4xl font-bold my-2">{deepAnalytics.predictions.improving}</div>
+                <div className="text-xs opacity-75">Upward trend detected</div>
+              </div>
+              <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg p-4">
+                <div className="text-sm font-medium opacity-90">Declining</div>
+                <div className="text-4xl font-bold my-2">{deepAnalytics.predictions.declining}</div>
+                <div className="text-xs opacity-75">Downward trend detected</div>
+              </div>
+            </div>
+
+            {/* Top Predicted Performers */}
+            <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+              <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                Top 10 Predicted Performers
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto">
+                {deepAnalytics.predictions.topPredictions.map((pred, idx) => (
+                  <div 
+                    key={pred.student.id}
+                    className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700 rounded-lg"
+                  >
+                    <div className="flex-shrink-0 w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                      #{idx + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm text-slate-800 dark:text-white truncate">
+                        {pred.student.name}
+                      </div>
+                      <div className="text-xs text-slate-600 dark:text-slate-300">
+                        Current: {pred.currentAvg}% → Predicted: {pred.predicted}%
+                      </div>
+                    </div>
+                    <div className={`flex-shrink-0 text-xs font-semibold px-2 py-1 rounded ${
+                      pred.trend === 'improving' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                      pred.trend === 'declining' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                      'bg-slate-100 text-slate-700 dark:bg-slate-600 dark:text-slate-300'
+                    }`}>
+                      {pred.trend === 'improving' && '↗️'}
+                      {pred.trend === 'declining' && '↘️'}
+                      {pred.trend === 'stable' && '→'}
+                      {' '}{pred.trend}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Subject Performance Analysis */}
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+              📖 Subject Performance Analysis
+            </h3>
+            <div className="space-y-3">
+              {deepAnalytics.subjectPerformance.map((subject, idx) => {
+                const maxTotal = Math.max(...deepAnalytics.subjectPerformance.map(s => s.total));
+                const passingRate = subject.total > 0 ? Math.round((subject.passing / subject.total) * 100) : 0;
+                
+                return (
+                  <div key={subject.subject} className="border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                          idx < 3 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                          idx < 6 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                          'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                        }`}>
+                          {subject.difficulty.toUpperCase()}
+                        </span>
+                        <span className="font-semibold text-slate-800 dark:text-white">
+                          {subject.subject}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-slate-800 dark:text-white">
+                          {subject.average}%
+                        </div>
+                        <div className="text-xs text-slate-600 dark:text-slate-300">
+                          {passingRate}% passing rate
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex-1 bg-slate-100 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full ${
+                            subject.difficulty === 'high' ? 'bg-red-500' :
+                            subject.difficulty === 'moderate' ? 'bg-yellow-500' :
+                            'bg-green-500'
+                          }`}
+                          style={{ width: `${(subject.average / 100) * 100}%` }}
+                        />
+                      </div>
+                      <div className="flex gap-4 text-xs text-slate-600 dark:text-slate-300">
+                        <span>✅ {subject.passing}</span>
+                        <span>❌ {subject.failing}</span>
+                        <span>👥 {subject.total}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Improvement Tracking */}
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+              📊 Student Improvement Tracking (Q1 vs Q4)
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg p-4">
+                <div className="text-sm font-medium opacity-90">Significant Improvement</div>
+                <div className="text-4xl font-bold my-2">{deepAnalytics.improvementTracking.significantImprovement}</div>
+                <div className="text-xs opacity-75">Students improving by &gt;5%</div>
+              </div>
+              <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-lg p-4">
+                <div className="text-sm font-medium opacity-90">Declining Performance</div>
+                <div className="text-4xl font-bold my-2">{deepAnalytics.improvementTracking.decliningPerformance}</div>
+                <div className="text-xs opacity-75">Students declining by &gt;5%</div>
+              </div>
+            </div>
+
+            {/* Top Improvers */}
+            <div className="mb-6">
+              <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                🏆 Top 10 Improvers
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto">
+                {deepAnalytics.improvementTracking.topImprovers.map((student, idx) => (
+                  <div 
+                    key={student.student.id}
+                    className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border-l-4 border-green-500"
+                  >
+                    <div className="flex-shrink-0 w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                      #{idx + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm text-slate-800 dark:text-white truncate">
+                        {student.student.name}
+                      </div>
+                      <div className="text-xs text-slate-600 dark:text-slate-300">
+                        Q1: {student.q1Avg}% → Q4: {student.q4Avg}%
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 text-green-600 dark:text-green-400 font-bold">
+                      +{student.improvement}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Students Needing Support */}
+            {deepAnalytics.improvementTracking.needsSupport.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                  ⚠️ Students Needing Support (Declining)
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto">
+                  {deepAnalytics.improvementTracking.needsSupport.map(student => (
+                    <div 
+                      key={student.student.id}
+                      className="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border-l-4 border-red-500"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm text-slate-800 dark:text-white truncate">
+                          {student.student.name}
+                        </div>
+                        <div className="text-xs text-slate-600 dark:text-slate-300">
+                          Q1: {student.q1Avg}% → Q4: {student.q4Avg}%
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0 text-red-600 dark:text-red-400 font-bold">
+                        {student.improvement}%
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* AI-Powered Recommendations */}
+          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg shadow-lg p-6">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+              🤖 AI-Powered Recommendations
+            </h3>
+            <div className="space-y-3">
+              {deepAnalytics.recommendations.map((rec, idx) => (
+                <div 
+                  key={idx}
+                  className={`p-4 rounded-lg border-l-4 ${
+                    rec.priority === 'critical' ? 'bg-red-500/20 border-red-300' :
+                    rec.priority === 'high' ? 'bg-orange-500/20 border-orange-300' :
+                    rec.priority === 'moderate' ? 'bg-yellow-500/20 border-yellow-300' :
+                    'bg-green-500/20 border-green-300'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`flex-shrink-0 px-2 py-1 rounded text-xs font-bold ${
+                      rec.priority === 'critical' ? 'bg-red-300 text-red-900' :
+                      rec.priority === 'high' ? 'bg-orange-300 text-orange-900' :
+                      rec.priority === 'moderate' ? 'bg-yellow-300 text-yellow-900' :
+                      'bg-green-300 text-green-900'
+                    }`}>
+                      {rec.priority.toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium">{rec.message}</div>
+                      <div className="text-sm opacity-90 mt-1">
+                        Type: {rec.type} • Count: {rec.count}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {deepAnalytics.recommendations.length === 0 && (
+                <div className="text-center py-8 opacity-75">
+                  <div className="text-4xl mb-2">✨</div>
+                  <div>All metrics are healthy! No immediate recommendations.</div>
+                </div>
+              )}
             </div>
           </div>
         </div>
