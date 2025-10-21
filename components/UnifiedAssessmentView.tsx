@@ -1411,20 +1411,26 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
 
             {/* Growth Chart Visualization */}
             <div className="bg-slate-50 dark:bg-slate-700 rounded-lg p-4">
-              <div className="flex items-end gap-2 h-48">
-                {deepAnalytics.quarterlyTrends.map((qt, idx) => {
-                  const maxAvg = Math.max(...deepAnalytics.quarterlyTrends.map(q => q.average));
-                  const height = maxAvg > 0 ? (qt.average / maxAvg) * 100 : 0;
+              <div className="flex items-end justify-around gap-4 h-48">
+                {deepAnalytics.quarterlyTrends.map((qt) => {
+                  const maxAvg = Math.max(...deepAnalytics.quarterlyTrends.map(q => q.average), 1);
+                  const heightPercent = maxAvg > 0 ? Math.max((qt.average / maxAvg) * 100, 5) : 5;
+                  
                   return (
-                    <div key={qt.quarter} className="flex-1 flex flex-col items-center gap-2">
-                      <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    <div key={qt.quarter} className="flex flex-col items-center gap-2 flex-1 max-w-[120px]">
+                      <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
                         {qt.average}%
                       </div>
-                      <div 
-                        className="w-full bg-gradient-to-t from-indigo-500 to-indigo-400 rounded-t-lg transition-all hover:from-indigo-600 hover:to-indigo-500"
-                        style={{ height: `${height}%` }}
-                      />
-                      <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      <div className="w-full flex items-end" style={{ height: '160px' }}>
+                        <div 
+                          className="w-full bg-gradient-to-t from-indigo-600 to-indigo-400 rounded-t-lg transition-all hover:from-indigo-700 hover:to-indigo-500 shadow-md"
+                          style={{ 
+                            height: `${heightPercent}%`,
+                            minHeight: '20px'
+                          }}
+                        />
+                      </div>
+                      <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
                         {qt.quarter.toUpperCase()}
                       </div>
                     </div>
