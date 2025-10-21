@@ -135,9 +135,154 @@ const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: {
         }
     };
 
+    // Top Reassessment calculation
+    const topReassessmentData = useMemo(() => {
+        if (!selectedSectionId) return [];
+        
+        return studentsInSection.map(student => {
+            const studentData: any = {
+                id: student.id,
+                name: student.name,
+                lrn: student.lrn || 'N/A'
+            };
+            
+            // For each core value
+            coreValues.forEach(cv => {
+                const gradeRecord = gradeMap.get(`${student.id}-${cv.id}`);
+                
+                // For each quarter
+                (['q1', 'q2', 'q3', 'q4'] as const).forEach(quarter => {
+                    const behaviors = cv.behaviors || [];
+                    const markings = behaviors.map(behavior => gradeRecord?.[quarter]?.[behavior]).filter(Boolean);
+                    
+                    // Calculate predominant marking
+                    const aoCount = markings.filter(m => m === 'AO').length;
+                    const soCount = markings.filter(m => m === 'SO').length;
+                    const roCount = markings.filter(m => m === 'RO').length;
+                    const noCount = markings.filter(m => m === 'NO').length;
+                    
+                    let predominant = '-';
+                    if (markings.length > 0) {
+                        const max = Math.max(aoCount, soCount, roCount, noCount);
+                        if (aoCount === max) predominant = 'AO';
+                        else if (soCount === max) predominant = 'SO';
+                        else if (roCount === max) predominant = 'RO';
+                        else if (noCount === max) predominant = 'NO';
+                    }
+                    
+                    studentData[`${cv.id}-${quarter}`] = predominant;
+                });
+            });
+            
+            return studentData;
+        });
+    }, [studentsInSection, coreValues, gradeMap, selectedSectionId]);
+
+    const [showTopReassessment, setShowTopReassessment] = useState(true);
+
     return (
         <div>
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">Core Values Gradebook</h1>
+            
+            {/* Toggle Top Reassessment */}
+            <div className="mb-4">
+                <button
+                    onClick={() => setShowTopReassessment(!showTopReassessment)}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors shadow-md"
+                >
+                    <span>{showTopReassessment ? '▼' : '▶'}</span>
+                    <span>Top Reassessment Summary</span>
+                    <span className="bg-purple-500 px-2 py-0.5 rounded-full text-xs">
+                        {studentsInSection.length} students
+                    </span>
+                </button>
+            </div>
+
+            {/* Top Reassessment Spreadsheet */}
+            {showTopReassessment && selectedSectionId && (
+                <div className="mb-6 bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
+                    <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-4">
+                        <h2 className="text-xl font-bold">📊 Top Reassessment - Complete Overview</h2>
+                        <p className="text-purple-100 text-sm mt-1">Comprehensive view of all core values across all quarters</p>
+                    </div>
+                    
+                    <div className="overflow-x-auto" style={{ maxHeight: '500px' }}>
+                        <table className="min-w-full text-xs border-collapse">
+                            <thead className="bg-slate-100 dark:bg-slate-900 sticky top-0 z-20">
+                                <tr>
+                                    <th rowSpan={2} className="px-3 py-2 sticky left-0 z-30 bg-slate-100 dark:bg-slate-900 border-b-2 border-r-2 border-slate-300 dark:border-slate-700 min-w-[180px]">
+                                        <div className="font-bold text-slate-700 dark:text-slate-300">Student Name</div>
+                                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">LRN</div>
+                                    </th>
+                                    {coreValues.map(cv => (
+                                        <th key={cv.id} colSpan={4} className="px-3 py-2 text-center border-b border-l border-slate-300 dark:border-slate-700 bg-purple-100 dark:bg-purple-900/30">
+                                            <div className="font-bold text-purple-700 dark:text-purple-300">{cv.name}</div>
+                                        </th>
+                                    ))}
+                                </tr>
+                                <tr>
+                                    {coreValues.map(cv => (
+                                        <React.Fragment key={cv.id}>
+                                            <th className="px-2 py-1 text-center border-b-2 border-l border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold">Q1</th>
+                                            <th className="px-2 py-1 text-center border-b-2 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold">Q2</th>
+                                            <th className="px-2 py-1 text-center border-b-2 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold">Q3</th>
+                                            <th className="px-2 py-1 text-center border-b-2 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold">Q4</th>
+                                        </React.Fragment>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {topReassessmentData.map((studentData, index) => (
+                                    <tr key={studentData.id} className={`${index % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'} hover:bg-purple-50 dark:hover:bg-purple-900/20 border-b dark:border-slate-700`}>
+                                        <td className="px-3 py-2 sticky left-0 z-10 border-r-2 border-slate-300 dark:border-slate-700 bg-inherit">
+                                            <div className="font-medium text-slate-900 dark:text-white">{studentData.name}</div>
+                                            <div className="text-[10px] text-slate-500 dark:text-slate-400">{studentData.lrn}</div>
+                                        </td>
+                                        {coreValues.map(cv => (
+                                            <React.Fragment key={cv.id}>
+                                                {(['q1', 'q2', 'q3', 'q4'] as const).map(quarter => {
+                                                    const marking = studentData[`${cv.id}-${quarter}`];
+                                                    return (
+                                                        <td key={`${cv.id}-${quarter}`} className={`px-2 py-2 text-center border-l border-slate-200 dark:border-slate-700 font-bold ${getMarkingColor(marking as CoreValueMarking)}`}>
+                                                            {marking === '-' ? <span className="text-slate-300 dark:text-slate-600">—</span> : marking}
+                                                        </td>
+                                                    );
+                                                })}
+                                            </React.Fragment>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {/* Legend */}
+                    <div className="bg-slate-50 dark:bg-slate-900/50 p-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex flex-wrap items-center gap-4 text-xs">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">Legend:</span>
+                            <div className="flex items-center gap-1">
+                                <span className="font-bold text-green-600">AO</span>
+                                <span className="text-slate-600 dark:text-slate-400">= Always Observed</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="font-bold text-lime-600">SO</span>
+                                <span className="text-slate-600 dark:text-slate-400">= Sometimes Observed</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="font-bold text-amber-600">RO</span>
+                                <span className="text-slate-600 dark:text-slate-400">= Rarely Observed</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="font-bold text-red-600">NO</span>
+                                <span className="text-slate-600 dark:text-slate-400">= Not Observed</span>
+                            </div>
+                        </div>
+                        <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                            <span className="font-semibold">Note:</span> Values shown are the predominant marking for each core value per quarter based on behavior observations.
+                        </div>
+                    </div>
+                </div>
+            )}
             
             <div className="mb-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm flex flex-wrap items-center gap-4">
                 <div className="flex-1 min-w-[200px]">
