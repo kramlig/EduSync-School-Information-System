@@ -18,10 +18,50 @@ type TabType = 'overview' | 'academic-gradebook' | 'core-values-gradebook' | 're
 
 const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolData, session, forceStudentId }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const { students = [], grades = [], learningAreas = [], coreValues = [], coreValueGrades = [] } = schoolData;
   
   const isStudentView = session.type === 'student';
   const isParentView = session.type === 'parent';
+
+  // Visible students based on user type
+  const visibleStudents = isStudentView 
+    ? students.filter(s => s.id === session.user.id)
+    : isParentView 
+    ? students.filter(s => s.id === forceStudentId)
+    : students;
+
+  // Report Cards handlers
+  const handleToggleStudent = (studentId: string) => {
+    setSelectedStudents(prev =>
+      prev.includes(studentId)
+        ? prev.filter(id => id !== studentId)
+        : [...prev, studentId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedStudents(visibleStudents.map(s => s.id));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedStudents([]);
+  };
+
+  const handleBulkPrint = (studentIds: string[]) => {
+    // Open PrintableReport in a new window with selected students
+    const studentsParam = studentIds.join(',');
+    const currentYear = new Date().getFullYear();
+    const url = `/print-report?students=${studentsParam}&schoolYear=${currentYear}`;
+    window.open(url, '_blank', 'width=1200,height=800');
+  };
+
+  const handlePrintSelected = () => {
+    if (selectedStudents.length > 0) {
+      handleBulkPrint(selectedStudents);
+    }
+  };
+
 
   // Calculate analytics for Tier 1
   const analytics = useMemo(() => {
@@ -580,13 +620,171 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       )}
 
       {activeTab === 'report-cards' && (
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-8 text-center">
-          <div className="text-6xl mb-4">📄</div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-4">Report Cards</h2>
-          <p className="text-slate-600 dark:text-slate-400 mb-6">
-            Printable DepEd Form 138 with complete academic and behavioral assessment
-          </p>
-          <p className="text-sm text-slate-500 dark:text-slate-500">Coming soon: Bulk generate and print report cards</p>
+        <div className="space-y-6">
+          {/* Report Cards Header */}
+          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg shadow-lg p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold mb-2">📄 Report Cards (DepEd Form 138)</h2>
+                <p className="text-indigo-100">Generate and print official report cards for students</p>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold">{visibleStudents.length}</div>
+                <div className="text-sm text-indigo-100">Students</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+            <div className="flex flex-wrap gap-4 mb-6">
+              <button
+                onClick={() => {
+                  const selectedIds = visibleStudents.map(s => s.id);
+                  handleBulkPrint(selectedIds);
+                }}
+                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors shadow-md"
+              >
+                <span>🖨️</span>
+                <span>Print All ({visibleStudents.length})</span>
+              </button>
+              
+              <button
+                onClick={handlePrintSelected}
+                disabled={selectedStudents.length === 0}
+                className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors shadow-md ${
+                  selectedStudents.length > 0
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <span>✓</span>
+                <span>Print Selected ({selectedStudents.length})</span>
+              </button>
+
+              <button
+                onClick={handleSelectAll}
+                className="flex items-center gap-2 px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors shadow-md"
+              >
+                <span>☑️</span>
+                <span>Select All</span>
+              </button>
+
+              <button
+                onClick={handleDeselectAll}
+                className="flex items-center gap-2 px-6 py-3 bg-slate-400 hover:bg-slate-500 text-white rounded-lg font-medium transition-colors shadow-md"
+              >
+                <span>□</span>
+                <span>Deselect All</span>
+              </button>
+            </div>
+
+            {/* Student Selection List */}
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4">
+                Select Students for Report Cards
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto p-2">
+                {visibleStudents.map(student => {
+                  const studentGrades = grades.filter(g => g.studentId === student.id);
+                  const finalGrades = studentGrades
+                    .map(g => g.finalGrade)
+                    .filter((g): g is number => typeof g === 'number');
+                  const average = finalGrades.length > 0
+                    ? Math.round(finalGrades.reduce((sum, g) => sum + g, 0) / finalGrades.length)
+                    : 0;
+                  
+                  const isSelected = selectedStudents.includes(student.id);
+                  
+                  return (
+                    <div
+                      key={student.id}
+                      onClick={() => handleToggleStudent(student.id)}
+                      className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                        isSelected
+                          ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 shadow-md'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                      }`}
+                    >
+                      <div className={`w-6 h-6 rounded flex items-center justify-center ${
+                        isSelected 
+                          ? 'bg-indigo-600 text-white' 
+                          : 'bg-slate-200 dark:bg-slate-700'
+                      }`}>
+                        {isSelected && '✓'}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-slate-800 dark:text-white truncate">
+                          {student.firstName} {student.lastName}
+                        </div>
+                        <div className="text-sm text-slate-600 dark:text-slate-400">
+                          {student.lrn ? `LRN: ${student.lrn}` : 'No LRN'}
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className={`text-lg font-bold ${
+                          average >= 90 ? 'text-indigo-600' :
+                          average >= 75 ? 'text-green-600' :
+                          average > 0 ? 'text-red-600' :
+                          'text-slate-400'
+                        }`}>
+                          {average > 0 ? `${average}%` : '--'}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {finalGrades.length}/{(learningAreas?.length || 0) * 4} grades
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Instructions */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-6">
+            <h4 className="font-bold text-slate-800 dark:text-white mb-3">📋 Instructions</h4>
+            <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
+              <li>• <strong>Select Students:</strong> Click on student cards to select/deselect</li>
+              <li>• <strong>Print All:</strong> Generates report cards for all students in one batch</li>
+              <li>• <strong>Print Selected:</strong> Generates report cards only for selected students</li>
+              <li>• <strong>Format:</strong> Uses official DepEd Form 138 format with grades and core values</li>
+              <li>• <strong>Printing:</strong> Opens print preview in a new window - use browser's print function</li>
+            </ul>
+          </div>
+
+          {/* Statistics */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 text-center">
+              <div className="text-2xl font-bold text-indigo-600">{visibleStudents.length}</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">Total Students</div>
+            </div>
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 text-center">
+              <div className="text-2xl font-bold text-green-600">{selectedStudents.length}</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">Selected</div>
+            </div>
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 text-center">
+              <div className="text-2xl font-bold text-purple-600">
+                {visibleStudents.filter(s => {
+                  const studentGrades = grades.filter(g => g.studentId === s.id);
+                  return studentGrades.length === (learningAreas?.length || 0) * 4;
+                }).length}
+              </div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">Complete Grades</div>
+            </div>
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 text-center">
+              <div className="text-2xl font-bold text-amber-600">
+                {visibleStudents.filter(s => {
+                  const studentGrades = grades.filter(g => g.studentId === s.id);
+                  return studentGrades.length < (learningAreas?.length || 0) * 4;
+                }).length}
+              </div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">Incomplete Grades</div>
+            </div>
+          </div>
         </div>
       )}
     </div>
