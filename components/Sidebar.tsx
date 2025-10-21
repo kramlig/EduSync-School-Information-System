@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
-import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, HeartIcon, ClipboardCheckIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronLeftIcon, ChevronRightIcon, BuildingOfficeIcon } from './icons';
+import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronLeftIcon, ChevronRightIcon, BuildingOfficeIcon } from './icons';
 import DepEdLogo from './DepEdLogo';
 
 interface SidebarProps {
@@ -39,8 +39,6 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
         { path: '/lesson-plan', label: 'Lesson Plans', icon: <ClipboardDocumentIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
         { path: '/assignments', label: 'Assignments', icon: <ClipboardDocumentCheckIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
         { path: '/grades', label: 'Grades & Reports', icon: <TableCellsIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
-        { path: '/core-values', label: 'Core Values', icon: <HeartIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
-        { path: '/core-values-gradebook', label: 'Core Values Gradebook', icon: <ClipboardCheckIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
         { path: '/attendance', label: 'Attendance', icon: <CalendarDaysIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
       ]
     },
@@ -55,8 +53,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
   const studentNavItems = [
       { path: '/', label: 'Dashboard', icon: <HomeIcon /> },
       { path: '/assignments', label: 'My Assignments', icon: <ClipboardDocumentCheckIcon /> },
-      { path: '/grades', label: 'My Grades', icon: <ClipboardDocumentListIcon /> },
-      { path: '/core-values', label: 'My Core Values', icon: <HeartIcon /> },
+      { path: '/grades', label: 'My Grades & Reports', icon: <ClipboardDocumentListIcon /> },
       { path: '/attendance', label: 'My Attendance', icon: <CalendarDaysIcon /> },
       { path: '/schedule', label: 'My Schedule', icon: <CalendarIcon /> },
   ];
@@ -65,8 +62,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
       { path: '/', label: 'Dashboard', icon: <HomeIcon /> },
       { path: '/announcements', label: 'Announcements', icon: <MegaphoneIcon /> },
       { path: '/assignments', label: 'Assignments', icon: <ClipboardDocumentCheckIcon /> },
-      { path: '/grades', label: 'Grades', icon: <ClipboardDocumentListIcon /> },
-      { path: '/core-values', label: 'Core Values', icon: <HeartIcon /> },
+      { path: '/grades', label: 'Grades & Reports', icon: <ClipboardDocumentListIcon /> },
       { path: '/attendance', label: 'Attendance', icon: <CalendarDaysIcon /> },
       { path: '/schedule', label: 'Schedule', icon: <CalendarIcon /> },
   ];
