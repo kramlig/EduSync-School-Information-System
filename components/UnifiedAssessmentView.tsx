@@ -124,23 +124,23 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
           <div class="stat-grid">
             <div class="stat-card">
               <div class="stat-label">Total Assessed</div>
-              <div class="stat-value">${analytics.behavior.totalAssessed}</div>
+              <div class="stat-value">${analytics.academic.totalStudents}</div>
               <div class="stat-detail">Out of ${analytics.academic.totalStudents}</div>
             </div>
             <div class="stat-card">
               <div class="stat-label">Exemplary (AO)</div>
-              <div class="stat-value">${analytics.behavior.exemplary}</div>
-              <div class="stat-detail">${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.exemplary / analytics.behavior.totalAssessed) * 100) : 0}%</div>
+              <div class="stat-value">${analytics.behavioral.exemplary}</div>
+              <div class="stat-detail">${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.exemplary / analytics.academic.totalStudents) * 100) : 0}%</div>
             </div>
             <div class="stat-card">
               <div class="stat-label">Good Standing (SO)</div>
-              <div class="stat-value">${analytics.behavior.goodStanding}</div>
-              <div class="stat-detail">${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.goodStanding / analytics.behavior.totalAssessed) * 100) : 0}%</div>
+              <div class="stat-value">${analytics.behavioral.goodStanding}</div>
+              <div class="stat-detail">${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.goodStanding / analytics.academic.totalStudents) * 100) : 0}%</div>
             </div>
             <div class="stat-card">
               <div class="stat-label">Needs Support</div>
-              <div class="stat-value">${analytics.behavior.needsSupport}</div>
-              <div class="stat-detail">${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.needsSupport / analytics.behavior.totalAssessed) * 100) : 0}%</div>
+              <div class="stat-value">${analytics.behavioral.behaviorSupport}</div>
+              <div class="stat-detail">${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.behaviorSupport / analytics.academic.totalStudents) * 100) : 0}%</div>
             </div>
           </div>
           
@@ -185,10 +185,10 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
     // Behavioral Performance
     csvRows.push('Behavioral Performance');
     csvRows.push('Metric,Value,Details');
-    csvRows.push(`Total Assessed,${analytics.behavior.totalAssessed},Out of ${analytics.academic.totalStudents}`);
-    csvRows.push(`Exemplary (AO),${analytics.behavior.exemplary},${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.exemplary / analytics.behavior.totalAssessed) * 100) : 0}%`);
-    csvRows.push(`Good Standing (SO),${analytics.behavior.goodStanding},${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.goodStanding / analytics.behavior.totalAssessed) * 100) : 0}%`);
-    csvRows.push(`Needs Support,${analytics.behavior.needsSupport},${analytics.behavior.totalAssessed > 0 ? Math.round((analytics.behavior.needsSupport / analytics.behavior.totalAssessed) * 100) : 0}%`);
+    csvRows.push(`Total Assessed,${analytics.academic.totalStudents},All students`);
+    csvRows.push(`Exemplary (AO),${analytics.behavioral.exemplary},${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.exemplary / analytics.academic.totalStudents) * 100) : 0}%`);
+    csvRows.push(`Good Standing (SO),${analytics.behavioral.goodStanding},${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.goodStanding / analytics.academic.totalStudents) * 100) : 0}%`);
+    csvRows.push(`Needs Support,${analytics.behavioral.behaviorSupport},${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.behaviorSupport / analytics.academic.totalStudents) * 100) : 0}%`);
     csvRows.push('');
     
     // Student Details
