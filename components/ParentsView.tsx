@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import type { Parent, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
@@ -16,7 +16,8 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData }) => {
   const { 
     parents, students, 
     addParent, updateParent, deleteParent, 
-    assignStudentToParent, unassignStudentFromParent 
+    assignStudentToParent, unassignStudentFromParent,
+    searchParents, isSearching
   } = schoolData;
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -30,6 +31,7 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData }) => {
   const [newParent, setNewParent] = useState<Omit<Parent, 'id' | 'studentIds'>>({ name: '', email: '' });
   
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Parent[] | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
@@ -37,6 +39,25 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData }) => {
   const debouncedChildSearchQuery = useDebounce(childSearchQuery, 300);
   
   // const authUser = session.user as AuthUser;
+
+  // Server-side search effect
+  useEffect(() => {
+    const performSearch = async () => {
+      if (debouncedSearchQuery.trim()) {
+        console.log(`[ParentsView] 🔍 Triggering server-side search: "${debouncedSearchQuery}"`);
+        const results = await searchParents(debouncedSearchQuery);
+        setSearchResults(results);
+      } else {
+        // Clear search results when query is empty
+        setSearchResults(null);
+      }
+    };
+
+    performSearch();
+  }, [debouncedSearchQuery, searchParents]);
+
+  // Use search results if searching, otherwise use regular parents list
+  const visibleParents = searchResults || parents;
 
   const handleAddParent = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,10 +124,8 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData }) => {
     }
   };
 
-  const filteredParents = useMemo(() => parents.filter(parent =>
-    parent.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-    parent.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-  ), [parents, debouncedSearchQuery]);
+  // No client-side filtering needed when using server-side search
+  const filteredParents = visibleParents;
 
   const totalPages = Math.ceil(filteredParents.length / ITEMS_PER_PAGE);
 
@@ -136,8 +155,26 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData }) => {
         <button onClick={() => setIsAddModalOpen(true)} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Add Parent</button>
       </div>
 
-       <div className="mb-4">
-        <input type="text" placeholder="Search by name or email..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }} className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"/>
+      <div className="mb-4 flex items-center gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <input 
+            type="text" 
+            placeholder="Search ALL parents by name or email..." 
+            value={searchQuery} 
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }} 
+            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
+          />
+          {isSearching && (
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+              <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+            </div>
+          )}
+        </div>
+        {searchResults && (
+          <div className="text-sm text-slate-600 dark:text-slate-400">
+            Found {searchResults.length} parent{searchResults.length !== 1 ? 's' : ''}
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">

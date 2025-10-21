@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { Assignment, StudentAssignmentGrade, AuthUser, StudentUser, ParentUser } from '../types';
+import type { Assignment, StudentAssignmentGrade, AuthUser, StudentUser, ParentUser, Student } from '../types';
 import Modal from './Modal';
 import { PencilIcon, TrashIcon, DocumentArrowDownIcon, DocumentArrowUpIcon } from './icons';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { getFirestoreInstance } from '../src/services/firestoreService';
 
 const getStatus = (assignment: Assignment, grade: StudentAssignmentGrade | undefined) => {
     const today = new Date().toISOString().split('T')[0];
@@ -48,6 +50,10 @@ const AssignmentsView: React.FC<{
     const [submissionModalOpen, setSubmissionModalOpen] = useState(false);
     const [assignmentToSubmit, setAssignmentToSubmit] = useState<Assignment | null>(null);
     const [fileName, setFileName] = useState('');
+    
+    // Students for the selected assignment's section
+    const [sectionStudents, setSectionStudents] = useState<Student[]>([]);
+    const [loadingStudents, setLoadingStudents] = useState(false);
 
     const authUser = session.user as AuthUser;
     const isReadOnly = isStaff && authUser.role === 'principal';
@@ -98,6 +104,34 @@ const AssignmentsView: React.FC<{
             setSelectedAssignment(null);
         }
     }, [filteredAssignments, selectedAssignment, isStaff]);
+    
+    // Fetch students for the selected assignment's section
+    useEffect(() => {
+        if (!selectedAssignment || !isStaff) {
+            setSectionStudents([]);
+            return;
+        }
+        
+        const fetchSectionStudents = async () => {
+            setLoadingStudents(true);
+            try {
+                const db = getFirestoreInstance();
+                const studentsCol = collection(db, 'students');
+                const q = query(studentsCol, where('sectionId', '==', selectedAssignment.sectionId));
+                const snapshot = await getDocs(q);
+                const studentsData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Student[];
+                console.log(`[AssignmentsView] Fetched ${studentsData.length} students for section ${selectedAssignment.sectionId}`);
+                setSectionStudents(studentsData);
+            } catch (error) {
+                console.error('[AssignmentsView] Error fetching section students:', error);
+                setSectionStudents([]);
+            } finally {
+                setLoadingStudents(false);
+            }
+        };
+        
+        fetchSectionStudents();
+    }, [selectedAssignment, isStaff]);
 
     // Portal (Student/Parent) Logic
     const studentAssignmentsByLA = useMemo(() => {
@@ -125,7 +159,7 @@ const AssignmentsView: React.FC<{
         setIsAssignmentModalOpen(true);
     };
 
-    const handleSaveAssignment = (e: React.FormEvent) => {
+    const handleSaveAssignment = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!assignmentToEdit) return;
         
@@ -134,25 +168,30 @@ const AssignmentsView: React.FC<{
             alert('Please fill all fields'); return;
         }
 
-        if (id) {
-            updateAssignment(assignmentToEdit as Assignment);
-        } else {
-            addAssignment(assignmentToEdit as Omit<Assignment, 'id'>);
+        try {
+            if (id) {
+                await updateAssignment(assignmentToEdit as Assignment);
+            } else {
+                await addAssignment(assignmentToEdit as Omit<Assignment, 'id'>);
+            }
+            setIsAssignmentModalOpen(false);
+        } catch (error) {
+            console.error('Failed to save assignment:', error);
+            alert(`Failed to save assignment: ${error}`);
         }
-        setIsAssignmentModalOpen(false);
     };
 
-    const handleDeleteAssignment = () => {
+    const handleDeleteAssignment = async () => {
         if (selectedAssignment) {
-            deleteAssignment(selectedAssignment.id);
+            await deleteAssignment(selectedAssignment.id);
             setIsDeleteModalOpen(false);
             setSelectedAssignment(null);
         }
     };
     
-    const handleScoreChange = (studentId: string, score: number | null, feedback: string | null) => {
+    const handleScoreChange = async (studentId: string, score: number | null, feedback: string | null) => {
         if (!selectedAssignment) return;
-        updateAssignmentGrade(studentId, selectedAssignment.id, score, feedback);
+        await updateAssignmentGrade(studentId, selectedAssignment.id, score, feedback);
     };
 
     // Student Handlers
@@ -162,10 +201,10 @@ const AssignmentsView: React.FC<{
         setSubmissionModalOpen(true);
     };
     
-    const handleFileSubmit = (e: React.FormEvent) => {
+    const handleFileSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (assignmentToSubmit && studentForPortal && fileName) {
-            submitAssignment(studentForPortal.id, assignmentToSubmit.id, fileName);
+            await submitAssignment(studentForPortal.id, assignmentToSubmit.id, fileName);
             setSubmissionModalOpen(false);
         }
     };
@@ -234,35 +273,41 @@ const AssignmentsView: React.FC<{
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {students.filter(s => s.sectionId === selectedAssignment.sectionId).map((student) => {
-                                            const grade = studentAssignmentGrades.find(g => g.assignmentId === selectedAssignment.id && g.studentId === student.id);
-                                            const status = getStatus(selectedAssignment, grade);
-                                            return (
-                                                <tr key={student.id} className="border-t dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                                    <td className="p-2 font-medium">{student.name}</td>
-                                                    <td className="p-2">
-                                                        <span className={`px-2 py-1 text-xs font-bold rounded-full ${status.color}`}>{status.text}</span>
-                                                        {grade?.filePath && <a href="#" onClick={(e) => e.preventDefault()} title={grade.filePath} className="ml-2 inline-block align-middle text-slate-500"><DocumentArrowDownIcon/></a>}
-                                                    </td>
-                                                    <td className="p-2 text-center">
-                                                        <input
-                                                            key={`${selectedAssignment.id}-${student.id}-${grade?.score ?? ''}`}
-                                                            type="number"
-                                                            defaultValue={grade?.score ?? ''}
-                                                            onBlur={(e) => handleScoreChange(student.id, e.target.value === '' ? null : parseInt(e.target.value), grade?.feedback ?? null)}
-                                                            disabled={isReadOnly}
-                                                            className="w-20 p-1 text-center border rounded-md dark:bg-slate-700 dark:border-slate-600"
-                                                        />
-                                                        <span className="ml-2 text-slate-500">/ {selectedAssignment.totalPoints}</span>
-                                                    </td>
-                                                    <td className="p-2 text-center">
-                                                        <button onClick={() => setFeedbackToEdit({studentId: student.id, feedback: grade?.feedback ?? null})} className="text-indigo-600 font-semibold text-xs">
-                                                            {grade?.feedback ? 'Edit Feedback' : 'Add Feedback'}
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
+                                        {loadingStudents ? (
+                                            <tr><td colSpan={4} className="p-4 text-center text-slate-500">Loading students...</td></tr>
+                                        ) : sectionStudents.length === 0 ? (
+                                            <tr><td colSpan={4} className="p-4 text-center text-slate-500">No students found in this section</td></tr>
+                                        ) : (
+                                            sectionStudents.map((student) => {
+                                                const grade = studentAssignmentGrades.find(g => g.assignmentId === selectedAssignment.id && g.studentId === student.id);
+                                                const status = getStatus(selectedAssignment, grade);
+                                                return (
+                                                    <tr key={student.id} className="border-t dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                                                        <td className="p-2 font-medium">{student.name}</td>
+                                                        <td className="p-2">
+                                                            <span className={`px-2 py-1 text-xs font-bold rounded-full ${status.color}`}>{status.text}</span>
+                                                            {grade?.filePath && <a href="#" onClick={(e) => e.preventDefault()} title={grade.filePath} className="ml-2 inline-block align-middle text-slate-500"><DocumentArrowDownIcon/></a>}
+                                                        </td>
+                                                        <td className="p-2 text-center">
+                                                            <input
+                                                                key={`${selectedAssignment.id}-${student.id}-${grade?.score ?? ''}`}
+                                                                type="number"
+                                                                defaultValue={grade?.score ?? ''}
+                                                                onBlur={(e) => handleScoreChange(student.id, e.target.value === '' ? null : parseInt(e.target.value), grade?.feedback ?? null)}
+                                                                disabled={isReadOnly}
+                                                                className="w-20 p-1 text-center border rounded-md dark:bg-slate-700 dark:border-slate-600"
+                                                            />
+                                                            <span className="ml-2 text-slate-500">/ {selectedAssignment.totalPoints}</span>
+                                                        </td>
+                                                        <td className="p-2 text-center">
+                                                            <button onClick={() => setFeedbackToEdit({studentId: student.id, feedback: grade?.feedback ?? null})} className="text-indigo-600 font-semibold text-xs">
+                                                                {grade?.feedback ? 'Edit Feedback' : 'Add Feedback'}
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
@@ -292,7 +337,7 @@ const AssignmentsView: React.FC<{
                     <button onClick={handleDeleteAssignment} className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg">Delete</button>
                 </div>
             </Modal>
-             <Modal isOpen={!!feedbackToEdit} onClose={() => setFeedbackToEdit(null)} title={`Feedback for ${students.find(s => s.id === feedbackToEdit?.studentId)?.name}`}>
+             <Modal isOpen={!!feedbackToEdit} onClose={() => setFeedbackToEdit(null)} title={`Feedback for ${sectionStudents.find(s => s.id === feedbackToEdit?.studentId)?.name || students.find(s => s.id === feedbackToEdit?.studentId)?.name}`}>
                 <textarea
                     value={feedbackToEdit?.feedback ?? ''}
                     onChange={(e) => setFeedbackToEdit(p => p ? {...p, feedback: e.target.value} : null)}

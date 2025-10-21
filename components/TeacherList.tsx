@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import type { Teacher, TeacherAssignment, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
@@ -27,7 +27,7 @@ const getRoleStyle = (role: Teacher['role']) => {
 const ITEMS_PER_PAGE = 25;
 
 const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
-  const { teachers, learningAreas, addTeacher, updateTeacher, deleteTeacher } = schoolData;
+  const { teachers, learningAreas, addTeacher, updateTeacher, deleteTeacher, searchTeachers, isSearching } = schoolData;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -39,10 +39,30 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
   const [newAssignment, setNewAssignment] = useState<{ gradeLevel: string; learningAreaId: string }>({ gradeLevel: '', learningAreaId: '' });
   
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Teacher[] | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
   const authUser = session.user as AuthUser;
+
+  // Server-side search effect
+  useEffect(() => {
+    const performSearch = async () => {
+      if (debouncedSearchQuery.trim()) {
+        console.log(`[TeacherList] 🔍 Triggering server-side search: "${debouncedSearchQuery}"`);
+        const results = await searchTeachers(debouncedSearchQuery);
+        setSearchResults(results);
+      } else {
+        // Clear search results when query is empty
+        setSearchResults(null);
+      }
+    };
+
+    performSearch();
+  }, [debouncedSearchQuery, searchTeachers]);
+
+  // Use search results if searching, otherwise use regular teachers list
+  const visibleTeachers = searchResults || teachers;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -123,10 +143,8 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
   
   const gradeLevels = [1, 2, 3, 4, 5, 6];
 
-  const filteredTeachers = useMemo(() => teachers.filter(teacher =>
-    teacher.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-    teacher.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-  ), [teachers, debouncedSearchQuery]);
+  // No client-side filtering needed when using server-side search
+  const filteredTeachers = visibleTeachers;
 
   const totalPages = Math.ceil(filteredTeachers.length / ITEMS_PER_PAGE);
   
@@ -180,8 +198,26 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
         )}
       </div>
       
-      <div className="mb-4">
-        <input type="text" placeholder="Search by name or email..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }} className="w-full max-w-sm px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"/>
+      <div className="mb-4 flex items-center gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <input 
+            type="text" 
+            placeholder="Search ALL teachers by name, email, or phone..." 
+            value={searchQuery} 
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }} 
+            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
+          />
+          {isSearching && (
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+              <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+            </div>
+          )}
+        </div>
+        {searchResults && (
+          <div className="text-sm text-slate-600 dark:text-slate-400">
+            Found {searchResults.length} teacher{searchResults.length !== 1 ? 's' : ''}
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">

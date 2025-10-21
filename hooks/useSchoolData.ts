@@ -22,7 +22,7 @@ import type {
 import { getFirestoreInstance, auth, waitForAuthReady } from '../src/services/firestoreService';
 import { 
     collection, getDocs, doc, getDoc, setDoc, deleteDoc, 
-    serverTimestamp, onSnapshot, query, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, QuerySnapshot
+    serverTimestamp, onSnapshot, query, orderBy, limit, startAfter, where, QueryDocumentSnapshot, DocumentData, QuerySnapshot
 } from 'firebase/firestore';
 
 const MOCK_SETTINGS: SchoolSettings = {
@@ -126,8 +126,10 @@ async function writeToFirestore(collectionName: string, id: string, data: any) {
             updatedAt: serverTimestamp(),
             updatedBy: auth.currentUser?.uid || 'anon'
         });
+        console.log(`[Firestore] ✅ Write successful: ${collectionName}/${id}`);
     } catch (error) {
-        console.error(`Failed to write to ${collectionName}:`, error);
+        console.error(`[Firestore] ❌ Failed to write to ${collectionName}:`, error);
+        throw error; // Re-throw so caller knows it failed
     }
 }
 
@@ -145,7 +147,7 @@ async function deleteFromFirestore(collectionName: string, id: string) {
 // Main hook function
 export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     const queryClient = useQueryClient();
-    const STUDENTS_PER_PAGE = 10; // Reduced to 10 for faster initial load with 7496 students
+    const STUDENTS_PER_PAGE = 100; // Increased to 100 to show full sections in gradebook (was 10)
 
     // Memoize shouldFetch to prevent excessive re-computation
     const shouldFetch = useCallback((collectionName: string) => {
@@ -158,6 +160,10 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     const [allStudents, setAllStudents] = useState<Student[]>([]);
     const [lastStudentDoc, setLastStudentDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
     const [hasMoreStudents, setHasMoreStudents] = useState(true);
+    
+    // Search cache and state to avoid redundant searches
+    const [searchCache, setSearchCache] = useState<Map<string, any>>(new Map());
+    const [isSearching, setIsSearching] = useState<boolean>(false);
 
     // Other collections (including students for now - we'll add pagination later if needed)
     const collectionConfigs = [
@@ -167,10 +173,11 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 // Fetch initial students with pagination support
                 await waitForAuthReady();
                 const db = getFirestoreInstance();
-                console.log('[Firestore] 🔍 Fetching initial students with limit(10)...');
+                console.log('[Firestore] 🔍 Fetching initial students with limit...');
                 
                 const studentsCol = collection(db, 'students');
-                const q = query(studentsCol, limit(10));
+                // Simple query without orderBy to test
+                const q = query(studentsCol, limit(STUDENTS_PER_PAGE));
                 
                 console.log('[Firestore] ⏱️ Calling getDocs...');
                 const snapshot = await getDocs(q);
@@ -179,7 +186,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 // Save the last document for pagination
                 if (snapshot.docs.length > 0) {
                     setLastStudentDoc(snapshot.docs[snapshot.docs.length - 1]);
-                    setHasMoreStudents(snapshot.docs.length === 10);
+                    setHasMoreStudents(snapshot.docs.length === STUDENTS_PER_PAGE);
                 } else {
                     setHasMoreStudents(false);
                 }
@@ -226,12 +233,24 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
     // Log query states after they potentially update
     useEffect(() => {
-        console.log('[useSchoolData] 📊 Queries state update:', queries.map(q => ({
+        const queryStates = queries.map((q, index) => ({
+            collection: collectionConfigs[index]?.name || 'unknown',
             isLoading: q.isLoading,
             isFetching: q.isFetching,
             isSuccess: q.isSuccess,
+            isError: q.isError,
+            error: q.error ? String(q.error) : null,
             dataLength: Array.isArray(q.data) ? q.data.length : 'not-array'
-        })));
+        }));
+        
+        console.log('[useSchoolData] 📊 Queries state update:', queryStates);
+        
+        // Log any errors
+        queryStates.forEach(state => {
+            if (state.isError) {
+                console.error(`[useSchoolData] ❌ ${state.collection} query error:`, state.error);
+            }
+        });
     }, [queries]);
 
     // Extract students query (first one in collectionConfigs)
@@ -263,7 +282,8 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             const db = getFirestoreInstance();
             
             const studentsCol = collection(db, 'students');
-            const q = query(studentsCol, startAfter(lastStudentDoc), limit(STUDENTS_PER_PAGE));
+            // Use same ordering as initial query
+            const q = query(studentsCol, orderBy('enrollmentDate', 'desc'), startAfter(lastStudentDoc), limit(STUDENTS_PER_PAGE));
             
             const snapshot = await getDocs(q);
             console.log('[useSchoolData] ✅ Fetched', snapshot.docs.length, 'more students');
@@ -283,14 +303,200 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         }
     }, [hasMoreStudents, isFetchingStudents, lastStudentDoc, STUDENTS_PER_PAGE]);
 
+    /**
+     * Server-side search function
+     * Searches ALL students in Firestore by name, email, or LRN
+     * Uses caching to avoid redundant queries
+     */
+    const searchStudents = useCallback(async (searchQuery: string): Promise<Student[]> => {
+        const trimmedQuery = searchQuery.trim().toLowerCase();
+        
+        // Return all loaded students if query is empty
+        if (!trimmedQuery) {
+            return allStudents;
+        }
+        
+        // Check cache first
+        if (searchCache.has(trimmedQuery)) {
+            console.log(`[useSchoolData] 📦 Using cached search results for: "${trimmedQuery}"`);
+            return searchCache.get(trimmedQuery)!;
+        }
+        
+        setIsSearching(true);
+        console.log(`[useSchoolData] 🔍 Server-side search for: "${trimmedQuery}"`);
+        
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const studentsCol = collection(db, 'students');
+            
+            // Fetch ALL students for client-side filtering
+            // This is acceptable for 7,496 students and provides best search UX
+            // Alternative: Use multiple queries with where() for exact field matches
+            const snapshot = await getDocs(studentsCol);
+            const allStudentsData = snapshot.docs.map((doc: any) => ({ 
+                id: doc.id, 
+                ...doc.data() 
+            })) as Student[];
+            
+            console.log(`[useSchoolData] ✅ Fetched ${allStudentsData.length} students for search`);
+            
+            // Client-side fuzzy search across name, email, and LRN
+            const results = allStudentsData.filter(student => {
+                const name = student.name?.toLowerCase() || '';
+                const email = student.email?.toLowerCase() || '';
+                const lrn = student.lrn?.toLowerCase() || '';
+                
+                return name.includes(trimmedQuery) || 
+                       email.includes(trimmedQuery) || 
+                       lrn.includes(trimmedQuery);
+            });
+            
+            console.log(`[useSchoolData] ✅ Found ${results.length} matching students`);
+            
+            // Cache the results
+            setSearchCache(prev => new Map(prev).set(trimmedQuery, results));
+            
+            return results;
+        } catch (error) {
+            console.error('[useSchoolData] ❌ Error searching students:', error);
+            return [];
+        } finally {
+            setIsSearching(false);
+        }
+    }, [allStudents, searchCache]);
+
+    // Server-side search for Teachers (search ALL teachers, not just paginated)
+    const searchTeachers = useCallback(async (searchQuery: string): Promise<Teacher[]> => {
+        const trimmedQuery = searchQuery.trim().toLowerCase();
+        
+        if (!trimmedQuery) {
+            return [];
+        }
+        
+        // Check cache first
+        const cacheKey = `teachers_${trimmedQuery}`;
+        if (searchCache.has(cacheKey)) {
+            console.log(`[useSchoolData] 📦 Returning cached teacher search results for: "${trimmedQuery}"`);
+            return searchCache.get(cacheKey) as Teacher[];
+        }
+        
+        setIsSearching(true);
+        console.log(`[useSchoolData] 🔍 Searching ALL teachers for: "${trimmedQuery}"`);
+        
+        try {
+            const db = getFirestoreInstance();
+            // Fetch ALL teachers from Firestore
+            const teachersCollection = collection(db, 'teachers');
+            const snapshot = await getDocs(teachersCollection);
+            
+            const allTeachersData: Teacher[] = [];
+            snapshot.forEach(doc => {
+                allTeachersData.push({ id: doc.id, ...doc.data() } as Teacher);
+            });
+            
+            console.log(`[useSchoolData] 📚 Fetched ${allTeachersData.length} total teachers from Firestore`);
+            
+            // Client-side fuzzy filter
+            const results = allTeachersData.filter(teacher => {
+                const name = (teacher.name || '').toLowerCase();
+                const email = (teacher.email || '').toLowerCase();
+                const contactNumber = (teacher.contactNumber || '').toLowerCase();
+                const query = trimmedQuery;
+                
+                return name.includes(query) || 
+                       email.includes(query) || 
+                       contactNumber.includes(query);
+            });
+            
+            console.log(`[useSchoolData] ✅ Found ${results.length} teachers matching "${trimmedQuery}"`);
+            
+            // Cache the results
+            setSearchCache(prev => new Map(prev).set(cacheKey, results));
+            
+            return results;
+        } catch (error) {
+            console.error('[useSchoolData] ❌ Error searching teachers:', error);
+            return [];
+        } finally {
+            setIsSearching(false);
+        }
+    }, [searchCache]);
+
+    // Server-side search for Parents (search ALL parents, not just paginated)
+    const searchParents = useCallback(async (searchQuery: string): Promise<Parent[]> => {
+        const trimmedQuery = searchQuery.trim().toLowerCase();
+        
+        if (!trimmedQuery) {
+            return [];
+        }
+        
+        // Check cache first
+        const cacheKey = `parents_${trimmedQuery}`;
+        if (searchCache.has(cacheKey)) {
+            console.log(`[useSchoolData] 📦 Returning cached parent search results for: "${trimmedQuery}"`);
+            return searchCache.get(cacheKey) as Parent[];
+        }
+        
+        setIsSearching(true);
+        console.log(`[useSchoolData] 🔍 Searching ALL parents for: "${trimmedQuery}"`);
+        
+        try {
+            const db = getFirestoreInstance();
+            // Fetch ALL parents from Firestore
+            const parentsCollection = collection(db, 'parents');
+            const snapshot = await getDocs(parentsCollection);
+            
+            const allParentsData: Parent[] = [];
+            snapshot.forEach(doc => {
+                allParentsData.push({ id: doc.id, ...doc.data() } as Parent);
+            });
+            
+            console.log(`[useSchoolData] 📚 Fetched ${allParentsData.length} total parents from Firestore`);
+            
+            // Client-side fuzzy filter
+            const results = allParentsData.filter(parent => {
+                const name = (parent.name || '').toLowerCase();
+                const email = (parent.email || '').toLowerCase();
+                const query = trimmedQuery;
+                
+                return name.includes(query) || email.includes(query);
+            });
+            
+            console.log(`[useSchoolData] ✅ Found ${results.length} parents matching "${trimmedQuery}"`);
+            
+            // Cache the results
+            setSearchCache(prev => new Map(prev).set(cacheKey, results));
+            
+            return results;
+        } catch (error) {
+            console.error('[useSchoolData] ❌ Error searching parents:', error);
+            return [];
+        } finally {
+            setIsSearching(false);
+        }
+    }, [searchCache]);
+
     const loading = queries.some(q => q.isLoading);
     const error = queries.find(q => q.error)?.error as string | null;
+    
+    // Log which queries are still loading
+    useEffect(() => {
+        const stillLoading = queries
+            .map((q, index) => ({ name: collectionConfigs[index]?.name, isLoading: q.isLoading }))
+            .filter(q => q.isLoading);
+        
+        if (stillLoading.length > 0) {
+            console.log('[useSchoolData] ⏳ Still loading:', stillLoading.map(q => q.name));
+        }
+    }, [loading]);
 
     const queryResultsMap = useMemo(() => {
         // Don't build map while still loading - return empty to avoid premature empty arrays
         if (loading) {
             return {};
         }
+
         
         const map = collectionConfigs
             .filter(config => shouldFetch(config.name))
@@ -302,9 +508,10 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 return acc;
             }, {} as Record<string, any>);
         
-        console.log('[useSchoolData] ✅ Data loaded - Teachers:', map.teachers?.length, 'Parents:', map.parents?.length, 'Students:', allStudents.length);
+        console.log('[useSchoolData] ✅ Data loaded - Teachers:', map.teachers?.length, 'Parents:', map.parents?.length, 'Students:', allStudents.length, 'Assignments:', map.assignments?.length, 'Sections:', map.sections?.length);
         return map;
-    }, [queries, collectionConfigs, shouldFetch, loading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [queries.map(q => q.data).join(','), collectionConfigs, shouldFetch, loading, allStudents.length]);
     
     const refresh = useCallback(() => {
       // Refetch students by triggering the query
@@ -313,8 +520,11 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
       queries.forEach(q => q.refetch && q.refetch());
     }, [studentsQuery, queries]);
 
-    // Helper to invalidate a query after mutation
-    const invalidate = (key: QueryKey) => queryClient.invalidateQueries({ queryKey: key });
+    // Helper to invalidate and refetch a query after mutation
+    const invalidate = async (key: QueryKey) => {
+        await queryClient.invalidateQueries({ queryKey: key });
+        await queryClient.refetchQueries({ queryKey: key });
+    };
 
     // === CRUD OPERATIONS ===
     // Students
@@ -324,6 +534,10 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             id: `s_${Date.now()}`,
             enrollmentDate: new Date().toISOString().split('T')[0],
         };
+        
+        // Optimistically add to local state so it appears immediately
+        setAllStudents(prev => [newStudent, ...prev]); // Add to beginning since we order by date desc
+        
         await writeToFirestore('students', newStudent.id, newStudent);
         await invalidate(['students']); // Invalidate the general 'students' key
         await invalidate(['students', 'initial']); // Invalidate the specific initial students query
@@ -331,11 +545,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     }, []);
 
     const updateStudent = useCallback(async (student: Student) => {
+        // Optimistically update local state
+        setAllStudents(prev => prev.map(s => s.id === student.id ? student : s));
+        
         await writeToFirestore('students', student.id, student);
         await invalidate(['students']);
     }, []);
 
     const deleteStudent = useCallback(async (studentId: string) => {
+        // Optimistically remove from local state
+        setAllStudents(prev => prev.filter(s => s.id !== studentId));
+        
         await deleteFromFirestore('students', studentId);
         await invalidate(['students']);
         await invalidate(['grades']);
@@ -734,6 +954,11 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         fetchMoreStudents,
         hasMoreStudents,
         isFetchingStudents,
+        // New search exports
+        searchStudents,
+        searchTeachers,
+        searchParents,
+        isSearching,
     }
 }
 
@@ -741,20 +966,20 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 export interface SchoolDataHook {
     students: Student[];
     learningAreas: LearningArea[];
-    grades?: Grade[];
-    coreValues?: CoreValue[];
-    coreValueGrades?: CoreValueGrade[];
-    attendanceRecords?: AttendanceRecord[];
+    grades: Grade[];
+    coreValues: CoreValue[];
+    coreValueGrades: CoreValueGrade[];
+    attendanceRecords: AttendanceRecord[];
     teachers: Teacher[];
     parents: Parent[];
-    sections?: Section[];
+    sections: Section[];
     settings: SchoolSettings;
-    substituteAssignments?: SubstituteAssignment[];
-    classSchedules?: ClassSchedule[];
-    assignments?: Assignment[];
-    studentAssignmentGrades?: StudentAssignmentGrade[];
-    lessonPlans?: LessonPlan[];
-    announcements?: Announcement[];
+    substituteAssignments: SubstituteAssignment[];
+    classSchedules: ClassSchedule[];
+    assignments: Assignment[];
+    studentAssignmentGrades: StudentAssignmentGrade[];
+    lessonPlans: LessonPlan[];
+    announcements: Announcement[];
     monthlySchoolDaysConfig: Record<string, number>;
     loading: boolean;
     error: string | null;
@@ -801,6 +1026,11 @@ export interface SchoolDataHook {
     fetchMoreStudents: () => Promise<void>;
     hasMoreStudents: boolean;
     isFetchingStudents: boolean;
+    // New search exports
+    searchStudents: (query: string) => Promise<Student[]>;
+    searchTeachers: (query: string) => Promise<Teacher[]>;
+    searchParents: (query: string) => Promise<Parent[]>;
+    isSearching: boolean;
 }
 
 // Default learning areas (same as original)

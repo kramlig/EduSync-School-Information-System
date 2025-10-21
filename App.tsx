@@ -15,8 +15,7 @@ const StudentList = lazy(() => import('./components/StudentList'));
 const TeacherList = lazy(() => import('./components/TeacherList'));
 const ParentsView = lazy(() => import('./components/ParentsView'));
 const SectionsView = lazy(() => import('./components/SectionsView'));
-const GradesView = lazy(() => import('./components/GradesView'));
-const GradebookView = lazy(() => import('./components/GradebookView'));
+const UnifiedGradesView = lazy(() => import('./components/UnifiedGradesView'));
 const CoreValuesView = lazy(() => import('./components/CoreValuesView'));
 const CoreValuesGradebookView = lazy(() => import('./components/CoreValuesGradebookView'));
 const AttendanceView = lazy(() => import('./components/AttendanceView'));
@@ -35,50 +34,80 @@ const App: React.FC = () => {
   
   // Ensure we have a Firebase Auth user for Firestore writes (rules require request.auth != null)
   const [authReady, setAuthReady] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (!user) {
         // Trigger anonymous sign-in; wait for next auth state change before proceeding
         signInAnonymously(auth).catch((e) => {
           console.error('[Auth] Anonymous sign-in failed:', e);
-          setAuthReady(true);
+          setAuthError('Failed to initialize authentication. Please check your internet connection.');
+          setAuthReady(true); // Set ready anyway to show error
         });
         return;
       }
       setAuthReady(true);
+      console.log('[Auth] ✅ Auth ready:', user.uid);
     });
     return () => unsub();
   }, []);
   
-  const [session, setSession] = useState<{ user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' } | null>(null);
-  
-  // Load session from localStorage once
+  // Add timeout mechanism to prevent infinite loading
+  // Increased timeout for mobile devices (30 seconds)
+  const [loadTimeout, setLoadTimeout] = useState(false);
   useEffect(() => {
+    const timer = setTimeout(() => {
+      console.warn('[App] ⏰ Load timeout reached (30 seconds)');
+      setLoadTimeout(true);
+    }, 30000); // 30 second timeout for mobile compatibility
+    
+    return () => clearTimeout(timer);
+  }, []);
+  
+  // Initialize session from localStorage BEFORE first render
+  const [session, setSession] = useState<{ user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' } | null>(() => {
     try {
       const raw = localStorage.getItem('edusync_session');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.user && parsed.type) {
-          setSession(parsed);
+          console.log('[App] 🔄 Restored session from localStorage:', parsed.user.email);
+          return parsed;
         }
       }
-    } catch {}
-  }, []);
+    } catch (e) {
+      console.error('[App] ❌ Failed to restore session:', e);
+    }
+    return null;
+  });
+  
+  // Remove the duplicate useEffect that loads session
+  // (now handled in useState initializer above)
 
   // Persist session changes
   useEffect(() => {
+    console.log('[App] 📦 Session changed:', session ? `${session.user.email} (${session.type})` : 'null');
     if (session) {
       localStorage.setItem('edusync_session', JSON.stringify(session));
+      console.log('[App] 💾 Session saved to localStorage');
     } else {
       localStorage.removeItem('edusync_session');
+      console.log('[App] 🗑️ Session removed from localStorage');
     }
   }, [session]);
   
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
-  // Get data from simplified hook - no memoization needed!
-  // Initially fetch only essential collections for login and basic app functionality
-  const schoolData = useSchoolData(['settings', 'teachers', 'students', 'parents']);
+  // REVERT TO SIMPLE APPROACH: Load all collections upfront
+  // Progressive loading was causing circular dependency issues on mobile
+  // The collections are already optimized (students paginated to 10)
+  const schoolData = useSchoolData([
+    'settings', 'teachers', 'students', 'parents', 'sections', 'announcements',
+    'assignments', 'studentAssignmentGrades', 'learningAreas', 'grades',
+    'coreValues', 'coreValueGrades', 'attendanceRecords', 'lessonPlans',
+    'classSchedules', 'substituteAssignments'
+  ]);
   
   const { 
     loading, error, settings, students, teachers, parents,
@@ -107,7 +136,12 @@ const App: React.FC = () => {
   }, [session, students, parentSelectedChildId]);
 
   const handleLogin = useCallback((user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => {
+    console.log('[App] 🔐 Login successful for:', user.email, 'Type:', type);
+    // Clear any old session first to prevent conflicts
+    localStorage.removeItem('edusync_session');
+    // Then set new session
     setSession({ user, type });
+    console.log('[App] ✅ Session state updated, should redirect to dashboard');
   }, []);
   
   const handleLogout = useCallback(() => {
@@ -121,39 +155,111 @@ const App: React.FC = () => {
     return [];
   }, [loginType, teachers, students, parents]);
 
-  console.log('[App] Loading check:', { authReady, loading, studentsCount: students.length });
+  console.log('[App] Loading check:', { authReady, loading, studentsCount: students.length, teachersCount: teachers.length, loadTimeout });
   
-  if (!authReady || loading) {
+  // Improved loading logic with timeout fallback
+  // Don't render login screen until:
+  // 1. Auth is ready
+  // 2. AND (data is loaded OR timeout reached)
+  // 3. AND we have teachers (or timeout to show error)
+  const isInitializing = !authReady || (loading && !loadTimeout);
+  const hasMinimalData = teachers.length > 0;
+  const canShowApp = authReady && (hasMinimalData || loadTimeout);
+  
+  if (isInitializing) {
     return <FullScreenLoader message="Loading school data..." />;
+  }
+  
+  // Show error if we timed out without getting teachers
+  if (loadTimeout && !hasMinimalData) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-orange-50 dark:bg-slate-900 text-orange-900 dark:text-orange-200">
+        <div className="text-center p-8 max-w-md">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h1 className="text-2xl font-bold mb-4">Connection Timeout</h1>
+          <p className="mb-4">
+            Unable to load school data from the server. This could be due to:
+          </p>
+          <ul className="text-left list-disc list-inside mb-6 space-y-2">
+            <li>Slow or unstable internet connection</li>
+            <li>Firebase services temporarily unavailable</li>
+            <li>Browser blocking third-party cookies</li>
+            <li>Firewall or network restrictions</li>
+          </ul>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+          >
+            🔄 Retry Connection
+          </button>
+          <p className="mt-4 text-sm text-orange-700 dark:text-orange-400">
+            If the problem persists, please check your internet connection and try again.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (authError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-red-50 dark:bg-slate-900 text-red-900 dark:text-red-200">
+        <div className="text-center p-8 max-w-md">
+          <div className="text-6xl mb-4">🔒</div>
+          <h1 className="text-2xl font-bold mb-4">Authentication Error</h1>
+          <p className="mb-6">{authError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+          >
+            🔄 Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-red-50 text-red-800">
-        <div className="text-center p-8">
+      <div className="flex items-center justify-center min-h-screen bg-red-50 dark:bg-slate-900 text-red-800 dark:text-red-200">
+        <div className="text-center p-8 max-w-2xl">
+          <div className="text-6xl mb-4">❌</div>
           <h1 className="text-2xl font-bold mb-4">Failed to Load Application Data</h1>
-          <p className="mb-4">There was a critical error fetching data from the server. Please check the console for details and try refreshing the page.</p>
-          <pre className="bg-red-100 p-4 rounded-md text-left text-sm">{error}</pre>
+          <p className="mb-4">There was a critical error fetching data from the server.</p>
+          <details className="mb-6">
+            <summary className="cursor-pointer text-sm font-semibold mb-2">Technical Details</summary>
+            <pre className="bg-red-100 dark:bg-red-900/30 p-4 rounded-md text-left text-sm overflow-auto">{error}</pre>
+          </details>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+          >
+            🔄 Reload Page
+          </button>
         </div>
       </div>
     );
   }
 
   if (!session) {
-    return <LoginScreen 
-      onLogin={handleLogin} 
-      users={getUsersForLogin}
-      loginType={loginType}
-      setLoginType={setLoginType}
-    />;
+    console.log('[App] 🔓 No session - rendering LoginScreen with', getUsersForLogin.length, 'users');
+    return (
+      <LoginScreen 
+        onLogin={handleLogin} 
+        users={getUsersForLogin}
+        loginType={loginType}
+        setLoginType={setLoginType}
+      />
+    );
   }
+  
+  console.log('[App] ✅ Session exists - rendering Router/Dashboard');
   
   const staffSession = session as { user: AuthUser, type: 'staff' };
   const studentSession = session as { user: StudentUser, type: 'student' };
   const parentSession = session as { user: ParentUser, type: 'parent' };
 
   return (
-    <Router>
+    <Router key={session?.user.id || 'no-session'}>
       <div className="flex h-screen bg-slate-100 dark:bg-slate-900">
         <Sidebar 
           session={session} 
@@ -179,8 +285,8 @@ const App: React.FC = () => {
                         <Route path="/teachers" element={<TeacherList schoolData={schoolData} session={staffSession} />} />
                         <Route path="/parents" element={<ParentsView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/sections" element={<SectionsView schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/grades" element={<GradesView schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/gradebook" element={<GradebookView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/grades" element={<UnifiedGradesView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/gradebook" element={<UnifiedGradesView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values" element={<CoreValuesView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values-gradebook" element={<CoreValuesGradebookView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={staffSession} />} />
@@ -197,7 +303,7 @@ const App: React.FC = () => {
           <>
             <Route path="/" element={<StudentDashboard schoolData={schoolData} session={studentSession} />} />
             <Route path="/assignments" element={<AssignmentsView schoolData={schoolData} session={studentSession} />} />
-            <Route path="/grades" element={<GradesView schoolData={schoolData} session={studentSession} />} />
+            <Route path="/grades" element={<UnifiedGradesView schoolData={schoolData} session={studentSession} />} />
             <Route path="/core-values" element={<CoreValuesView schoolData={schoolData} session={studentSession} />} />
             <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={studentSession} />} />
             <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={studentSession} />} />
@@ -208,7 +314,7 @@ const App: React.FC = () => {
             <Route path="/" element={<ParentDashboard schoolData={schoolData} session={parentSession} />} />
             <Route path="/announcements" element={<AnnouncementsView schoolData={schoolData} session={parentSession} />} />
             <Route path="/assignments" element={<AssignmentsView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
-            <Route path="/grades" element={<GradesView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
+            <Route path="/grades" element={<UnifiedGradesView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/core-values" element={<CoreValuesView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
