@@ -21,7 +21,7 @@ import type {
 } from '../types';
 import { getFirestoreInstance, auth, waitForAuthReady } from '../src/services/firestoreService';
 import { 
-    collection, getDocs, doc, getDoc, setDoc, deleteDoc, 
+    collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, 
     serverTimestamp, onSnapshot, query, orderBy, limit, startAfter, where, QueryDocumentSnapshot, DocumentData, QuerySnapshot
 } from 'firebase/firestore';
 
@@ -198,6 +198,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 return [];
             }
         }},
+        { name: 'learningAreas', fetchFn: () => fetchCollection<LearningArea>('learningAreas') },
         { name: 'grades', fetchFn: () => fetchCollection<Grade>('grades') },
         { name: 'coreValues', fetchFn: () => fetchCollection<CoreValue>('coreValues') },
         { name: 'coreValueGrades', fetchFn: () => fetchCollection<CoreValueGrade>('coreValueGrades') },
@@ -227,8 +228,10 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         .map(config => ({
           queryKey: [config.name, 'v2'], // Cache buster - increment when data structure changes
           queryFn: config.fetchFn,
-          staleTime: 0, // Force refetch - was 5 * 60 * 1000
-          cacheTime: 0, // Don't cache - force fresh data
+          staleTime: Infinity, // Data is fresh until we manually invalidate
+          cacheTime: 30 * 60 * 1000, // Keep in cache for 30 minutes to support optimistic updates
+          refetchOnMount: false, // Don't refetch on mount - trust cache
+          refetchOnWindowFocus: false, // Don't refetch on window focus
         }))
     });
 
@@ -606,15 +609,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         value?: number, 
         subSubject?: string
     ) => {
-        const grades: Grade[] = queryClient.getQueryData(['grades']) || [];
-        const learningAreas: LearningArea[] = queryClient.getQueryData(['learningAreas']) || DEFAULT_LEARNING_AREAS;
+        const grades: Grade[] = queryClient.getQueryData(['grades', 'v2']) || [];
+        const learningAreas: LearningArea[] = queryClient.getQueryData(['learningAreas', 'v2']) || DEFAULT_LEARNING_AREAS;
         const learningArea = learningAreas.find(la => la.id === learningAreaId);
+        
         let existing = grades.find(g => g.studentId === studentId && g.learningAreaId === learningAreaId);
         if (!existing) {
-            existing = { id: `g_${studentId}_${learningAreaId}`, studentId, learningAreaId } as Grade;
+            existing = { id: `grade_${studentId}_${learningAreaId}`, studentId, learningAreaId } as Grade;
         } else {
             existing = { ...existing };
         }
+        
         if (learningArea?.isComposite && subSubject) {
             const current = (existing[quarter] as Record<string, number | undefined>) || {};
             const next = { ...current } as any;
@@ -624,11 +629,33 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         } else {
             (existing as any)[quarter] = value as any;
         }
+        
         const calc = computeFinalAndRemarks(existing);
         existing.finalGrade = calc.finalGrade;
         existing.remarks = calc.remarks;
-        await writeToFirestore('grades', existing.id, existing);
-        await invalidate(['grades']);
+        
+        // Optimistically update cache IMMEDIATELY using updater function to avoid race conditions
+        queryClient.setQueryData(['grades', 'v2'], (oldGrades: Grade[] = []) => {
+            const existingIndex = oldGrades.findIndex(g => g.studentId === studentId && g.learningAreaId === learningAreaId);
+            if (existingIndex >= 0) {
+                // Update existing grade
+                return oldGrades.map((g, i) => i === existingIndex ? existing! : g);
+            } else {
+                // Add new grade
+                return [...oldGrades, existing!];
+            }
+        });
+        
+        // Write to Firestore in background - revert optimistic update on failure
+        try {
+            await writeToFirestore('grades', existing.id, existing);
+            console.log(`✅ SAVED: ${existing.id} → ${quarter.toUpperCase()} = ${value || 'cleared'}`);
+        } catch (error) {
+            console.error('❌ SAVE FAILED:', existing.id, error);
+            // Revert to original grades on failure
+            queryClient.setQueryData(['grades', 'v2'], grades);
+            throw error; // Re-throw so UI can show error
+        }
     }, []);
 
     // Core Values
@@ -639,7 +666,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         behavior: string, 
         value: CoreValueMarking | ''
     ) => {
-        const coreValueGrades: CoreValueGrade[] = queryClient.getQueryData(['coreValueGrades']) || [];
+        const coreValueGrades: CoreValueGrade[] = queryClient.getQueryData(['coreValueGrades', 'v2']) || [];
         let existing = coreValueGrades.find(r => r.studentId === studentId && r.coreValueId === coreValueId);
         let nextRecord: CoreValueGrade;
         if (!existing) {
@@ -658,16 +685,52 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
     // Attendance
     const updateAttendance = useCallback(async (studentId: string, date: string, status: AttendanceStatus) => {
-        const attendanceRecords: AttendanceRecord[] = queryClient.getQueryData(['attendanceRecords']) || [];
+        const attendanceRecords: AttendanceRecord[] = queryClient.getQueryData(['attendanceRecords', 'v2']) || [];
         let existing = attendanceRecords.find(ar => ar.studentId === studentId);
-        if (existing) {
-            const updated = { ...existing, dailyStatus: { ...existing.dailyStatus, [date]: status } };
-            await writeToFirestore('attendanceRecords', studentId, updated);
-        } else {
-            const newRecord: AttendanceRecord = { studentId, dailyStatus: { [date]: status } };
-            await writeToFirestore('attendanceRecords', studentId, newRecord);
+        
+        // Optimistically update the cache IMMEDIATELY using updater function to avoid race conditions
+        queryClient.setQueryData(['attendanceRecords', 'v2'], (oldRecords: AttendanceRecord[] = []) => {
+            const existingRecord = oldRecords.find(ar => ar.studentId === studentId);
+            const updatedRecord = existingRecord 
+                ? { ...existingRecord, dailyStatus: { ...existingRecord.dailyStatus, [date]: status } }
+                : { studentId, dailyStatus: { [date]: status } };
+            
+            return existingRecord
+                ? oldRecords.map(ar => ar.studentId === studentId ? updatedRecord : ar)
+                : [...oldRecords, updatedRecord];
+        });
+        
+        // Then write to Firestore using field-level update to prevent data loss
+        const db = getFirestoreInstance();
+        const docRef = doc(db, 'attendanceRecords', studentId);
+        
+        try {
+            if (existing) {
+                // Use updateDoc with field path to update only the specific date
+                await updateDoc(docRef, {
+                    [`dailyStatus.${date}`]: status,
+                    updatedAt: serverTimestamp(),
+                    updatedBy: auth.currentUser?.uid || 'anon'
+                });
+            } else {
+                // Create new document if it doesn't exist
+                await setDoc(docRef, {
+                    studentId,
+                    dailyStatus: { [date]: status },
+                    updatedAt: serverTimestamp(),
+                    updatedBy: auth.currentUser?.uid || 'anon'
+                });
+            }
+            console.log(`[Firestore] ✅ Attendance updated: ${studentId} - ${date} = ${status}`);
+        } catch (error) {
+            console.error('[Firestore] ❌ Attendance update failed:', error);
+            // Rollback optimistic update on error
+            queryClient.setQueryData(['attendanceRecords', 'v2'], attendanceRecords);
+            throw error;
         }
-        await invalidate(['attendanceRecords']);
+        
+        // No refetch needed - cache is already updated and Firestore write is complete
+        // Data is consistent between cache and server
     }, []);
 
     // Learning Areas
@@ -724,7 +787,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     }, []);
 
     const assignStudentToParent = useCallback(async (parentId: string, studentId: string) => {
-        const parents: Parent[] = queryClient.getQueryData(['parents']) || [];
+        const parents: Parent[] = queryClient.getQueryData(['parents', 'v2']) || [];
         const parent = parents.find(p => p.id === parentId);
         if (parent) {
             const updated = { ...parent, studentIds: [...(parent.studentIds || []), studentId] };
@@ -734,7 +797,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     }, []);
 
     const unassignStudentFromParent = useCallback(async (parentId: string, studentId: string) => {
-        const parents: Parent[] = queryClient.getQueryData(['parents']) || [];
+        const parents: Parent[] = queryClient.getQueryData(['parents', 'v2']) || [];
         const parent = parents.find(p => p.id === parentId);
         if (parent) {
             const updated = { ...parent, studentIds: (parent.studentIds || []).filter(id => id !== studentId) };
@@ -826,7 +889,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         score: number | null, 
         feedback: string | null
     ) => {
-        const studentAssignmentGrades: StudentAssignmentGrade[] = queryClient.getQueryData(['studentAssignmentGrades']) || [];
+        const studentAssignmentGrades: StudentAssignmentGrade[] = queryClient.getQueryData(['studentAssignmentGrades', 'v2']) || [];
         let existing = studentAssignmentGrades.find(g => g.studentId === studentId && g.assignmentId === assignmentId);
         if (existing) {
             const updated = { ...existing, score, feedback, updatedAt: Date.now() };
@@ -848,7 +911,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     }, []);
 
     const submitAssignment = useCallback(async (studentId: string, assignmentId: string, filePath: string) => {
-        const studentAssignmentGrades: StudentAssignmentGrade[] = queryClient.getQueryData(['studentAssignmentGrades']) || [];
+        const studentAssignmentGrades: StudentAssignmentGrade[] = queryClient.getQueryData(['studentAssignmentGrades', 'v2']) || [];
         let existing = studentAssignmentGrades.find(g => g.studentId === studentId && g.assignmentId === assignmentId);
         if (existing) {
             const updated = { 
@@ -911,7 +974,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     // Compose the state from queries and return from the hook
     return {
         students: allStudents, // Now using paginated students
-        learningAreas: DEFAULT_LEARNING_AREAS,
+        learningAreas: queryResultsMap.learningAreas ?? [],
         grades: queryResultsMap.grades ?? [],
         coreValues: queryResultsMap.coreValues ?? [],
         coreValueGrades: queryResultsMap.coreValueGrades ?? [],
@@ -1138,5 +1201,447 @@ const DEFAULT_LEARNING_AREAS: LearningArea[] = [
         isActive: true,
         order: 7,
         description: 'Music, Arts, Physical Education, Health for Elementary'
+    },
+    // ====== MOTHER TONGUE (MTB-MLE) - Elementary Grades 1-3 ======
+    {
+        id: 'la_mtb_elem',
+        name: 'Mother Tongue',
+        credits: 3,
+        category: 'core',
+        gradeLevel: [1, 2, 3],
+        department: 'Language',
+        kToTwelveCode: 'MTB-MLE',
+        isActive: true,
+        order: 0,
+        description: 'Mother Tongue-Based Multilingual Education (MTB-MLE) - Grades 1-3'
+    },
+    // ====== EPP/TLE - Elementary Grades 4-6 ======
+    {
+        id: 'la_epp_elem',
+        name: 'EPP/TLE',
+        credits: 2,
+        category: 'specialized',
+        gradeLevel: [4, 5, 6],
+        department: 'Technical Education',
+        kToTwelveCode: 'EPP',
+        isActive: true,
+        order: 8,
+        description: 'Edukasyong Pantahanan at Pangkabuhayan for Elementary Grades 4-6'
+    },
+    // ====== JUNIOR HIGH SCHOOL (Grades 7-10) ======
+    {
+        id: 'la_filipino_jhs',
+        name: 'Filipino',
+        credits: 5,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Language',
+        kToTwelveCode: 'FIL-JHS',
+        isActive: true,
+        order: 1,
+        description: 'Filipino for Junior High School'
+    },
+    {
+        id: 'la_english_jhs',
+        name: 'English',
+        credits: 5,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Language',
+        kToTwelveCode: 'ENG-JHS',
+        isActive: true,
+        order: 2,
+        description: 'English for Junior High School'
+    },
+    {
+        id: 'la_math_jhs',
+        name: 'Mathematics',
+        credits: 5,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'STEM',
+        kToTwelveCode: 'MATH-JHS',
+        isActive: true,
+        order: 3,
+        description: 'Mathematics for Junior High School'
+    },
+    {
+        id: 'la_science_jhs',
+        name: 'Science',
+        credits: 5,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'STEM',
+        kToTwelveCode: 'SCI-JHS',
+        isActive: true,
+        order: 4,
+        description: 'Science for Junior High School'
+    },
+    {
+        id: 'la_ap_jhs',
+        name: 'Araling Panlipunan',
+        credits: 5,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Humanities',
+        kToTwelveCode: 'AP-JHS',
+        isActive: true,
+        order: 5,
+        description: 'Araling Panlipunan for Junior High School'
+    },
+    {
+        id: 'la_esp_jhs',
+        name: 'Edukasyon sa Pagpapakatao',
+        credits: 5,
+        category: 'core',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Values Education',
+        kToTwelveCode: 'ESP-JHS',
+        isActive: true,
+        order: 6,
+        description: 'Values Education for Junior High School'
+    },
+    {
+        id: 'la_mapeh_jhs',
+        name: 'MAPEH',
+        credits: 5,
+        isComposite: true,
+        subSubjects: ['Music', 'Arts', 'PE', 'Health'],
+        category: 'specialized',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Arts & Sports',
+        kToTwelveCode: 'MAPEH-JHS',
+        isActive: true,
+        order: 7,
+        description: 'Music, Arts, Physical Education, Health for Junior High School'
+    },
+    {
+        id: 'la_tle_jhs',
+        name: 'Technology and Livelihood Education',
+        credits: 5,
+        category: 'specialized',
+        gradeLevel: [7, 8, 9, 10],
+        department: 'Technical Education',
+        kToTwelveCode: 'TLE-JHS',
+        isActive: true,
+        order: 8,
+        description: 'TLE for Junior High School'
+    },
+    // ====== SENIOR HIGH SCHOOL - CORE SUBJECTS (All Tracks) ======
+    {
+        id: 'la_oral_comm_shs',
+        name: 'Oral Communication',
+        credits: 3,
+        category: 'core',
+        gradeLevel: [11],
+        department: 'Language',
+        kToTwelveCode: 'ORALCOM',
+        semesterBased: true,
+        semester: 1,
+        isActive: true,
+        order: 1
+    },
+    {
+        id: 'la_reading_writing_shs',
+        name: 'Reading and Writing',
+        credits: 3,
+        category: 'core',
+        gradeLevel: [11],
+        department: 'Language',
+        kToTwelveCode: 'READWRIT',
+        semesterBased: true,
+        semester: 2,
+        isActive: true,
+        order: 2
+    },
+    {
+        id: 'la_gen_math_shs',
+        name: 'General Mathematics',
+        credits: 3,
+        category: 'core',
+        gradeLevel: [11],
+        department: 'STEM',
+        kToTwelveCode: 'GENMATH',
+        semesterBased: true,
+        semester: 1,
+        isActive: true,
+        order: 3
+    },
+    {
+        id: 'la_stats_prob_shs',
+        name: 'Statistics and Probability',
+        credits: 3,
+        category: 'core',
+        gradeLevel: [11],
+        department: 'STEM',
+        kToTwelveCode: 'STATPROB',
+        semesterBased: true,
+        semester: 2,
+        isActive: true,
+        order: 4
+    },
+    {
+        id: 'la_earth_science_shs',
+        name: 'Earth Science',
+        credits: 3,
+        category: 'core',
+        gradeLevel: [11],
+        department: 'STEM',
+        kToTwelveCode: 'EARTHSCI',
+        semesterBased: true,
+        semester: 1,
+        isActive: true,
+        order: 5
+    },
+    {
+        id: 'la_physical_science_shs',
+        name: 'Physical Science',
+        credits: 3,
+        category: 'core',
+        gradeLevel: [11],
+        department: 'STEM',
+        kToTwelveCode: 'PHYSCI',
+        semesterBased: true,
+        semester: 2,
+        isActive: true,
+        order: 6
+    },
+    // ====== SENIOR HIGH SCHOOL - STEM TRACK ======
+    {
+        id: 'la_precalc_stem',
+        name: 'Pre-Calculus',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [11],
+        department: 'STEM',
+        kToTwelveCode: 'PRECALC',
+        trackRequired: ['STEM'],
+        semesterBased: true,
+        isActive: true,
+        order: 1
+    },
+    {
+        id: 'la_basic_calc_stem',
+        name: 'Basic Calculus',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [11, 12],
+        department: 'STEM',
+        kToTwelveCode: 'BASICCALC',
+        trackRequired: ['STEM'],
+        semesterBased: true,
+        isActive: true,
+        order: 2
+    },
+    {
+        id: 'la_gen_bio_stem',
+        name: 'General Biology',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [11, 12],
+        department: 'STEM',
+        kToTwelveCode: 'GENBIO',
+        trackRequired: ['STEM'],
+        semesterBased: true,
+        isActive: true,
+        order: 3
+    },
+    {
+        id: 'la_gen_chem_stem',
+        name: 'General Chemistry',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [11, 12],
+        department: 'STEM',
+        kToTwelveCode: 'GENCHEM',
+        trackRequired: ['STEM'],
+        semesterBased: true,
+        isActive: true,
+        order: 4
+    },
+    {
+        id: 'la_gen_physics_stem',
+        name: 'General Physics',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [12],
+        department: 'STEM',
+        kToTwelveCode: 'GENPHYS',
+        trackRequired: ['STEM'],
+        semesterBased: true,
+        isActive: true,
+        order: 5
+    },
+    // ====== SENIOR HIGH SCHOOL - ABM TRACK ======
+    {
+        id: 'la_fund_abm',
+        name: 'Fundamentals of Accountancy, Business and Management',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [11, 12],
+        department: 'Business',
+        kToTwelveCode: 'FUNDABM',
+        trackRequired: ['ABM'],
+        semesterBased: true,
+        isActive: true,
+        order: 1
+    },
+    {
+        id: 'la_bus_math_abm',
+        name: 'Business Mathematics',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [11],
+        department: 'Business',
+        kToTwelveCode: 'BUSMATH',
+        trackRequired: ['ABM'],
+        semesterBased: true,
+        isActive: true,
+        order: 2
+    },
+    {
+        id: 'la_bus_finance_abm',
+        name: 'Business Finance',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [12],
+        department: 'Business',
+        kToTwelveCode: 'BUSFIN',
+        trackRequired: ['ABM'],
+        semesterBased: true,
+        isActive: true,
+        order: 3
+    },
+    {
+        id: 'la_org_mgmt_abm',
+        name: 'Organization and Management',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [11],
+        department: 'Business',
+        kToTwelveCode: 'ORGMGMT',
+        trackRequired: ['ABM'],
+        semesterBased: true,
+        isActive: true,
+        order: 4
+    },
+    {
+        id: 'la_prin_marketing_abm',
+        name: 'Principles of Marketing',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [12],
+        department: 'Business',
+        kToTwelveCode: 'PRINMKT',
+        trackRequired: ['ABM'],
+        semesterBased: true,
+        isActive: true,
+        order: 5
+    },
+    // ====== SENIOR HIGH SCHOOL - HUMSS TRACK ======
+    {
+        id: 'la_creative_writing_humss',
+        name: 'Creative Writing',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [11],
+        department: 'Humanities',
+        kToTwelveCode: 'CREWRIT',
+        trackRequired: ['HUMSS'],
+        semesterBased: true,
+        isActive: true,
+        order: 1
+    },
+    {
+        id: 'la_creative_nonfic_humss',
+        name: 'Creative Nonfiction',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [12],
+        department: 'Humanities',
+        kToTwelveCode: 'CRENON',
+        trackRequired: ['HUMSS'],
+        semesterBased: true,
+        isActive: true,
+        order: 2
+    },
+    {
+        id: 'la_world_religions_humss',
+        name: 'World Religions and Belief Systems',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [11],
+        department: 'Humanities',
+        kToTwelveCode: 'WORLDREL',
+        trackRequired: ['HUMSS'],
+        semesterBased: true,
+        isActive: true,
+        order: 3
+    },
+    {
+        id: 'la_phil_politics_humss',
+        name: 'Philippine Politics and Governance',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [11],
+        department: 'Humanities',
+        kToTwelveCode: 'PHILPOL',
+        trackRequired: ['HUMSS'],
+        semesterBased: true,
+        isActive: true,
+        order: 4
+    },
+    {
+        id: 'la_trends_networks_humss',
+        name: 'Trends, Networks and Critical Thinking',
+        credits: 3,
+        category: 'specialized',
+        gradeLevel: [12],
+        department: 'Humanities',
+        kToTwelveCode: 'TRENDS',
+        trackRequired: ['HUMSS'],
+        semesterBased: true,
+        isActive: true,
+        order: 5
+    },
+    // ====== SENIOR HIGH SCHOOL - GAS TRACK ======
+    {
+        id: 'la_humanities_gas',
+        name: 'Humanities 1',
+        credits: 3,
+        category: 'elective',
+        gradeLevel: [11],
+        department: 'Humanities',
+        kToTwelveCode: 'HUM1',
+        trackRequired: ['GAS'],
+        semesterBased: true,
+        isActive: true,
+        order: 1
+    },
+    {
+        id: 'la_social_science_gas',
+        name: 'Social Science 1',
+        credits: 3,
+        category: 'elective',
+        gradeLevel: [11],
+        department: 'Humanities',
+        kToTwelveCode: 'SOCSCI1',
+        trackRequired: ['GAS'],
+        semesterBased: true,
+        isActive: true,
+        order: 2
+    },
+    {
+        id: 'la_applied_subjects_gas',
+        name: 'Applied Subjects',
+        credits: 3,
+        category: 'elective',
+        gradeLevel: [11, 12],
+        department: 'Applied',
+        kToTwelveCode: 'APPSUB',
+        trackRequired: ['GAS'],
+        semesterBased: true,
+        isActive: true,
+        order: 3
     }
 ];

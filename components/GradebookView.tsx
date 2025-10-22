@@ -87,36 +87,35 @@ const getCurrentQuarter = (): 'all' | 'q1' | 'q2' | 'q3' | 'q4' => {
   return 'all'; // fallback
 };
 
-const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: AuthUser | StudentUser, type: 'staff' | 'student' }; }> = ({ schoolData, session }) => {
+const GradebookView: React.FC<{ 
+  schoolData: SchoolDataHook; 
+  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
+  selectedSectionId?: string;
+  onSectionChange?: (sectionId: string) => void;
+  selectedQuarter?: 'all' | 'q1' | 'q2' | 'q3' | 'q4';
+  onQuarterChange?: (quarter: 'all' | 'q1' | 'q2' | 'q3' | 'q4') => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+}> = ({ schoolData, session, selectedSectionId: propSectionId, onSectionChange, selectedQuarter: propQuarter, onQuarterChange, searchQuery: propSearchQuery, onSearchChange }) => {
   const { students, grades, learningAreas, sections, substituteAssignments, classSchedules, updateGrade } = schoolData;
   
-  // Debug logging to check data
-  console.log('[GradebookView] 📊 Data received:', {
-    students: students?.length || 0,
-    grades: grades?.length || 0,
-    learningAreas: learningAreas?.length || 0,
-    sections: sections?.length || 0
-  });
+  // Use props if provided (unified mode), otherwise use local state (standalone mode)
+  const [localSectionId, setLocalSectionId] = useState<string | null>(null);
+  const [localQuarterFilter, setLocalQuarterFilter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>(getCurrentQuarter());
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
   
-  // Debug: Check first few students and grades
-  if (students?.length > 0) {
-    console.log('[GradebookView] 📝 ALL student sectionIds:', students.map(s => s.sectionId));
-    console.log('[GradebookView] Sample students:', students.slice(0, 5).map(s => ({ id: s.id, name: s.name, sectionId: s.sectionId })));
-  }
-  if (grades?.length > 0) {
-    console.log('[GradebookView] Sample grades:', grades.slice(0, 5).map(g => ({ id: g.id, studentId: g.studentId, learningAreaId: g.learningAreaId })));
-  }
-  if (sections?.length > 0) {
-    console.log('[GradebookView] 📋 ALL section IDs:', sections.map(s => s.id));
-    console.log('[GradebookView] Sample sections:', sections.slice(0, 5).map(s => ({ id: s.id, name: s.name })));
-  }
+  const selectedSectionId = propSectionId !== undefined ? propSectionId : localSectionId;
+  const quarterFilter = propQuarter !== undefined ? propQuarter : localQuarterFilter;
+  const searchQuery = propSearchQuery !== undefined ? propSearchQuery : localSearchQuery;
   
-  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
-  const [quarterFilter, setQuarterFilter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>(getCurrentQuarter());
-  const [mapehModalState, setMapehModalState] = useState<{ isOpen: boolean, student?: Student, quarter?: 'q1'|'q2'|'q3'|'q4', la?: LearningArea }>({ isOpen: false });
-  const [searchQuery, setSearchQuery] = useState('');
+  const setSelectedSectionId = onSectionChange || setLocalSectionId;
+  const setQuarterFilter = onQuarterChange || setLocalQuarterFilter;
+  const setSearchQuery = onSearchChange || setLocalSearchQuery;
+  
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
-  const [showStats, setShowStats] = useState(true);
+  
+  const [mapehModalState, setMapehModalState] = useState<{ isOpen: boolean, student?: Student, quarter?: 'q1'|'q2'|'q3'|'q4', la?: LearningArea }>({ isOpen: false });
+  const [showStats, setShowStats] = useState(false);
   
   // Priority 1: Toast notifications
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
@@ -134,6 +133,10 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
   
   // Keyboard shortcuts modal
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  
+  // Phase 1: Pagination state
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const authUser = session.user as AuthUser;
   const isReadOnly = authUser.role === 'principal';
@@ -178,9 +181,9 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     if (!selectedSectionId && visibleSections.length > 0) {
       setSelectedSectionId(visibleSections[0].id);
     } else if (selectedSectionId && !visibleSections.some(s => s.id === selectedSectionId)) {
-      setSelectedSectionId(visibleSections[0]?.id || null);
+      setSelectedSectionId(visibleSections[0]?.id || 'all');
     }
-  }, [visibleSections, selectedSectionId]);
+  }, [visibleSections, selectedSectionId, setSelectedSectionId]);
   
   // Keyboard shortcuts listener
   useEffect(() => {
@@ -260,11 +263,32 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     return counts;
   }, [students]);
 
+  // K-12 COMPLIANCE: Filter learning areas by grade level
+  const applicableLearningAreas = useMemo(() => {
+    const selectedSection = sections.find(s => s.id === selectedSectionId);
+    if (!selectedSection) {
+      return learningAreas;
+    }
+    
+    const sectionGradeLevel = selectedSection.gradeLevel;
+    
+    // Filter learning areas that are applicable to this grade level
+    const filtered = learningAreas.filter(la => {
+      // If no gradeLevel metadata, show it (backward compatibility)
+      if (!la.gradeLevel || !Array.isArray(la.gradeLevel)) {
+        return true;
+      }
+      
+      // Check if this grade level is in the learning area's applicable grades
+      return la.gradeLevel.includes(sectionGradeLevel);
+    });
+    
+    // Sort by order field (DepEd-compliant subject ordering)
+    return filtered.sort((a, b) => (a.order || 999) - (b.order || 999));
+  }, [learningAreas, selectedSectionId, sections]);
+
   const studentsInSection = useMemo(() => {
     if (!selectedSectionId) return [];
-    
-    console.log('[GradebookView] 🔍 Filtering students for section:', selectedSectionId);
-    console.log('[GradebookView] Total students:', students.length);
     
     let filtered = students.filter(s => 
         s.sectionId === selectedSectionId &&
@@ -288,7 +312,7 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
         let totalGrades = 0;
         let gradeCount = 0;
         
-        learningAreas.forEach(la => {
+        applicableLearningAreas.forEach(la => {
           const grade = studentGrades.get(la.id);
           ['q1', 'q2', 'q3', 'q4'].forEach(q => {
             const qGrade = calculateQuarterAverage(grade?.[q as 'q1' | 'q2' | 'q3' | 'q4']);
@@ -324,7 +348,7 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
         
         let aSum = 0, aCount = 0, bSum = 0, bCount = 0;
         
-        learningAreas.forEach(la => {
+        applicableLearningAreas.forEach(la => {
           const aGrade = aGrades?.get(la.id);
           const bGrade = bGrades?.get(la.id);
           
@@ -344,9 +368,8 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
         const bGrades = gradeMap.get(b.id);
         
         let aComplete = 0, bComplete = 0;
-        const totalPossible = learningAreas.length * 4;
         
-        learningAreas.forEach(la => {
+        applicableLearningAreas.forEach(la => {
           const aGrade = aGrades?.get(la.id);
           const bGrade = bGrades?.get(la.id);
           
@@ -363,7 +386,19 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     });
     
     return filtered;
-  }, [students, selectedSectionId, debouncedSearchQuery, gradeFilter, sortBy, sortOrder, gradeMap, learningAreas]);
+  }, [students, selectedSectionId, debouncedSearchQuery, gradeFilter, sortBy, sortOrder, gradeMap, applicableLearningAreas]);
+
+  // Phase 1: Paginated students
+  const totalPages = Math.max(1, Math.ceil(studentsInSection.length / pageSize));
+  const pagedStudents = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return studentsInSection.slice(start, start + pageSize);
+  }, [studentsInSection, page, pageSize]);
+  
+  // Reset page when filters change
+  React.useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchQuery, selectedSectionId, gradeFilter, sortBy, sortOrder, pageSize]);
 
   const columns = useMemo(() => {
     const cols: { id: string; learningArea: LearningArea; quarter: 'q1' | 'q2' | 'q3' | 'q4' }[] = [];
@@ -372,12 +407,12 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
       : [quarterFilter];
 
     quarters.forEach(q => {
-        learningAreas.forEach(la => {
+        applicableLearningAreas.forEach(la => {
             cols.push({ id: `${la.id}-${q}`, learningArea: la, quarter: q });
         });
     });
     return cols;
-  }, [learningAreas, quarterFilter]);
+  }, [applicableLearningAreas, quarterFilter]);
 
   // Enhanced grade change with toast notifications
   const handleGradeChange = async (studentId: string, laId: string, quarter: 'q1'|'q2'|'q3'|'q4', value: string) => {
@@ -391,10 +426,15 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
       try {
         await updateGrade(studentId, laId, quarter, numValue);
         setLastSaved(new Date());
-        // Don't show toast for every grade change to avoid spam
-        // setToast({ message: 'Grade saved successfully', type: 'success' });
+        
+        // Show success toast but don't spam - only show every 3 seconds
+        const now = Date.now();
+        const timeSinceLastToast = lastSaved ? now - lastSaved.getTime() : Infinity;
+        if (timeSinceLastToast > 3000) {
+          setToast({ message: '✓ Grade saved', type: 'success' });
+        }
       } catch (error) {
-        setToast({ message: 'Failed to save grade', type: 'error' });
+        setToast({ message: `Failed to save: ${error instanceof Error ? error.message : 'Unknown error'}`, type: 'error' });
       } finally {
         setIsSaving(false);
       }
@@ -417,7 +457,7 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     try {
       // Apply to all selected students for current quarter and first subject
       const quarter = quarterFilter === 'all' ? 'q1' : quarterFilter;
-      const laId = learningAreas[0]?.id;
+      const laId = applicableLearningAreas[0]?.id;
       
       if (!laId) return;
       
@@ -500,7 +540,7 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     
     const totalStudents = studentsInSection.length;
     const quartersToCheck = quarterFilter === 'all' ? ['q1', 'q2', 'q3', 'q4'] : [quarterFilter];
-    const totalPossibleGrades = totalStudents * learningAreas.length * quartersToCheck.length;
+    const totalPossibleGrades = totalStudents * applicableLearningAreas.length * quartersToCheck.length;
     
     let totalGradesEntered = 0;
     let totalGradeSum = 0;
@@ -509,7 +549,7 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     
     studentsInSection.forEach(student => {
       const studentGrades = gradeMap.get(student.id);
-      learningAreas.forEach(la => {
+      applicableLearningAreas.forEach(la => {
         const currentGrade = studentGrades?.get(la.id);
         quartersToCheck.forEach(q => {
           const qGrade = calculateQuarterAverage(currentGrade?.[q as 'q1' | 'q2' | 'q3' | 'q4']);
@@ -540,7 +580,7 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
       missingCount: missingGrades.length,
       missingGrades: missingGrades.slice(0, 10), // Show first 10
     };
-  }, [selectedSectionId, studentsInSection, learningAreas, gradeMap, quarterFilter]);
+  }, [selectedSectionId, studentsInSection, applicableLearningAreas, gradeMap, quarterFilter]);
 
   return (
     <div>
@@ -738,29 +778,57 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
               )}
           </select>
         </div>
-        <div>
-          <label htmlFor="quarter-filter" className="font-semibold mr-2">Filter Quarter:</label>
-          <select 
-              id="quarter-filter"
-              value={quarterFilter}
-              onChange={e => setQuarterFilter(e.target.value as any)}
-              className="p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
-          >
-            <option value="all">All Quarters</option>
-            <option value="q1">Quarter 1</option>
-            <option value="q2">Quarter 2</option>
-            <option value="q3">Quarter 3</option>
-            <option value="q4">Quarter 4</option>
-          </select>
+        
+        {/* Phase 2: Quarter Tabs (replaces dropdown) */}
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-slate-700 dark:text-slate-300 mr-2">Quarter:</span>
+          <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+            <button
+              onClick={() => setQuarterFilter('all')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                quarterFilter === 'all'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              All
+            </button>
+            {(['q1', 'q2', 'q3', 'q4'] as const).map((q) => (
+              <button
+                key={q}
+                onClick={() => setQuarterFilter(q)}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  quarterFilter === q
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {q.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
+        
         <div className="flex-grow">
-          <input
-            type="text"
-            placeholder="Search student in this class..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full max-w-xs p-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
-          />
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search student in this class..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full p-2 pr-8 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
+            />
+            {/* Phase 2: Search clear button */}
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xl leading-none"
+                aria-label="Clear search"
+              >
+                &times;
+              </button>
+            )}
+          </div>
         </div>
       </div>
       
@@ -901,10 +969,11 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
           <th rowSpan={2} scope="col" className="px-3 py-3 sticky left-0 z-30 bg-slate-100 dark:bg-slate-900 w-12 border-b-2 border-slate-200 dark:border-slate-700">
             <input
               type="checkbox"
-              checked={selectedStudents.size === studentsInSection.length && studentsInSection.length > 0}
+              aria-label="Select all students on page"
+              checked={selectedStudents.size === pagedStudents.length && pagedStudents.length > 0}
               onChange={(e) => {
                 if (e.target.checked) {
-                  setSelectedStudents(new Set(studentsInSection.map(s => s.id)));
+                  setSelectedStudents(new Set(pagedStudents.map(s => s.id)));
                 } else {
                   setSelectedStudents(new Set());
                 }
@@ -913,25 +982,44 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
             />
           </th>
         )}
-        <th rowSpan={2} scope="col" className={`px-4 py-3 sticky ${isReadOnly ? 'left-0' : 'left-12'} z-30 bg-slate-100 dark:bg-slate-900 min-w-[200px] border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider`}>Student Name</th>
+        <th rowSpan={2} scope="col" className={`px-3 py-2 sticky ${isReadOnly ? 'left-0' : 'left-12'} z-30 bg-slate-100 dark:bg-slate-900 min-w-[200px] border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider`}>Student Name</th>
         {(quarterFilter === 'all' ? ['q1', 'q2', 'q3', 'q4'] as const : [quarterFilter]).map(q => (
-          <th key={q} colSpan={learningAreas.length} className="px-4 py-3 text-center border-b-2 border-l border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">{q.toUpperCase()}</th>
+          <th key={q} colSpan={applicableLearningAreas.length} className="px-3 py-2 text-center border-b-2 border-l border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">{q.toUpperCase()}</th>
                 ))}
               </tr>
          <tr>
         {(quarterFilter === 'all' ? ['q1', 'q2', 'q3', 'q4'] as const : [quarterFilter]).flatMap(q => 
-          learningAreas.map((la, index) => (
-            <th key={`${la.id}-${q}`} scope="col" className={`px-4 py-3 text-center whitespace-nowrap border-b-2 border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider ${index === 0 ? 'border-l' : ''}`}>{la.name}</th>
+          applicableLearningAreas.map((la, index) => (
+            <th 
+              key={`${la.id}-${q}`} 
+              scope="col" 
+              className={`
+                px-3 py-2 text-center whitespace-nowrap border-b-2 border-slate-200 dark:border-slate-700 
+                text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider
+                bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900
+                min-w-[100px]
+                ${index === 0 ? 'border-l-2 border-l-slate-300 dark:border-l-slate-600' : 'border-l border-slate-200 dark:border-slate-700'}
+              `}
+            >
+              <div className="flex flex-col items-center gap-1">
+                <span className="font-semibold">{la.name}</span>
+                {la.kToTwelveCode && (
+                  <span className="text-[9px] text-slate-500 dark:text-slate-400 font-normal">
+                    {la.kToTwelveCode}
+                  </span>
+                )}
+              </div>
+            </th>
           ))
         )}
               </tr>
             </thead>
             <tbody>
-              {studentsInSection.map((student, rowIndex) => (
+              {pagedStudents.map((student, rowIndex) => (
                 <tr key={student.id} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                   {/* Checkbox cell */}
                   {!isReadOnly && (
-                    <td className="px-3 py-2 sticky left-0 z-10 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                    <td className="px-2 py-2 sticky left-0 z-10 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                       <input
                         type="checkbox"
                         checked={selectedStudents.has(student.id)}
@@ -948,61 +1036,70 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                       />
                     </td>
                   )}
-                  <td className={`px-4 py-2 font-medium text-slate-900 dark:text-white sticky ${isReadOnly ? 'left-0' : 'left-12'} z-10 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 whitespace-nowrap`}>{student.name}</td>
+                  <td className={`px-3 py-2 font-medium text-slate-900 dark:text-white sticky ${isReadOnly ? 'left-0' : 'left-12'} z-10 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 whitespace-nowrap`}>{student.name}</td>
                   {columns.map((col, colIndex) => {
                     const studentGrades = gradeMap.get(student.id);
                     const currentGrade = studentGrades?.get(col.learningArea.id);
                     const gradeValue: number | string = (currentGrade?.[col.quarter] as number) ?? '';
                     
-                    // DEBUG: Log first student's first column only to avoid spam
-                    if (rowIndex === 0 && colIndex === 0) {
-                      console.log('[GradebookView] 🎯 First cell render:', {
-                        studentId: student.id,
-                        studentName: student.name,
-                        learningAreaId: col.learningArea.id,
-                        learningAreaName: col.learningArea.name,
-                        quarter: col.quarter,
-                        currentGrade: currentGrade,
-                        gradeValue: gradeValue,
-                        hasStudentGrades: !!studentGrades,
-                        studentGradesSize: studentGrades?.size
-                      });
-                    }
-                    
                     if (col.learningArea.isComposite) {
                         const quarterAvg = calculateQuarterAverage(currentGrade?.[col.quarter]);
                         return (
-                          <td key={col.id} className="px-2 py-1 text-center border-l dark:border-slate-700">
+                          <td key={col.id} className="px-2 py-1.5 text-center border-l-2 border-l-slate-200 dark:border-l-slate-700 bg-slate-50/50 dark:bg-slate-800/50 min-w-[100px]">
                             <div className="flex items-center justify-center gap-2">
-                                <span className={quarterAvg !== undefined ? 'font-semibold' : 'text-slate-400'}>{quarterAvg ?? '-'}</span>
-                                <button onClick={() => setMapehModalState({isOpen: true, student, quarter: col.quarter, la: col.learningArea })} disabled={isReadOnly} className="text-indigo-600 dark:text-indigo-400 text-xs font-semibold hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Edit</button>
+                                <span className={`font-bold text-base ${quarterAvg !== undefined ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500'}`}>
+                                  {quarterAvg ?? '—'}
+                                </span>
+                                <button 
+                                  onClick={() => setMapehModalState({isOpen: true, student, quarter: col.quarter, la: col.learningArea })} 
+                                  disabled={isReadOnly} 
+                                  className="px-2 py-1 text-xs font-semibold text-white bg-indigo-600 rounded hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-400"
+                                >
+                                  Edit
+                                </button>
                             </div>
                           </td>
                         );
                     }
                     
-                    const isEmpty = gradeValue === undefined || gradeValue === '';
+                    const isEmpty = gradeValue === undefined || gradeValue === '' || (typeof gradeValue === 'number' && isNaN(gradeValue));
                     
                     return (
-                      <td key={col.id} className={`p-1 border-l dark:border-slate-700 ${isEmpty ? 'bg-yellow-50 dark:bg-yellow-900/10' : ''}`}>
+                      <td 
+                        key={col.id} 
+                        className={`
+                          p-1.5 border-l-2 border-l-slate-200 dark:border-l-slate-700 relative min-w-[100px]
+                          ${isEmpty 
+                            ? 'bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/10 dark:to-amber-900/10' 
+                            : 'bg-white dark:bg-slate-800'
+                          }
+                        `}
+                      >
+                        {/* Phase 2: Empty state helper text */}
+                        {isEmpty && !isReadOnly && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Click to enter</span>
+                          </div>
+                        )}
                         <input
                           id={`cell-${rowIndex}-${colIndex}`}
-                          key={`${student.id}-${col.id}`}
+                          key={`${student.id}-${col.id}-${gradeValue}`}
                           type="number" min="0" max="100"
                           defaultValue={gradeValue}
                           onBlur={(e) => handleGradeChange(student.id, col.learningArea.id, col.quarter, e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
                           disabled={isReadOnly}
-                          placeholder="--"
+                          placeholder="—"
                           className={`
-                            w-24 p-2 border-2 rounded-md text-center font-medium transition-all
+                            w-full px-2 py-1.5 border-2 rounded-lg text-center font-bold text-sm transition-all
                             ${isEmpty 
-                              ? 'border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20' 
-                              : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700'
+                              ? 'border-amber-300 dark:border-amber-700 bg-transparent text-slate-700 dark:text-slate-200' 
+                              : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-900 dark:text-emerald-100'
                             }
-                            focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:scale-105
-                            hover:border-indigo-400 dark:hover:border-indigo-500
+                            focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:scale-105 focus:shadow-lg
+                            hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-md
                             disabled:bg-slate-100 dark:disabled:bg-slate-700/50 disabled:cursor-not-allowed disabled:opacity-60
+                            placeholder:text-slate-400 dark:placeholder:text-slate-500
                           `}
                         />
                       </td>
@@ -1012,6 +1109,71 @@ const GradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Phase 1: Pagination Controls */}
+      {selectedSectionId && studentsInSection.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm">
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-slate-600 dark:text-slate-400">
+              Showing <span className="font-semibold text-slate-800 dark:text-slate-200">{pagedStudents.length}</span> of{' '}
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{studentsInSection.length}</span> students
+            </span>
+            
+            <div className="flex items-center gap-2">
+              <label htmlFor="page-size-select" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Per page:
+              </label>
+              <select
+                id="page-size-select"
+                value={pageSize}
+                onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+                className="px-3 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(1)}
+              disabled={page === 1}
+              className="px-3 py-1 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              First
+            </button>
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 py-1 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            
+            <span className="px-3 py-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+              Page {page} of {totalPages}
+            </span>
+            
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-3 py-1 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages}
+              className="px-3 py-1 text-sm rounded-md border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Last
+            </button>
+          </div>
         </div>
       )}
 

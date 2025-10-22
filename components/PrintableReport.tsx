@@ -6,11 +6,12 @@ import { jsPDF } from 'jspdf';
 import type { Student, Grade, SubGradeRecord } from '../types';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
 import { PrinterIcon } from './icons';
-import { getPlaceholderAvatar } from '../src/services/studentPhotoService';
 
 interface PrintableReportProps {
   student: Student;
   schoolData: SchoolDataHook;
+  hideDownloadButton?: boolean;
+  studentIndex?: number;
 }
 
 const calculateAge = (dateOfBirth?: string): number | string => {
@@ -103,7 +104,7 @@ export const generateReportCardPDF = async (student: Student, schoolData: School
   }
 };
 
-const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }) => {
+const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, hideDownloadButton = false, studentIndex = 0 }) => {
   const { grades, learningAreas, coreValues, coreValueGrades, attendanceRecords, monthlySchoolDaysConfig, teachers, sections, settings } = schoolData;
   const slug = (s: string) => s
     .toLowerCase()
@@ -117,6 +118,32 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
   const section = useMemo(() => sections.find(s => s.id === student.sectionId), [sections, student.sectionId]);
   const adviser = useMemo(() => teachers.find(t => t.id === section?.adviserId), [teachers, section]);
   const principal = useMemo(() => teachers.find(t => t.role === 'principal'), [teachers]);
+
+  // Filter learning areas by student's grade level, or show only subjects where student has grades
+  const studentLearningAreas = useMemo(() => {
+    const gradeLevel = section?.gradeLevel;
+    
+    // Get learning area IDs where student has grades
+    const studentGradeIds = new Set(Array.from(studentGrades.keys()));
+    
+    // Filter by grade level if available, otherwise show all learning areas where student has grades
+    const filtered = gradeLevel 
+      ? learningAreas.filter(la => {
+          // Handle both single grade level and array of grade levels
+          if (Array.isArray(la.gradeLevel)) {
+            return la.gradeLevel.includes(gradeLevel as number);
+          }
+          return la.gradeLevel === gradeLevel;
+        })
+      : learningAreas.filter(la => studentGradeIds.has(la.id));
+    
+    // If filtering by grade level returns empty, fall back to showing subjects with grades
+    if (filtered.length === 0 && studentGradeIds.size > 0) {
+      return learningAreas.filter(la => studentGradeIds.has(la.id));
+    }
+    
+    return filtered;
+  }, [learningAreas, section, studentGrades]);
 
   const generalAverage = useMemo(() => {
     const finalGrades = Array.from(studentGrades.values()).map((g: Grade) => g.finalGrade).filter((g): g is number => typeof g === 'number');
@@ -156,9 +183,10 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
 
   return (
     <div className="text-black bg-white font-serif">
-      <div className="flex justify-end items-center gap-3 mb-4 print:hidden">
-        <button
-          onClick={async () => {
+      {!hideDownloadButton && (
+        <div className="flex justify-end items-center gap-3 mb-4 print:hidden">
+          <button
+            onClick={async () => {
             // Robust selection: prefer explicit IDs, fall back to first two .page-content blocks
             let page1 = document.getElementById('page-1') as HTMLElement | null;
             let page2 = document.getElementById('page-2') as HTMLElement | null;
@@ -196,16 +224,22 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
               document.body.classList.remove('pdf-export');
             }
           }}
-          className="flex items-center bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"
+          className="group flex items-center gap-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 active:scale-95"
         >
-          <PrinterIcon />
-          <span className="ml-2">Download PDF</span>
+          <div className="transition-transform group-hover:rotate-12">
+            <PrinterIcon />
+          </div>
+          <span className="text-sm tracking-wide">Download PDF Report</span>
+          <svg className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
         </button>
       </div>
+      )}
 
       <div id="print-content" className="p-4 bg-gray-200 text-[10px]">
         {/* PAGE 1: Front Page */}
-  <div id="page-1" className="page-content bg-white shadow-lg p-8 mb-8 mx-auto" style={{width: '11in', minHeight: '8.5in', pageBreakAfter: 'always', breakAfter: 'page'}}>
+  <div id={`page-1-${student.id}`} className="page-content bg-white shadow-lg p-8 mb-8 mx-auto" style={{width: '11in', minHeight: '8.5in', pageBreakAfter: 'always', breakAfter: 'page'}}>
           <div className="grid grid-cols-12 gap-4">
             {/* Left Column */}
             <div className="col-span-6">
@@ -236,6 +270,7 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
                       </tr>
                   </tbody>
               </table>
+              
               <h3 className="font-bold text-center mb-1 text-xs mt-12">PARENTS / GUARDIAN'S SIGNATURE</h3>
               <div className="mt-8 space-y-10 p-2">
                   <div className="flex items-end"><span className="w-24">1st Quarter</span><div className="flex-1 border-b border-black"></div></div>
@@ -257,24 +292,8 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
                         <p>{settings.district}</p>
                         <p className="font-bold text-xs mt-1">{settings.schoolName}</p>
                     </div>
-                    <div className="w-1/4 flex flex-col items-end gap-2">
+                    <div className="w-1/4 flex justify-center">
                         <DepEdLogo className="w-24 h-24" />
-                        {/* Student Photo */}
-                        <div className="w-24 h-24 rounded-lg overflow-hidden bg-slate-100 border-2 border-slate-300 shadow-sm">
-                            {student.photoURL ? (
-                                <img 
-                                    src={student.photoURL} 
-                                    alt={student.name}
-                                    className="w-full h-full object-cover"
-                                />
-                            ) : (
-                                <img 
-                                    src={getPlaceholderAvatar(student.name)} 
-                                    alt={student.name}
-                                    className="w-full h-full object-cover"
-                                />
-                            )}
-                        </div>
                     </div>
                 </div>
                 <div className="space-y-2 text-[10px] mb-4">
@@ -331,7 +350,7 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
         <div style={{ pageBreakAfter: 'always', breakAfter: 'page', height: '0', display: 'block' }} className="print:block hidden" aria-hidden="true"></div>
         
         {/* PAGE 2: Back Page */}
-  <div id="page-2" className="page-content bg-white shadow-lg p-8 mx-auto" style={{width: '11in', minHeight: '8.5in', pageBreakBefore: 'always', breakBefore: 'page'}}>
+  <div id={`page-2-${student.id}`} className="page-content bg-white shadow-lg p-8 mx-auto" style={{width: '11in', minHeight: '8.5in', pageBreakBefore: 'always', breakBefore: 'page'}}>
             <div className="grid grid-cols-2 gap-8">
                 <div>
                     <h2 className="text-center font-bold text-xs mb-1">REPORT ON LEARNING PROGRESS ACHIEVEMENT</h2>
@@ -341,7 +360,7 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
                             <tr><Th>1</Th><Th>2</Th><Th>3</Th><Th>4</Th></tr>
                         </thead>
                         <tbody>
-                            {learningAreas.map(la => {
+                            {studentLearningAreas.map(la => {
                                 const grade = studentGrades.get(la.id);
                                 return (<React.Fragment key={la.id}>
                                         <tr>
@@ -376,9 +395,9 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData }
                          <tbody>
                             {coreValues.map((cv, index) => (
                                <React.Fragment key={cv.id}>
-                                {cv.behaviors.map((behavior, bIndex) => (
+                                {(cv.behaviors || []).map((behavior, bIndex) => (
                                     <tr key={behavior}>
-                                        {bIndex === 0 && <Td rowSpan={cv.behaviors.length} className="font-bold align-top">{index + 1}. {cv.name}</Td>}
+                                        {bIndex === 0 && <Td rowSpan={(cv.behaviors || []).length} className="font-bold align-top">{index + 1}. {cv.name}</Td>}
                                         <Td className="text-left leading-tight">{behavior}</Td>
                                         <Td>{studentCoreValues.get(cv.id)?.q1?.[behavior] ?? ''}</Td><Td>{studentCoreValues.get(cv.id)?.q2?.[behavior] ?? ''}</Td><Td>{studentCoreValues.get(cv.id)?.q3?.[behavior] ?? ''}</Td><Td>{studentCoreValues.get(cv.id)?.q4?.[behavior] ?? ''}</Td>
                                     </tr>

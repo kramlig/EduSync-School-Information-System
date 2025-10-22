@@ -35,10 +35,31 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
   const [selectedSectionId, setSelectedSectionId] = useState<string | 'all'>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  
+  // New state for optimistic updates and UI feedback
+  const [localAttendance, setLocalAttendance] = useState<Map<string, AttendanceStatus>>(new Map());
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [updatingCells, setUpdatingCells] = useState<Set<string>>(new Set());
+
+  // Helper function to clear all filters
+  const clearAllFilters = useCallback(() => {
+    setSelectedSectionId('all');
+    setSearchQuery('');
+    setPage(1);
+    setToast({ message: 'All filters cleared', type: 'info' });
+  }, []);
 
   // Refs to help auto-scroll to today's column
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const headerCellRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
+  
+  // Auto-dismiss toast after 5 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
   
   // const selectedMonth = useMemo(() => currentDate.toLocaleString('default', { month: 'short' }), [currentDate]);
   
@@ -114,6 +135,14 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
     return bySection;
   }, [visibleStudents, debouncedSearchQuery, isStudentView, isParentView, selectedSectionId]);
 
+  // Calculate active filter count
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedSectionId !== 'all') count++;
+    if (searchQuery.trim() !== '') count++;
+    return count;
+  }, [selectedSectionId, searchQuery]);
+
   const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
   const pagedStudents = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -136,13 +165,111 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
     }
   }, [daysInMonth, currentDate]);
   
-  const handleAttendanceChange = useCallback((studentId: string, date: Date, currentStatus?: AttendanceStatus) => {
+  // Memoized totals calculation (performance optimization)
+  const studentTotalsCache = useMemo(() => {
+    const cache = new Map<string, Record<AttendanceStatus, number> & { total: number }>();
+    
+    pagedStudents.forEach(student => {
+      const record = attendanceRecords.find(r => r.studentId === student.id);
+      
+      const year = currentDate.getFullYear();
+      const schoolYearStartMonth = 6; // June
+      const currentSchoolYear = currentDate.getMonth() >= schoolYearStartMonth - 1 ? year : year - 1;
+      
+      // Build a merged map of all attendance (server + optimistic)
+      const mergedStatus: Record<string, AttendanceStatus> = {};
+      
+      // First, add all server data
+      if (record?.dailyStatus) {
+        Object.entries(record.dailyStatus).forEach(([date, status]) => {
+          mergedStatus[date] = status as AttendanceStatus;
+        });
+      }
+      
+      // Then, overlay optimistic updates for this student
+      // Key format: "studentId-YYYY-MM-DD"
+      localAttendance.forEach((status, key) => {
+        // The key is in format: studentId-dateStr, where dateStr is YYYY-MM-DD
+        // Since studentId might not contain hyphens, we can use indexOf to split correctly
+        const firstHyphenIndex = key.indexOf('-');
+        if (firstHyphenIndex === -1) return;
+        
+        const studentId = key.substring(0, firstHyphenIndex);
+        const dateStr = key.substring(firstHyphenIndex + 1);
+        
+        if (studentId === student.id) {
+          mergedStatus[dateStr] = status;
+        }
+      });
+      
+      // Now calculate totals from the merged data
+      const totals = Object.entries(mergedStatus).reduce((acc, [date, status]) => {
+        const entryDate = new Date(date + 'T00:00:00'); // Add time to avoid timezone issues
+        const entryMonth = entryDate.getMonth();
+        const entryYear = entryDate.getFullYear();
+        
+        // Determine which school year this entry belongs to
+        // School year starts in June (month 5 in 0-indexed)
+        // If month >= June (5), it belongs to school year starting that year
+        // If month < June (5), it belongs to school year that started the previous year
+        const entrySchoolYear = entryMonth >= schoolYearStartMonth - 1 ? entryYear : entryYear - 1;
+
+        if (entrySchoolYear === currentSchoolYear) {
+          const statusKey = status as AttendanceStatus;
+          acc[statusKey] = (acc[statusKey] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<AttendanceStatus, number>);
+
+      cache.set(student.id, {
+        P: totals.P || 0,
+        A: totals.A || 0,
+        L: totals.L || 0,
+        E: totals.E || 0,
+        total: (totals.P || 0) + (totals.A || 0) + (totals.L || 0) + (totals.E || 0),
+      });
+    });
+    
+    return cache;
+  }, [pagedStudents, attendanceRecords, currentDate, localAttendance]);
+  
+  const handleAttendanceChange = useCallback(async (studentId: string, date: Date, currentStatus?: AttendanceStatus) => {
     if(isReadOnly) return;
     const dateStr = date.toISOString().split('T')[0];
+    const key = `${studentId}-${dateStr}`;
+    
+    // Determine next status
     const currentIndex = currentStatus ? STATUS_OPTIONS.indexOf(currentStatus) : -1;
     const nextIndex = (currentIndex + 1) % STATUS_OPTIONS.length;
     const newStatus = STATUS_OPTIONS[nextIndex];
-    updateAttendance(studentId, dateStr, newStatus);
+    
+    // Optimistic UI update
+    setLocalAttendance(prev => new Map(prev).set(key, newStatus));
+    setUpdatingCells(prev => new Set(prev).add(key));
+    
+    try {
+      await updateAttendance(studentId, dateStr, newStatus);
+      // Optimistic state will be cleared by the useEffect when server data catches up
+      setToast({ 
+        message: `Marked as ${newStatus === 'P' ? 'Present' : newStatus === 'A' ? 'Absent' : newStatus === 'L' ? 'Late' : 'Excused'}`, 
+        type: 'success' 
+      });
+    } catch (error) {
+      // Rollback on error
+      setLocalAttendance(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(key);
+        return newMap;
+      });
+      setToast({ message: 'Failed to update attendance', type: 'error' });
+      console.error('Failed to update attendance:', error);
+    } finally {
+      setUpdatingCells(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(key);
+        return newSet;
+      });
+    }
   }, [isReadOnly, updateAttendance]);
   
   const handleMarkAllPresent = useCallback((day: Date) => {
@@ -154,34 +281,9 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
 
 
   const calculateTotals = useCallback((studentId: string): Record<AttendanceStatus, number> & { total: number } => {
-    const record = attendanceRecords.find(r => r.studentId === studentId);
-    if (!record) return { P: 0, A: 0, L: 0, E: 0, total: 0 };
-
-    const year = currentDate.getFullYear();
-    const schoolYearStartMonth = 6; // June
-    
-    const totals = Object.entries(record.dailyStatus).reduce((acc, [date, status]) => {
-      const entryDate = new Date(date);
-      // Simple school year check
-      const entryYear = entryDate.getMonth() >= schoolYearStartMonth - 1 ? entryDate.getFullYear() : entryDate.getFullYear() -1;
-      const currentSchoolYear = currentDate.getMonth() >= schoolYearStartMonth - 1 ? year : year - 1;
-
-      if(entryYear === currentSchoolYear) {
-        // FIX: The `status` from Object.entries is typed as `unknown`. Cast it to the correct type `AttendanceStatus` to use it as an index.
-        const statusKey = status as AttendanceStatus;
-        acc[statusKey] = (acc[statusKey] || 0) + 1;
-      }
-      return acc;
-    }, {} as Record<AttendanceStatus, number>);
-
-    return {
-      P: totals.P || 0,
-      A: totals.A || 0,
-      L: totals.L || 0,
-      E: totals.E || 0,
-      total: (totals.P || 0) + (totals.A || 0) + (totals.L || 0) + (totals.E || 0),
-    };
-  }, [attendanceRecords, currentDate]);
+    // Use memoized cache for performance
+    return studentTotalsCache.get(studentId) || { P: 0, A: 0, L: 0, E: 0, total: 0 };
+  }, [studentTotalsCache]);
   
   const title = isStudentView ? 'My Attendance' : (isParentView ? `Attendance for ${filteredStudents[0]?.name}` : 'Manage Attendance');
 
@@ -190,7 +292,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
     setCurrentDate(new Date(now.getFullYear(), now.getMonth(), 1));
   };
 
-  const markTodayPresentForPage = () => {
+  const markTodayPresentForPage = async () => {
     if (isReadOnly) return;
     const now = new Date();
     const sameMonth = now.getFullYear() === currentDate.getFullYear() && now.getMonth() === currentDate.getMonth();
@@ -198,52 +300,156 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
       jumpToToday();
       return;
     }
+    
     const dateStr = now.toISOString().split('T')[0];
-    pagedStudents.forEach(student => updateAttendance(student.id, dateStr, 'P'));
+    const studentCount = pagedStudents.length;
+    
+    // Show loading toast
+    setToast({ message: `Marking ${studentCount} students as present...`, type: 'info' });
+    
+    try {
+      // Update all students on the current page
+      const promises = pagedStudents.map(student => {
+        const key = `${student.id}-${dateStr}`;
+        // Optimistic UI update
+        setLocalAttendance(prev => new Map(prev).set(key, 'P'));
+        setUpdatingCells(prev => new Set(prev).add(key));
+        return updateAttendance(student.id, dateStr, 'P')
+          .finally(() => {
+            setUpdatingCells(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(key);
+              return newSet;
+            });
+          });
+      });
+      
+      await Promise.all(promises);
+      setToast({ message: `✓ ${studentCount} students marked as present`, type: 'success' });
+    } catch (error) {
+      console.error('Failed to mark students present:', error);
+      setToast({ message: 'Failed to mark some students present', type: 'error' });
+    }
   };
 
   return (
     <div>
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
+          toast.type === 'success' ? 'bg-green-600' :
+          toast.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+        } text-white flex items-center gap-3 animate-fade-in min-w-[280px]`}>
+          <span className="flex-1">{toast.message}</span>
+          <button 
+            onClick={() => setToast(null)} 
+            className="text-white hover:text-gray-200 font-bold text-xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+      )}
+      
       <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
 
-      <div className="mb-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm flex flex-wrap items-center justify-between gap-4">
+      {/* Filter Bar with improvements */}
+      <div className="mb-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm">
         {!(isStudentView || isParentView) && (
-          <div className="flex items-center gap-3 flex-1 min-w-[260px]">
-            <div className="flex items-center gap-2">
-              <label className="font-semibold">Class:</label>
-              <select
-                value={selectedSectionId}
-                onChange={(e) => setSelectedSectionId(e.target.value as any)}
-                className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700"
-              >
-                <option value="all">All</option>
-                {visibleSections.map(s => (
-                  <option key={s.id} value={s.id}>{`Grade ${s.gradeLevel} - ${s.name}`}</option>
-                ))}
-              </select>
+          <>
+            {/* Filter Header with Active Count and Clear All */}
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">🔍 Filters</span>
+                {activeFilterCount > 0 && (
+                  <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 text-xs font-semibold rounded-full">
+                    {activeFilterCount} active
+                  </span>
+                )}
+              </div>
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={clearAllFilters}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                >
+                  Clear All
+                </button>
+              )}
             </div>
-            <input
-              type="text"
-              placeholder="Search students..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full max-w-sm input-style"
-            />
-            <div className="flex items-center gap-2 ml-2">
-              <label className="font-semibold">Page size:</label>
-              <select
-                value={pageSize}
-                onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
-                className="px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-sm"
-              >
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
+
+            {/* Filter Controls */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <label htmlFor="section-select" className="font-semibold text-sm">📚 Section:</label>
+                <select
+                  id="section-select"
+                  aria-label="Filter by section"
+                  value={selectedSectionId}
+                  onChange={(e) => setSelectedSectionId(e.target.value as any)}
+                  className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700"
+                >
+                  <option value="all">All Sections</option>
+                  {visibleSections.map(s => (
+                    <option key={s.id} value={s.id}>{`Grade ${s.gradeLevel} - ${s.name}`}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-md">
+                <label htmlFor="search-input" className="font-semibold text-sm">🔎 Search:</label>
+                <div className="relative flex-1">
+                  <input
+                    id="search-input"
+                    type="text"
+                    placeholder="Search by name or email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-3 py-2 pr-8 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      aria-label="Clear search"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 ml-auto">
+                <label htmlFor="page-size-select" className="font-semibold text-sm">Page size:</label>
+                <select
+                  id="page-size-select"
+                  aria-label="Items per page"
+                  value={pageSize}
+                  onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+                  className="px-2 py-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-sm"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
             </div>
-          </div>
+
+            {/* Result Count */}
+            <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-700">
+              <span className="text-sm text-slate-600 dark:text-slate-400">
+                📊 Showing <span className="font-semibold text-slate-800 dark:text-slate-200">{filteredStudents.length}</span> of <span className="font-semibold text-slate-800 dark:text-slate-200">{visibleStudents.length}</span> students
+                {activeFilterCount > 0 && (
+                  <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
+                    ({activeFilterCount} {activeFilterCount === 1 ? 'filter' : 'filters'} applied)
+                  </span>
+                )}
+              </span>
+            </div>
+          </>
         )}
-        <div className="flex items-center space-x-2">
+
+        {/* Month Navigation - Always visible */}
+        <div className={`flex items-center ${!(isStudentView || isParentView) ? 'justify-between mt-3 pt-3 border-t border-slate-200 dark:border-slate-700' : 'justify-between'}`}>
+          <div className="flex items-center space-x-2">
             <button onClick={() => setCurrentDate(d => new Date(d.setMonth(d.getMonth() - 1)))} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">‹</button>
             <span className="font-bold text-lg w-32 text-center">{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
             <button onClick={() => setCurrentDate(d => new Date(d.setMonth(d.getMonth() + 1)))} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">›</button>
@@ -251,16 +457,47 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
             {!(isStudentView || isParentView) && (
               <button onClick={markTodayPresentForPage} disabled={isReadOnly} className="px-3 py-1 rounded bg-green-600 text-white text-sm disabled:opacity-50">Mark Today Present (page)</button>
             )}
+          </div>
         </div>
-        <div className="flex-1 min-w-[200px] flex justify-end">
-            <div className="flex space-x-2 text-xs">
-                {Object.entries(STATUS_MAP).map(([key, {label, bgColor}]) => (
-                    <div key={key} className="flex items-center space-x-1">
-                        <div className={`w-3 h-3 rounded-full ${bgColor}`}></div>
-                        <span>{label}</span>
-                    </div>
-                ))}
-            </div>
+      </div>
+
+      {/* Empty State Message */}
+      {!(isStudentView || isParentView) && filteredStudents.length === 0 && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6 text-center mb-4">
+          <div className="text-4xl mb-2">🔍</div>
+          <h3 className="text-lg font-semibold text-yellow-900 dark:text-yellow-200 mb-1">No students found</h3>
+          <p className="text-sm text-yellow-700 dark:text-yellow-300">
+            {searchQuery && selectedSectionId !== 'all' 
+              ? `No students match "${searchQuery}" in ${sections.find(s => s.id === selectedSectionId)?.name || 'selected section'}`
+              : searchQuery 
+              ? `No students match "${searchQuery}"`
+              : selectedSectionId !== 'all'
+              ? `No students in ${sections.find(s => s.id === selectedSectionId)?.name || 'selected section'}`
+              : 'No students available'}
+          </p>
+          {activeFilterCount > 0 && (
+            <button
+              onClick={clearAllFilters}
+              className="mt-3 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white text-sm rounded-md"
+            >
+              Clear all filters
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Status Legend */}
+      <div className="mb-4 bg-white dark:bg-slate-800 p-3 rounded-lg shadow-sm">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Status Legend:</span>
+          <div className="flex space-x-4 text-sm">
+            {Object.entries(STATUS_MAP).map(([key, {label, bgColor}]) => (
+              <div key={key} className="flex items-center space-x-1.5">
+                <div className={`w-4 h-4 rounded ${bgColor}`}></div>
+                <span className="text-slate-700 dark:text-slate-300">{label}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -303,14 +540,23 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
                 <td className="sticky left-0 z-10 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 px-3 py-3 border-b border-slate-200 dark:border-slate-700 font-medium text-slate-900 dark:text-white whitespace-nowrap">{student.name}</td>
                 {daysInMonth.map(day => {
                     const dateStr = day.toISOString().split('T')[0];
-                    const status = studentRecord?.dailyStatus[dateStr];
+                    const key = `${student.id}-${dateStr}`;
+                    // Use optimistic local state if available, otherwise use server state
+                    const status = localAttendance.get(key) || studentRecord?.dailyStatus[dateStr];
+                    const isUpdating = updatingCells.has(key);
+                    
                     return (
                         <td 
                             key={dateStr} 
                             onClick={() => handleAttendanceChange(student.id, day, status)}
-                            className={`border-b border-l border-slate-200 dark:border-slate-700 text-center font-bold text-xs ${!isReadOnly && 'cursor-pointer'} ${getStatusColor(status)}`}
+                            className={`relative border-b border-l border-slate-200 dark:border-slate-700 text-center font-bold text-xs ${!isReadOnly && 'cursor-pointer'} ${getStatusColor(status)} ${isUpdating ? 'opacity-60' : ''}`}
                         >
                             {status}
+                            {isUpdating && (
+                              <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/50 flex items-center justify-center">
+                                <div className="w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                              </div>
+                            )}
                         </td>
                     )
                 })}

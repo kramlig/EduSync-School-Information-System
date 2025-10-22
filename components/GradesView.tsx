@@ -5,7 +5,6 @@ import { generateStudentReport } from '../services/geminiService';
 import Modal from './Modal';
 import Spinner from './Spinner';
 import { ChevronDownIcon, ChevronRightIcon, PrinterIcon } from './icons';
-import PrintableReport from './PrintableReport';
 import { useDebounce } from '../hooks/useDebounce';
 import Toast from './Toast';
 
@@ -13,6 +12,13 @@ interface GradesViewProps {
   schoolData: SchoolDataHook;
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
   forceStudentId?: string; // For parent view
+  // Optional lifted filter props (for controlled mode from UnifiedAssessmentView)
+  selectedSectionId?: string;
+  onSectionChange?: (id: string) => void;
+  performanceFilter?: FilterType;
+  onPerformanceChange?: (filter: FilterType) => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 type ToastType = 'success' | 'error' | 'info';
@@ -216,10 +222,31 @@ const StudentGradeDetails: React.FC<{
   student: Student,
   learningAreas: LearningArea[],
   grades: Grade[],
+  sections: any[],
   updateGrade: SchoolDataHook['updateGrade'],
   isReadOnly: boolean,
-}> = React.memo(({ student, learningAreas, grades, updateGrade, isReadOnly }) => {
+}> = React.memo(({ student, learningAreas, grades, sections, updateGrade, isReadOnly }) => {
   const [mapehModalState, setMapehModalState] = useState<{ isOpen: boolean, quarter?: 'q1'|'q2'|'q3'|'q4', la?: LearningArea }>({ isOpen: false });
+
+  // Filter learning areas by student's grade level
+  const applicableLearningAreas = useMemo(() => {
+    const studentSection = sections?.find(s => s.id === student.sectionId);
+    const studentGradeLevel = studentSection?.gradeLevel;
+
+    if (!studentGradeLevel) {
+      // If we can't determine grade level, show all subjects (fallback)
+      return learningAreas;
+    }
+
+    return learningAreas.filter(la => {
+      // If learning area has no gradeLevel array, include it (legacy subjects or all-grade subjects)
+      if (!la.gradeLevel || !Array.isArray(la.gradeLevel)) {
+        return true;
+      }
+      // Only include if student's grade level is in the learning area's applicable grades
+      return la.gradeLevel.includes(studentGradeLevel);
+    });
+  }, [learningAreas, sections, student.sectionId]);
 
   const gradeMap = useMemo(() => {
     const map = new Map<string, Grade>();
@@ -232,6 +259,40 @@ const StudentGradeDetails: React.FC<{
   const handleGradeCommit = useCallback((laId: string, quarter: 'q1'|'q2'|'q3'|'q4', numValue: number | undefined) => {
     updateGrade(student.id, laId, quarter, numValue);
   }, [student.id, updateGrade]);
+
+  // Calculate final grade dynamically if not stored in database
+  const getFinalGrade = useCallback((grade: Grade | undefined): number | undefined => {
+    if (!grade) return undefined;
+    
+    // If stored finalGrade exists, use it
+    if (grade.finalGrade !== undefined) return grade.finalGrade;
+    
+    // Otherwise calculate it on-the-fly from quarterly grades
+    const quarters: ('q1' | 'q2' | 'q3' | 'q4')[] = ['q1', 'q2', 'q3', 'q4'];
+    const values: number[] = [];
+    
+    for (const q of quarters) {
+      const v = grade[q];
+      if (typeof v === 'number') {
+        values.push(v);
+      } else if (v && typeof v === 'object') {
+        // Handle composite subjects (e.g., MAPEH with sub-subjects)
+        const nums = Object.values(v as Record<string, any>).filter(n => typeof n === 'number') as number[];
+        if (nums.length) {
+          values.push(Math.round(nums.reduce((a, b) => a + b, 0) / nums.length));
+        }
+      }
+    }
+    
+    if (!values.length) return undefined;
+    return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+  }, []);
+
+  // Calculate remarks based on final grade
+  const getRemarks = useCallback((finalGrade: number | undefined): 'Passed' | 'Failed' | undefined => {
+    if (finalGrade === undefined) return undefined;
+    return finalGrade >= 75 ? 'Passed' : 'Failed';
+  }, []);
 
   return (
     <div className="overflow-x-auto bg-white dark:bg-slate-800 p-4 rounded-lg shadow-inner">
@@ -248,7 +309,7 @@ const StudentGradeDetails: React.FC<{
           </tr>
         </thead>
         <tbody className="text-sm">
-          {learningAreas.map((la, laIndex) => {
+          {applicableLearningAreas.map((la, laIndex) => {
             const currentGrade = gradeMap.get(la.id);
             return (
               <tr key={la.id} className="border-b border-slate-200 dark:border-slate-700">
@@ -282,10 +343,25 @@ const StudentGradeDetails: React.FC<{
                   );
                 })}
                 <td className="py-2 px-3 text-center font-bold">
-                  {currentGrade?.finalGrade !== undefined ? <span className={getGradeColor(currentGrade.finalGrade)}>{currentGrade.finalGrade}</span> : '-'}
+                  {(() => {
+                    const finalGrade = getFinalGrade(currentGrade);
+                    return finalGrade !== undefined ? (
+                      <span className={getGradeColor(finalGrade)}>{finalGrade}</span>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    );
+                  })()}
                 </td>
                 <td className="py-2 px-3 text-center">
-                  {currentGrade?.remarks && <span className={`px-2 py-1 text-xs font-bold rounded-full ${getRemarksColor(currentGrade.remarks)}`}>{currentGrade.remarks}</span>}
+                  {(() => {
+                    const finalGrade = getFinalGrade(currentGrade);
+                    const remarks = currentGrade?.remarks || getRemarks(finalGrade);
+                    return remarks ? (
+                      <span className={`px-2 py-1 text-xs font-bold rounded-full ${getRemarksColor(remarks)}`}>
+                        {remarks}
+                      </span>
+                    ) : null;
+                  })()}
                 </td>
               </tr>
             );
@@ -310,7 +386,17 @@ const StudentGradeDetails: React.FC<{
 StudentGradeDetails.displayName = 'StudentGradeDetails';
 
 
-const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStudentId }) => {
+const GradesView: React.FC<GradesViewProps> = ({ 
+  schoolData, 
+  session, 
+  forceStudentId,
+  selectedSectionId: externalSectionId,
+  onSectionChange,
+  performanceFilter: externalPerformanceFilter,
+  onPerformanceChange,
+  searchQuery: externalSearchQuery,
+  onSearchChange
+}) => {
   const { students, grades, learningAreas, sections, substituteAssignments, classSchedules } = schoolData;
   const isStudentView = session.type === 'student';
   const isParentView = session.type === 'parent';
@@ -318,21 +404,34 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
   const initialStudentId = isStudentView ? session.user.id : (isParentView ? forceStudentId : null);
   const initialExpanded = initialStudentId ? new Set([initialStudentId]) : new Set<string>();
 
+  // Determine if this component is in controlled mode (receiving filter props from parent)
+  const isControlled = externalSectionId !== undefined;
+
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(initialExpanded);
-  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Internal state (used when NOT controlled)
+  const [internalSearchQuery, setInternalSearchQuery] = useState('');
+  const [internalSelectedSectionId, setInternalSelectedSectionId] = useState<string | 'all'>('all');
+  const [internalPerformanceFilter, setInternalPerformanceFilter] = useState<FilterType>('all');
+  
+  // Use external props if controlled, otherwise use internal state
+  const searchQuery = isControlled ? (externalSearchQuery || '') : internalSearchQuery;
+  const setSearchQuery = isControlled && onSearchChange ? onSearchChange : setInternalSearchQuery;
+  const selectedSectionId = isControlled ? (externalSectionId || 'all') : internalSelectedSectionId;
+  const setSelectedSectionId = isControlled && onSectionChange ? onSectionChange : setInternalSelectedSectionId;
+  const performanceFilter = isControlled ? (externalPerformanceFilter || 'all') : internalPerformanceFilter;
+  const setPerformanceFilter = isControlled && onPerformanceChange ? onPerformanceChange : setInternalPerformanceFilter;
+  
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportContent, setReportContent] = useState('');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [selectedStudentForAction, setSelectedStudentForAction] = useState<Student | null>(null);
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [selectedSectionId, setSelectedSectionId] = useState<string | 'all'>('all');
   const [page, setPage] = useState(1);
   const pageSize = 25;
   
   // Priority 2: Advanced filtering and sorting
-  const [performanceFilter, setPerformanceFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<SortType>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   
@@ -415,23 +514,30 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
     setReportContent(report);
     setIsGeneratingReport(false);
   };
-
-  const handlePrintReport = (student: Student) => {
-    setSelectedStudentForAction(student);
-    setIsPrintModalOpen(true);
-  };
   
   // Helper: Calculate student's overall average and completion rate
   const calculateStudentStats = useCallback((student: Student) => {
     const studentGrades = grades.filter(g => g.studentId === student.id);
     if (studentGrades.length === 0) return { average: 0, completion: 0, hasIncomplete: true };
     
+    // Get student's grade level to filter applicable subjects
+    const studentSection = sections?.find(s => s.id === student.sectionId);
+    const studentGradeLevel = studentSection?.gradeLevel;
+    
+    // Filter learning areas by student's grade level (same logic as display)
+    const applicableLearningAreas = learningAreas.filter(la => {
+      if (!studentGradeLevel || !la.gradeLevel || !Array.isArray(la.gradeLevel)) {
+        return true; // Fallback: include all if grade level data is missing
+      }
+      return la.gradeLevel.includes(studentGradeLevel);
+    });
+    
     let totalGrades = 0;
     let gradeCount = 0;
-    let totalQuarters = learningAreas.length * 4;
+    let totalQuarters = applicableLearningAreas.length * 4; // Use filtered list
     let completedQuarters = 0;
     
-    learningAreas.forEach(la => {
+    applicableLearningAreas.forEach(la => { // Use filtered list
       const grade = studentGrades.find(g => g.learningAreaId === la.id);
       (['q1', 'q2', 'q3', 'q4'] as const).forEach(q => {
         const qGrade = calculateQuarterAverage(grade?.[q]);
@@ -448,7 +554,7 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
     const hasIncomplete = completion < 100;
     
     return { average, completion, hasIncomplete };
-  }, [grades, learningAreas]);
+  }, [grades, learningAreas, sections]);
   
   const filteredStudents = useMemo(() => {
     let base = (isStudentView || isParentView)
@@ -844,8 +950,8 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
       
       <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
 
-      {/* Priority 2 & 3: Enhanced Filters and Controls */}
-      {!(isStudentView || isParentView) && (
+      {/* Priority 2 & 3: Enhanced Filters and Controls (only show when not controlled) */}
+      {!(isStudentView || isParentView) && !isControlled && (
         <div className="mb-4 space-y-4">
           {/* Filter Chips */}
           <div className="flex flex-wrap items-center gap-2">
@@ -1059,13 +1165,16 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
                       </td>
                     )}
                     <td className="px-5 py-4 text-sm">
-                      <div className="flex items-center space-x-4">
-                         <button onClick={(e) => { e.stopPropagation(); handleGenerateReport(student); }} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 font-semibold text-xs">Generate Report</button>
-                         <button onClick={(e) => { e.stopPropagation(); handlePrintReport(student); }} className="flex items-center text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold text-xs">
-                           <PrinterIcon />
-                           <span className="ml-1">Print Report</span>
-                         </button>
-                      </div>
+                      <button 
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          handleGenerateReport(student); 
+                        }} 
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-indigo-600 dark:text-indigo-400 hover:text-white hover:bg-indigo-600 dark:hover:bg-indigo-500 border border-indigo-600 dark:border-indigo-400 rounded-md font-medium text-xs transition-colors"
+                      >
+                        <span>🤖</span>
+                        <span>Generate AI Report</span>
+                      </button>
                     </td>
                   </tr>
                   {expandedStudents.has(student.id) && (
@@ -1075,6 +1184,7 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
                           student={student}
                           learningAreas={learningAreas}
                           grades={grades}
+                          sections={sections}
                           updateGrade={schoolData.updateGrade}
                           isReadOnly={isReadOnly}
                         />
@@ -1129,12 +1239,6 @@ const GradesView: React.FC<GradesViewProps> = ({ schoolData, session, forceStude
           </div>
         )}
       </Modal>
-
-      {selectedStudentForAction && (
-        <Modal isOpen={isPrintModalOpen} onClose={() => setIsPrintModalOpen(false)} title={`Printable Report for ${selectedStudentForAction.name}`} size="7xl" printable={true}>
-          <PrintableReport student={selectedStudentForAction} schoolData={schoolData} />
-        </Modal>
-      )}
     </div>
   );
 };

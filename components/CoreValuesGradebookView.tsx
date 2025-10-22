@@ -32,11 +32,31 @@ const getCurrentQuarter = (): 'q1' | 'q2' | 'q3' | 'q4' => {
   return 'q4';                                     // March-May
 };
 
-const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: { user: AuthUser | StudentUser, type: 'staff' | 'student' }; }> = ({ schoolData, session }) => {
+const CoreValuesGradebookView: React.FC<{ 
+  schoolData: SchoolDataHook; 
+  session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
+  selectedSectionId?: string;
+  onSectionChange?: (sectionId: string) => void;
+  selectedQuarter?: 'all' | 'q1' | 'q2' | 'q3' | 'q4';
+  onQuarterChange?: (quarter: 'all' | 'q1' | 'q2' | 'q3' | 'q4') => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+}> = ({ schoolData, session, selectedSectionId: propSectionId, onSectionChange, selectedQuarter: propQuarter, onQuarterChange, searchQuery: propSearchQuery, onSearchChange }) => {
     const { students, coreValues, coreValueGrades, sections, substituteAssignments, classSchedules, updateCoreValueGrade } = schoolData;
     
-    const [selectedSectionId, setSelectedSectionId] = useState<string | 'all'>('all');
-    const [searchQuery, setSearchQuery] = useState('');
+    // Use props if provided (unified mode), otherwise use local state (standalone mode)
+    const [localSectionId, setLocalSectionId] = useState<string | 'all'>('all');
+    const [localQuarter, setLocalQuarter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>(getCurrentQuarter());
+    const [localSearchQuery, setLocalSearchQuery] = useState('');
+    
+    const selectedSectionId = propSectionId !== undefined ? propSectionId : localSectionId;
+    const selectedQuarter = propQuarter !== undefined ? propQuarter : localQuarter;
+    const searchQuery = propSearchQuery !== undefined ? propSearchQuery : localSearchQuery;
+    
+    const setSelectedSectionId = onSectionChange || setLocalSectionId;
+    const setSelectedQuarter = onQuarterChange || setLocalQuarter;
+    const setSearchQuery = onSearchChange || setLocalSearchQuery;
+    
     const debouncedSearchQuery = useDebounce(searchQuery, 500);
     
     const authUser = session.user as AuthUser;
@@ -46,7 +66,6 @@ const CoreValuesGradebookView: React.FC<{ schoolData: SchoolDataHook; session: {
 
     // New state for enhancements
     const [savingCells, setSavingCells] = useState<Set<string>>(new Set());
-    const [selectedQuarter, setSelectedQuarter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>(getCurrentQuarter());
     const [showAnalytics, setShowAnalytics] = useState(false);
     const [compactView, setCompactView] = useState(false);
     const [filterByGrade, setFilterByGrade] = useState<CoreValueMarking | 'all' | 'empty'>('all');
