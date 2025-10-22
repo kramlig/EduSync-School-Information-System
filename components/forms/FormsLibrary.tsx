@@ -67,7 +67,7 @@ const FormsLibrary: React.FC<FormsLibraryProps> = ({ user }) => {
       title: 'Form 137',
       description: 'Permanent Record - Student academic history across multiple school years',
       icon: <ClipboardDocumentIcon />,
-      route: '/forms/form137',
+      route: '/forms/137',
       color: 'indigo',
       badge: 'Permanent Record',
       stats: {

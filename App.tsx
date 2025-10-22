@@ -1,7 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useSchoolData } from './hooks/useSchoolData';
 import type { AuthUser, StudentUser, ParentUser } from './types';
 import Sidebar from './components/Sidebar';
@@ -27,6 +27,18 @@ const CourseList = lazy(() => import('./components/CourseList'));
 const StudentDashboard = lazy(() => import('./components/StudentDashboard'));
 const ParentDashboard = lazy(() => import('./components/ParentDashboard'));
 const FormsLibrary = lazy(() => import('./components/forms/FormsLibrary'));
+const Form137Dashboard = lazy(() => import('./components/forms/Form137/Form137Dashboard'));
+const Form137Manager = lazy(() => import('./components/forms/Form137/Form137Manager'));
+
+// Wrapper components to extract URL params
+const Form137ManagerWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear }) => {
+  const { studentId } = useParams<{ studentId: string }>();
+  return <Form137Manager studentId={studentId || ''} schoolYear={schoolYear} />;
+};
+
+const Form137CreateWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear }) => {
+  return <Form137Manager studentId="" schoolYear={schoolYear} initialMode="create" />;
+};
 
 const App: React.FC = () => {
   console.log('[App] Rendering');
@@ -285,6 +297,9 @@ const App: React.FC = () => {
                         <Route path="/parents" element={<ParentsView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/sections" element={<SectionsView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/forms" element={<FormsLibrary user={staffSession.user} />} />
+                        <Route path="/forms/137" element={<Form137Dashboard />} />
+                        <Route path="/forms/137/:studentId" element={<Form137ManagerWrapper schoolYear={settings.schoolYear} />} />
+                        <Route path="/forms/137/new" element={<Form137CreateWrapper schoolYear={settings.schoolYear} />} />
                         <Route path="/grades" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/gradebook" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />

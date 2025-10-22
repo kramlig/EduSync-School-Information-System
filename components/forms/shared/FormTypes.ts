@@ -12,10 +12,16 @@
 export interface AcademicHistory {
   id: string;
   studentId: string;
+  lrn?: string; // Learner Reference Number
+  studentName: string;
+  birthDate?: string;
+  birthPlace?: string;
+  parentGuardian?: string;
+  
   schoolYear: string; // Format: "2024-2025"
   gradeLevel: number; // 0 = Kinder, 1-12 = Grade levels
   section: string;
-  adviser: string;
+  adviserName: string;
   schoolName: string;
   schoolId: string;
   
@@ -30,12 +36,13 @@ export interface AcademicHistory {
   daysPresent: number;
   
   // Promotion status
-  remarks: 'PROMOTED' | 'RETAINED' | 'CONDITIONAL';
+  promotionStatus: 'PROMOTED' | 'RETAINED' | 'CONDITIONAL';
+  remarks?: string; // Additional remarks/notes
   
   // Core values (behavior)
-  coreValues: {
-    behavior: Record<string, number>; // e.g., { "Respect": 95, "Excellence": 92 }
-    observedValues: Record<string, ObservedValue>; // e.g., { "Respect": "SO", "Excellence": "AO" }
+  coreValues?: {
+    behavior?: Record<string, number>; // e.g., { "Respect": 95, "Excellence": 92 }
+    observedValues?: Record<string, ObservedValue>; // e.g., { "Respect": "SO", "Excellence": "AO" }
   };
   
   // Metadata
