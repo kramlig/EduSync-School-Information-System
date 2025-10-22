@@ -26,6 +26,7 @@ const SettingsView = lazy(() => import('./components/SettingsView'));
 const CourseList = lazy(() => import('./components/CourseList'));
 const StudentDashboard = lazy(() => import('./components/StudentDashboard'));
 const ParentDashboard = lazy(() => import('./components/ParentDashboard'));
+const FormsLibrary = lazy(() => import('./components/forms/FormsLibrary'));
 
 const App: React.FC = () => {
   console.log('[App] Rendering');
@@ -283,6 +284,7 @@ const App: React.FC = () => {
                         <Route path="/teachers" element={<TeacherList schoolData={schoolData} session={staffSession} />} />
                         <Route path="/parents" element={<ParentsView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/sections" element={<SectionsView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/forms" element={<FormsLibrary user={staffSession.user} />} />
                         <Route path="/grades" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/gradebook" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />

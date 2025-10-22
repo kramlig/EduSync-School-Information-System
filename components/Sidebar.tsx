@@ -40,6 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
         { path: '/assignments', label: 'Assignments', icon: <ClipboardDocumentCheckIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
         { path: '/grades', label: 'Grades & Reports', icon: <TableCellsIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
         { path: '/attendance', label: 'Attendance', icon: <CalendarDaysIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
+        { path: '/forms', label: 'DepEd Forms', icon: <ClipboardDocumentListIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'] },
       ]
     },
     {
