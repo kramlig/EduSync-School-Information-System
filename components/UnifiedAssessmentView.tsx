@@ -1,4 +1,8 @@
 import React, { useState, useMemo } from 'react';
+import Papa from 'papaparse';
+import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
+import html2canvas from 'html2canvas';
 import type { AuthUser, StudentUser, ParentUser, CoreValueMarking } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import GradesView from './GradesView';
@@ -7,6 +11,7 @@ import CoreValuesGradebookView from './CoreValuesGradebookView';
 import GradeDistributionChart from './GradeDistributionChart';
 import BehaviorDistributionChart from './BehaviorDistributionChart';
 import CorrelationScatterPlot from './CorrelationScatterPlot';
+import PrintableReport from './PrintableReport';
 
 interface UnifiedAssessmentViewProps {
   schoolData: SchoolDataHook;
@@ -15,27 +20,86 @@ interface UnifiedAssessmentViewProps {
 }
 
 type TabType = 'overview' | 'academic-gradebook' | 'core-values-gradebook' | 'report-cards' | 'deep-analytics';
+type FilterType = 'all' | 'honor' | 'needs-improvement' | 'incomplete';
 
 const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolData, session, forceStudentId }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [currentPrintStudents, setCurrentPrintStudents] = useState<string[]>([]);
+  const [showPrintModal, setShowPrintModal] = useState(false);
   
-  // Tier 2: Filter State
-  const [filterSection, setFilterSection] = useState<string>('all');
-  const [filterQuarter, setFilterQuarter] = useState<string>('all');
-  const [filterPerformance, setFilterPerformance] = useState<string>('all');
+  // Unified Filter State (shared across ALL tabs)
+  const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
+  const [performanceFilter, setPerformanceFilter] = useState<FilterType>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedQuarter, setSelectedQuarter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>('all');
   
-  const { students = [], grades = [], learningAreas = [], coreValues = [], coreValueGrades = [] } = schoolData;
+  const { students = [], grades = [], learningAreas = [], coreValues = [], coreValueGrades = [], sections = [] } = schoolData;
   
   const isStudentView = session.type === 'student';
   const isParentView = session.type === 'parent';
 
-  // Visible students based on user type
-  const visibleStudents = isStudentView 
+  // Base students based on user type
+  const baseStudents = isStudentView 
     ? students.filter(s => s.id === session.user.id)
     : isParentView 
     ? students.filter(s => s.id === forceStudentId)
     : students;
+
+  // Apply filters to students
+  const visibleStudents = React.useMemo(() => {
+    let filtered = [...baseStudents];
+
+    // Filter by section
+    if (selectedSectionId !== 'all') {
+      filtered = filtered.filter(s => s.sectionId === selectedSectionId);
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(s => 
+        s.firstName?.toLowerCase().includes(query) ||
+        s.lastName?.toLowerCase().includes(query) ||
+        s.name?.toLowerCase().includes(query) ||
+        s.email?.toLowerCase().includes(query) ||
+        s.lrn?.toLowerCase().includes(query)
+      );
+    }
+
+    // Filter by performance
+    if (performanceFilter !== 'all') {
+      filtered = filtered.filter(student => {
+        const studentGrades = grades.filter(g => g.studentId === student.id);
+        const finalGrades = studentGrades
+          .map(g => g.finalGrade)
+          .filter((g): g is number => typeof g === 'number');
+        
+        if (performanceFilter === 'honor') {
+          const average = finalGrades.length > 0
+            ? finalGrades.reduce((sum, g) => sum + g, 0) / finalGrades.length
+            : 0;
+          return average >= 90;
+        }
+        
+        if (performanceFilter === 'needs-improvement') {
+          const average = finalGrades.length > 0
+            ? finalGrades.reduce((sum, g) => sum + g, 0) / finalGrades.length
+            : 0;
+          return average > 0 && average < 75;
+        }
+        
+        if (performanceFilter === 'incomplete') {
+          const expectedGrades = (learningAreas?.length || 0) * 4; // 4 quarters
+          return finalGrades.length < expectedGrades;
+        }
+        
+        return true;
+      });
+    }
+
+    return filtered;
+  }, [baseStudents, selectedSectionId, searchQuery, performanceFilter, grades, learningAreas]);
 
   // Report Cards handlers
   const handleToggleStudent = (studentId: string) => {
@@ -55,11 +119,10 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
   };
 
   const handleBulkPrint = (studentIds: string[]) => {
-    // Open PrintableReport in a new window with selected students
-    const studentsParam = studentIds.join(',');
-    const currentYear = new Date().getFullYear();
-    const url = `/print-report?students=${studentsParam}&schoolYear=${currentYear}`;
-    window.open(url, '_blank', 'width=1200,height=800');
+    if (studentIds.length > 0) {
+      setCurrentPrintStudents(studentIds);
+      setShowPrintModal(true);
+    }
   };
 
   const handlePrintSelected = () => {
@@ -68,182 +131,444 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
     }
   };
 
-  // Tier 2: Export Functions
-  const exportToPDF = () => {
-    // Create a printable version of the analytics
-    const printContent = document.createElement('div');
-    printContent.innerHTML = `
-      <html>
-        <head>
-          <title>Assessment Analytics Report</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            h1 { color: #4f46e5; border-bottom: 2px solid #4f46e5; padding-bottom: 10px; }
-            h2 { color: #374151; margin-top: 20px; }
-            .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 20px 0; }
-            .stat-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; }
-            .stat-label { font-size: 14px; color: #6b7280; }
-            .stat-value { font-size: 28px; font-weight: bold; color: #111827; margin: 5px 0; }
-            .stat-detail { font-size: 12px; color: #9ca3af; }
-            table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-            th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
-            th { background-color: #f3f4f6; font-weight: 600; }
-            .footer { margin-top: 30px; padding-top: 15px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
-          </style>
-        </head>
-        <body>
-          <h1>📊 Assessment Analytics Report</h1>
-          <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
-          <p><strong>School Year:</strong> ${new Date().getFullYear()}</p>
-          
-          <h2>📚 Academic Performance Summary</h2>
-          <div class="stat-grid">
-            <div class="stat-card">
-              <div class="stat-label">Total Students</div>
-              <div class="stat-value">${analytics.academic.totalStudents}</div>
-              <div class="stat-detail">Average: ${analytics.academic.avgGrade}%</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Honor Roll (≥90%)</div>
-              <div class="stat-value">${analytics.academic.honorRoll}</div>
-              <div class="stat-detail">${analytics.academic.totalStudents > 0 ? Math.round((analytics.academic.honorRoll / analytics.academic.totalStudents) * 100) : 0}% of class</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Passing (≥75%)</div>
-              <div class="stat-value">${analytics.academic.passing}</div>
-              <div class="stat-detail">Meeting standards</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Completion Rate</div>
-              <div class="stat-value">${analytics.academic.avgCompletion}%</div>
-              <div class="stat-detail">${analytics.academic.totalStudents - analytics.academic.passing - analytics.academic.failing} incomplete</div>
-            </div>
-          </div>
-          
-          <h2>🌟 Behavioral Performance Summary</h2>
-          <div class="stat-grid">
-            <div class="stat-card">
-              <div class="stat-label">Total Assessed</div>
-              <div class="stat-value">${analytics.academic.totalStudents}</div>
-              <div class="stat-detail">Out of ${analytics.academic.totalStudents}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Exemplary (AO)</div>
-              <div class="stat-value">${analytics.behavioral.exemplary}</div>
-              <div class="stat-detail">${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.exemplary / analytics.academic.totalStudents) * 100) : 0}%</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Good Standing (SO)</div>
-              <div class="stat-value">${analytics.behavioral.goodStanding}</div>
-              <div class="stat-detail">${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.goodStanding / analytics.academic.totalStudents) * 100) : 0}%</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Needs Support</div>
-              <div class="stat-value">${analytics.behavioral.behaviorSupport}</div>
-              <div class="stat-detail">${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.behaviorSupport / analytics.academic.totalStudents) * 100) : 0}%</div>
-            </div>
-          </div>
-          
-          <div class="footer">
-            <p>EduSync School Information System • Generated on ${new Date().toLocaleDateString()}</p>
-          </div>
-        </body>
-      </html>
-    `;
+  const handlePrintSingleStudent = (studentId: string) => {
+    setCurrentPrintStudents([studentId]);
+    setShowPrintModal(true);
+  };
+
+  // PDF Export Handler with Chart Images
+  const handleExportPDF = async () => {
+    const timestamp = new Date().toISOString().split('T')[0];
+    const sectionName = selectedSectionId === 'all' ? 'All-Sections' : sections.find(s => s.id === selectedSectionId)?.name || 'Unknown';
     
-    const printWindow = window.open('', '_blank', 'width=800,height=600');
-    if (printWindow) {
-      printWindow.document.write(printContent.innerHTML);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-      }, 250);
+    // Show loading state
+    console.log('📄 Generating PDF with charts...');
+    
+    const doc = new jsPDF();
+    let yPos = 20;
+    
+    // Title
+    doc.setFontSize(20);
+    doc.setTextColor(79, 70, 229); // Purple
+    doc.text('Deep Analytics Report', 20, yPos);
+    
+    // Metadata
+    yPos += 10;
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, yPos);
+    doc.text(`Section: ${sectionName}`, 120, yPos);
+    
+    // Academic Performance Section
+    yPos += 15;
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Academic Performance', 20, yPos);
+    
+    yPos += 8;
+    doc.setFontSize(10);
+    const academicData = [
+      ['Total Students', analytics.academic.totalStudents.toString()],
+      ['Average Grade', `${analytics.academic.avgGrade}%`],
+      ['Honor Roll', `${analytics.academic.honorRoll} (${analytics.academic.totalStudents > 0 ? Math.round((analytics.academic.honorRoll / analytics.academic.totalStudents) * 100) : 0}%)`],
+      ['Passing', `${analytics.academic.passing}`],
+      ['Failing', `${analytics.academic.failing}`],
+      ['Completion Rate', `${analytics.academic.avgCompletion}%`]
+    ];
+    
+    academicData.forEach(([label, value]) => {
+      doc.text(`${label}:`, 25, yPos);
+      doc.text(value, 100, yPos);
+      yPos += 6;
+    });
+    
+    // Behavioral Performance Section
+    yPos += 10;
+    doc.setFontSize(14);
+    doc.text('Behavioral Performance', 20, yPos);
+    
+    yPos += 8;
+    doc.setFontSize(10);
+    const behavioralData = [
+      ['Exemplary Behavior', `${analytics.behavioral.exemplary} (${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.exemplary / analytics.academic.totalStudents) * 100) : 0}%)`],
+      ['Good Standing', `${analytics.behavioral.goodStanding} (${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.goodStanding / analytics.academic.totalStudents) * 100) : 0}%)`],
+      ['Needs Support', `${analytics.behavioral.behaviorSupport} (${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.behaviorSupport / analytics.academic.totalStudents) * 100) : 0}%)`]
+    ];
+    
+    behavioralData.forEach(([label, value]) => {
+      doc.text(`${label}:`, 25, yPos);
+      doc.text(value, 100, yPos);
+      yPos += 6;
+    });
+    
+    // Risk Assessment Section
+    if (yPos > 240) {
+      doc.addPage();
+      yPos = 20;
+    }
+    
+    yPos += 10;
+    doc.setFontSize(14);
+    doc.text('Risk Assessment', 20, yPos);
+    
+    yPos += 8;
+    doc.setFontSize(10);
+    doc.text(`Critical Risk: ${deepAnalytics.riskAssessment.criticalRisk}`, 25, yPos);
+    yPos += 6;
+    doc.text(`High Risk: ${deepAnalytics.riskAssessment.highRisk}`, 25, yPos);
+    yPos += 6;
+    doc.text(`Moderate Risk: ${deepAnalytics.riskAssessment.moderateRisk}`, 25, yPos);
+    yPos += 6;
+    doc.text(`Declining Students: ${deepAnalytics.riskAssessment.decliningStudents}`, 25, yPos);
+    
+    // Top At-Risk Students
+    if (deepAnalytics.riskAssessment.atRiskStudents.length > 0) {
+      yPos += 10;
+      doc.setFontSize(12);
+      doc.text('At-Risk Students (Top 5)', 20, yPos);
+      
+      yPos += 8;
+      doc.setFontSize(9);
+      doc.text('Name', 25, yPos);
+      doc.text('Recent Avg', 100, yPos);
+      doc.text('Risk Level', 140, yPos);
+      yPos += 5;
+      
+      deepAnalytics.riskAssessment.atRiskStudents.slice(0, 5).forEach(student => {
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        doc.text(student.student.name.substring(0, 30), 25, yPos);
+        doc.text(`${student.recentAvg}%`, 100, yPos);
+        doc.text(student.riskLevel.toUpperCase(), 140, yPos);
+        yPos += 6;
+      });
+    }
+    
+    // Subject Performance
+    if (yPos > 200) {
+      doc.addPage();
+      yPos = 20;
+    }
+    
+    yPos += 10;
+    doc.setFontSize(14);
+    doc.text('Subject Performance', 20, yPos);
+    
+    yPos += 8;
+    doc.setFontSize(9);
+    doc.text('Subject', 25, yPos);
+    doc.text('Average', 100, yPos);
+    doc.text('Difficulty', 140, yPos);
+    yPos += 5;
+    
+    deepAnalytics.subjectPerformance.slice(0, 10).forEach(subject => {
+      if (yPos > 270) {
+        doc.addPage();
+        yPos = 20;
+      }
+      doc.text(subject.subject.substring(0, 30), 25, yPos);
+      doc.text(`${subject.average}%`, 100, yPos);
+      doc.text(subject.difficulty.toUpperCase(), 140, yPos);
+      yPos += 6;
+    });
+    
+    // Capture and Add Charts
+    try {
+      // Add new page for charts
+      doc.addPage();
+      yPos = 20;
+      
+      doc.setFontSize(16);
+      doc.setTextColor(79, 70, 229);
+      doc.text('Visual Analytics', 20, yPos);
+      yPos += 15;
+      
+      // Capture Grade Distribution Chart
+      const gradeChartElement = document.getElementById('grade-distribution-chart');
+      if (gradeChartElement) {
+        console.log('📊 Capturing Grade Distribution Chart...');
+        const gradeCanvas = await html2canvas(gradeChartElement, {
+          backgroundColor: '#ffffff',
+          logging: false,
+          windowWidth: gradeChartElement.scrollWidth,
+          windowHeight: gradeChartElement.scrollHeight
+        } as any);
+        
+        const gradeImgData = gradeCanvas.toDataURL('image/png');
+        const imgWidth = 85; // Half page width
+        const imgHeight = (gradeCanvas.height * imgWidth) / gradeCanvas.width;
+        
+        doc.addImage(gradeImgData, 'PNG', 15, yPos, imgWidth, imgHeight);
+      }
+      
+      // Capture Behavior Distribution Chart
+      const behaviorChartElement = document.getElementById('behavior-distribution-chart');
+      if (behaviorChartElement) {
+        console.log('📊 Capturing Behavior Distribution Chart...');
+        const behaviorCanvas = await html2canvas(behaviorChartElement, {
+          backgroundColor: '#ffffff',
+          logging: false,
+          windowWidth: behaviorChartElement.scrollWidth,
+          windowHeight: behaviorChartElement.scrollHeight
+        } as any);
+        
+        const behaviorImgData = behaviorCanvas.toDataURL('image/png');
+        const imgWidth = 85;
+        const imgHeight = (behaviorCanvas.height * imgWidth) / behaviorCanvas.width;
+        
+        // Place next to the first chart
+        doc.addImage(behaviorImgData, 'PNG', 105, yPos, imgWidth, imgHeight);
+      }
+      
+      // Calculate yPos after charts
+      const maxChartHeight = 80; // Approximate height
+      yPos += maxChartHeight + 15;
+      
+      // Check if we need a new page for correlation chart
+      if (yPos > 200) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      // Capture Correlation Scatter Plot
+      const correlationChartElement = document.getElementById('correlation-scatter-plot');
+      if (correlationChartElement) {
+        console.log('📊 Capturing Correlation Scatter Plot...');
+        const correlationCanvas = await html2canvas(correlationChartElement, {
+          backgroundColor: '#ffffff',
+          logging: false,
+          windowWidth: correlationChartElement.scrollWidth,
+          windowHeight: correlationChartElement.scrollHeight
+        } as any);
+        
+        const correlationImgData = correlationCanvas.toDataURL('image/png');
+        const imgWidth = 170; // Full width
+        const imgHeight = (correlationCanvas.height * imgWidth) / correlationCanvas.width;
+        
+        // Center the chart
+        doc.addImage(correlationImgData, 'PNG', 20, yPos, imgWidth, imgHeight);
+      }
+      
+      console.log('✅ Charts captured successfully');
+    } catch (error) {
+      console.warn('⚠️ Could not capture charts:', error);
+      // Continue with PDF generation even if charts fail
+    }
+    
+    // Footer (update page count after adding chart pages)
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(`Page ${i} of ${pageCount}`, 95, 285);
+      doc.text('EduSync School Information System', 20, 285);
+    }
+    
+    // Save
+    doc.save(`Deep-Analytics-Report_${sectionName}_${timestamp}.pdf`);
+    console.log(`✅ Successfully exported PDF with charts: Deep-Analytics-Report_${sectionName}_${timestamp}.pdf`);
+  };
+
+  // Excel Export Handler
+  const handleExportExcel = () => {
+    const timestamp = new Date().toISOString().split('T')[0];
+    const sectionName = selectedSectionId === 'all' ? 'All-Sections' : sections.find(s => s.id === selectedSectionId)?.name || 'Unknown';
+    
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    
+    // Sheet 1: Summary Dashboard
+    const summaryData = [
+      ['Deep Analytics Report'],
+      ['Generated', new Date().toLocaleDateString()],
+      ['Section', sectionName],
+      [''],
+      ['Academic Performance'],
+      ['Metric', 'Value', 'Percentage'],
+      ['Total Students', analytics.academic.totalStudents, ''],
+      ['Average Grade', analytics.academic.avgGrade + '%', ''],
+      ['Honor Roll (≥90%)', analytics.academic.honorRoll, analytics.academic.totalStudents > 0 ? Math.round((analytics.academic.honorRoll / analytics.academic.totalStudents) * 100) + '%' : '0%'],
+      ['Passing (≥75%)', analytics.academic.passing, analytics.academic.totalStudents > 0 ? Math.round((analytics.academic.passing / analytics.academic.totalStudents) * 100) + '%' : '0%'],
+      ['Failing (<75%)', analytics.academic.failing, analytics.academic.totalStudents > 0 ? Math.round((analytics.academic.failing / analytics.academic.totalStudents) * 100) + '%' : '0%'],
+      ['Completion Rate', analytics.academic.avgCompletion + '%', ''],
+      [''],
+      ['Behavioral Performance'],
+      ['Metric', 'Value', 'Percentage'],
+      ['Exemplary Behavior', analytics.behavioral.exemplary, analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.exemplary / analytics.academic.totalStudents) * 100) + '%' : '0%'],
+      ['Good Standing', analytics.behavioral.goodStanding, analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.goodStanding / analytics.academic.totalStudents) * 100) + '%' : '0%'],
+      ['Needs Support', analytics.behavioral.behaviorSupport, analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.behaviorSupport / analytics.academic.totalStudents) * 100) + '%' : '0%']
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+    
+    // Sheet 2: Risk Assessment
+    const riskData = [
+      ['At-Risk Students'],
+      ['Student Name', 'LRN', 'Recent Average', 'Overall Average', 'Risk Level', 'Declining', 'Needs Intervention'],
+      ...deepAnalytics.riskAssessment.atRiskStudents.map(student => [
+        student.student.name,
+        student.student.lrn || 'N/A',
+        student.recentAvg + '%',
+        student.overallAvg + '%',
+        student.riskLevel.toUpperCase(),
+        student.isDeclining ? 'Yes' : 'No',
+        student.needsIntervention ? 'Yes' : 'No'
+      ])
+    ];
+    const wsRisk = XLSX.utils.aoa_to_sheet(riskData);
+    XLSX.utils.book_append_sheet(wb, wsRisk, 'Risk Assessment');
+    
+    // Sheet 3: Subject Performance
+    const subjectData = [
+      ['Subject Performance'],
+      ['Subject', 'Average Grade', 'Passing Students', 'Failing Students', 'Total Students', 'Difficulty Level'],
+      ...deepAnalytics.subjectPerformance.map(subject => [
+        subject.subject,
+        subject.average + '%',
+        subject.passing,
+        subject.failing,
+        subject.total,
+        subject.difficulty.toUpperCase()
+      ])
+    ];
+    const wsSubjects = XLSX.utils.aoa_to_sheet(subjectData);
+    XLSX.utils.book_append_sheet(wb, wsSubjects, 'Subject Performance');
+    
+    // Sheet 4: Improvement Tracking
+    const improvementData = [
+      ['Student Improvement Tracking'],
+      ['Student Name', 'LRN', 'Q1 Average', 'Q4 Average', 'Improvement', 'Improvement %', 'Category', 'Status'],
+      ...deepAnalytics.improvementTracking.topImprovers.map(item => [
+        item.student.name,
+        item.student.lrn || 'N/A',
+        item.q1Avg + '%',
+        item.q4Avg + '%',
+        (item.improvement > 0 ? '+' : '') + item.improvement + '%',
+        (item.improvementPercent > 0 ? '+' : '') + item.improvementPercent + '%',
+        item.category.toUpperCase(),
+        item.category === 'significant' ? 'Improving' : item.category === 'stable' ? 'Stable' : 'Declining'
+      ])
+    ];
+    const wsImprovement = XLSX.utils.aoa_to_sheet(improvementData);
+    XLSX.utils.book_append_sheet(wb, wsImprovement, 'Improvement Tracking');
+    
+    // Sheet 5: Correlation Insights
+    const correlationData = [
+      ['Correlation Insights'],
+      ['Category', 'Count', 'Description'],
+      ['High Achievers', analytics.correlation.highAchievers, 'Excellent grades + exemplary behavior'],
+      ['At-Risk Students', analytics.correlation.atRisk, 'Low grades + behavioral concerns'],
+      ['Academic Support', analytics.correlation.academicStrugglesGoodBehavior, 'Good behavior but struggling grades'],
+      ['Behavior Support', analytics.correlation.goodGradesBehaviorConcerns, 'Good grades but behavioral issues'],
+      [''],
+      ['Correlation Strength', analytics.correlation.correlationStrength, '']
+    ];
+    const wsCorrelation = XLSX.utils.aoa_to_sheet(correlationData);
+    XLSX.utils.book_append_sheet(wb, wsCorrelation, 'Correlations');
+    
+    // Save workbook
+    XLSX.writeFile(wb, `Deep-Analytics-Complete_${sectionName}_${timestamp}.xlsx`);
+    console.log(`✅ Successfully exported Excel: Deep-Analytics-Complete_${sectionName}_${timestamp}.xlsx`);
+  };
+
+  // CSV Export Handler for Deep Analytics
+  const handleExportDeepAnalytics = (exportType: 'overview' | 'risk-assessment' | 'subject-performance' | 'improvement-tracking' | 'all') => {
+    const timestamp = new Date().toISOString().split('T')[0];
+    const sectionName = selectedSectionId === 'all' ? 'All-Sections' : sections.find(s => s.id === selectedSectionId)?.name || 'Unknown';
+    
+    if (exportType === 'overview' || exportType === 'all') {
+      // Export Overview Summary
+      const overviewData = [
+        {
+          'Report Type': 'Deep Analytics Overview',
+          'Generated Date': new Date().toLocaleDateString(),
+          'Section': sectionName,
+          'Total Students': analytics.academic.totalStudents,
+          'Average Grade': `${analytics.academic.avgGrade}%`,
+          'Honor Roll': analytics.academic.honorRoll,
+          'Passing': analytics.academic.passing,
+          'Failing': analytics.academic.failing,
+          'Avg Completion': `${analytics.academic.avgCompletion}%`,
+          'Exemplary Behavior': analytics.behavioral.exemplary,
+          'Good Standing': analytics.behavioral.goodStanding,
+          'Needs Support': analytics.behavioral.behaviorSupport
+        }
+      ];
+      
+      const csv = Papa.unparse(overviewData);
+      downloadCSV(csv, `Deep-Analytics-Overview_${sectionName}_${timestamp}.csv`);
+    }
+    
+    if (exportType === 'risk-assessment' || exportType === 'all') {
+      // Export At-Risk Students
+      const riskData = deepAnalytics.riskAssessment.atRiskStudents.map(student => ({
+        'Student Name': student.student.name,
+        'LRN': student.student.lrn || 'N/A',
+        'Recent Average': `${student.recentAvg}%`,
+        'Overall Average': `${student.overallAvg}%`,
+        'Risk Level': student.riskLevel.toUpperCase(),
+        'Declining': student.isDeclining ? 'Yes' : 'No',
+        'Needs Intervention': student.needsIntervention ? 'Yes' : 'No'
+      }));
+      
+      const csv = Papa.unparse(riskData);
+      downloadCSV(csv, `Risk-Assessment_${sectionName}_${timestamp}.csv`);
+    }
+    
+    if (exportType === 'subject-performance' || exportType === 'all') {
+      // Export Subject Performance
+      const subjectData = deepAnalytics.subjectPerformance.map(subject => ({
+        'Subject': subject.subject,
+        'Average Grade': `${subject.average}%`,
+        'Passing Students': subject.passing,
+        'Failing Students': subject.failing,
+        'Total Students': subject.total,
+        'Difficulty Level': subject.difficulty.toUpperCase()
+      }));
+      
+      const csv = Papa.unparse(subjectData);
+      downloadCSV(csv, `Subject-Performance_${sectionName}_${timestamp}.csv`);
+    }
+    
+    if (exportType === 'improvement-tracking' || exportType === 'all') {
+      // Export Student Improvement Tracking
+      const improvementData = deepAnalytics.improvementTracking.topImprovers.map(item => ({
+        'Student Name': item.student.name,
+        'LRN': item.student.lrn || 'N/A',
+        'Q1 Average': `${item.q1Avg}%`,
+        'Q4 Average': `${item.q4Avg}%`,
+        'Improvement': `${item.improvement > 0 ? '+' : ''}${item.improvement}%`,
+        'Improvement Percent': `${item.improvementPercent > 0 ? '+' : ''}${item.improvementPercent}%`,
+        'Category': item.category.toUpperCase(),
+        'Status': item.category === 'significant' ? 'Improving' : item.category === 'stable' ? 'Stable' : 'Declining'
+      }));
+      
+      const csv = Papa.unparse(improvementData);
+      downloadCSV(csv, `Improvement-Tracking_${sectionName}_${timestamp}.csv`);
     }
   };
 
-  const exportToExcel = () => {
-    // Prepare CSV data
-    const csvRows: string[] = [];
-    
-    // Header
-    csvRows.push('Assessment Analytics Report');
-    csvRows.push(`Generated: ${new Date().toLocaleString()}`);
-    csvRows.push(`School Year: ${new Date().getFullYear()}`);
-    csvRows.push('');
-    
-    // Academic Performance
-    csvRows.push('Academic Performance');
-    csvRows.push('Metric,Value,Details');
-    csvRows.push(`Total Students,${analytics.academic.totalStudents},Average: ${analytics.academic.avgGrade}%`);
-    csvRows.push(`Honor Roll,${analytics.academic.honorRoll},${analytics.academic.totalStudents > 0 ? Math.round((analytics.academic.honorRoll / analytics.academic.totalStudents) * 100) : 0}% of class`);
-    csvRows.push(`Passing,${analytics.academic.passing},≥75% average`);
-    csvRows.push(`Failing,${analytics.academic.failing},<75% average`);
-    csvRows.push(`Completion Rate,${analytics.academic.avgCompletion}%,Average completion`);
-    csvRows.push('');
-    
-    // Behavioral Performance
-    csvRows.push('Behavioral Performance');
-    csvRows.push('Metric,Value,Details');
-    csvRows.push(`Total Assessed,${analytics.academic.totalStudents},All students`);
-    csvRows.push(`Exemplary (AO),${analytics.behavioral.exemplary},${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.exemplary / analytics.academic.totalStudents) * 100) : 0}%`);
-    csvRows.push(`Good Standing (SO),${analytics.behavioral.goodStanding},${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.goodStanding / analytics.academic.totalStudents) * 100) : 0}%`);
-    csvRows.push(`Needs Support,${analytics.behavioral.behaviorSupport},${analytics.academic.totalStudents > 0 ? Math.round((analytics.behavioral.behaviorSupport / analytics.academic.totalStudents) * 100) : 0}%`);
-    csvRows.push('');
-    
-    // Student Details
-    csvRows.push('Student Details');
-    csvRows.push('Student Name,LRN,Academic Average,Completion %,Behavioral Rating');
-    
-    visibleStudents.forEach(student => {
-      const studentGrades = grades.filter(g => g.studentId === student.id);
-      const finalGrades = studentGrades
-        .map(g => g.finalGrade)
-        .filter((g): g is number => typeof g === 'number');
-      
-      const average = finalGrades.length > 0
-        ? Math.round(finalGrades.reduce((sum, g) => sum + g, 0) / finalGrades.length)
-        : 0;
-      
-      const totalPossibleGrades = (learningAreas?.length || 0) * 4;
-      const completedGrades = studentGrades.reduce((sum, g) => {
-        return sum + ['q1', 'q2', 'q3', 'q4'].filter(q => g[q as keyof typeof g] !== undefined).length;
-      }, 0);
-      const completion = totalPossibleGrades > 0 
-        ? Math.round((completedGrades / totalPossibleGrades) * 100)
-        : 0;
-      
-      const studentCVGrades = coreValueGrades.filter(cvg => cvg.studentId === student.id);
-      const avgBehavior = studentCVGrades.length > 0
-        ? Math.round(studentCVGrades.reduce((sum, cvg) => {
-            const coreValue = coreValues.find(cv => cv.id === cvg.coreValueId);
-            if (!coreValue || !coreValue.behaviors) return sum;
-            const totalBehaviors = coreValue.behaviors.length;
-            const markedBehaviors = Object.values(cvg.markings || {}).filter((m: any) => m?.marking).length;
-            return sum + (totalBehaviors > 0 ? (markedBehaviors / totalBehaviors) * 100 : 0);
-          }, 0) / studentCVGrades.length)
-        : 0;
-      
-      const behaviorRating = avgBehavior >= 75 ? 'Exemplary' : avgBehavior >= 60 ? 'Good Standing' : 'Needs Support';
-      
-      csvRows.push(`"${student.name}",${student.lrn || 'N/A'},${average}%,${completion}%,${behaviorRating}`);
-    });
-    
-    // Create and download CSV
-    const csvContent = csvRows.join('\n');
+  const downloadCSV = (csvContent: string, filename: string) => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     
     link.setAttribute('href', url);
-    link.setAttribute('download', `assessment-analytics-${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', filename);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    // Show success feedback
+    console.log(`✅ Successfully exported: ${filename}`);
   };
 
-  // Calculate analytics for Tier 1
+  // Calculate analytics for Overview tab (uses lifted filter state)
   const analytics = useMemo(() => {
     let visibleStudents = isStudentView 
       ? students.filter(s => s.id === session.user.id)
@@ -251,65 +576,82 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       ? students.filter(s => s.id === forceStudentId)
       : students;
 
-    // Apply Tier 2 Filters
-    // Filter by section
-    if (filterSection !== 'all') {
-      visibleStudents = visibleStudents.filter(s => s.sectionId === filterSection);
+    // Apply section filter (from lifted state)
+    if (selectedSectionId !== 'all') {
+      visibleStudents = visibleStudents.filter(s => s.sectionId === selectedSectionId);
+    }
+
+    // Apply search filter (from lifted state)
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      visibleStudents = visibleStudents.filter(student =>
+        student.name.toLowerCase().includes(query) ||
+        student.email.toLowerCase().includes(query) ||
+        student.lrn?.toLowerCase().includes(query)
+      );
     }
 
     // Academic Performance Metrics
     const studentsWithGrades = visibleStudents.map(student => {
       const studentGrades = grades.filter(g => g.studentId === student.id);
       
-      // Filter by quarter if specified
-      let relevantGrades = studentGrades;
-      if (filterQuarter !== 'all') {
-        relevantGrades = studentGrades.filter(g => {
-          const quarterKey = filterQuarter as 'q1' | 'q2' | 'q3' | 'q4';
-          return g[quarterKey] !== undefined;
-        });
-      }
+      // Calculate average - prefer finalGrade, fallback to computing from quarters
+      const averagesForCalculation = studentGrades
+        .map(g => {
+          // If finalGrade exists, use it
+          if (typeof g.finalGrade === 'number' && g.finalGrade > 0) {
+            return g.finalGrade;
+          }
+          // Otherwise compute from quarterly grades
+          const quarters = [g.q1, g.q2, g.q3, g.q4].filter(
+            (q): q is number => typeof q === 'number' && q > 0
+          );
+          if (quarters.length > 0) {
+            return Math.round(quarters.reduce((sum, q) => sum + q, 0) / quarters.length);
+          }
+          return null;
+        })
+        .filter((avg): avg is number => avg !== null);
       
-      const finalGrades = relevantGrades
-        .map(g => g.finalGrade)
-        .filter((g): g is number => typeof g === 'number');
-      
-      const average = finalGrades.length > 0
-        ? Math.round(finalGrades.reduce((sum, g) => sum + g, 0) / finalGrades.length)
+      const average = averagesForCalculation.length > 0
+        ? Math.round(averagesForCalculation.reduce((sum, g) => sum + g, 0) / averagesForCalculation.length)
         : 0;
       
-      const totalPossibleGrades = (learningAreas?.length || 0) * 4;
+      // Get student's grade level to calculate completion accurately
+      const studentSection = sections?.find(s => s.id === student.sectionId);
+      const studentGradeLevel = studentSection?.gradeLevel;
+      
+      // Filter learning areas by student's grade level
+      const applicableLearningAreas = learningAreas?.filter(la => {
+        if (!studentGradeLevel || !la.gradeLevel || !Array.isArray(la.gradeLevel)) {
+          return true; // Fallback: include all if grade level data is missing
+        }
+        return la.gradeLevel.includes(studentGradeLevel);
+      }) || [];
+      
+      const totalPossibleGrades = applicableLearningAreas.length * 4;
       const completedGrades = studentGrades.reduce((sum, g) => {
         return sum + ['q1', 'q2', 'q3', 'q4'].filter(q => g[q as keyof typeof g] !== undefined).length;
       }, 0);
+      // Cap completion at 100% (shouldn't exceed total possible)
       const completion = totalPossibleGrades > 0 
-        ? Math.round((completedGrades / totalPossibleGrades) * 100)
+        ? Math.min(100, Math.round((completedGrades / totalPossibleGrades) * 100))
         : 0;
 
-      return { student, average, completion, hasGrades: finalGrades.length > 0 };
+      return { student, average, completion, hasGrades: averagesForCalculation.length > 0 };
     });
 
-    // Apply performance filter
-    let filteredStudentsWithGrades = studentsWithGrades;
-    if (filterPerformance !== 'all') {
-      if (filterPerformance === 'honor') {
-        filteredStudentsWithGrades = studentsWithGrades.filter(s => s.average >= 90);
-      } else if (filterPerformance === 'passing') {
-        filteredStudentsWithGrades = studentsWithGrades.filter(s => s.average >= 75 && s.average < 90);
-      } else if (filterPerformance === 'failing') {
-        filteredStudentsWithGrades = studentsWithGrades.filter(s => s.average < 75 && s.average > 0);
-      }
-    }
-
+    // Calculate metrics ALWAYS from the base filtered set (section + search)
+    // These counts should show ALL students in the current view, not affected by performance filter
     const totalStudents = visibleStudents.length;
-    const honorRoll = filteredStudentsWithGrades.filter(s => s.average >= 90).length;
-    const passing = filteredStudentsWithGrades.filter(s => s.average >= 75 && s.average > 0).length;
-    const failing = filteredStudentsWithGrades.filter(s => s.average < 75 && s.average > 0).length;
-    const avgGrade = filteredStudentsWithGrades.filter(s => s.hasGrades).length > 0
-      ? Math.round(filteredStudentsWithGrades.filter(s => s.hasGrades).reduce((sum, s) => sum + s.average, 0) / filteredStudentsWithGrades.filter(s => s.hasGrades).length)
+    const honorRoll = studentsWithGrades.filter(s => s.average >= 90).length;
+    const passing = studentsWithGrades.filter(s => s.average >= 75 && s.average > 0).length;
+    const failing = studentsWithGrades.filter(s => s.average < 75 && s.average > 0).length;
+    const avgGrade = studentsWithGrades.filter(s => s.hasGrades).length > 0
+      ? Math.round(studentsWithGrades.filter(s => s.hasGrades).reduce((sum, s) => sum + s.average, 0) / studentsWithGrades.filter(s => s.hasGrades).length)
       : 0;
-    const avgCompletion = totalStudents > 0
-      ? Math.round(filteredStudentsWithGrades.reduce((sum, s) => sum + s.completion, 0) / totalStudents)
+    const avgCompletion = visibleStudents.length > 0
+      ? Math.round(studentsWithGrades.reduce((sum, s) => sum + s.completion, 0) / visibleStudents.length)
       : 0;
 
     // Core Values Performance Metrics
@@ -413,9 +755,9 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
         studentsWithBoth
       }
     };
-  }, [students, grades, learningAreas, coreValues, coreValueGrades, session, forceStudentId, isStudentView, isParentView, filterSection, filterQuarter, filterPerformance]);
+  }, [students, grades, learningAreas, coreValues, coreValueGrades, session, forceStudentId, isStudentView, isParentView, selectedSectionId, performanceFilter, searchQuery]);
 
-  // Tier 3: Deep Analytics Calculations
+  // Tier 3: Deep Analytics Calculations (now uses unified filters)
   const deepAnalytics = useMemo(() => {
     let visibleStudents = isStudentView 
       ? students.filter(s => s.id === session.user.id)
@@ -423,8 +765,21 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       ? students.filter(s => s.id === forceStudentId)
       : students;
 
-    if (filterSection !== 'all') {
-      visibleStudents = visibleStudents.filter(s => s.sectionId === filterSection);
+    // Use unified section filter
+    if (selectedSectionId !== 'all') {
+      visibleStudents = visibleStudents.filter(s => s.sectionId === selectedSectionId);
+    }
+
+    // Use unified search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      visibleStudents = visibleStudents.filter(s => 
+        s.firstName?.toLowerCase().includes(query) ||
+        s.lastName?.toLowerCase().includes(query) ||
+        s.name?.toLowerCase().includes(query) ||
+        s.email?.toLowerCase().includes(query) ||
+        s.lrn?.toLowerCase().includes(query)
+      );
     }
 
     // Quarterly Trend Analysis
@@ -670,7 +1025,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       },
       recommendations
     };
-  }, [students, grades, learningAreas, session, forceStudentId, isStudentView, isParentView, filterSection]);
+  }, [students, grades, learningAreas, session, forceStudentId, isStudentView, isParentView, selectedSectionId, searchQuery]);
 
   const tabs = [
     { id: 'overview' as TabType, label: 'Overview & Analytics', icon: '📊' },
@@ -705,407 +1060,293 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       {/* Tab Content */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* Tier 2: Filter Controls & Export Actions */}
+          {/* Filters Section (controls both analytics and student list) */}
           {!(isStudentView || isParentView) && (
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-4">
-              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-                {/* Filters */}
-                <div className="flex flex-wrap gap-3 items-center">
-                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">🔍 Filters:</span>
-                  
-                  {/* Section Filter */}
-                  <select
-                    value={filterSection}
-                    onChange={(e) => setFilterSection(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              <div className="flex flex-col gap-4">
+                {/* Performance Filters */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Filter:</span>
+                  <button
+                    onClick={() => setPerformanceFilter('all')}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      performanceFilter === 'all'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                    }`}
                   >
-                    <option value="all">All Sections</option>
-                    {Array.from(new Set(students.map(s => s.sectionId).filter(Boolean))).map(sectionId => (
-                      <option key={sectionId} value={sectionId}>
-                        {schoolData.sections?.find(sec => sec.id === sectionId)?.name || sectionId}
-                      </option>
-                    ))}
-                  </select>
-
-                  {/* Quarter Filter */}
-                  <select
-                    value={filterQuarter}
-                    onChange={(e) => setFilterQuarter(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    All ({analytics.academic.totalStudents})
+                  </button>
+                  <button
+                    onClick={() => setPerformanceFilter('honor')}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      performanceFilter === 'honor'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                    }`}
                   >
-                    <option value="all">All Quarters</option>
-                    <option value="q1">Quarter 1</option>
-                    <option value="q2">Quarter 2</option>
-                    <option value="q3">Quarter 3</option>
-                    <option value="q4">Quarter 4</option>
-                  </select>
-
-                  {/* Performance Filter */}
-                  <select
-                    value={filterPerformance}
-                    onChange={(e) => setFilterPerformance(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    🌟 Honor Roll ({analytics.academic.honorRoll})
+                  </button>
+                  <button
+                    onClick={() => setPerformanceFilter('needs-improvement')}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      performanceFilter === 'needs-improvement'
+                        ? 'bg-yellow-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                    }`}
                   >
-                    <option value="all">All Performance Levels</option>
-                    <option value="honor">🏆 Honor Roll (≥90%)</option>
-                    <option value="passing">✅ Passing (75-89%)</option>
-                    <option value="failing">⚠️ Needs Support (&lt;75%)</option>
-                  </select>
+                    ⚠️ Needs Attention ({analytics.academic.failing})
+                  </button>
+                  <button
+                    onClick={() => setPerformanceFilter('incomplete')}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      performanceFilter === 'incomplete'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                    }`}
+                  >
+                    📝 Incomplete ({analytics.academic.totalStudents - analytics.academic.passing})
+                  </button>
+                </div>
 
-                  {/* Reset Filters Button */}
-                  {(filterSection !== 'all' || filterQuarter !== 'all' || filterPerformance !== 'all') && (
+                {/* Section and Search Filters */}
+                <div className="flex flex-wrap items-center gap-3 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700 p-4 rounded-xl shadow-sm">
+                  {/* Section Dropdown - Enhanced */}
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="section-filter" className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z"/>
+                      </svg>
+                      Section:
+                    </label>
+                    <select
+                      id="section-filter"
+                      value={selectedSectionId}
+                      onChange={(e) => setSelectedSectionId(e.target.value)}
+                      className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                    >
+                      <option value="all">All Sections</option>
+                      {schoolData.sections?.map((section) => (
+                        <option key={section.id} value={section.id}>
+                          Grade {section.gradeLevel} - {section.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Quarter Dropdown - NEW */}
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="quarter-filter" className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/>
+                      </svg>
+                      Quarter:
+                    </label>
+                    <select
+                      id="quarter-filter"
+                      value={selectedQuarter}
+                      onChange={(e) => setSelectedQuarter(e.target.value as 'all' | 'q1' | 'q2' | 'q3' | 'q4')}
+                      className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                    >
+                      <option value="all">All Quarters</option>
+                      <option value="q1">Quarter 1</option>
+                      <option value="q2">Quarter 2</option>
+                      <option value="q3">Quarter 3</option>
+                      <option value="q4">Quarter 4</option>
+                    </select>
+                  </div>
+
+                  {/* Search Input - Enhanced */}
+                  <div className="flex-1 min-w-[280px]">
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg className="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                      </div>
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search by student name, email, or ID..."
+                        className="w-full pl-10 pr-10 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm hover:shadow-md transition-all"
+                      />
+                      {searchQuery && (
+                        <button
+                          onClick={() => setSearchQuery('')}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                        >
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Clear Filters Button - Enhanced */}
+                  {(selectedSectionId !== 'all' || selectedQuarter !== 'all' || performanceFilter !== 'all' || searchQuery) && (
                     <button
                       onClick={() => {
-                        setFilterSection('all');
-                        setFilterQuarter('all');
-                        setFilterPerformance('all');
+                        setSelectedSectionId('all');
+                        setSelectedQuarter('all');
+                        setPerformanceFilter('all');
+                        setSearchQuery('');
                       }}
-                      className="px-3 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-md transition-colors"
+                      className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-md hover:shadow-lg transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2"
                     >
-                      ↺ Reset
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Clear All
                     </button>
                   )}
                 </div>
-
-                {/* Export Actions */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={exportToPDF}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors shadow-sm"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
-                    </svg>
-                    <span className="hidden sm:inline">Export PDF</span>
-                  </button>
-                  <button
-                    onClick={exportToExcel}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium transition-colors shadow-sm"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                    </svg>
-                    <span className="hidden sm:inline">Export Excel</span>
-                  </button>
-                </div>
               </div>
-
-              {/* Active Filters Display */}
-              {(filterSection !== 'all' || filterQuarter !== 'all' || filterPerformance !== 'all') && (
-                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Active filters:</span>
-                    {filterSection !== 'all' && (
-                      <span className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs rounded-full">
-                        Section: {schoolData.sections?.find(sec => sec.id === filterSection)?.name || filterSection}
-                      </span>
-                    )}
-                    {filterQuarter !== 'all' && (
-                      <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded-full">
-                        {filterQuarter.toUpperCase()}
-                      </span>
-                    )}
-                    {filterPerformance !== 'all' && (
-                      <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded-full">
-                        {filterPerformance === 'honor' ? 'Honor Roll' : filterPerformance === 'passing' ? 'Passing' : 'Needs Support'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           )}
-          
-          {/* Tier 1 Analytics - Summary Cards */}
+
+          {/* Simplified Overview Analytics - 6 Key Metrics */}
           {!(isStudentView || isParentView) && (
-            <>
-              {/* Academic Performance Cards */}
-              <div>
-                <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">📚 Academic Performance</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg p-4 shadow-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-blue-100 text-sm font-medium">Total Students</p>
-                        <p className="text-3xl font-bold mt-1">{analytics.academic.totalStudents}</p>
-                      </div>
-                      <div className="bg-blue-400/30 rounded-full p-3">
-                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
-                        </svg>
-                      </div>
+            <div className="space-y-6">
+              <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">� Quick Overview</h2>
+              
+              {/* 6 Essential Metrics Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Total Students */}
+                <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg p-5 shadow-lg hover:shadow-xl transition-shadow">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-blue-100 text-sm font-medium">Total Students</p>
+                      <p className="text-4xl font-bold mt-2">{analytics.academic.totalStudents}</p>
                     </div>
-                    <div className="mt-2 flex items-center text-sm">
-                      <span className="text-blue-100">Average: {analytics.academic.avgGrade}%</span>
+                    <div className="bg-blue-400/30 rounded-full p-3">
+                      <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                      </svg>
                     </div>
                   </div>
+                  <div className="mt-3 text-sm text-blue-100">
+                    Class Average: {analytics.academic.avgGrade}%
+                  </div>
+                </div>
 
-                  <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg p-4 shadow-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-green-100 text-sm font-medium">Honor Roll</p>
-                        <p className="text-3xl font-bold mt-1">{analytics.academic.honorRoll}</p>
-                      </div>
-                      <div className="bg-green-400/30 rounded-full p-3">
-                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      </div>
+                {/* Honor Roll */}
+                <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg p-5 shadow-lg hover:shadow-xl transition-shadow">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-green-100 text-sm font-medium">Honor Roll</p>
+                      <p className="text-4xl font-bold mt-2">{analytics.academic.honorRoll}</p>
                     </div>
-                    <div className="mt-2 text-sm text-green-100">
-                      {analytics.academic.totalStudents > 0 ? Math.round((analytics.academic.honorRoll / analytics.academic.totalStudents) * 100) : 0}% of class
+                    <div className="bg-green-400/30 rounded-full p-3">
+                      <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
                     </div>
                   </div>
-
-                  <div className="bg-gradient-to-br from-lime-500 to-lime-600 text-white rounded-lg p-4 shadow-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-lime-100 text-sm font-medium">Passing</p>
-                        <p className="text-3xl font-bold mt-1">{analytics.academic.passing}</p>
-                      </div>
-                      <div className="bg-lime-400/30 rounded-full p-3">
-                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="mt-2 text-sm text-lime-100">≥75% average</div>
+                  <div className="mt-3 text-sm text-green-100">
+                    {analytics.academic.totalStudents > 0 ? Math.round((analytics.academic.honorRoll / analytics.academic.totalStudents) * 100) : 0}% of class (≥90%)
                   </div>
+                </div>
 
-                  <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg p-4 shadow-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-purple-100 text-sm font-medium">Completion</p>
-                        <p className="text-3xl font-bold mt-1">{analytics.academic.avgCompletion}%</p>
-                      </div>
-                      <div className="bg-purple-400/30 rounded-full p-3">
-                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                        </svg>
-                      </div>
+                {/* At-Risk Students */}
+                <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-lg p-5 shadow-lg hover:shadow-xl transition-shadow">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-red-100 text-sm font-medium">At-Risk Students</p>
+                      <p className="text-4xl font-bold mt-2">{analytics.correlation.atRisk}</p>
                     </div>
-                    <div className="mt-2 text-sm text-purple-100">
-                      {analytics.academic.totalStudents - analytics.academic.passing - analytics.academic.failing} incomplete
+                    <div className="bg-red-400/30 rounded-full p-3">
+                      <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
                     </div>
+                  </div>
+                  <div className="mt-3 text-sm text-red-100">
+                    Low grades + behavior concerns
+                  </div>
+                </div>
+
+                {/* Completion Rate */}
+                <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg p-5 shadow-lg hover:shadow-xl transition-shadow">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-purple-100 text-sm font-medium">Completion Rate</p>
+                      <p className="text-4xl font-bold mt-2">{analytics.academic.avgCompletion}%</p>
+                    </div>
+                    <div className="bg-purple-400/30 rounded-full p-3">
+                      <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-sm text-purple-100">
+                    Graded + Evaluated
+                  </div>
+                </div>
+
+                {/* Exemplary Behavior */}
+                <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-lg p-5 shadow-lg hover:shadow-xl transition-shadow">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-indigo-100 text-sm font-medium">Exemplary Behavior</p>
+                      <p className="text-4xl font-bold mt-2">{analytics.behavioral.exemplary}</p>
+                    </div>
+                    <div className="bg-indigo-400/30 rounded-full p-3">
+                      <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-sm text-indigo-100">
+                    All Outstanding (AO)
+                  </div>
+                </div>
+
+                {/* High Achievers */}
+                <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-lg p-5 shadow-lg hover:shadow-xl transition-shadow">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-amber-100 text-sm font-medium">High Achievers</p>
+                      <p className="text-4xl font-bold mt-2">{analytics.correlation.highAchievers}</p>
+                    </div>
+                    <div className="bg-amber-400/30 rounded-full p-3">
+                      <span className="text-4xl">🏆</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-sm text-amber-100">
+                    Excellent grades + behavior
                   </div>
                 </div>
               </div>
 
-              {/* Behavioral Performance Cards */}
-              <div>
-                <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">🌟 Behavioral Performance</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-lg p-4 shadow-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-indigo-100 text-sm font-medium">Exemplary</p>
-                        <p className="text-3xl font-bold mt-1">{analytics.behavioral.exemplary}</p>
-                      </div>
-                      <div className="bg-indigo-400/30 rounded-full p-3">
-                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="mt-2 text-sm text-indigo-100">Mostly "Always Observed"</div>
-                  </div>
-
-                  <div className="bg-gradient-to-br from-teal-500 to-teal-600 text-white rounded-lg p-4 shadow-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-teal-100 text-sm font-medium">Good Standing</p>
-                        <p className="text-3xl font-bold mt-1">{analytics.behavioral.goodStanding}</p>
-                      </div>
-                      <div className="bg-teal-400/30 rounded-full p-3">
-                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="mt-2 text-sm text-teal-100">Positive behavior</div>
-                  </div>
-
-                  <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-lg p-4 shadow-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-amber-100 text-sm font-medium">Needs Support</p>
-                        <p className="text-3xl font-bold mt-1">{analytics.behavioral.behaviorSupport}</p>
-                      </div>
-                      <div className="bg-amber-400/30 rounded-full p-3">
-                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="mt-2 text-sm text-amber-100">Behavioral concerns</div>
-                  </div>
-
-                  <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 text-white rounded-lg p-4 shadow-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-cyan-100 text-sm font-medium">Completion</p>
-                        <p className="text-3xl font-bold mt-1">{analytics.behavioral.avgValueCompletion}%</p>
-                      </div>
-                      <div className="bg-cyan-400/30 rounded-full p-3">
-                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    </div>
-                    <div className="mt-2 text-sm text-cyan-100">Values assessed</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Correlation Insights Panel */}
-              <div>
-                <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">🔍 Insights & Correlations</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-md border-l-4 border-purple-500">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-600 dark:text-slate-400">High Achievers</p>
-                        <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{analytics.correlation.highAchievers}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                          Excellent grades + exemplary behavior
-                        </p>
-                      </div>
-                      <span className="text-3xl">🏆</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-md border-l-4 border-red-500">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-600 dark:text-slate-400">At-Risk Students</p>
-                        <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{analytics.correlation.atRisk}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                          Low grades + behavioral concerns
-                        </p>
-                      </div>
-                      <span className="text-3xl">⚠️</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-md border-l-4 border-blue-500">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Academic Support</p>
-                        <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{analytics.correlation.academicStrugglesGoodBehavior}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                          Good behavior but struggling grades
-                        </p>
-                      </div>
-                      <span className="text-3xl">📚</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-md border-l-4 border-amber-500">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Behavior Support</p>
-                        <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{analytics.correlation.goodGradesBehaviorConcerns}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                          Good grades but behavioral issues
-                        </p>
-                      </div>
-                      <span className="text-3xl">🤝</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* AI Insight Banner */}
-                {analytics.correlation.correlationStrength !== 'Insufficient data' && (
-                  <div className="mt-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="text-2xl">💡</div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-slate-800 dark:text-white mb-2">Key Insight:</p>
-                        <p className="text-sm text-slate-700 dark:text-slate-300">
-                          <strong>{analytics.correlation.correlationStrength} correlation</strong> detected between academic performance and behavioral assessment. 
-                          {analytics.correlation.highAchievers > 0 && (
-                            <> Students with exemplary behavior tend to perform {analytics.academic.avgGrade >= 85 ? 'significantly' : 'notably'} better academically.</>
-                          )}
-                          {analytics.correlation.atRisk > 0 && (
-                            <> {analytics.correlation.atRisk} student{analytics.correlation.atRisk > 1 ? 's need' : ' needs'} immediate intervention in both areas.</>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Visual Analytics Charts - Tier 2 */}
-              {!(isStudentView || isParentView) && (
-                <div className="mt-8">
-                  <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">
-                    📊 Visual Analytics
-                  </h2>
-                  
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                    {/* Grade Distribution Chart */}
-                    <GradeDistributionChart
-                      data={[
-                        { range: '90-100', count: analytics.academic.honorRoll, color: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' },
-                        { range: '85-89', count: analytics.academic.passing - analytics.academic.honorRoll > 0 ? Math.floor((analytics.academic.passing - analytics.academic.honorRoll) / 2) : 0, color: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' },
-                        { range: '80-84', count: analytics.academic.passing - analytics.academic.honorRoll > 0 ? Math.ceil((analytics.academic.passing - analytics.academic.honorRoll) / 2) : 0, color: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' },
-                        { range: '75-79', count: analytics.academic.passing - (analytics.academic.honorRoll + Math.floor((analytics.academic.passing - analytics.academic.honorRoll) / 2) + Math.ceil((analytics.academic.passing - analytics.academic.honorRoll) / 2)), color: 'linear-gradient(135deg, #84cc16 0%, #65a30d 100%)' },
-                        { range: 'Below 75', count: analytics.academic.failing, color: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' },
-                      ]}
-                      title="Academic Grade Distribution"
-                    />
-
-                    {/* Behavior Distribution Chart */}
-                    <BehaviorDistributionChart
-                      data={[
-                        { label: 'Exemplary (AO)', count: analytics.behavioral.exemplary, color: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)', icon: '⭐' },
-                        { label: 'Good Standing (SO)', count: analytics.behavioral.goodStanding, color: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', icon: '👍' },
-                        { label: 'Needs Support (RO/NO)', count: analytics.behavioral.behaviorSupport, color: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', icon: '🆘' },
-                      ]}
-                      title="Core Values Assessment Distribution"
-                    />
-                  </div>
-
-                  {/* Correlation Scatter Plot */}
-                  <div className="mb-6">
-                    <CorrelationScatterPlot
-                      data={analytics.correlation.studentsWithBoth.map(s => {
-                        const aoCount = s.aoCount || 0;
-                        const soCount = s.soCount || 0;
-                        const roCount = s.roCount || 0;
-                        const noCount = s.noCount || 0;
-                        const totalMarkings = aoCount + soCount + roCount + noCount;
-                        
-                        return {
-                          id: s.student.id,
-                          name: `${s.student.firstName} ${s.student.lastName}`,
-                          academic: s.average,
-                          behavioral: totalMarkings > 0 
-                            ? Math.round(((aoCount * 100 + soCount * 75) / (totalMarkings * 100)) * 100)
-                            : 0,
-                          category: (s.average >= 90 && s.isExemplary 
-                            ? 'high-achiever' 
-                            : s.average < 75 && s.needsSupport 
-                            ? 'at-risk'
-                            : s.average < 75 && (s.isExemplary || s.isGood)
-                            ? 'academic-support'
-                            : s.average >= 85 && s.needsSupport
-                            ? 'behavior-support'
-                            : 'normal') as 'high-achiever' | 'at-risk' | 'academic-support' | 'behavior-support' | 'normal'
-                        };
-                      })}
-                      title="Academic vs Behavioral Performance Correlation"
-                    />
-                  </div>
-                </div>
-              )}
-            </>
+              {/* Call to Action - Deep Analytics */}
+              <button
+                onClick={() => setActiveTab('deep-analytics')}
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-4 px-6 rounded-lg font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-3 group"
+              >
+                <span className="text-2xl">�</span>
+                <span>View Detailed Analytics & Insights</span>
+                <svg className="w-6 h-6 group-hover:translate-x-1 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
           )}
 
-          {/* Student List (Enhanced GradesView) */}
+          {/* Student List (Enhanced GradesView with lifted filter state) */}
           <div>
-            <GradesView schoolData={schoolData} session={session} forceStudentId={forceStudentId} />
+            <GradesView 
+              schoolData={schoolData} 
+              session={session} 
+              forceStudentId={forceStudentId}
+              selectedSectionId={selectedSectionId}
+              onSectionChange={setSelectedSectionId}
+              performanceFilter={performanceFilter}
+              onPerformanceChange={setPerformanceFilter}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+            />
           </div>
         </div>
       )}
@@ -1137,7 +1378,13 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
           {!isParentView && (
             <GradebookView 
               schoolData={schoolData} 
-              session={session as { user: AuthUser | StudentUser, type: 'staff' | 'student' }} 
+              session={session as { user: AuthUser | StudentUser, type: 'staff' | 'student' }}
+              selectedSectionId={selectedSectionId}
+              onSectionChange={setSelectedSectionId}
+              selectedQuarter={selectedQuarter}
+              onQuarterChange={setSelectedQuarter}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
             />
           )}
           {isParentView && (
@@ -1181,7 +1428,13 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
           {!isParentView && (
             <CoreValuesGradebookView 
               schoolData={schoolData} 
-              session={session as { user: AuthUser | StudentUser, type: 'staff' | 'student' }} 
+              session={session as { user: AuthUser | StudentUser, type: 'staff' | 'student' }}
+              selectedSectionId={selectedSectionId}
+              onSectionChange={setSelectedSectionId}
+              selectedQuarter={selectedQuarter}
+              onQuarterChange={setSelectedQuarter}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
             />
           )}
           {isParentView && (
@@ -1209,6 +1462,131 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
                 <div className="text-3xl font-bold">{visibleStudents.length}</div>
                 <div className="text-sm text-indigo-100">Students</div>
               </div>
+            </div>
+          </div>
+
+          {/* Filters Section */}
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filter Students
+            </h3>
+            
+            <div className="flex flex-wrap items-center gap-3 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700 p-4 rounded-xl shadow-sm">
+              {/* Performance Filter */}
+              <div className="flex items-center gap-2">
+                <label htmlFor="report-performance-filter" className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
+                  </svg>
+                  Performance:
+                </label>
+                <select
+                  id="report-performance-filter"
+                  value={performanceFilter}
+                  onChange={(e) => setPerformanceFilter(e.target.value as FilterType)}
+                  className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                >
+                  <option value="all">All Students</option>
+                  <option value="honor">🏆 Honor Roll (≥90%)</option>
+                  <option value="needs-improvement">⚠️ Needs Improvement (&lt;75%)</option>
+                  <option value="incomplete">📝 Incomplete Grades</option>
+                </select>
+              </div>
+
+              {/* Section Filter */}
+              <div className="flex items-center gap-2">
+                <label htmlFor="report-section-filter" className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z"/>
+                  </svg>
+                  Section:
+                </label>
+                <select
+                  id="report-section-filter"
+                  value={selectedSectionId}
+                  onChange={(e) => setSelectedSectionId(e.target.value)}
+                  className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                >
+                  <option value="all">All Sections</option>
+                  {schoolData.sections?.map((section) => (
+                    <option key={section.id} value={section.id}>
+                      Grade {section.gradeLevel} - {section.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quarter Filter */}
+              <div className="flex items-center gap-2">
+                <label htmlFor="report-quarter-filter" className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/>
+                  </svg>
+                  Quarter:
+                </label>
+                <select
+                  id="report-quarter-filter"
+                  value={selectedQuarter}
+                  onChange={(e) => setSelectedQuarter(e.target.value as 'all' | 'q1' | 'q2' | 'q3' | 'q4')}
+                  className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                >
+                  <option value="all">All Quarters</option>
+                  <option value="q1">Quarter 1</option>
+                  <option value="q2">Quarter 2</option>
+                  <option value="q3">Quarter 3</option>
+                  <option value="q4">Quarter 4</option>
+                </select>
+              </div>
+
+              {/* Search Input */}
+              <div className="flex-1 min-w-[280px]">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by student name, email, or ID..."
+                    className="w-full pl-10 pr-10 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm hover:shadow-md transition-all"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      title="Clear search"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Clear Filters Button */}
+              {(selectedSectionId !== 'all' || selectedQuarter !== 'all' || performanceFilter !== 'all' || searchQuery) && (
+                <button
+                  onClick={() => {
+                    setSelectedSectionId('all');
+                    setSelectedQuarter('all');
+                    setPerformanceFilter('all');
+                    setSearchQuery('');
+                  }}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-md hover:shadow-lg transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Clear All
+                </button>
+              )}
             </div>
           </div>
 
@@ -1265,54 +1643,101 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto p-2">
                 {visibleStudents.map(student => {
                   const studentGrades = grades.filter(g => g.studentId === student.id);
-                  const finalGrades = studentGrades
-                    .map(g => g.finalGrade)
-                    .filter((g): g is number => typeof g === 'number');
-                  const average = finalGrades.length > 0
-                    ? Math.round(finalGrades.reduce((sum, g) => sum + g, 0) / finalGrades.length)
+                  
+                  // Calculate general average - prefer finalGrade, fallback to computing from quarters
+                  const averagesForCalculation = studentGrades
+                    .map(g => {
+                      // If finalGrade exists, use it
+                      if (typeof g.finalGrade === 'number' && g.finalGrade > 0) {
+                        return g.finalGrade;
+                      }
+                      // Otherwise compute from quarterly grades
+                      const quarters = [g.q1, g.q2, g.q3, g.q4].filter(
+                        (q): q is number => typeof q === 'number' && q > 0
+                      );
+                      if (quarters.length > 0) {
+                        return Math.round(quarters.reduce((sum, q) => sum + q, 0) / quarters.length);
+                      }
+                      return null;
+                    })
+                    .filter((avg): avg is number => avg !== null);
+                  
+                  const average = averagesForCalculation.length > 0
+                    ? Math.round(averagesForCalculation.reduce((sum, g) => sum + g, 0) / averagesForCalculation.length)
                     : 0;
+                  
+                  // Count total quarterly grades entered (Q1, Q2, Q3, Q4)
+                  const totalQuarterlyGrades = studentGrades.reduce((count, grade) => {
+                    let quarterCount = 0;
+                    if (typeof grade.q1 === 'number' && grade.q1 > 0) quarterCount++;
+                    if (typeof grade.q2 === 'number' && grade.q2 > 0) quarterCount++;
+                    if (typeof grade.q3 === 'number' && grade.q3 > 0) quarterCount++;
+                    if (typeof grade.q4 === 'number' && grade.q4 > 0) quarterCount++;
+                    return count + quarterCount;
+                  }, 0);
+                  
+                  // Calculate expected grades based on subjects this student actually has
+                  // Count how many subjects (learning areas) this student has grade records for
+                  const studentSubjectCount = studentGrades.length;
+                  const totalExpectedGrades = studentSubjectCount * 4; // 4 quarters per subject
                   
                   const isSelected = selectedStudents.includes(student.id);
                   
                   return (
                     <div
                       key={student.id}
-                      onClick={() => handleToggleStudent(student.id)}
-                      className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                      className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
                         isSelected
                           ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 shadow-md'
-                          : 'border-slate-200 dark:border-slate-700 hover:border-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-indigo-400'
                       }`}
                     >
-                      <div className={`w-6 h-6 rounded flex items-center justify-center ${
+                      <div 
+                        onClick={() => handleToggleStudent(student.id)}
+                        className={`w-6 h-6 rounded flex items-center justify-center cursor-pointer ${
                         isSelected 
                           ? 'bg-indigo-600 text-white' 
-                          : 'bg-slate-200 dark:bg-slate-700'
+                          : 'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300'
                       }`}>
                         {isSelected && '✓'}
                       </div>
                       
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-slate-800 dark:text-white truncate">
-                          {student.firstName} {student.lastName}
+                          {student.firstName && student.lastName 
+                            ? `${student.firstName} ${student.lastName}`
+                            : student.name || 'No Name'}
                         </div>
                         <div className="text-sm text-slate-600 dark:text-slate-400">
-                          {student.lrn ? `LRN: ${student.lrn}` : 'No LRN'}
+                          {student.lrn ? `Student: ${student.lrn}` : 'No Student ID'}
                         </div>
                       </div>
 
-                      <div className="text-right">
-                        <div className={`text-lg font-bold ${
-                          average >= 90 ? 'text-indigo-600' :
-                          average >= 75 ? 'text-green-600' :
-                          average > 0 ? 'text-red-600' :
-                          'text-slate-400'
-                        }`}>
-                          {average > 0 ? `${average}%` : '--'}
+                      <div className="text-right flex items-center gap-2">
+                        <div>
+                          <div className={`text-lg font-bold ${
+                            average >= 90 ? 'text-indigo-600' :
+                            average >= 75 ? 'text-green-600' :
+                            average > 0 ? 'text-red-600' :
+                            'text-slate-400'
+                          }`}>
+                            {average > 0 ? `${average}%` : '--'}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {totalQuarterlyGrades}/{totalExpectedGrades} grades
+                          </div>
                         </div>
-                        <div className="text-xs text-slate-500">
-                          {finalGrades.length}/{(learningAreas?.length || 0) * 4} grades
-                        </div>
+                        
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePrintSingleStudent(student.id);
+                          }}
+                          className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors"
+                          title="Print Report Card"
+                        >
+                          🖨️ Print
+                        </button>
                       </div>
                     </div>
                   );
@@ -1368,10 +1793,403 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       {/* Deep Analytics Tab - Tier 3 */}
       {activeTab === 'deep-analytics' && !(isStudentView || isParentView) && (
         <div className="space-y-6">
-          {/* Header */}
+          {/* Header with Export Actions */}
           <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg shadow-lg p-6">
-            <h2 className="text-2xl font-bold mb-2">🔬 Deep Analytics & Insights</h2>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-2xl font-bold">🔬 Deep Analytics & Insights</h2>
+              
+              {/* Export Buttons */}
+              <div className="flex items-center gap-3">
+                {/* CSV Export Dropdown */}
+                <div className="relative group">
+                  <button className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition-all duration-200 font-medium">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    CSV
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                
+                {/* Dropdown Menu */}
+                <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                  <div className="py-2">
+                    <button
+                      onClick={() => handleExportDeepAnalytics('overview')}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-slate-700 flex items-center gap-2"
+                    >
+                      <span className="text-lg">�</span>
+                      <div>
+                        <div className="font-medium">Overview Summary</div>
+                        <div className="text-xs text-slate-500">Academic & behavioral metrics</div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleExportDeepAnalytics('risk-assessment')}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-slate-700 flex items-center gap-2"
+                    >
+                      <span className="text-lg">⚠️</span>
+                      <div>
+                        <div className="font-medium">Risk Assessment</div>
+                        <div className="text-xs text-slate-500">At-risk student details</div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleExportDeepAnalytics('subject-performance')}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-slate-700 flex items-center gap-2"
+                    >
+                      <span className="text-lg">📚</span>
+                      <div>
+                        <div className="font-medium">Subject Performance</div>
+                        <div className="text-xs text-slate-500">Per-subject analytics</div>
+                      </div>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleExportDeepAnalytics('improvement-tracking')}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-slate-700 flex items-center gap-2"
+                    >
+                      <span className="text-lg">📈</span>
+                      <div>
+                        <div className="font-medium">Improvement Tracking</div>
+                        <div className="text-xs text-slate-500">Student progress trends</div>
+                      </div>
+                    </button>
+                    
+                    <div className="border-t border-slate-200 dark:border-slate-700 my-2"></div>
+                    
+                    <button
+                      onClick={() => handleExportDeepAnalytics('all')}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-slate-700 flex items-center gap-2 font-medium"
+                    >
+                      <span className="text-lg">💾</span>
+                      <div>
+                        <div className="font-medium">Export All CSV</div>
+                        <div className="text-xs text-slate-500">Download all reports</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+                </div>
+
+                {/* PDF Export Button */}
+                <button
+                  onClick={handleExportPDF}
+                  className="flex items-center gap-2 bg-red-500/90 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-all duration-200 font-medium"
+                  title="Export as PDF"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  PDF
+                </button>
+
+                {/* Excel Export Button */}
+                <button
+                  onClick={handleExportExcel}
+                  className="flex items-center gap-2 bg-green-500/90 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-all duration-200 font-medium"
+                  title="Export as Excel"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Excel
+                </button>
+              </div>
+            </div>
             <p className="text-purple-100">Advanced analytics, predictions, and AI-powered recommendations</p>
+          </div>
+
+          {/* Comprehensive Analytics - All Stat Cards */}
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">📚 Academic Performance Details</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg p-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-blue-100 text-sm font-medium">Total Students</p>
+                    <p className="text-3xl font-bold mt-1">{analytics.academic.totalStudents}</p>
+                  </div>
+                  <div className="bg-blue-400/30 rounded-full p-3">
+                    <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center text-sm">
+                  <span className="text-blue-100">Average: {analytics.academic.avgGrade}%</span>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg p-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-green-100 text-sm font-medium">Honor Roll</p>
+                    <p className="text-3xl font-bold mt-1">{analytics.academic.honorRoll}</p>
+                  </div>
+                  <div className="bg-green-400/30 rounded-full p-3">
+                    <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-green-100">
+                  {analytics.academic.totalStudents > 0 ? Math.round((analytics.academic.honorRoll / analytics.academic.totalStudents) * 100) : 0}% of class (≥90%)
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-lime-500 to-lime-600 text-white rounded-lg p-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-lime-100 text-sm font-medium">Passing</p>
+                    <p className="text-3xl font-bold mt-1">{analytics.academic.passing}</p>
+                  </div>
+                  <div className="bg-lime-400/30 rounded-full p-3">
+                    <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-lime-100">≥75% average</div>
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg p-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-purple-100 text-sm font-medium">Completion</p>
+                    <p className="text-3xl font-bold mt-1">{analytics.academic.avgCompletion}%</p>
+                  </div>
+                  <div className="bg-purple-400/30 rounded-full p-3">
+                    <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-purple-100">
+                  {analytics.academic.totalStudents - analytics.academic.passing - analytics.academic.failing} incomplete
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Behavioral Performance Cards */}
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">🌟 Behavioral Performance Details</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-lg p-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-indigo-100 text-sm font-medium">Exemplary</p>
+                    <p className="text-3xl font-bold mt-1">{analytics.behavioral.exemplary}</p>
+                  </div>
+                  <div className="bg-indigo-400/30 rounded-full p-3">
+                    <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-indigo-100">Mostly "Always Observed"</div>
+              </div>
+
+              <div className="bg-gradient-to-br from-teal-500 to-teal-600 text-white rounded-lg p-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-teal-100 text-sm font-medium">Good Standing</p>
+                    <p className="text-3xl font-bold mt-1">{analytics.behavioral.goodStanding}</p>
+                  </div>
+                  <div className="bg-teal-400/30 rounded-full p-3">
+                    <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-teal-100">Positive behavior</div>
+              </div>
+
+              <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-lg p-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-amber-100 text-sm font-medium">Needs Support</p>
+                    <p className="text-3xl font-bold mt-1">{analytics.behavioral.behaviorSupport}</p>
+                  </div>
+                  <div className="bg-amber-400/30 rounded-full p-3">
+                    <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-amber-100">Behavioral concerns</div>
+              </div>
+
+              <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 text-white rounded-lg p-4 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-cyan-100 text-sm font-medium">Values Completion</p>
+                    <p className="text-3xl font-bold mt-1">{analytics.behavioral.avgValueCompletion}%</p>
+                  </div>
+                  <div className="bg-cyan-400/30 rounded-full p-3">
+                    <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-cyan-100">Values assessed</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Correlation Insights Panel */}
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-4">🔍 Detailed Insights & Correlations</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-md border-l-4 border-purple-500">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">High Achievers</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{analytics.correlation.highAchievers}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                      Excellent grades + exemplary behavior
+                    </p>
+                  </div>
+                  <span className="text-3xl">🏆</span>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-md border-l-4 border-red-500">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">At-Risk Students</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{analytics.correlation.atRisk}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                      Low grades + behavioral concerns
+                    </p>
+                  </div>
+                  <span className="text-3xl">⚠️</span>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-md border-l-4 border-blue-500">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Academic Support</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{analytics.correlation.academicStrugglesGoodBehavior}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                      Good behavior but struggling grades
+                    </p>
+                  </div>
+                  <span className="text-3xl">📚</span>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-md border-l-4 border-amber-500">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Behavior Support</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{analytics.correlation.goodGradesBehaviorConcerns}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                      Good grades but behavioral issues
+                    </p>
+                  </div>
+                  <span className="text-3xl">🤝</span>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Insight Banner */}
+            {analytics.correlation.correlationStrength !== 'Insufficient data' && (
+              <div className="mt-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl">💡</div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-slate-800 dark:text-white mb-2">Key Insight:</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      <strong>{analytics.correlation.correlationStrength} correlation</strong> detected between academic performance and behavioral assessment. 
+                      {analytics.correlation.highAchievers > 0 && (
+                        <> Students with exemplary behavior tend to perform {analytics.academic.avgGrade >= 85 ? 'significantly' : 'notably'} better academically.</>
+                      )}
+                      {analytics.correlation.atRisk > 0 && (
+                        <> {analytics.correlation.atRisk} student{analytics.correlation.atRisk > 1 ? 's need' : ' needs'} immediate intervention in both areas.</>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Visual Analytics Charts */}
+          <div id="deep-analytics-charts">
+            <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">
+              📊 Visual Analytics
+            </h2>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Grade Distribution Chart */}
+              <div id="grade-distribution-chart">
+                <GradeDistributionChart
+                data={[
+                  { range: '90-100', count: analytics.academic.honorRoll, color: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' },
+                  { range: '85-89', count: analytics.academic.passing - analytics.academic.honorRoll > 0 ? Math.floor((analytics.academic.passing - analytics.academic.honorRoll) / 2) : 0, color: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' },
+                  { range: '80-84', count: analytics.academic.passing - analytics.academic.honorRoll > 0 ? Math.ceil((analytics.academic.passing - analytics.academic.honorRoll) / 2) : 0, color: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' },
+                  { range: '75-79', count: analytics.academic.passing - (analytics.academic.honorRoll + Math.floor((analytics.academic.passing - analytics.academic.honorRoll) / 2) + Math.ceil((analytics.academic.passing - analytics.academic.honorRoll) / 2)), color: 'linear-gradient(135deg, #84cc16 0%, #65a30d 100%)' },
+                  { range: 'Below 75', count: analytics.academic.failing, color: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' },
+                ]}
+                title="Academic Grade Distribution"
+                />
+              </div>
+
+              {/* Behavior Distribution Chart */}
+              <div id="behavior-distribution-chart">
+                <BehaviorDistributionChart
+                data={[
+                  { label: 'Exemplary (AO)', count: analytics.behavioral.exemplary, color: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)', icon: '⭐' },
+                  { label: 'Good Standing (SO)', count: analytics.behavioral.goodStanding, color: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', icon: '👍' },
+                  { label: 'Needs Support (RO/NO)', count: analytics.behavioral.behaviorSupport, color: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', icon: '🆘' },
+                ]}
+                title="Core Values Assessment Distribution"
+                />
+              </div>
+            </div>
+
+            {/* Correlation Scatter Plot */}
+            <div className="mb-6" id="correlation-scatter-plot">
+              <CorrelationScatterPlot
+                data={analytics.correlation.studentsWithBoth.map(s => {
+                  const aoCount = s.aoCount || 0;
+                  const soCount = s.soCount || 0;
+                  const roCount = s.roCount || 0;
+                  const noCount = s.noCount || 0;
+                  const totalMarkings = aoCount + soCount + roCount + noCount;
+                  
+                  // Handle both name formats
+                  const studentName = s.student.firstName && s.student.lastName
+                    ? `${s.student.firstName} ${s.student.lastName}`
+                    : s.student.name || 'Unknown Student';
+                  
+                  return {
+                    id: s.student.id,
+                    name: studentName,
+                    academic: s.average,
+                    behavioral: totalMarkings > 0 
+                      ? Math.round(((aoCount * 100 + soCount * 75) / (totalMarkings * 100)) * 100)
+                      : 0,
+                    category: (s.average >= 90 && s.isExemplary 
+                      ? 'high-achiever' 
+                      : s.average < 75 && s.needsSupport 
+                      ? 'at-risk'
+                      : s.average < 75 && (s.isExemplary || s.isGood)
+                      ? 'academic-support'
+                      : s.average >= 85 && s.needsSupport
+                      ? 'behavior-support'
+                      : 'normal') as 'high-achiever' | 'at-risk' | 'academic-support' | 'behavior-support' | 'normal'
+                  };
+                })}
+                title="Academic vs Behavioral Performance Correlation"
+              />
+            </div>
           </div>
 
           {/* Quarterly Trend Analysis */}
@@ -1743,6 +2561,117 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
                   <div>All metrics are healthy! No immediate recommendations.</div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Modal */}
+      {showPrintModal && currentPrintStudents.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 z-50 overflow-auto">
+          <div className="min-h-screen p-4">
+            <div className="max-w-[95vw] lg:max-w-[1200px] mx-auto bg-white rounded-lg shadow-2xl">
+              <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-lg z-10">
+                <h3 className="text-lg font-semibold text-slate-800">
+                  DepEd Form 138 - Report Card {currentPrintStudents.length > 1 && `(${currentPrintStudents.length} students)`}
+                </h3>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={async () => {
+                      const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').substring(0, 80);
+                      
+                      try {
+                        const html2canvas = (await import('html2canvas')).default;
+                        const { jsPDF } = await import('jspdf');
+                        
+                        const pdf = new jsPDF({ unit: 'in', format: 'letter', orientation: 'landscape' });
+                        let isFirstPage = true;
+                        
+                        document.body.classList.add('pdf-export');
+                        
+                        // Process each student
+                        for (const studentId of currentPrintStudents) {
+                          const page1 = document.getElementById(`page-1-${studentId}`) as HTMLElement | null;
+                          const page2 = document.getElementById(`page-2-${studentId}`) as HTMLElement | null;
+                          
+                          if (!page1 || !page2) continue;
+                          
+                          const cnvOpts = {
+                            scale: 2,
+                            useCORS: true,
+                            allowTaint: false,
+                            backgroundColor: '#ffffff',
+                            scrollY: 0,
+                          } as const;
+                          
+                          const [c1, c2] = await Promise.all([
+                            html2canvas(page1, cnvOpts),
+                            html2canvas(page2, cnvOpts),
+                          ]);
+                          
+                          const img1 = c1.toDataURL('image/jpeg', 0.98);
+                          const img2 = c2.toDataURL('image/jpeg', 0.98);
+                          
+                          if (!isFirstPage) {
+                            pdf.addPage('letter', 'landscape');
+                          }
+                          pdf.addImage(img1, 'JPEG', 0, 0, 11, 8.5);
+                          pdf.addPage('letter', 'landscape');
+                          pdf.addImage(img2, 'JPEG', 0, 0, 11, 8.5);
+                          
+                          isFirstPage = false;
+                        }
+                        
+                        document.body.classList.remove('pdf-export');
+                        
+                        const filename = currentPrintStudents.length === 1
+                          ? `Form138_${slug(visibleStudents.find(s => s.id === currentPrintStudents[0])?.name || 'student')}_${slug(String(schoolData.settings.schoolYear))}.pdf`
+                          : `Form138_Multiple_Students_${slug(String(schoolData.settings.schoolYear))}.pdf`;
+                        
+                        pdf.save(filename);
+                      } catch (error) {
+                        console.error('PDF generation error:', error);
+                        document.body.classList.remove('pdf-export');
+                      }
+                    }}
+                    className="group flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-105 active:scale-95"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    <span className="text-sm">Download PDF</span>
+                  </button>
+                  <button
+                    onClick={() => setShowPrintModal(false)}
+                    className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-[80vh] overflow-y-auto">
+                {currentPrintStudents.map((studentId, index) => {
+                  const student = visibleStudents.find(s => s.id === studentId);
+                  if (!student) return null;
+                  return (
+                    <div key={studentId} className={index > 0 ? 'mt-8 pt-8 border-t-4 border-slate-300' : ''}>
+                      {currentPrintStudents.length > 1 && (
+                        <div className="bg-slate-100 px-6 py-3 mb-4">
+                          <h4 className="font-semibold text-slate-700">
+                            Student {index + 1} of {currentPrintStudents.length}: {student.name}
+                          </h4>
+                        </div>
+                      )}
+                      <PrintableReport
+                        student={student}
+                        schoolData={schoolData}
+                        hideDownloadButton={true}
+                        studentIndex={index}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
