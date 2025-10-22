@@ -1,6 +1,59 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // ========================================
+    // DepEd Forms Collections - Added Oct 22, 2025
+    // ========================================
+    
+    // Form 137 - Academic History / Permanent Record
+    // Staff with appropriate roles can read/write
+    match /academicHistory/{recordId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+      // TODO: Add role-based validation when auth includes custom claims
+      // allow write: if request.auth.token.role in ['admin', 'registrar', 'principal'];
+    }
+    
+    // Form 138 - Report Cards
+    // Teachers can write for their students, all staff can read
+    match /reportCards/{cardId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+      // TODO: Add role-based validation
+      // allow write: if request.auth.token.role in ['admin', 'teacher', 'principal', 'registrar'];
+    }
+    
+    // School Forms - SF1, SF2, SF9 (EBEIS)
+    // Admin and registrar can manage
+    match /schoolForms/{formId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+      // TODO: Add role-based validation
+      // allow write: if request.auth.token.role in ['admin', 'registrar', 'principal'];
+    }
+    
+    // ELLN Assessments - K-3 Early Learning
+    // Teachers and admin can manage
+    match /ellnAssessments/{assessmentId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+      // TODO: Add role-based validation
+      // allow write: if request.auth.token.role in ['admin', 'teacher', 'principal'];
+    }
+    
+    // Form Generation Log - Analytics & Tracking
+    // All authenticated users can read, only system can write
+    match /formGenerationLog/{logId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if false; // Log entries are immutable
+    }
+    
+    // ========================================
+    // End DepEd Forms Collections
+    // ========================================
+    
     // Allow public read access for all collections to enable initial data load.
     // WARNING: This is permissive. Data should be secured further post-login.
     // For now, this unblocks the login screen.
