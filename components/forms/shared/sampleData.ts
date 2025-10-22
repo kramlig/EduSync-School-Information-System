@@ -184,8 +184,18 @@ export const sampleForm137: Partial<AcademicHistory> = {
   daysOfSchool: 200,
   daysPresent: 198,
   remarks: 'Promoted to Grade 7',
+  coreValues: {
+    observedValues: {
+      'Maka-Diyos': 'SO',
+      'Makatao': 'AO',
+      'Makakalikasan': 'RO',
+      'Makabansa': 'AO'
+    }
+  },
   createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString()
+  updatedAt: new Date().toISOString(),
+  createdBy: 'admin',
+  updatedBy: 'admin'
 };
 
 /**
