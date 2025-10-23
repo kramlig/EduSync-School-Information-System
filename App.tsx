@@ -11,6 +11,7 @@ import Header from './components/Header';
 import LoginScreen from './components/LoginScreen';
 import FullScreenLoader from './components/FullScreenLoader';
 import OfflineBanner from './components/OfflineBanner';
+import UpdateNotification from './components/UpdateNotification';
 
 // Lazy load heavy components for better code splitting
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -288,6 +289,9 @@ const App: React.FC = () => {
 
   return (
     <Router key={session?.user.id || 'no-session'}>
+      {/* PWA Update Notification */}
+      <UpdateNotification />
+      
       {/* TIER 1B: Offline status indicator */}
       <OfflineBanner 
         isOnline={isOnline} 
