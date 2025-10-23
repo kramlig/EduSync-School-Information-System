@@ -38,12 +38,34 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
   
   const isStudentView = session.type === 'student';
   const isParentView = session.type === 'parent';
+  const isTeacherView = session.type === 'staff' && (session.user as AuthUser).role === 'teacher';
+
+  // Get teacher's assignments if they are a teacher
+  const teacherAssignments = isTeacherView ? (session.user as AuthUser).assignments || [] : [];
+  const teacherGradeLevels = teacherAssignments.map(a => a.gradeLevel);
+  const teacherLearningAreaIds = teacherAssignments.map(a => a.learningAreaId);
+
+  // Filter sections based on teacher's grade level assignments
+  const availableSections = isTeacherView
+    ? sections.filter(s => teacherGradeLevels.includes(s.gradeLevel))
+    : sections;
+
+  // Filter learning areas based on teacher's assignments
+  const availableLearningAreas = isTeacherView
+    ? learningAreas.filter(la => teacherLearningAreaIds.includes(la.id))
+    : learningAreas;
 
   // Base students based on user type
   const baseStudents = isStudentView 
     ? students.filter(s => s.id === session.user.id)
     : isParentView 
     ? students.filter(s => s.id === forceStudentId)
+    : isTeacherView
+    ? students.filter(s => {
+        // Teachers can only see students in sections they teach (matching grade levels)
+        const studentSection = sections.find(sec => sec.id === s.sectionId);
+        return studentSection && teacherGradeLevels.includes(studentSection.gradeLevel);
+      })
     : students;
 
   // Apply filters to students
@@ -99,7 +121,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
     }
 
     return filtered;
-  }, [baseStudents, selectedSectionId, searchQuery, performanceFilter, grades, learningAreas]);
+  }, [baseStudents, selectedSectionId, searchQuery, performanceFilter, grades, availableLearningAreas]);
 
   // Report Cards handlers
   const handleToggleStudent = (studentId: string) => {
@@ -621,8 +643,8 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       const studentSection = sections?.find(s => s.id === student.sectionId);
       const studentGradeLevel = studentSection?.gradeLevel;
       
-      // Filter learning areas by student's grade level
-      const applicableLearningAreas = learningAreas?.filter(la => {
+      // Filter learning areas by student's grade level (and teacher's assignments if applicable)
+      const applicableLearningAreas = availableLearningAreas?.filter(la => {
         if (!studentGradeLevel || !la.gradeLevel || !Array.isArray(la.gradeLevel)) {
           return true; // Fallback: include all if grade level data is missing
         }
@@ -755,7 +777,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
         studentsWithBoth
       }
     };
-  }, [students, grades, learningAreas, coreValues, coreValueGrades, session, forceStudentId, isStudentView, isParentView, selectedSectionId, performanceFilter, searchQuery]);
+  }, [students, grades, availableLearningAreas, coreValues, coreValueGrades, session, forceStudentId, isStudentView, isParentView, selectedSectionId, performanceFilter, searchQuery]);
 
   // Tier 3: Deep Analytics Calculations (now uses unified filters)
   const deepAnalytics = useMemo(() => {
@@ -903,7 +925,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
     const declining = predictions.filter(p => p.trend === 'declining').length;
 
     // Subject-wise Performance Analysis
-    const subjectPerformance = learningAreas.map(la => {
+    const subjectPerformance = availableLearningAreas.map(la => {
       const subjectGrades = grades.filter(g => g.learningAreaId === la.id);
       const allQuarterGrades = ['q1', 'q2', 'q3', 'q4'].flatMap(q => {
         const qKey = q as 'q1' | 'q2' | 'q3' | 'q4';
@@ -1025,7 +1047,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       },
       recommendations
     };
-  }, [students, grades, learningAreas, session, forceStudentId, isStudentView, isParentView, selectedSectionId, searchQuery]);
+  }, [students, grades, availableLearningAreas, session, forceStudentId, isStudentView, isParentView, selectedSectionId, searchQuery]);
 
   const tabs = [
     { id: 'overview' as TabType, label: 'Overview & Analytics', icon: '📊' },
@@ -1125,8 +1147,8 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
                       onChange={(e) => setSelectedSectionId(e.target.value)}
                       className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
                     >
-                      <option value="all">All Sections</option>
-                      {schoolData.sections?.map((section) => (
+                      <option value="all">{isTeacherView ? 'All My Sections' : 'All Sections'}</option>
+                      {availableSections?.map((section) => (
                         <option key={section.id} value={section.id}>
                           Grade {section.gradeLevel} - {section.name}
                         </option>
