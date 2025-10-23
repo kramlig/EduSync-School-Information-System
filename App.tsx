@@ -185,8 +185,11 @@ const App: React.FC = () => {
   
   // TIER 1 OPTIMIZATION: Simplified initialization logic
   // Show login screen as soon as auth is ready
-  // Only wait for data loading AFTER user is logged in
-  const isInitializing = !authReady || (session && loading && !loadTimeout);
+  // Only wait for data loading AFTER user is logged in AND only on initial mount
+  // Once we've loaded at least SOME data (1+ collection), allow navigation
+  const hasAnyData = students.length > 0 || teachers.length > 0 || learningAreas.length > 0 || 
+                      sections.length > 0 || settings.length > 0;
+  const isInitializing = !authReady || (session && loading && !loadTimeout && !hasAnyData);
   
   if (isInitializing) {
     return <FullScreenLoader message="Loading school data..." />;
