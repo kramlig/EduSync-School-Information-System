@@ -72,6 +72,15 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
     console.log('[UnifiedAssessmentView] ✅ Filtered Learning Areas:', availableLearningAreas.length, availableLearningAreas.map(la => la.name));
   }
 
+  // Auto-select first section for teachers on mount
+  React.useEffect(() => {
+    if (isTeacherView && availableSections.length > 0 && selectedSectionId === 'all') {
+      const firstSection = availableSections[0];
+      console.log('[UnifiedAssessmentView] 🎯 Auto-selecting first section for teacher:', firstSection.name);
+      setSelectedSectionId(firstSection.id);
+    }
+  }, [isTeacherView, availableSections, selectedSectionId]);
+
   // Base students based on user type
   const baseStudents = isStudentView 
     ? students.filter(s => s.id === session.user.id)
