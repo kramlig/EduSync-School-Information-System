@@ -1,8 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from '../App.tsx';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import './index.css';
 
 // Register the service worker for caching and offline support
@@ -40,13 +38,9 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-const queryClient = new QueryClient();
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-      {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
-    </QueryClientProvider>
+    <App />
   </React.StrictMode>
 );
