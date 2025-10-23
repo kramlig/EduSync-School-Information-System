@@ -64,11 +64,18 @@ const App: React.FC = () => {
         // Trigger anonymous sign-in; wait for next auth state change before proceeding
         signInAnonymously(auth).catch((e) => {
           console.error('[Auth] Anonymous sign-in failed:', e);
-          setAuthError('Failed to initialize authentication. Please check your internet connection.');
-          setAuthReady(true); // Set ready anyway to show error
+          // If offline, don't show error - just set ready to allow offline mode
+          if (!navigator.onLine) {
+            console.log('[Auth] ⚠️ Offline mode - skipping anonymous auth');
+            setAuthReady(true);
+          } else {
+            setAuthError('Failed to initialize authentication. Please check your internet connection.');
+            setAuthReady(true); // Set ready anyway to show error
+          }
         });
         return;
       }
+      setAuthError(null); // Clear any previous errors
       setAuthReady(true);
       console.log('[Auth] ✅ Auth ready:', user.uid);
     });
