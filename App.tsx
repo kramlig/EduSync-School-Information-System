@@ -2,8 +2,7 @@ import React, { useState, useEffect, lazy, Suspense, useCallback } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
-import { useSchoolData } from './hooks/useSchoolData';
-import { useQueryClient } from '@tanstack/react-query';
+import { useFirestoreData } from './hooks/useFirestoreData';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useFirestoreSyncStatus } from './hooks/useFirestoreSyncStatus';
 import type { AuthUser, StudentUser, ParentUser } from './types';
@@ -46,9 +45,6 @@ const Form137CreateWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear }) 
 
 const App: React.FC = () => {
   console.log('[App] Rendering');
-  
-  // Get React Query client for cache management
-  const queryClient = useQueryClient();
   
   // TIER 1B: Monitor online/offline status and pending writes
   const { isOnline, wasOffline } = useOnlineStatus();
@@ -111,15 +107,11 @@ const App: React.FC = () => {
     } else {
       localStorage.removeItem('edusync_session');
       console.log('[App] 🗑️ Session removed from localStorage');
-      // TIER 1 FIX: Clear React Query cache when logging out
-      // This prevents cached data from being displayed on login screen
-      queryClient.clear();
-      console.log('[App] 🗑️ React Query cache cleared');
       // TIER 1B: Clear cached user credentials on logout
       localStorage.removeItem('edusync_cached_user');
       console.log('[App] 🗑️ Cached user credentials cleared');
     }
-  }, [session, queryClient]);
+  }, [session]);
   
   // Add timeout mechanism to prevent infinite loading
   // TIER 1 FIX: Only run timeout when logged in AND loading data
@@ -144,25 +136,17 @@ const App: React.FC = () => {
   
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
-  // TIER 1 OPTIMIZATION - FINAL SOLUTION:
-  // Load NO data until user is logged in
-  // Login screen will use email/password (no dropdown), so it doesn't need user lists
-  const schoolData = useSchoolData(
-    session ? [
-      // Only load data AFTER successful login
-      'settings', 'teachers', 'students', 'parents', 'sections', 'announcements',
-      'assignments', 'studentAssignmentGrades', 'learningAreas', 'grades',
-      'coreValues', 'coreValueGrades', 'attendanceRecords', 'lessonPlans',
-      'classSchedules', 'substituteAssignments'
-    ] : []  // NO data loading at login screen
-  );
+  // NEW: Firestore subscriptions hook - loads all data automatically with real-time updates
+  // No need to specify collections - all subscriptions are active
+  // Loading state is true until all 16 collections have loaded
+  const schoolData = useFirestoreData();
   
   const { 
     loading, error, settings, students, teachers, parents,
-    grades = [], coreValues = [], coreValueGrades = [], attendanceRecords = [],
-    sections = [], substituteAssignments = [], classSchedules = [],
-    assignments = [], studentAssignmentGrades = [], lessonPlans = [],
-    announcements = []
+    grades, coreValues, coreValueGrades, attendanceRecords,
+    sections, substituteAssignments, classSchedules,
+    assignments, studentAssignmentGrades, lessonPlans,
+    announcements
   } = schoolData;
 
   // Track selected child for parent sessions
