@@ -2,7 +2,7 @@ import React, { useState, useEffect, lazy, Suspense, useCallback } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
-import { useFirestoreData } from './hooks/useFirestoreData';
+import { useSchoolData } from './hooks/useSchoolData';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useFirestoreSyncStatus } from './hooks/useFirestoreSyncStatus';
 import type { AuthUser, StudentUser, ParentUser } from './types';
@@ -139,7 +139,7 @@ const App: React.FC = () => {
   // NEW: Firestore subscriptions hook - loads all data automatically with real-time updates
   // No need to specify collections - all subscriptions are active
   // Loading state is true until all 16 collections have loaded
-  const schoolData = useFirestoreData();
+  const schoolData = useSchoolData();
   
   const { 
     loading, error, settings, students, teachers, parents,
