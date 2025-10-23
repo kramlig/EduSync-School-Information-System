@@ -145,7 +145,7 @@ const App: React.FC = () => {
   const { 
     loading, error, settings, students, teachers, parents,
     grades, coreValues, coreValueGrades, attendanceRecords,
-    sections, substituteAssignments, classSchedules,
+    sections, learningAreas, substituteAssignments, classSchedules,
     assignments, studentAssignmentGrades, lessonPlans,
     announcements
   } = schoolData;
