@@ -4,11 +4,13 @@ import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useSchoolData } from './hooks/useSchoolData';
 import { useQueryClient } from '@tanstack/react-query';
+import { useOnlineStatus } from './hooks/useOnlineStatus';
 import type { AuthUser, StudentUser, ParentUser } from './types';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import LoginScreen from './components/LoginScreen';
 import FullScreenLoader from './components/FullScreenLoader';
+import OfflineBanner from './components/OfflineBanner';
 
 // Lazy load heavy components for better code splitting
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -46,6 +48,9 @@ const App: React.FC = () => {
   
   // Get React Query client for cache management
   const queryClient = useQueryClient();
+  
+  // TIER 1B: Monitor online/offline status
+  const { isOnline, wasOffline } = useOnlineStatus();
   
   // Ensure we have a Firebase Auth user for Firestore writes (rules require request.auth != null)
   const [authReady, setAuthReady] = useState(false);
@@ -101,6 +106,9 @@ const App: React.FC = () => {
       // This prevents cached data from being displayed on login screen
       queryClient.clear();
       console.log('[App] 🗑️ React Query cache cleared');
+      // TIER 1B: Clear cached user credentials on logout
+      localStorage.removeItem('edusync_cached_user');
+      console.log('[App] 🗑️ Cached user credentials cleared');
     }
   }, [session, queryClient]);
   
@@ -286,6 +294,12 @@ const App: React.FC = () => {
 
   return (
     <Router key={session?.user.id || 'no-session'}>
+      {/* TIER 1B: Offline status indicator */}
+      <OfflineBanner 
+        isOnline={isOnline} 
+        wasOffline={wasOffline}
+        pendingWrites={0} // Will be connected in Phase 2
+      />
       <div className="flex h-screen bg-slate-100 dark:bg-slate-900">
         <Sidebar 
           session={session} 

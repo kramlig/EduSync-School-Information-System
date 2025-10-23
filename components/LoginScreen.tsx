@@ -48,13 +48,74 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
       const userDoc = snapshot.docs[0];
       const userData = { id: userDoc.id, ...userDoc.data() } as AuthUser | StudentUser | ParentUser;
       
+      // ✅ TIER 1B: Cache user for offline login
+      console.log('[LoginScreen] 💾 Caching user credentials for offline use');
+      localStorage.setItem('edusync_cached_user', JSON.stringify({
+        email: email.toLowerCase(),
+        type: loginType,
+        userData: userData,
+        cachedAt: Date.now()
+      }));
+      
       // Note: In production, use proper Firebase Auth with password verification
       // For now, in debug mode we accept any password
       console.log('[LoginScreen] ✅ User found, logging in');
       onLogin(userData, loginType);
     } catch (err) {
       console.error('[LoginScreen] ❌ Login error:', err);
-      setError('Login failed. Please try again.');
+      
+      // ✅ TIER 1B: Offline fallback with first-login detection
+      if (!navigator.onLine) {
+        console.log('[LoginScreen] 🔴 Offline detected, checking for cached credentials...');
+        
+        const cachedStr = localStorage.getItem('edusync_cached_user');
+        
+        if (cachedStr) {
+          try {
+            const cached = JSON.parse(cachedStr);
+            const CACHE_EXPIRY_DAYS = 7;
+            const cacheAge = Date.now() - cached.cachedAt;
+            const cacheExpired = cacheAge > (CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+            
+            if (cacheExpired) {
+              console.log('[LoginScreen] ⚠️ Cached credentials expired');
+              setError('Cached credentials expired. Please connect to internet to login.');
+              setIsLoading(false);
+              return;
+            }
+            
+            // Check if cached user matches current login attempt
+            if (cached.email === email.toLowerCase() && cached.type === loginType) {
+              console.log('[LoginScreen] ✅ Using cached credentials (offline mode)');
+              onLogin(cached.userData, loginType);
+              setIsLoading(false);
+              return;
+            } else {
+              console.log('[LoginScreen] ⚠️ Cached user mismatch');
+              setError(
+                `No cached credentials for ${email} as ${loginType}. ` +
+                `Last login was ${cached.email} as ${cached.type}.`
+              );
+              setIsLoading(false);
+              return;
+            }
+          } catch (parseErr) {
+            console.error('[LoginScreen] ❌ Error parsing cached user:', parseErr);
+          }
+        }
+        
+        // No cache exists - first-time user offline
+        console.log('[LoginScreen] ⚠️ First-time login attempt while offline');
+        setError(
+          '⚠️ First login requires internet connection. ' +
+          'Please connect to WiFi to set up your account. ' +
+          'After first login, you can work offline anytime.'
+        );
+      } else {
+        // Online but other error
+        setError('Unable to login. Please check your credentials and try again.');
+      }
+      
       setIsLoading(false);
     }
   };
