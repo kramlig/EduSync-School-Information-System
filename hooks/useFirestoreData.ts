@@ -24,6 +24,8 @@ import {
     addDoc,
     updateDoc,
     deleteDoc,
+    getDoc,
+    setDoc,
     serverTimestamp,
     query,
     where,
@@ -760,41 +762,833 @@ export function useFirestoreData(collectionsToFetch?: string[]): SchoolDataHook 
         setSearchCache(new Map());
     }, []);
 
-    // ===== TODO: ADD CRUD METHODS (Day 1 Evening) =====
-    // Placeholder stubs to satisfy SchoolDataHook interface
-    const addStudent = async (student: Omit<Student, 'id' | 'enrollmentDate'>) => {
-        console.log('[useFirestoreData] TODO: addStudent', student);
-        return { success: true };
-    };
+    // ===== CRUD METHODS =====
+    // All methods use Firestore directly (subscriptions auto-update the state)
 
-    const updateStudent = async (student: Student) => {
-        console.log('[useFirestoreData] TODO: updateStudent', student);
-    };
+    // ===== STUDENT CRUD =====
+    const addStudent = useCallback(async (student: Omit<Student, 'id' | 'enrollmentDate'>): Promise<{ success: boolean; message?: string }> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
 
-    const deleteStudent = async (studentId: string) => {
-        console.log('[useFirestoreData] TODO: deleteStudent', studentId);
-    };
+            // Validate unique email
+            const existingStudent = students.find(s => s.email === student.email);
+            if (existingStudent) {
+                return { success: false, message: 'A student with this email already exists.' };
+            }
 
-    // ... TODO: Add all remaining CRUD methods to match SchoolDataHook interface
+            const newStudent = {
+                ...student,
+                enrollmentDate: serverTimestamp(),
+                createdAt: serverTimestamp()
+            };
+
+            const docRef = await addDoc(collection(db, 'students'), newStudent);
+            console.log('[useFirestoreData] ✅ Student added:', docRef.id);
+            return { success: true };
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error adding student:', err);
+            return { success: false, message: err.message };
+        }
+    }, [students]);
+
+    const updateStudent = useCallback(async (student: Student): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'students', student.id), {
+                ...student,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Student updated:', student.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating student:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteStudent = useCallback(async (studentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            // Delete student and related data
+            await deleteDoc(doc(db, 'students', studentId));
+            
+            // Delete related grades
+            const gradesQuery = query(collection(db, 'grades'), where('studentId', '==', studentId));
+            const gradesSnapshot = await getDocs(gradesQuery);
+            const gradeDeletes = gradesSnapshot.docs.map(d => deleteDoc(d.ref));
+            
+            // Delete related core value grades
+            const cvGradesQuery = query(collection(db, 'coreValueGrades'), where('studentId', '==', studentId));
+            const cvGradesSnapshot = await getDocs(cvGradesQuery);
+            const cvGradeDeletes = cvGradesSnapshot.docs.map(d => deleteDoc(d.ref));
+            
+            // Delete attendance records
+            const attendanceQuery = query(collection(db, 'attendanceRecords'), where('studentId', '==', studentId));
+            const attendanceSnapshot = await getDocs(attendanceQuery);
+            const attendanceDeletes = attendanceSnapshot.docs.map(d => deleteDoc(d.ref));
+            
+            await Promise.all([...gradeDeletes, ...cvGradeDeletes, ...attendanceDeletes]);
+            console.log('[useFirestoreData] ✅ Student and related data deleted:', studentId);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error deleting student:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== TEACHER CRUD =====
+    const addTeacher = useCallback(async (teacher: Omit<Teacher, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'teachers'), {
+                ...teacher,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Teacher added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error adding teacher:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateTeacher = useCallback(async (teacher: Teacher): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'teachers', teacher.id), {
+                ...teacher,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Teacher updated:', teacher.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating teacher:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteTeacher = useCallback(async (teacherId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'teachers', teacherId));
+            console.log('[useFirestoreData] ✅ Teacher deleted:', teacherId);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error deleting teacher:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== PARENT CRUD =====
+    const addParent = useCallback(async (parent: Omit<Parent, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'parents'), {
+                ...parent,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Parent added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error adding parent:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateParent = useCallback(async (parent: Parent): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'parents', parent.id), {
+                ...parent,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Parent updated:', parent.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating parent:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteParent = useCallback(async (parentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'parents', parentId));
+            console.log('[useFirestoreData] ✅ Parent deleted:', parentId);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error deleting parent:', err);
+            throw err;
+        }
+    }, []);
+
+    const assignStudentToParent = useCallback(async (parentId: string, studentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const parentRef = doc(db, 'parents', parentId);
+            const parentDoc = await getDoc(parentRef);
+            
+            if (!parentDoc.exists()) {
+                throw new Error('Parent not found');
+            }
+            
+            const currentStudentIds = parentDoc.data().studentIds || [];
+            const updatedStudentIds = Array.from(new Set([...currentStudentIds, studentId]));
+            
+            await updateDoc(parentRef, {
+                studentIds: updatedStudentIds,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Student assigned to parent:', { parentId, studentId });
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error assigning student to parent:', err);
+            throw err;
+        }
+    }, []);
+
+    const unassignStudentFromParent = useCallback(async (parentId: string, studentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const parentRef = doc(db, 'parents', parentId);
+            const parentDoc = await getDoc(parentRef);
+            
+            if (!parentDoc.exists()) {
+                throw new Error('Parent not found');
+            }
+            
+            const currentStudentIds = parentDoc.data().studentIds || [];
+            const updatedStudentIds = currentStudentIds.filter((id: string) => id !== studentId);
+            
+            await updateDoc(parentRef, {
+                studentIds: updatedStudentIds,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Student unassigned from parent:', { parentId, studentId });
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error unassigning student from parent:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== SECTION CRUD =====
+    const addSection = useCallback(async (section: Omit<Section, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'sections'), {
+                ...section,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Section added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error adding section:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateSection = useCallback(async (section: Section): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'sections', section.id), {
+                ...section,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Section updated:', section.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating section:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteSection = useCallback(async (sectionId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'sections', sectionId));
+            
+            // Update students to remove section reference
+            const studentsInSection = students.filter(s => s.sectionId === sectionId);
+            const updatePromises = studentsInSection.map(student =>
+                updateDoc(doc(db, 'students', student.id), {
+                    sectionId: null,
+                    updatedAt: serverTimestamp()
+                })
+            );
+            await Promise.all(updatePromises);
+            
+            console.log('[useFirestoreData] ✅ Section deleted:', sectionId);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error deleting section:', err);
+            throw err;
+        }
+    }, [students]);
+
+    // ===== LEARNING AREA CRUD =====
+    const addLearningArea = useCallback(async (area: Omit<LearningArea, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'learningAreas'), {
+                ...area,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Learning area added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error adding learning area:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateLearningArea = useCallback(async (learningAreaId: string, area: Omit<LearningArea, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'learningAreas', learningAreaId), {
+                ...area,
+                id: learningAreaId,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Learning area updated:', learningAreaId);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating learning area:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteLearningArea = useCallback(async (learningAreaId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'learningAreas', learningAreaId));
+            
+            // Delete related grades
+            const gradesQuery = query(collection(db, 'grades'), where('learningAreaId', '==', learningAreaId));
+            const gradesSnapshot = await getDocs(gradesQuery);
+            const deletePromises = gradesSnapshot.docs.map(d => deleteDoc(d.ref));
+            await Promise.all(deletePromises);
+            
+            console.log('[useFirestoreData] ✅ Learning area and related grades deleted:', learningAreaId);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error deleting learning area:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== GRADE CRUD =====
+    const updateGrade = useCallback(async (
+        studentId: string,
+        learningAreaId: string,
+        quarter: 'q1' | 'q2' | 'q3' | 'q4',
+        value?: number,
+        subSubject?: string
+    ): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            // Find or create grade document
+            const gradesQuery = query(
+                collection(db, 'grades'),
+                where('studentId', '==', studentId),
+                where('learningAreaId', '==', learningAreaId)
+            );
+            const gradesSnapshot = await getDocs(gradesQuery);
+            
+            let gradeRef;
+            let gradeData: any = {};
+            
+            if (gradesSnapshot.empty) {
+                // Create new grade document
+                gradeData = {
+                    studentId,
+                    learningAreaId,
+                    [quarter]: subSubject ? { [subSubject]: value } : value,
+                    createdAt: serverTimestamp()
+                };
+                gradeRef = await addDoc(collection(db, 'grades'), gradeData);
+            } else {
+                // Update existing grade document
+                const existingDoc = gradesSnapshot.docs[0];
+                gradeRef = existingDoc.ref;
+                gradeData = existingDoc.data();
+                
+                if (subSubject) {
+                    const currentQuarter = gradeData[quarter] || {};
+                    gradeData[quarter] = { ...currentQuarter, [subSubject]: value };
+                } else {
+                    gradeData[quarter] = value;
+                }
+                
+                // Calculate final grade and remarks
+                const quarters = ['q1', 'q2', 'q3', 'q4'];
+                const quarterGrades = quarters.map(q => {
+                    const qValue = gradeData[q];
+                    if (typeof qValue === 'number') return qValue;
+                    if (typeof qValue === 'object' && qValue !== null) {
+                        const values = Object.values(qValue).filter(v => typeof v === 'number');
+                        return values.length > 0 ? values.reduce((sum: any, v: any) => sum + v, 0) / values.length : undefined;
+                    }
+                    return undefined;
+                }).filter(g => g !== undefined);
+                
+                if (quarterGrades.length > 0) {
+                    gradeData.finalGrade = Math.round(quarterGrades.reduce((sum: any, g: any) => sum + g, 0) / quarterGrades.length);
+                    gradeData.remarks = gradeData.finalGrade >= 75 ? 'Passed' : 'Failed';
+                }
+                
+                await updateDoc(gradeRef, {
+                    ...gradeData,
+                    updatedAt: serverTimestamp()
+                });
+            }
+            
+            console.log('[useFirestoreData] ✅ Grade updated:', { studentId, learningAreaId, quarter });
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating grade:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== CORE VALUE GRADE CRUD =====
+    const updateCoreValueGrade = useCallback(async (
+        studentId: string,
+        coreValueId: string,
+        quarter: 'q1' | 'q2' | 'q3' | 'q4',
+        behavior: string,
+        value: CoreValueMarking | ''
+    ): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            // Find or create core value grade document
+            const cvGradesQuery = query(
+                collection(db, 'coreValueGrades'),
+                where('studentId', '==', studentId),
+                where('coreValueId', '==', coreValueId)
+            );
+            const cvGradesSnapshot = await getDocs(cvGradesQuery);
+            
+            let cvGradeData: any = {};
+            
+            if (cvGradesSnapshot.empty) {
+                // Create new core value grade
+                cvGradeData = {
+                    studentId,
+                    coreValueId,
+                    [quarter]: { [behavior]: value },
+                    createdAt: serverTimestamp()
+                };
+                await addDoc(collection(db, 'coreValueGrades'), cvGradeData);
+            } else {
+                // Update existing
+                const existingDoc = cvGradesSnapshot.docs[0];
+                cvGradeData = existingDoc.data();
+                
+                const currentQuarter = cvGradeData[quarter] || {};
+                cvGradeData[quarter] = { ...currentQuarter, [behavior]: value };
+                
+                await updateDoc(existingDoc.ref, {
+                    ...cvGradeData,
+                    updatedAt: serverTimestamp()
+                });
+            }
+            
+            console.log('[useFirestoreData] ✅ Core value grade updated:', { studentId, coreValueId, quarter, behavior });
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating core value grade:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== ATTENDANCE CRUD =====
+    const updateAttendance = useCallback(async (
+        studentId: string,
+        date: string,
+        status: AttendanceStatus
+    ): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            // Find or create attendance record
+            const attendanceQuery = query(
+                collection(db, 'attendanceRecords'),
+                where('studentId', '==', studentId)
+            );
+            const attendanceSnapshot = await getDocs(attendanceQuery);
+            
+            if (attendanceSnapshot.empty) {
+                // Create new attendance record
+                await addDoc(collection(db, 'attendanceRecords'), {
+                    studentId,
+                    dailyStatus: { [date]: status },
+                    createdAt: serverTimestamp()
+                });
+            } else {
+                // Update existing
+                const existingDoc = attendanceSnapshot.docs[0];
+                const dailyStatus = existingDoc.data().dailyStatus || {};
+                dailyStatus[date] = status;
+                
+                await updateDoc(existingDoc.ref, {
+                    dailyStatus,
+                    updatedAt: serverTimestamp()
+                });
+            }
+            
+            console.log('[useFirestoreData] ✅ Attendance updated:', { studentId, date, status });
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating attendance:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== SETTINGS CRUD =====
+    const updateSettings = useCallback(async (settings: SchoolSettings): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await setDoc(doc(db, 'settings', 'school'), {
+                ...settings,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Settings updated');
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating settings:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== SUBSTITUTE ASSIGNMENT CRUD =====
+    const addSubstituteAssignment = useCallback(async (assignment: Omit<SubstituteAssignment, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'substituteAssignments'), {
+                ...assignment,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Substitute assignment added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error adding substitute assignment:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateSubstituteAssignment = useCallback(async (assignment: SubstituteAssignment): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'substituteAssignments', assignment.id), {
+                ...assignment,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Substitute assignment updated:', assignment.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating substitute assignment:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteSubstituteAssignment = useCallback(async (assignmentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'substituteAssignments', assignmentId));
+            console.log('[useFirestoreData] ✅ Substitute assignment deleted:', assignmentId);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error deleting substitute assignment:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== CLASS SCHEDULE CRUD =====
+    const addSchedule = useCallback(async (sched: Omit<ClassSchedule, 'id'>): Promise<{ success: boolean; message?: string }> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            // TODO: Add conflict validation if needed
+            
+            const docRef = await addDoc(collection(db, 'classSchedules'), {
+                ...sched,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Schedule added:', docRef.id);
+            return { success: true };
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error adding schedule:', err);
+            return { success: false, message: err.message };
+        }
+    }, []);
+
+    const updateSchedule = useCallback(async (sched: ClassSchedule): Promise<{ success: boolean; message?: string }> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'classSchedules', sched.id), {
+                ...sched,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Schedule updated:', sched.id);
+            return { success: true };
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating schedule:', err);
+            return { success: false, message: err.message };
+        }
+    }, []);
+
+    const deleteSchedule = useCallback(async (scheduleId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'classSchedules', scheduleId));
+            console.log('[useFirestoreData] ✅ Schedule deleted:', scheduleId);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error deleting schedule:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== ASSIGNMENT CRUD =====
+    const addAssignment = useCallback(async (assignment: Omit<Assignment, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'assignments'), {
+                ...assignment,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Assignment added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error adding assignment:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateAssignment = useCallback(async (assignment: Assignment): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'assignments', assignment.id), {
+                ...assignment,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Assignment updated:', assignment.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating assignment:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteAssignment = useCallback(async (assignmentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'assignments', assignmentId));
+            
+            // Delete related student grades
+            const gradesQuery = query(collection(db, 'studentAssignmentGrades'), where('assignmentId', '==', assignmentId));
+            const gradesSnapshot = await getDocs(gradesQuery);
+            const deletePromises = gradesSnapshot.docs.map(d => deleteDoc(d.ref));
+            await Promise.all(deletePromises);
+            
+            console.log('[useFirestoreData] ✅ Assignment and related grades deleted:', assignmentId);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error deleting assignment:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateAssignmentGrade = useCallback(async (
+        studentId: string,
+        assignmentId: string,
+        score: number | null,
+        feedback: string | null
+    ): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            // Find existing grade or create new
+            const gradesQuery = query(
+                collection(db, 'studentAssignmentGrades'),
+                where('studentId', '==', studentId),
+                where('assignmentId', '==', assignmentId)
+            );
+            const gradesSnapshot = await getDocs(gradesQuery);
+            
+            const gradeData = {
+                studentId,
+                assignmentId,
+                score,
+                feedback,
+            };
+            
+            if (gradesSnapshot.empty) {
+                await addDoc(collection(db, 'studentAssignmentGrades'), {
+                    ...gradeData,
+                    createdAt: serverTimestamp()
+                });
+            } else {
+                await updateDoc(gradesSnapshot.docs[0].ref, {
+                    ...gradeData,
+                    updatedAt: serverTimestamp()
+                });
+            }
+            
+            console.log('[useFirestoreData] ✅ Assignment grade updated:', { studentId, assignmentId, score });
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating assignment grade:', err);
+            throw err;
+        }
+    }, []);
+
+    const submitAssignment = useCallback(async (studentId: string, assignmentId: string, submission: any): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            const gradesQuery = query(
+                collection(db, 'studentAssignmentGrades'),
+                where('studentId', '==', studentId),
+                where('assignmentId', '==', assignmentId)
+            );
+            const gradesSnapshot = await getDocs(gradesQuery);
+            
+            if (gradesSnapshot.empty) {
+                await addDoc(collection(db, 'studentAssignmentGrades'), {
+                    studentId,
+                    assignmentId,
+                    submission,
+                    submittedAt: serverTimestamp(),
+                    createdAt: serverTimestamp()
+                });
+            } else {
+                await updateDoc(gradesSnapshot.docs[0].ref, {
+                    submission,
+                    submittedAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                });
+            }
+            
+            console.log('[useFirestoreData] ✅ Assignment submitted:', { studentId, assignmentId });
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error submitting assignment:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== LESSON PLAN CRUD =====
+    const addLessonPlan = useCallback(async (lessonPlan: Omit<LessonPlan, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'lessonPlans'), {
+                ...lessonPlan,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Lesson plan added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error adding lesson plan:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateLessonPlan = useCallback(async (lessonPlan: LessonPlan): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'lessonPlans', lessonPlan.id), {
+                ...lessonPlan,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Lesson plan updated:', lessonPlan.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating lesson plan:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteLessonPlan = useCallback(async (lessonPlanId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'lessonPlans', lessonPlanId));
+            console.log('[useFirestoreData] ✅ Lesson plan deleted:', lessonPlanId);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error deleting lesson plan:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== ANNOUNCEMENT CRUD =====
+    const addAnnouncement = useCallback(async (announcement: Omit<Announcement, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'announcements'), {
+                ...announcement,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Announcement added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error adding announcement:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateAnnouncement = useCallback(async (announcement: Announcement): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'announcements', announcement.id), {
+                ...announcement,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useFirestoreData] ✅ Announcement updated:', announcement.id);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error updating announcement:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteAnnouncement = useCallback(async (announcementId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'announcements', announcementId));
+            console.log('[useFirestoreData] ✅ Announcement deleted:', announcementId);
+        } catch (err: any) {
+            console.error('[useFirestoreData] ❌ Error deleting announcement:', err);
+            throw err;
+        }
+    }, [])
 
     // ===== RETURN HOOK INTERFACE =====
     return {
-        // Collections (2/16 implemented)
+        // Collections (16/16 implemented)
         students,
         teachers,
-        parents, // Empty for now
-        sections, // Empty for now
-        learningAreas, // Empty for now
-        grades, // Empty for now
-        coreValues, // Empty for now
-        coreValueGrades, // Empty for now
-        attendanceRecords, // Empty for now
-        substituteAssignments, // Empty for now
-        classSchedules, // Empty for now
-        assignments, // Empty for now
-        studentAssignmentGrades, // Empty for now
-        lessonPlans, // Empty for now
-        announcements, // Empty for now
+        parents,
+        sections,
+        learningAreas,
+        grades,
+        coreValues,
+        coreValueGrades,
+        attendanceRecords,
+        substituteAssignments,
+        classSchedules,
+        assignments,
+        studentAssignmentGrades,
+        lessonPlans,
+        announcements,
         settings,
         monthlySchoolDaysConfig,
 
@@ -816,44 +1610,68 @@ export function useFirestoreData(collectionsToFetch?: string[]): SchoolDataHook 
         // Actions
         refresh,
 
-        // CRUD (stubbed - TODO: implement Day 1 Evening)
+        // Student CRUD
         addStudent,
         updateStudent,
         deleteStudent,
-        updateGrade: async () => {},
-        updateCoreValueGrade: async () => {},
-        addLearningArea: async () => {},
-        updateLearningArea: async () => {},
-        deleteLearningArea: async () => {},
-        updateSettings: async () => {},
-        updateAttendance: async () => {},
-        addParent: async () => {},
-        updateParent: async () => {},
-        deleteParent: async () => {},
-        assignStudentToParent: async () => {},
-        unassignStudentFromParent: async () => {},
-        addTeacher: async () => {},
-        updateTeacher: async () => {},
-        deleteTeacher: async () => {},
-        addSection: async () => {},
-        updateSection: async () => {},
-        deleteSection: async () => {},
-        addSubstituteAssignment: async () => {},
-        updateSubstituteAssignment: async () => {},
-        deleteSubstituteAssignment: async () => {},
-        addSchedule: async () => ({ success: true }),
-        updateSchedule: async () => ({ success: true }),
-        deleteSchedule: async () => {},
-        addAssignment: async () => {},
-        updateAssignment: async () => {},
-        deleteAssignment: async () => {},
-        updateAssignmentGrade: async () => {},
-        submitAssignment: async () => {},
-        addLessonPlan: async () => {},
-        updateLessonPlan: async () => {},
-        deleteLessonPlan: async () => {},
-        addAnnouncement: async () => {},
-        updateAnnouncement: async () => {},
-        deleteAnnouncement: async () => {},
+
+        // Teacher CRUD
+        addTeacher,
+        updateTeacher,
+        deleteTeacher,
+
+        // Parent CRUD
+        addParent,
+        updateParent,
+        deleteParent,
+        assignStudentToParent,
+        unassignStudentFromParent,
+
+        // Section CRUD
+        addSection,
+        updateSection,
+        deleteSection,
+
+        // Learning Area CRUD
+        addLearningArea,
+        updateLearningArea,
+        deleteLearningArea,
+
+        // Grade CRUD
+        updateGrade,
+        updateCoreValueGrade,
+
+        // Attendance CRUD
+        updateAttendance,
+
+        // Settings CRUD
+        updateSettings,
+
+        // Substitute Assignment CRUD
+        addSubstituteAssignment,
+        updateSubstituteAssignment,
+        deleteSubstituteAssignment,
+
+        // Class Schedule CRUD
+        addSchedule,
+        updateSchedule,
+        deleteSchedule,
+
+        // Assignment CRUD
+        addAssignment,
+        updateAssignment,
+        deleteAssignment,
+        updateAssignmentGrade,
+        submitAssignment,
+
+        // Lesson Plan CRUD
+        addLessonPlan,
+        updateLessonPlan,
+        deleteLessonPlan,
+
+        // Announcement CRUD
+        addAnnouncement,
+        updateAnnouncement,
+        deleteAnnouncement,
     };
 }
