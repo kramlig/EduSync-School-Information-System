@@ -5,13 +5,15 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 5_000 },
   use: {
-    baseURL: process.env.TEST_BASE_URL || 'http://127.0.0.1:5173',
+    baseURL: process.env.TEST_BASE_URL || 'http://localhost:5174',
   },
   webServer: {
-    command: 'npm run build && npx vite preview --host 127.0.0.1 --port 5173 --strictPort',
-    port: 5173,
+    command: 'npm run dev',
+    port: 5174,
     timeout: 180_000,
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI, // Only start new server if not in CI and no existing server
+    stdout: 'pipe', // Capture output
+    stderr: 'pipe',
   },
   projects: [
     {

@@ -29,8 +29,6 @@ const Header: React.FC<HeaderProps> = ({
   // State for parent's selected child view
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
 
   const parentChildren = useMemo(() => {
     if (session.type === 'parent') {
@@ -55,12 +53,12 @@ const Header: React.FC<HeaderProps> = ({
 
 
 
-  // Simple online indicator using navigator.onLine; can be replaced by a prop later
-  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-  
   // Online status and sync monitoring
-  const { wasOffline } = useOnlineStatus();
+  const { isOnline, wasOffline } = useOnlineStatus();
   const { hasPendingWrites, pendingCount } = useFirestoreSyncStatus();
+
+  // DEBUG: Log online status
+  console.log('[Header] Online status:', { isOnline, wasOffline, navigatorOnline: navigator.onLine });
 
   // Role badge colors
   const getRoleBadgeClass = (role: string) => {
@@ -73,35 +71,8 @@ const Header: React.FC<HeaderProps> = ({
     }
   };
 
-
-
-  const showToastNotification = (message: string) => {
-    setToastMessage(message);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
-  };
-
-  const clearLocalCache = () => {
-    try {
-      const req = indexedDB.deleteDatabase('EduSyncDB');
-      req.onsuccess = () => {
-        showToastNotification('Local cache cleared! Reloading...');
-        setTimeout(() => window.location.reload(), 1500);
-      };
-      req.onerror = () => {
-        showToastNotification('Failed to clear cache. See console.');
-        // eslint-disable-next-line no-console
-        console.error('Error deleting IndexedDB');
-      };
-      req.onblocked = () => showToastNotification('Cache delete blocked. Close other tabs and try again.');
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('Cache clear threw:', e);
-      showToastNotification('Unexpected error clearing cache.');
-    }
-  };
-
-
+  // NOTE: Clear cache function removed - users should not manually clear cache in production
+  // Firestore handles sync automatically. If needed for debugging, use browser DevTools.
 
   return (
     <>
@@ -120,13 +91,28 @@ const Header: React.FC<HeaderProps> = ({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2 md:gap-3">
-          {/* Online/Offline Status */}
+          {/* Online/Offline Status with Pending Writes */}
           <div 
-            className={`hidden sm:flex items-center px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${isOnline ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200' : 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200'}`}
-            title={isOnline ? 'Online' : 'Offline'}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
+              isOnline 
+                ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200' 
+                : 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200'
+            }`}
+            title={isOnline ? 'Online' : 'Offline Mode - Changes will sync when connection is restored'}
+            role="status"
+            aria-live="polite"
           >
-            {isOnline ? <WifiIcon className="h-3.5 w-3.5 mr-1" /> : <WifiSlashIcon className="h-3.5 w-3.5 mr-1" />}
-            <span>{isOnline ? 'Online' : 'Offline'}</span>
+            {isOnline ? (
+              <WifiIcon className="h-3.5 w-3.5" />
+            ) : (
+              <WifiSlashIcon className="h-3.5 w-3.5 animate-pulse" />
+            )}
+            <span className="hidden md:inline">{isOnline ? 'Online' : 'Offline'}</span>
+            {!isOnline && pendingCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 bg-amber-200 dark:bg-amber-700 rounded-full text-xs font-bold">
+                {pendingCount}
+              </span>
+            )}
           </div>
 
           {/* Parent Child Selector */}
@@ -168,18 +154,6 @@ const Header: React.FC<HeaderProps> = ({
               </span>
             </button>
           )}
-
-
-
-          {/* Clear Cache (Desktop only) */}
-          <button 
-            onClick={clearLocalCache} 
-            title="Clear Local Cache" 
-            className="hidden lg:inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 border border-slate-300 dark:border-slate-600 hover:border-red-400 rounded-md transition-colors"
-            aria-label="Clear local cache"
-          >
-            Clear Cache
-          </button>
 
           {/* Mobile Menu Toggle */}
           <button
@@ -257,30 +231,11 @@ const Header: React.FC<HeaderProps> = ({
             )}
 
             <button
-              onClick={() => { clearLocalCache(); setMobileMenuOpen(false); }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600"
-            >
-              Clear Cache
-            </button>
-
-            <button
               onClick={() => { onLogout(); setMobileMenuOpen(false); }}
               className="w-full px-3 py-2 text-sm font-semibold text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20"
             >
               Logout
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Toast Notification */}
-      {showToast && (
-        <div className="fixed top-20 right-4 z-50 animate-fade-in-down">
-          <div className="bg-indigo-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 max-w-sm">
-            <svg className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-sm font-medium">{toastMessage}</span>
           </div>
         </div>
       )}

@@ -1,0 +1,205 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - navigation [ref=e4]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - img "DepEd Logo" [ref=e8]
+          - generic [ref=e9]:
+            - generic [ref=e10]: EduSync
+            - generic [ref=e11]:
+              - img [ref=e13]
+              - generic "Enrique Orencia Elementary School" [ref=e15]
+            - generic [ref=e16]: SY 2025-2026
+        - button "Collapse sidebar" [ref=e17] [cursor=pointer]:
+          - img [ref=e19]
+      - list [ref=e21]:
+        - heading "Main" [level=3] [ref=e22]
+        - listitem [ref=e23]:
+          - link "Dashboard" [ref=e24] [cursor=pointer]:
+            - /url: /
+            - img [ref=e28]
+            - generic [ref=e30]: Dashboard
+        - heading "School Management" [level=3] [ref=e31]
+        - listitem [ref=e32]:
+          - link "Announcements" [ref=e33] [cursor=pointer]:
+            - /url: /announcements
+            - img [ref=e36]
+            - generic [ref=e38]: Announcements
+        - listitem [ref=e39]:
+          - link "Students" [ref=e40] [cursor=pointer]:
+            - /url: /students
+            - img [ref=e43]
+            - generic [ref=e48]: Students
+        - listitem [ref=e49]:
+          - link "Teachers" [ref=e50] [cursor=pointer]:
+            - /url: /teachers
+            - img [ref=e53]
+            - generic [ref=e55]: Teachers
+        - listitem [ref=e56]:
+          - link "Parents" [ref=e57] [cursor=pointer]:
+            - /url: /parents
+            - img [ref=e60]
+            - generic [ref=e62]: Parents
+        - listitem [ref=e63]:
+          - link "Classes" [ref=e64] [cursor=pointer]:
+            - /url: /sections
+            - img [ref=e67]
+            - generic [ref=e69]: Classes
+        - listitem [ref=e70]:
+          - link "Scheduler" [ref=e71] [cursor=pointer]:
+            - /url: /schedule
+            - img [ref=e74]
+            - generic [ref=e76]: Scheduler
+        - listitem [ref=e77]:
+          - link "Substitutes" [ref=e78] [cursor=pointer]:
+            - /url: /substitute
+            - img [ref=e81]
+            - generic [ref=e85]: Substitutes
+        - listitem [ref=e86]:
+          - link "Learning Areas" [ref=e87] [cursor=pointer]:
+            - /url: /learning-areas
+            - img [ref=e90]
+            - generic [ref=e92]: Learning Areas
+        - heading "Academics" [level=3] [ref=e93]
+        - listitem [ref=e94]:
+          - link "Lesson Plans" [ref=e95] [cursor=pointer]:
+            - /url: /lesson-plan
+            - img [ref=e98]
+            - generic [ref=e100]: Lesson Plans
+        - listitem [ref=e101]:
+          - link "Assignments" [ref=e102] [cursor=pointer]:
+            - /url: /assignments
+            - img [ref=e105]
+            - generic [ref=e107]: Assignments
+        - listitem [ref=e108]:
+          - link "Grades & Reports" [ref=e109] [cursor=pointer]:
+            - /url: /grades
+            - img [ref=e112]
+            - generic [ref=e114]: Grades & Reports
+        - listitem [ref=e115]:
+          - link "Attendance" [ref=e116] [cursor=pointer]:
+            - /url: /attendance
+            - img [ref=e119]
+            - generic [ref=e121]: Attendance
+        - listitem [ref=e122]:
+          - link "DepEd Forms" [ref=e123] [cursor=pointer]:
+            - /url: /forms
+            - img [ref=e126]
+            - generic [ref=e128]: DepEd Forms
+        - heading "System" [level=3] [ref=e129]
+        - listitem [ref=e130]:
+          - link "Settings" [ref=e131] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e134]
+            - generic [ref=e137]: Settings
+      - generic [ref=e138]:
+        - paragraph [ref=e139]: © 2024 EduSync Inc.
+        - paragraph [ref=e140]: Offline-First SIS
+    - generic [ref=e141]:
+      - banner [ref=e142]:
+        - generic [ref=e144]:
+          - generic [ref=e145]: System Admin
+          - generic [ref=e146]: Admin
+          - generic [ref=e147]: SY 2025-2026
+        - generic [ref=e148]:
+          - status "Online" [ref=e149]:
+            - img [ref=e151]
+            - generic [ref=e153]: Online
+          - button "Logout" [ref=e154] [cursor=pointer]
+      - main [ref=e155]:
+        - generic [ref=e156]:
+          - generic [ref=e157]:
+            - heading "Dashboard" [level=1] [ref=e158]
+            - generic [ref=e159]:
+              - button "Refresh Data" [ref=e160] [cursor=pointer]:
+                - img [ref=e161]
+                - generic [ref=e163]: Refresh Data
+              - button "Add Student" [ref=e164] [cursor=pointer]:
+                - img [ref=e166]
+                - generic [ref=e168]: Add Student
+              - button "Record Grade" [ref=e169] [cursor=pointer]:
+                - img [ref=e171]
+                - generic [ref=e173]: Record Grade
+          - alert [ref=e175]:
+            - generic [ref=e176]:
+              - img [ref=e179]
+              - generic [ref=e181]:
+                - heading "Missing Grades" [level=3] [ref=e182]
+                - paragraph [ref=e183]: 93 student(s) have no final grades recorded.
+              - button "Dismiss alert" [ref=e184] [cursor=pointer]: ×
+          - generic [ref=e185]:
+            - button "Total Students 100 ↑ +5" [ref=e186] [cursor=pointer]:
+              - img [ref=e189]
+              - generic [ref=e194]:
+                - heading "Total Students" [level=4] [ref=e195]
+                - generic [ref=e196]:
+                  - paragraph [ref=e197]: "100"
+                  - generic [ref=e198]: ↑ +5
+            - button "Total Learning Areas 0" [ref=e199] [cursor=pointer]:
+              - img [ref=e202]
+              - generic [ref=e204]:
+                - heading "Total Learning Areas" [level=4] [ref=e205]
+                - paragraph [ref=e207]: "0"
+            - button "Class Average Grade 90.5% ↑ +2%" [ref=e208] [cursor=pointer]:
+              - img [ref=e211]
+              - generic [ref=e213]:
+                - heading "Class Average Grade" [level=4] [ref=e214]
+                - generic [ref=e215]:
+                  - paragraph [ref=e216]: 90.5%
+                  - generic [ref=e217]: ↑ +2%
+          - generic [ref=e218]:
+            - generic [ref=e219]:
+              - generic [ref=e220]:
+                - img [ref=e222]
+                - heading "Grade Distribution" [level=2] [ref=e224]
+              - generic [ref=e225]:
+                - generic [ref=e226]:
+                  - generic [ref=e227]: 90-100
+                  - generic [ref=e230]: "19"
+                - generic [ref=e231]:
+                  - generic [ref=e232]: 80-89
+                  - generic [ref=e235]: "7"
+                - generic [ref=e236]:
+                  - generic [ref=e237]: 75-79
+                  - generic [ref=e240]: "0"
+                - generic [ref=e241]:
+                  - generic [ref=e242]: Below 75
+                  - generic [ref=e245]: "0"
+            - generic [ref=e246]:
+              - heading "Grading Progress" [level=2] [ref=e247]
+              - generic [ref=e249]:
+                - img [ref=e250]:
+                  - generic [ref=e253]: 26%
+                - paragraph [ref=e254]: 26 of 100 graded
+          - generic [ref=e255]:
+            - generic [ref=e256]:
+              - heading "Recent Activity" [level=2] [ref=e257]
+              - generic [ref=e258]:
+                - generic [ref=e261]:
+                  - heading "Grades Updated" [level=4] [ref=e262]
+                  - paragraph [ref=e263]: 26 final grades have been recorded
+                  - paragraph [ref=e264]: Today
+                - generic [ref=e267]:
+                  - heading "Students Enrolled" [level=4] [ref=e268]
+                  - paragraph [ref=e269]: Managing 100 students across sections
+                  - paragraph [ref=e270]: This week
+            - generic [ref=e271]:
+              - generic [ref=e272]:
+                - img [ref=e274]
+                - heading "Upcoming Events" [level=2] [ref=e276]
+              - generic [ref=e280]:
+                - generic [ref=e281]:
+                  - generic [ref=e282]: Deadline
+                  - generic [ref=e283]: Oct 30
+                - heading "Grade Submission Deadline" [level=4] [ref=e284]
+          - generic [ref=e285]:
+            - heading "Welcome to EduSync" [level=2] [ref=e286]
+            - paragraph [ref=e287]: This is your central hub for managing school information. You can navigate using the sidebar to view students, manage learning areas, and record grades. The system is designed to work even when you're offline. Any changes you make will be saved locally and synced automatically when you reconnect.
+  - generic [ref=e288]:
+    - img [ref=e290]
+    - button "Open Tanstack query devtools" [ref=e338] [cursor=pointer]:
+      - img [ref=e339]
+```

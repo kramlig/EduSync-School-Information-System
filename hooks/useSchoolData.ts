@@ -21,7 +21,7 @@ import type {
 } from '../types';
 import { getFirestoreInstance, auth, waitForAuthReady } from '../src/services/firestoreService';
 import { 
-    collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, 
+    collection, getDocs, getDocsFromCache, getDocsFromServer, doc, getDoc, setDoc, updateDoc, deleteDoc, 
     serverTimestamp, onSnapshot, query, orderBy, limit, startAfter, where, QueryDocumentSnapshot, DocumentData, QuerySnapshot
 } from 'firebase/firestore';
 
@@ -75,8 +75,18 @@ async function fetchPaginatedCollection<T>(
         let q = query(collection(db, collectionName), limit(limitCount));
         
         console.log(`[Firestore] ⏱️ Executing getDocs() for ${collectionName}...`);
-        const snapshot = await getDocs(q);
-        console.log(`[Firestore] ✅ Fetched ${collectionName}: ${snapshot.docs.length} documents`);
+        
+        // OFFLINE FIX: Try cache first, fallback to server
+        let snapshot: QuerySnapshot<DocumentData>;
+        try {
+            console.log(`[Firestore] 📦 Trying cache for ${collectionName}...`);
+            snapshot = await getDocsFromCache(q);
+            console.log(`[Firestore] ✅ Cache hit for ${collectionName}: ${snapshot.docs.length} documents`);
+        } catch (cacheError) {
+            console.log(`[Firestore] 📡 Cache miss, fetching from server for ${collectionName}...`);
+            snapshot = await getDocsFromServer(q);
+            console.log(`[Firestore] ✅ Server fetch for ${collectionName}: ${snapshot.docs.length} documents`);
+        }
         
         const data = snapshot.docs.map((doc: any) => {
             return { id: doc.id, ...doc.data() } as T;
@@ -100,7 +110,18 @@ async function fetchCollection<T>(collectionName: string): Promise<T[]> {
         
         const db = getFirestoreInstance();
         const collectionRef = collection(db, collectionName);
-        const snapshot = await getDocs(collectionRef);
+        
+        // OFFLINE FIX: Try cache first, fallback to server
+        let snapshot: QuerySnapshot<DocumentData>;
+        try {
+            console.log(`[Firestore] 📦 Trying cache for ${collectionName}...`);
+            snapshot = await getDocsFromCache(collectionRef);
+            console.log(`[Firestore] ✅ Cache hit for ${collectionName}: ${snapshot.docs.length} documents`);
+        } catch (cacheError) {
+            console.log(`[Firestore] 📡 Cache miss, fetching from server for ${collectionName}...`);
+            snapshot = await getDocsFromServer(collectionRef);
+            console.log(`[Firestore] ✅ Server fetch for ${collectionName}: ${snapshot.docs.length} documents`);
+        }
         
         console.log(`[Firestore] ✅ Fetched ${collectionName}: ${snapshot.docs.length} documents`);
         
