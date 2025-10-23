@@ -68,18 +68,6 @@ const App: React.FC = () => {
     return () => unsub();
   }, []);
   
-  // Add timeout mechanism to prevent infinite loading
-  // Increased timeout for mobile devices (30 seconds)
-  const [loadTimeout, setLoadTimeout] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      console.warn('[App] ⏰ Load timeout reached (30 seconds)');
-      setLoadTimeout(true);
-    }, 30000); // 30 second timeout for mobile compatibility
-    
-    return () => clearTimeout(timer);
-  }, []);
-  
   // Initialize session from localStorage BEFORE first render
   const [session, setSession] = useState<{ user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' } | null>(() => {
     try {
@@ -115,6 +103,27 @@ const App: React.FC = () => {
       console.log('[App] 🗑️ React Query cache cleared');
     }
   }, [session, queryClient]);
+  
+  // Add timeout mechanism to prevent infinite loading
+  // TIER 1 FIX: Only run timeout when logged in AND loading data
+  // Not when sitting at login screen!
+  const [loadTimeout, setLoadTimeout] = useState(false);
+  useEffect(() => {
+    // Reset timeout when session changes
+    setLoadTimeout(false);
+    
+    // Only start timeout if user is logged in
+    if (!session) {
+      return; // No timeout needed at login screen
+    }
+    
+    const timer = setTimeout(() => {
+      console.warn('[App] ⏰ Load timeout reached (30 seconds)');
+      setLoadTimeout(true);
+    }, 30000); // 30 second timeout for mobile compatibility
+    
+    return () => clearTimeout(timer);
+  }, [session]); // Re-run when session changes
   
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
