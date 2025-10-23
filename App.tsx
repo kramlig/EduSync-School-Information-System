@@ -186,14 +186,15 @@ const App: React.FC = () => {
   // Show login screen as soon as auth is ready
   // Only wait for data loading AFTER user is logged in
   const isInitializing = !authReady || (session && loading && !loadTimeout);
-  const hasMinimalData = teachers.length > 0;
   
   if (isInitializing) {
     return <FullScreenLoader message="Loading school data..." />;
   }
   
-  // Show error if we timed out without getting teachers
-  if (loadTimeout && !hasMinimalData) {
+  // NEW: Removed hasMinimalData check - allow app to render with empty data
+  // Components will show appropriate empty states
+  // This fixes offline-first-visit blank page issue
+  if (false && loadTimeout) { // Disabled timeout error screen
     return (
       <div className="flex items-center justify-center min-h-screen bg-orange-50 dark:bg-slate-900 text-orange-900 dark:text-orange-200">
         <div className="text-center p-8 max-w-md">
@@ -275,7 +276,7 @@ const App: React.FC = () => {
   
   // TIER 1 OPTIMIZATION: Show loading state while data loads after login
   // This prevents confusion when transitioning from login to dashboard
-  if (session && loading && !hasMinimalData) {
+  if (session && loading) {
     return <FullScreenLoader message="Loading your data..." />;
   }
   

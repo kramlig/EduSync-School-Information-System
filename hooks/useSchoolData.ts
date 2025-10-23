@@ -132,6 +132,19 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             }
         };
 
+        // OFFLINE-FIRST-VISIT FIX: Timeout to prevent infinite loading
+        // If subscriptions don't receive data within 5 seconds, assume offline-first-visit
+        const loadingTimeout = setTimeout(() => {
+            if (isInitialLoad && loadedCollections < totalCollections) {
+                console.warn(
+                    `[useSchoolData] ⏰ Loading timeout - received ${loadedCollections}/${totalCollections} collections. ` +
+                    `Likely offline-first-visit with no cached data. Setting loading=false to show empty states.`
+                );
+                setLoading(false);
+                isInitialLoad = false;
+            }
+        }, 5000); // 5 seconds timeout
+
         // Wait for auth before subscribing
         waitForAuthReady().then(() => {
             const db = getFirestoreInstance();
@@ -583,6 +596,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         // ===== CLEANUP =====
         return () => {
             console.log('[useSchoolData] 🧹 Cleaning up subscriptions...');
+            clearTimeout(loadingTimeout);
             unsubscribers.forEach(unsub => unsub());
         };
     }, [shouldFetch]); // Re-subscribe if collectionsToFetch changes
