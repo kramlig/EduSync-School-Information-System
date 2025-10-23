@@ -370,7 +370,36 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredAndPaginatedStudents.map((student, index) => {
+            {filteredAndPaginatedStudents.length === 0 && !schoolData.loading ? (
+              <tr>
+                <td colSpan={5} className="px-5 py-12 text-center">
+                  <div className="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
+                    {!navigator.onLine ? (
+                      <>
+                        <svg className="w-16 h-16 mb-4 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+                        </svg>
+                        <p className="text-lg font-semibold mb-2">No Cached Student Data</p>
+                        <p className="text-sm max-w-md">
+                          You're offline and haven't visited this page online yet. Please connect to the internet to load student data, then it will be available offline.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-16 h-16 mb-4 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                        <p className="text-lg font-semibold mb-2">No Students Found</p>
+                        <p className="text-sm">
+                          {searchQuery ? 'Try adjusting your search terms.' : 'Start by adding your first student.'}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              filteredAndPaginatedStudents.map((student, index) => {
               const section = sections.find(s => s.id === student.sectionId);
               
               const status = student.status || 'active';
@@ -432,7 +461,9 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
                   </div>
                 </td>
               </tr>
-            )})}
+            )
+            })
+            )}
           </tbody>
         </table>
         {(schoolData.loading || hasMoreStudents) && (
