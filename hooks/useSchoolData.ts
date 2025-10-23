@@ -68,9 +68,20 @@ const DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG: Record<string, number> = {
  * 
  * Uses Firestore onSnapshot() for real-time subscriptions
  * All data is cached automatically by Firestore SDK
+ * 
+ * CRITICAL: Pass collectionsToFetch=[] to prevent any subscriptions (e.g., login screen)
+ * This saves resources and prevents unnecessary fetching before authentication
  */
 export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     console.log('[useSchoolData] 🚀 Hook initializing (Firestore subscriptions)...', { collectionsToFetch });
+
+    // STRONG FOUNDATION: Check if we should even initialize subscriptions
+    // If collectionsToFetch is explicitly [], don't start ANY subscriptions
+    const shouldInitialize = collectionsToFetch === undefined || collectionsToFetch.length > 0;
+    
+    if (!shouldInitialize) {
+        console.log('[useSchoolData] ⏸️ Initialization skipped - empty collectionsToFetch array (likely login screen)');
+    }
 
     // ===== STATE MANAGEMENT =====
     // Collections state
@@ -112,6 +123,121 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         }
         return !collectionsToFetch || collectionsToFetch.includes(collectionName);
     }, [collectionsToFetch]);
+
+    // ===== EARLY EXIT: STRONG FOUNDATION ARCHITECTURE =====
+    // If shouldInitialize is false (collectionsToFetch === []), return empty state immediately
+    // This prevents ANY Firestore operations (no waitForAuthReady, no subscriptions)
+    // Used on login screen to prevent unnecessary resource usage before authentication
+    if (!shouldInitialize) {
+        return {
+            // Empty collections (16 total)
+            students: [],
+            teachers: [],
+            parents: [],
+            sections: [],
+            learningAreas: [],
+            grades: [],
+            coreValues: [],
+            coreValueGrades: [],
+            attendanceRecords: [],
+            substituteAssignments: [],
+            classSchedules: [],
+            assignments: [],
+            studentAssignmentGrades: [],
+            lessonPlans: [],
+            announcements: [],
+            settings: {
+                schoolName: '',
+                region: '',
+                division: '',
+                district: '',
+                schoolYear: '',
+            },
+            monthlySchoolDaysConfig: {},
+
+            // No loading, no error
+            loading: false,
+            error: null,
+
+            // Empty pagination state
+            hasMoreStudents: false,
+            isFetchingStudents: false,
+            fetchMoreStudents: async () => {},
+
+            // No searching
+            isSearching: false,
+            searchStudents: async () => [],
+            searchTeachers: async () => [],
+            searchParents: async () => [],
+
+            // No-op refresh
+            refresh: () => {},
+
+            // Empty Student CRUD
+            addStudent: async () => ({ success: false }),
+            updateStudent: async () => {},
+            deleteStudent: async () => {},
+
+            // Empty Teacher CRUD
+            addTeacher: async () => {},
+            updateTeacher: async () => {},
+            deleteTeacher: async () => {},
+
+            // Empty Parent CRUD
+            addParent: async () => {},
+            updateParent: async () => {},
+            deleteParent: async () => {},
+            assignStudentToParent: async () => {},
+            unassignStudentFromParent: async () => {},
+
+            // Empty Section CRUD
+            addSection: async () => {},
+            updateSection: async () => {},
+            deleteSection: async () => {},
+
+            // Empty Learning Area CRUD
+            addLearningArea: async () => {},
+            updateLearningArea: async () => {},
+            deleteLearningArea: async () => {},
+
+            // Empty Grade CRUD
+            updateGrade: async () => {},
+            updateCoreValueGrade: async () => {},
+
+            // Empty Attendance CRUD
+            updateAttendance: async () => {},
+
+            // Empty Settings CRUD
+            updateSettings: async () => {},
+
+            // Empty Substitute Assignment CRUD
+            addSubstituteAssignment: async () => {},
+            updateSubstituteAssignment: async () => {},
+            deleteSubstituteAssignment: async () => {},
+
+            // Empty Class Schedule CRUD
+            addSchedule: async () => ({ success: false }),
+            updateSchedule: async () => ({ success: false }),
+            deleteSchedule: async () => {},
+
+            // Empty Assignment CRUD
+            addAssignment: async () => {},
+            updateAssignment: async () => {},
+            deleteAssignment: async () => {},
+            updateAssignmentGrade: async () => {},
+            submitAssignment: async () => {},
+
+            // Empty Lesson Plan CRUD
+            addLessonPlan: async () => {},
+            updateLessonPlan: async () => {},
+            deleteLessonPlan: async () => {},
+
+            // Empty Announcement CRUD
+            addAnnouncement: async () => {},
+            updateAnnouncement: async () => {},
+            deleteAnnouncement: async () => {},
+        };
+    }
 
     // ===== FIRESTORE SUBSCRIPTIONS =====
     useEffect(() => {
