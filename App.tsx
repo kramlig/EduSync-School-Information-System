@@ -138,9 +138,9 @@ const App: React.FC = () => {
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
   // NEW: Firestore subscriptions hook - loads all data automatically with real-time updates
-  // No need to specify collections - all subscriptions are active
-  // Loading state is true until all 16 collections have loaded
-  const schoolData = useSchoolData();
+  // IMPORTANT: Only fetch data when user is logged in (session exists)
+  // Pass empty array when no session to prevent unnecessary subscriptions
+  const schoolData = useSchoolData(session ? undefined : []);
   
   const { 
     loading, error, settings, students, teachers, parents,
