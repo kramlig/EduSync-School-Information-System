@@ -116,7 +116,7 @@ export function useFirestoreData(collectionsToFetch?: string[]): SchoolDataHook 
         const unsubscribers: (() => void)[] = [];
         let isInitialLoad = true;
         let loadedCollections = 0;
-        const totalCollections = 2; // Students + Teachers (Day 1 Morning)
+        const totalCollections = 16; // All 16 collections (Day 1 Afternoon)
 
         const checkAllLoaded = () => {
             loadedCollections++;
@@ -220,7 +220,355 @@ export function useFirestoreData(collectionsToFetch?: string[]): SchoolDataHook 
                 checkAllLoaded();
             }
 
-            // TODO: Add remaining 14 collection subscriptions (Day 1 Afternoon)
+            // ===== PARENTS SUBSCRIPTION =====
+            if (shouldFetch('parents')) {
+                console.log('[useFirestoreData] 👪 Subscribing to parents...');
+                const unsubParents = onSnapshot(
+                    collection(db, 'parents'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [parents] CACHE' : '📡 [parents] SERVER');
+                        setParents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Parent[]);
+                        console.log(`[useFirestoreData] ✅ Parents: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Parents error:', err);
+                        setError(`Parents error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubParents);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== SECTIONS SUBSCRIPTION =====
+            if (shouldFetch('sections')) {
+                console.log('[useFirestoreData] 📚 Subscribing to sections...');
+                const unsubSections = onSnapshot(
+                    collection(db, 'sections'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [sections] CACHE' : '📡 [sections] SERVER');
+                        setSections(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Section[]);
+                        console.log(`[useFirestoreData] ✅ Sections: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Sections error:', err);
+                        setError(`Sections error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubSections);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== LEARNING AREAS SUBSCRIPTION =====
+            if (shouldFetch('learningAreas')) {
+                console.log('[useFirestoreData] 📖 Subscribing to learningAreas...');
+                const unsubLearningAreas = onSnapshot(
+                    collection(db, 'learningAreas'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [learningAreas] CACHE' : '📡 [learningAreas] SERVER');
+                        setLearningAreas(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LearningArea[]);
+                        console.log(`[useFirestoreData] ✅ Learning Areas: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Learning Areas error:', err);
+                        setError(`Learning Areas error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubLearningAreas);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== GRADES SUBSCRIPTION =====
+            if (shouldFetch('grades')) {
+                console.log('[useFirestoreData] 📊 Subscribing to grades...');
+                const unsubGrades = onSnapshot(
+                    collection(db, 'grades'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [grades] CACHE' : '📡 [grades] SERVER');
+                        setGrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Grade[]);
+                        console.log(`[useFirestoreData] ✅ Grades: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Grades error:', err);
+                        setError(`Grades error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubGrades);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== CORE VALUES SUBSCRIPTION =====
+            if (shouldFetch('coreValues')) {
+                console.log('[useFirestoreData] 💎 Subscribing to coreValues...');
+                const unsubCoreValues = onSnapshot(
+                    collection(db, 'coreValues'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [coreValues] CACHE' : '📡 [coreValues] SERVER');
+                        setCoreValues(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CoreValue[]);
+                        console.log(`[useFirestoreData] ✅ Core Values: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Core Values error:', err);
+                        setError(`Core Values error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubCoreValues);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== CORE VALUE GRADES SUBSCRIPTION =====
+            if (shouldFetch('coreValueGrades')) {
+                console.log('[useFirestoreData] 💯 Subscribing to coreValueGrades...');
+                const unsubCoreValueGrades = onSnapshot(
+                    collection(db, 'coreValueGrades'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [coreValueGrades] CACHE' : '📡 [coreValueGrades] SERVER');
+                        setCoreValueGrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CoreValueGrade[]);
+                        console.log(`[useFirestoreData] ✅ Core Value Grades: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Core Value Grades error:', err);
+                        setError(`Core Value Grades error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubCoreValueGrades);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== ATTENDANCE RECORDS SUBSCRIPTION =====
+            if (shouldFetch('attendanceRecords')) {
+                console.log('[useFirestoreData] 📅 Subscribing to attendanceRecords...');
+                const unsubAttendance = onSnapshot(
+                    collection(db, 'attendanceRecords'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [attendanceRecords] CACHE' : '📡 [attendanceRecords] SERVER');
+                        const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setAttendanceRecords(records as unknown as AttendanceRecord[]);
+                        console.log(`[useFirestoreData] ✅ Attendance Records: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Attendance Records error:', err);
+                        setError(`Attendance Records error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubAttendance);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== SUBSTITUTE ASSIGNMENTS SUBSCRIPTION =====
+            if (shouldFetch('substituteAssignments')) {
+                console.log('[useFirestoreData] 🔄 Subscribing to substituteAssignments...');
+                const unsubSubstitutes = onSnapshot(
+                    collection(db, 'substituteAssignments'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [substituteAssignments] CACHE' : '📡 [substituteAssignments] SERVER');
+                        setSubstituteAssignments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as SubstituteAssignment[]);
+                        console.log(`[useFirestoreData] ✅ Substitute Assignments: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Substitute Assignments error:', err);
+                        setError(`Substitute Assignments error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubSubstitutes);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== CLASS SCHEDULES SUBSCRIPTION =====
+            if (shouldFetch('classSchedules')) {
+                console.log('[useFirestoreData] ⏰ Subscribing to classSchedules...');
+                const unsubSchedules = onSnapshot(
+                    collection(db, 'classSchedules'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [classSchedules] CACHE' : '📡 [classSchedules] SERVER');
+                        setClassSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ClassSchedule[]);
+                        console.log(`[useFirestoreData] ✅ Class Schedules: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Class Schedules error:', err);
+                        setError(`Class Schedules error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubSchedules);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== ASSIGNMENTS SUBSCRIPTION =====
+            if (shouldFetch('assignments')) {
+                console.log('[useFirestoreData] 📝 Subscribing to assignments...');
+                const unsubAssignments = onSnapshot(
+                    collection(db, 'assignments'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [assignments] CACHE' : '📡 [assignments] SERVER');
+                        setAssignments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Assignment[]);
+                        console.log(`[useFirestoreData] ✅ Assignments: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Assignments error:', err);
+                        setError(`Assignments error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubAssignments);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== STUDENT ASSIGNMENT GRADES SUBSCRIPTION =====
+            if (shouldFetch('studentAssignmentGrades')) {
+                console.log('[useFirestoreData] 📋 Subscribing to studentAssignmentGrades...');
+                const unsubStudentGrades = onSnapshot(
+                    collection(db, 'studentAssignmentGrades'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [studentAssignmentGrades] CACHE' : '📡 [studentAssignmentGrades] SERVER');
+                        setStudentAssignmentGrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as StudentAssignmentGrade[]);
+                        console.log(`[useFirestoreData] ✅ Student Assignment Grades: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Student Assignment Grades error:', err);
+                        setError(`Student Assignment Grades error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubStudentGrades);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== LESSON PLANS SUBSCRIPTION =====
+            if (shouldFetch('lessonPlans')) {
+                console.log('[useFirestoreData] 📄 Subscribing to lessonPlans...');
+                const unsubLessonPlans = onSnapshot(
+                    collection(db, 'lessonPlans'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [lessonPlans] CACHE' : '📡 [lessonPlans] SERVER');
+                        setLessonPlans(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LessonPlan[]);
+                        console.log(`[useFirestoreData] ✅ Lesson Plans: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Lesson Plans error:', err);
+                        setError(`Lesson Plans error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubLessonPlans);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== ANNOUNCEMENTS SUBSCRIPTION =====
+            if (shouldFetch('announcements')) {
+                console.log('[useFirestoreData] 📢 Subscribing to announcements...');
+                const unsubAnnouncements = onSnapshot(
+                    collection(db, 'announcements'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [announcements] CACHE' : '📡 [announcements] SERVER');
+                        setAnnouncements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Announcement[]);
+                        console.log(`[useFirestoreData] ✅ Announcements: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Announcements error:', err);
+                        setError(`Announcements error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubAnnouncements);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== SETTINGS SUBSCRIPTION =====
+            if (shouldFetch('settings')) {
+                console.log('[useFirestoreData] ⚙️ Subscribing to settings...');
+                const unsubSettings = onSnapshot(
+                    doc(db, 'settings', 'school'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [settings] CACHE' : '📡 [settings] SERVER');
+                        if (snapshot.exists()) {
+                            setSettings({ ...MOCK_SETTINGS, ...snapshot.data() } as SchoolSettings);
+                            console.log('[useFirestoreData] ✅ Settings loaded');
+                        }
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Settings error:', err);
+                        setError(`Settings error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubSettings);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== MONTHLY SCHOOL DAYS CONFIG SUBSCRIPTION =====
+            if (shouldFetch('monthlySchoolDaysConfig')) {
+                console.log('[useFirestoreData] 📆 Subscribing to monthlySchoolDaysConfig...');
+                const unsubMonthlyDays = onSnapshot(
+                    doc(db, 'settings', 'monthlySchoolDays'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [monthlySchoolDaysConfig] CACHE' : '📡 [monthlySchoolDaysConfig] SERVER');
+                        if (snapshot.exists()) {
+                            setMonthlySchoolDaysConfig({ ...DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG, ...snapshot.data() });
+                            console.log('[useFirestoreData] ✅ Monthly School Days loaded');
+                        }
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useFirestoreData] ❌ Monthly School Days error:', err);
+                        setError(`Monthly School Days error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubMonthlyDays);
+            } else {
+                checkAllLoaded();
+            }
 
         }).catch((err) => {
             console.error('[useFirestoreData] ❌ Auth error:', err);
@@ -349,8 +697,8 @@ export function useFirestoreData(collectionsToFetch?: string[]): SchoolDataHook 
             })) as Teacher[];
 
             const results = allTeachers.filter(teacher => {
-                const fullName = `${teacher.lastName} ${teacher.firstName}`.toLowerCase();
-                const email = teacher.email?.toLowerCase() || '';
+                const fullName = `${(teacher as any).lastName || ''} ${(teacher as any).firstName || ''}`.toLowerCase();
+                const email = (teacher as any).email?.toLowerCase() || '';
                 return fullName.includes(trimmedQuery) || email.includes(trimmedQuery);
             });
 
@@ -389,8 +737,8 @@ export function useFirestoreData(collectionsToFetch?: string[]): SchoolDataHook 
             })) as Parent[];
 
             const results = allParents.filter(parent => {
-                const fullName = `${parent.lastName || ''} ${parent.firstName || ''}`.toLowerCase();
-                const email = parent.email?.toLowerCase() || '';
+                const fullName = `${(parent as any).lastName || ''} ${(parent as any).firstName || ''}`.toLowerCase();
+                const email = (parent as any).email?.toLowerCase() || '';
                 return fullName.includes(trimmedQuery) || email.includes(trimmedQuery);
             });
 
