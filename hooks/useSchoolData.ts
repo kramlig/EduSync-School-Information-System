@@ -259,6 +259,8 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
           cacheTime: 30 * 60 * 1000, // Keep in cache for 30 minutes to support optimistic updates
           refetchOnMount: false, // Don't refetch on mount - trust cache
           refetchOnWindowFocus: false, // Don't refetch on window focus
+          retry: 0, // OFFLINE FIX: Don't retry failed queries (prevents hanging when offline)
+          retryDelay: 0, // No delay between retries
         }))
     });
 
