@@ -127,16 +127,20 @@ const App: React.FC = () => {
   
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
-  // TIER 1 OPTIMIZATION: Only load data AFTER login
-  // This fixes the 20-30 second blank screen on initial load
-  // Data is loaded immediately after authentication completes
+  // TIER 1 OPTIMIZATION: Smart data loading strategy
+  // When logged OUT: Only load minimal data needed for login (teachers, students, parents)
+  // When logged IN: Load ALL school data
   const schoolData = useSchoolData(
     session ? [
+      // Logged IN: Load everything
       'settings', 'teachers', 'students', 'parents', 'sections', 'announcements',
       'assignments', 'studentAssignmentGrades', 'learningAreas', 'grades',
       'coreValues', 'coreValueGrades', 'attendanceRecords', 'lessonPlans',
       'classSchedules', 'substituteAssignments'
-    ] : []  // Don't load any data when logged out
+    ] : [
+      // Logged OUT: Only load data needed for login screen
+      'teachers', 'students', 'parents'
+    ]
   );
   
   const { 
