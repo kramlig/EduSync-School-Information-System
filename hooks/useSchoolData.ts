@@ -151,8 +151,13 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
     // Memoize shouldFetch to prevent excessive re-computation
     const shouldFetch = useCallback((collectionName: string) => {
-        const result = !collectionsToFetch || collectionsToFetch.length === 0 || collectionsToFetch.includes(collectionName);
-        // Only log on changes, not every render
+        // TIER 1 FIX: If collectionsToFetch is an empty array, fetch NOTHING
+        // If undefined, fetch everything (backward compatibility)
+        if (collectionsToFetch !== undefined && collectionsToFetch.length === 0) {
+            return false; // Empty array = fetch nothing
+        }
+        // If undefined or includes this collection, fetch it
+        const result = !collectionsToFetch || collectionsToFetch.includes(collectionName);
         return result;
     }, [collectionsToFetch]);
 
