@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, lazy, Suspense, useCallback } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
@@ -127,20 +127,17 @@ const App: React.FC = () => {
   
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
-  // TIER 1 OPTIMIZATION: Smart data loading strategy
-  // When logged OUT: Only load minimal data needed for login (teachers, students, parents)
-  // When logged IN: Load ALL school data
+  // TIER 1 OPTIMIZATION - FINAL SOLUTION:
+  // Load NO data until user is logged in
+  // Login screen will use email/password (no dropdown), so it doesn't need user lists
   const schoolData = useSchoolData(
     session ? [
-      // Logged IN: Load everything
+      // Only load data AFTER successful login
       'settings', 'teachers', 'students', 'parents', 'sections', 'announcements',
       'assignments', 'studentAssignmentGrades', 'learningAreas', 'grades',
       'coreValues', 'coreValueGrades', 'attendanceRecords', 'lessonPlans',
       'classSchedules', 'substituteAssignments'
-    ] : [
-      // Logged OUT: Only load data needed for login screen
-      'teachers', 'students', 'parents'
-    ]
+    ] : []  // NO data loading at login screen
   );
   
   const { 
@@ -181,13 +178,6 @@ const App: React.FC = () => {
   const handleLogout = useCallback(() => {
     setSession(null);
   }, []);
-
-  const getUsersForLogin = useMemo(() => {
-    if (loginType === 'staff') return teachers;
-    if (loginType === 'student') return students;
-    if (loginType === 'parent') return parents;
-    return [];
-  }, [loginType, teachers, students, parents]);
 
   console.log('[App] Loading check:', { authReady, loading, studentsCount: students.length, teachersCount: teachers.length, loadTimeout });
   
@@ -272,11 +262,10 @@ const App: React.FC = () => {
   }
 
   if (!session) {
-    console.log('[App] 🔓 No session - rendering LoginScreen with', getUsersForLogin.length, 'users');
+    console.log('[App] 🔓 No session - rendering LoginScreen (NO pre-loaded data)');
     return (
       <LoginScreen 
         onLogin={handleLogin} 
-        users={getUsersForLogin}
         loginType={loginType}
         setLoginType={setLoginType}
       />

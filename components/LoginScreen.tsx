@@ -1,15 +1,16 @@
 import DepEdLogo from './DepEdLogo';
 import React, { useState } from 'react';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
+import { getFirestoreInstance } from '../src/services/firestoreService';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 interface LoginScreenProps {
   onLogin: (user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => void;
-  users: (AuthUser | StudentUser | ParentUser)[];
   loginType: 'staff' | 'student' | 'parent';
   setLoginType: (type: 'staff' | 'student' | 'parent') => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users, loginType, setLoginType }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginType }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -18,44 +19,58 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users, loginType, se
   const allowAnyPassword = true; // DEBUG ONLY
   const enableQuickLogin = true; // DEBUG ONLY
 
-  console.log(`[LoginScreen] 🖥️ RENDERING LoginScreen component - users: ${users.length}, type: "${loginType}"`);
-  if (users.length && (window as any).__dumpedUsers !== true) {
-    console.log('[AuthDebug] First 10 user emails:', users.slice(0,10).map(u => u.email));
-    (window as any).__dumpedUsers = true;
-  }
+  console.log(`[LoginScreen] 🖥️ RENDERING LoginScreen component - type: "${loginType}"`);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    console.log(`[LoginScreen] 🔐 Attempting login with type: "${loginType}", email: "${email}"`);
-    console.log(`[LoginScreen] 📋 Available users count: ${users.length}`);
-
-    // This is a simplified, mock authentication.
-    const user = users.find(u => u.email.trim().toLowerCase() === email.trim().toLowerCase());
-
-    console.log(`[LoginScreen] 🔍 User found: ${!!user}`);
-    
-    if (user && (allowAnyPassword || password === 'password')) {
-      console.log('[LoginScreen] ✅ Login success for', user.email, 'type', loginType);
-      console.log('[LoginScreen] 🚀 Calling onLogin callback...');
-      onLogin(user, loginType);
-      console.log('[LoginScreen] ✅ onLogin callback completed');
-    } else {
-      console.log('[LoginScreen] ❌ Login failed - user:', !!user, 'passwordCheck:', allowAnyPassword || password === 'password');
-      setError('Invalid email or password.');
+    try {
+      console.log('[LoginScreen] 🔍 Looking up user:', email, 'in', loginType, 'collection');
+      
+      // Determine which collection to query
+      const collectionName = loginType === 'staff' ? 'teachers' : 
+                            loginType === 'student' ? 'students' : 'parents';
+      
+      // Query Firestore for user
+      const db = getFirestoreInstance();
+      const usersCol = collection(db, collectionName);
+      const q = query(usersCol, where('email', '==', email.toLowerCase()));
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        setError(`No ${loginType} account found with that email`);
+        setIsLoading(false);
+        return;
+      }
+      
+      const userDoc = snapshot.docs[0];
+      const userData = { id: userDoc.id, ...userDoc.data() } as AuthUser | StudentUser | ParentUser;
+      
+      // Note: In production, use proper Firebase Auth with password verification
+      // For now, in debug mode we accept any password
+      console.log('[LoginScreen] ✅ User found, logging in');
+      onLogin(userData, loginType);
+    } catch (err) {
+      console.error('[LoginScreen] ❌ Login error:', err);
+      setError('Login failed. Please try again.');
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
-  const handleQuickLogin = () => {
-    if (!enableQuickLogin) return;
-    const user = users[0];
-    if (user) {
-      console.log('[AuthDebug] Quick login as', user.email);
-      onLogin(user, loginType);
-    }
+  // Quick login for demo purposes
+  const handleQuickLogin = async () => {
+    setEmail('admin@school.edu');
+    setPassword('password');
+    // Wait for state update then submit
+    setTimeout(() => {
+      const form = document.querySelector('form');
+      if (form) {
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form.dispatchEvent(submitEvent);
+      }
+    }, 100);
   };
 
   return (
@@ -121,12 +136,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users, loginType, se
                 >
                     {isLoading ? 'Signing in...' : 'Sign in'}
                 </button>
-                {enableQuickLogin && users.length > 0 && (
+                {enableQuickLogin && (
                   <button
                     type="button"
                     onClick={handleQuickLogin}
                     className="w-full flex justify-center py-1.5 px-4 border border-slate-300 dark:border-slate-600 rounded-md text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600"
-                  >Quick Login (debug)</button>
+                  >Quick Login as Admin (debug)</button>
                 )}
             </div>
         </form>
