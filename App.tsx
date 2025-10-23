@@ -262,6 +262,12 @@ const App: React.FC = () => {
     );
   }
   
+  // TIER 1 OPTIMIZATION: Show loading state while data loads after login
+  // This prevents confusion when transitioning from login to dashboard
+  if (session && loading && !hasMinimalData) {
+    return <FullScreenLoader message="Loading your data..." />;
+  }
+  
   console.log('[App] ✅ Session exists - rendering Router/Dashboard');
   
   const staffSession = session as { user: AuthUser, type: 'staff' };
