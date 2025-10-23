@@ -228,6 +228,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         .map(config => ({
           queryKey: [config.name, 'v2'], // Cache buster - increment when data structure changes
           queryFn: config.fetchFn,
+          enabled: shouldFetch(config.name), // TIER 1 FIX: Only run query if collection should be fetched
           staleTime: Infinity, // Data is fresh until we manually invalidate
           cacheTime: 30 * 60 * 1000, // Keep in cache for 30 minutes to support optimistic updates
           refetchOnMount: false, // Don't refetch on mount - trust cache
