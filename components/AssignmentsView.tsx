@@ -25,6 +25,9 @@ const AssignmentsView: React.FC<{
         addAssignment, updateAssignment, deleteAssignment, updateAssignmentGrade, submitAssignment
     } = schoolData;
     
+    // Safety check for offline mode - ensure data is available
+    const isDataLoading = !assignments || !sections || !learningAreas || !students;
+    
     // Determine user role and relevant student
     const isStaff = session.type === 'staff';
     const isStudent = session.type === 'student';
@@ -211,6 +214,24 @@ const AssignmentsView: React.FC<{
     
     // Common
     const title = isStudent ? 'My Assignments' : isParent ? `Assignments for ${studentForPortal?.name}` : 'Assignments';
+    
+    // Show loading state while data is initializing (important for offline mode)
+    if (isDataLoading) {
+        return (
+            <div>
+                <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
+                <div className="flex items-center justify-center p-12 bg-white dark:bg-slate-800 rounded-lg shadow-md">
+                    <div className="text-center">
+                        <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-sky-500 mb-4"></div>
+                        <p className="text-slate-600 dark:text-slate-300">Loading assignments...</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+                            {navigator.onLine ? 'Fetching data from server...' : 'Loading cached data...'}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
     
     // RENDER STAFF VIEW
     if (isStaff) return (
