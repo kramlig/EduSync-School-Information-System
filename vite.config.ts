@@ -18,8 +18,6 @@ export default defineConfig({
             'firebase/firestore',
             'firebase/storage'
           ],
-          // Query and state management
-          'vendor-query': ['@tanstack/react-query'],
           // Utility libraries
           'vendor-utils': [
             'html2canvas',

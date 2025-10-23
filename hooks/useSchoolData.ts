@@ -1,30 +1,56 @@
 /**
- * PHASE 1: SIMPLIFIED useSchoolData Hook
+ * FIRESTORE SUBSCRIPTIONS HOOK (Option C Refactor)
  * 
- * Key Changes:
- * - NO real-time listeners (except announcements - optional)
- * - Simple fetch on mount
- * - Manual refresh capability
- * - Direct Firestore reads (no IndexedDB complexity)
- * - Optimistic updates for writes
+ * Replaces React Query with direct Firestore onSnapshot() subscriptions
  * 
- * This removes the infinite loop issues and makes the data flow predictable.
+ * Key Benefits:
+ * - Real-time updates automatic
+ * - Cache-first by default (Firestore SDK handles it)
+ * - No dual caching systems (single source of truth)
+ * - Simpler code (no React Query abstractions)
+ * - Works offline-first (no blank pages)
+ * 
+ * Migration Status: COMPLETE ✅
+ * - Day 1 Morning: Students + Teachers (2/16 collections) ✅
+ * - Day 1 Afternoon: Add remaining 14 collections ✅
+ * - Day 1 Evening: Add all CRUD methods ✅
+ * - Day 2 Morning: Switch App.tsx ✅
+ * - Day 2 Afternoon: Rename to useSchoolData.ts ✅
  */
 
-import { useCallback, useState, useEffect, useMemo } from 'react';
-import { useQuery, useQueries, useQueryClient, QueryKey } from '@tanstack/react-query';
+import { useState, useEffect, useCallback } from 'react';
+import { 
+    collection, 
+    onSnapshot, 
+    doc,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    getDoc,
+    setDoc,
+    serverTimestamp,
+    query,
+    where,
+    getDocs,
+    getDocsFromCache,
+    getDocsFromServer,
+    limit,
+    startAfter,
+    QueryDocumentSnapshot,
+    DocumentData
+} from 'firebase/firestore';
+import { getFirestoreInstance, auth, waitForAuthReady } from '../src/services/firestoreService';
 import type { 
     Student, LearningArea, Grade, CoreValue, CoreValueGrade, AttendanceRecord, 
     Teacher, Section, SchoolSettings, SubstituteAssignment, ClassSchedule, 
     Assignment, StudentAssignmentGrade, LessonPlan, Parent, Announcement, 
     AttendanceStatus, CoreValueMarking 
 } from '../types';
-import { getFirestoreInstance, auth, waitForAuthReady } from '../src/services/firestoreService';
-import { 
-    collection, getDocs, getDocsFromCache, getDocsFromServer, doc, getDoc, setDoc, updateDoc, deleteDoc, 
-    serverTimestamp, onSnapshot, query, orderBy, limit, startAfter, where, QueryDocumentSnapshot, DocumentData, QuerySnapshot
-} from 'firebase/firestore';
 
+// Import interface from backup (will match exactly)
+import type { SchoolDataHook } from './useSchoolData.REACT_QUERY_BACKUP';
+
+// Mock settings (same as React Query version)
 const MOCK_SETTINGS: SchoolSettings = {
     schoolName: 'ENRIQUE URENCIA ELEMENTARY SCHOOL',
     region: 'Region XI',
@@ -37,1640 +63,1617 @@ const DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG: Record<string, number> = {
     Jan: 22, Feb: 20, Mar: 22, Apr: 10, May: 0, Jun: 10, Jul: 22, Aug: 22, Sep: 21, Oct: 22, Nov: 21, Dec: 10,
 };
 
-export type SchoolDataState = {
-    students: Student[];
-    learningAreas: LearningArea[];
-    grades: Grade[];
-    coreValues: CoreValue[];
-    coreValueGrades: CoreValueGrade[];
-    attendanceRecords: AttendanceRecord[];
-    teachers: Teacher[];
-    parents: Parent[];
-    sections: Section[];
-    settings: SchoolSettings;
-    substituteAssignments: SubstituteAssignment[];
-    classSchedules: ClassSchedule[];
-    assignments: Assignment[];
-    studentAssignmentGrades: StudentAssignmentGrade[];
-    lessonPlans: LessonPlan[];
-    announcements: Announcement[];
-    monthlySchoolDaysConfig: Record<string, number>;
-};
-
-// Helper: Fetch a single collection from Firestore with pagination
-async function fetchPaginatedCollection<T>(
-    collectionName: string, 
-    limitCount: number, 
-    lastDoc: QueryDocumentSnapshot<DocumentData> | null = null
-): Promise<{ data: T[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
-    try {
-        console.log(`[Firestore] 🔍 Fetching paginated collection: ${collectionName}, limit: ${limitCount}`);
-        
-        // Wait for auth before fetching
-        await waitForAuthReady();
-        
-        const db = getFirestoreInstance();
-        
-        // Simple query without orderBy to avoid index requirements  
-        let q = query(collection(db, collectionName), limit(limitCount));
-        
-        console.log(`[Firestore] ⏱️ Executing getDocs() for ${collectionName}...`);
-        
-        // OFFLINE FIX: Try cache first, fallback to server
-        let snapshot: QuerySnapshot<DocumentData>;
-        try {
-            console.log(`[Firestore] 📦 Trying cache for ${collectionName}...`);
-            snapshot = await getDocsFromCache(q);
-            console.log(`[Firestore] ✅ Cache hit for ${collectionName}: ${snapshot.docs.length} documents`);
-        } catch (cacheError) {
-            console.log(`[Firestore] 📡 Cache miss, fetching from server for ${collectionName}...`);
-            snapshot = await getDocsFromServer(q);
-            console.log(`[Firestore] ✅ Server fetch for ${collectionName}: ${snapshot.docs.length} documents`);
-        }
-        
-        const data = snapshot.docs.map((doc: any) => {
-            return { id: doc.id, ...doc.data() } as T;
-        });
-        
-        const newLastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
-        return { data, lastDoc: newLastDoc };
-    } catch (error) {
-        console.error(`[Firestore] ❌ Failed to fetch paginated ${collectionName}:`, error);
-        return { data: [], lastDoc: null };
-    }
-}
-
-// Helper: Fetch a single collection from Firestore (non-paginated)
-async function fetchCollection<T>(collectionName: string): Promise<T[]> {
-    try {
-        console.log(`[Firestore] 🔍 Fetching collection: ${collectionName}`);
-        
-        // Wait for auth to be ready before fetching
-        await waitForAuthReady();
-        
-        const db = getFirestoreInstance();
-        const collectionRef = collection(db, collectionName);
-        
-        // OFFLINE FIX: Try cache first, fallback to server
-        let snapshot: QuerySnapshot<DocumentData>;
-        try {
-            console.log(`[Firestore] 📦 Trying cache for ${collectionName}...`);
-            snapshot = await getDocsFromCache(collectionRef);
-            console.log(`[Firestore] ✅ Cache hit for ${collectionName}: ${snapshot.docs.length} documents`);
-        } catch (cacheError) {
-            console.log(`[Firestore] 📡 Cache miss, fetching from server for ${collectionName}...`);
-            snapshot = await getDocsFromServer(collectionRef);
-            console.log(`[Firestore] ✅ Server fetch for ${collectionName}: ${snapshot.docs.length} documents`);
-        }
-        
-        console.log(`[Firestore] ✅ Fetched ${collectionName}: ${snapshot.docs.length} documents`);
-        
-        const data = snapshot.docs.map(doc => {
-            const docData = { id: doc.id, ...doc.data() } as T;
-            return docData;
-        });
-        
-        return data;
-    } catch (error) {
-        console.error(`[Firestore] ❌ Failed to fetch ${collectionName}:`, error);
-        return [];
-    }
-}
-
-// Helper: Write to Firestore with metadata
-async function writeToFirestore(collectionName: string, id: string, data: any) {
-    try {
-        const db = getFirestoreInstance();
-        const docRef = doc(db, collectionName, id);
-        await setDoc(docRef, {
-            ...data,
-            updatedAt: serverTimestamp(),
-            updatedBy: auth.currentUser?.uid || 'anon'
-        });
-        console.log(`[Firestore] ✅ Write successful: ${collectionName}/${id}`);
-    } catch (error) {
-        console.error(`[Firestore] ❌ Failed to write to ${collectionName}:`, error);
-        throw error; // Re-throw so caller knows it failed
-    }
-}
-
-// Helper: Delete from Firestore
-async function deleteFromFirestore(collectionName: string, id: string) {
-    try {
-        const db = getFirestoreInstance();
-        await deleteDoc(doc(db, collectionName, id));
-    }  catch (error) {
-        console.error(`Failed to delete from ${collectionName}:`, error);
-    }
-}
-
-
-// Main hook function
+/**
+ * Main Hook: useSchoolData
+ * 
+ * Uses Firestore onSnapshot() for real-time subscriptions
+ * All data is cached automatically by Firestore SDK
+ */
 export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
-    const queryClient = useQueryClient();
-    const STUDENTS_PER_PAGE = 100; // Increased to 100 to show full sections in gradebook (was 10)
+    console.log('[useSchoolData] 🚀 Hook initializing (Firestore subscriptions)...', { collectionsToFetch });
 
-    // Memoize shouldFetch to prevent excessive re-computation
+    // ===== STATE MANAGEMENT =====
+    // Collections state
+    const [students, setStudents] = useState<Student[]>([]);
+    const [teachers, setTeachers] = useState<Teacher[]>([]);
+    const [parents, setParents] = useState<Parent[]>([]);
+    const [sections, setSections] = useState<Section[]>([]);
+    const [learningAreas, setLearningAreas] = useState<LearningArea[]>([]);
+    const [grades, setGrades] = useState<Grade[]>([]);
+    const [coreValues, setCoreValues] = useState<CoreValue[]>([]);
+    const [coreValueGrades, setCoreValueGrades] = useState<CoreValueGrade[]>([]);
+    const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+    const [substituteAssignments, setSubstituteAssignments] = useState<SubstituteAssignment[]>([]);
+    const [classSchedules, setClassSchedules] = useState<ClassSchedule[]>([]);
+    const [assignments, setAssignments] = useState<Assignment[]>([]);
+    const [studentAssignmentGrades, setStudentAssignmentGrades] = useState<StudentAssignmentGrade[]>([]);
+    const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
+    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+    const [settings, setSettings] = useState<SchoolSettings>(MOCK_SETTINGS);
+    const [monthlySchoolDaysConfig, setMonthlySchoolDaysConfig] = useState<Record<string, number>>(DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG);
+
+    // Loading & error state
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+
+    // Pagination state (for students)
+    const [lastStudentDoc, setLastStudentDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+    const [hasMoreStudents, setHasMoreStudents] = useState<boolean>(true);
+    const [isFetchingStudents, setIsFetchingStudents] = useState<boolean>(false);
+
+    // Search state
+    const [isSearching, setIsSearching] = useState<boolean>(false);
+    const [searchCache, setSearchCache] = useState<Map<string, any>>(new Map());
+
+    // ===== HELPER: Should Fetch Collection =====
     const shouldFetch = useCallback((collectionName: string) => {
-        // TIER 1 FIX: If collectionsToFetch is an empty array, fetch NOTHING
-        // If undefined, fetch everything (backward compatibility)
         if (collectionsToFetch !== undefined && collectionsToFetch.length === 0) {
             return false; // Empty array = fetch nothing
         }
-        // If undefined or includes this collection, fetch it
-        const result = !collectionsToFetch || collectionsToFetch.includes(collectionName);
-        return result;
+        return !collectionsToFetch || collectionsToFetch.includes(collectionName);
     }, [collectionsToFetch]);
 
-    // State for paginated students
-    const [allStudents, setAllStudents] = useState<Student[]>([]);
-    const [lastStudentDoc, setLastStudentDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-    const [hasMoreStudents, setHasMoreStudents] = useState(true);
-    
-    // Search cache and state to avoid redundant searches
-    const [searchCache, setSearchCache] = useState<Map<string, any>>(new Map());
-    const [isSearching, setIsSearching] = useState<boolean>(false);
+    // ===== FIRESTORE SUBSCRIPTIONS =====
+    useEffect(() => {
+        console.log('[useSchoolData] 📡 Setting up subscriptions...');
+        
+        const unsubscribers: (() => void)[] = [];
+        let isInitialLoad = true;
+        let loadedCollections = 0;
+        const totalCollections = 16; // All 16 collections (Day 1 Afternoon)
 
-    // Other collections (including students for now - we'll add pagination later if needed)
-    const collectionConfigs = [
-        { name: 'students', fetchFn: async () => {
-            console.log('[useSchoolData] 🚀 Students fetchFn EXECUTING!');
-            try {
-                // Fetch initial students with pagination support
-                await waitForAuthReady();
-                const db = getFirestoreInstance();
-                console.log('[Firestore] 🔍 Fetching initial students with limit...');
-                
-                const studentsCol = collection(db, 'students');
-                // Simple query without orderBy to test
-                const q = query(studentsCol, limit(STUDENTS_PER_PAGE));
-                
-                console.log('[Firestore] ⏱️ Calling getDocs...');
-                const snapshot = await getDocs(q);
-                console.log('[Firestore] ✅ SUCCESS! Fetched', snapshot.docs.length, 'students');
-                
-                // Save the last document for pagination
-                if (snapshot.docs.length > 0) {
-                    setLastStudentDoc(snapshot.docs[snapshot.docs.length - 1]);
-                    setHasMoreStudents(snapshot.docs.length === STUDENTS_PER_PAGE);
-                } else {
-                    setHasMoreStudents(false);
-                }
-                
-                const data = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
-                return data;
-            } catch (error) {
-                console.error('[Firestore] ❌ Students fetch error:', error);
-                return [];
+        const checkAllLoaded = () => {
+            loadedCollections++;
+            console.log(`[useSchoolData] 📊 Loaded ${loadedCollections}/${totalCollections} collections`);
+            if (loadedCollections >= totalCollections && isInitialLoad) {
+                setLoading(false);
+                isInitialLoad = false;
+                console.log('[useSchoolData] ✅ Initial load complete');
             }
-        }},
-        { name: 'learningAreas', fetchFn: () => fetchCollection<LearningArea>('learningAreas') },
-        { name: 'grades', fetchFn: () => fetchCollection<Grade>('grades') },
-        { name: 'coreValues', fetchFn: () => fetchCollection<CoreValue>('coreValues') },
-        { name: 'coreValueGrades', fetchFn: () => fetchCollection<CoreValueGrade>('coreValueGrades') },
-        { name: 'attendanceRecords', fetchFn: () => fetchCollection<AttendanceRecord>('attendanceRecords') },
-        { name: 'teachers', fetchFn: () => fetchCollection<Teacher>('teachers') },
-        { name: 'parents', fetchFn: () => fetchCollection<Parent>('parents') },
-        { name: 'sections', fetchFn: () => fetchCollection<Section>('sections') },
-        { name: 'settings', fetchFn: async () => {
-            await waitForAuthReady();
+        };
+
+        // Wait for auth before subscribing
+        waitForAuthReady().then(() => {
             const db = getFirestoreInstance();
-            const docRef = doc(db, 'settings', 'default');
-            const docSnap = await getDoc(docRef);
-            console.log('[Firestore] ✅ Fetched settings:', docSnap.exists());
-            return docSnap.exists() ? [docSnap.data() as SchoolSettings] : [];
-        }},
-        { name: 'substituteAssignments', fetchFn: () => fetchCollection<SubstituteAssignment>('substituteAssignments') },
-        { name: 'classSchedules', fetchFn: () => fetchCollection<ClassSchedule>('classSchedules') },
-        { name: 'assignments', fetchFn: () => fetchCollection<Assignment>('assignments') },
-        { name: 'studentAssignmentGrades', fetchFn: () => fetchCollection<StudentAssignmentGrade>('studentAssignmentGrades') },
-        { name: 'lessonPlans', fetchFn: () => fetchCollection<LessonPlan>('lessonPlans') },
-        { name: 'announcements', fetchFn: () => fetchCollection<Announcement>('announcements') },
-    ];
 
-    const queries = useQueries({
-      queries: collectionConfigs
-        .filter(config => shouldFetch(config.name))
-        .map(config => ({
-          queryKey: [config.name, 'v2'], // Cache buster - increment when data structure changes
-          queryFn: config.fetchFn,
-          enabled: shouldFetch(config.name), // TIER 1 FIX: Only run query if collection should be fetched
-          staleTime: Infinity, // Data is fresh until we manually invalidate
-          cacheTime: 30 * 60 * 1000, // Keep in cache for 30 minutes to support optimistic updates
-          refetchOnMount: false, // Don't refetch on mount - trust cache
-          refetchOnWindowFocus: false, // Don't refetch on window focus
-          retry: 0, // OFFLINE FIX: Don't retry failed queries (prevents hanging when offline)
-          retryDelay: 0, // No delay between retries
-        }))
-    });
+            // ===== STUDENTS SUBSCRIPTION =====
+            if (shouldFetch('students')) {
+                console.log('[useSchoolData] 👥 Subscribing to students...');
+                
+                const studentsQuery = query(
+                    collection(db, 'students'),
+                    limit(100) // Initial page
+                );
 
-    // Log query states after they potentially update
-    useEffect(() => {
-        const queryStates = queries.map((q, index) => ({
-            collection: collectionConfigs[index]?.name || 'unknown',
-            isLoading: q.isLoading,
-            isFetching: q.isFetching,
-            isSuccess: q.isSuccess,
-            isError: q.isError,
-            error: q.error ? String(q.error) : null,
-            dataLength: Array.isArray(q.data) ? q.data.length : 'not-array'
-        }));
-        
-        console.log('[useSchoolData] 📊 Queries state update:', queryStates);
-        
-        // Log any errors
-        queryStates.forEach(state => {
-            if (state.isError) {
-                console.error(`[useSchoolData] ❌ ${state.collection} query error:`, state.error);
+                const unsubStudents = onSnapshot(
+                    studentsQuery,
+                    { includeMetadataChanges: true }, // CRITICAL: Detect cache vs server
+                    (snapshot) => {
+                        const fromCache = snapshot.metadata.fromCache;
+                        console.log(
+                            fromCache 
+                                ? '📦 [students] Data from CACHE' 
+                                : '📡 [students] Data from SERVER'
+                        );
+
+                        const studentsData = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        })) as Student[];
+
+                        setStudents(studentsData);
+                        
+                        // Update pagination state
+                        if (snapshot.docs.length > 0) {
+                            setLastStudentDoc(snapshot.docs[snapshot.docs.length - 1]);
+                            setHasMoreStudents(snapshot.docs.length === 100);
+                        } else {
+                            setHasMoreStudents(false);
+                        }
+
+                        console.log(`[useSchoolData] ✅ Students updated: ${studentsData.length} documents`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Students subscription error:', err);
+                        setError(`Students error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+
+                unsubscribers.push(unsubStudents);
+            } else {
+                console.log('[useSchoolData] ⏭️ Skipping students (not in collectionsToFetch)');
+                checkAllLoaded();
             }
+
+            // ===== TEACHERS SUBSCRIPTION =====
+            if (shouldFetch('teachers')) {
+                console.log('[useSchoolData] 👨‍🏫 Subscribing to teachers...');
+                
+                const unsubTeachers = onSnapshot(
+                    collection(db, 'teachers'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        const fromCache = snapshot.metadata.fromCache;
+                        console.log(
+                            fromCache 
+                                ? '📦 [teachers] Data from CACHE' 
+                                : '📡 [teachers] Data from SERVER'
+                        );
+
+                        const teachersData = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        })) as Teacher[];
+
+                        setTeachers(teachersData);
+                        console.log(`[useSchoolData] ✅ Teachers updated: ${teachersData.length} documents`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Teachers subscription error:', err);
+                        setError(`Teachers error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+
+                unsubscribers.push(unsubTeachers);
+            } else {
+                console.log('[useSchoolData] ⏭️ Skipping teachers (not in collectionsToFetch)');
+                checkAllLoaded();
+            }
+
+            // ===== PARENTS SUBSCRIPTION =====
+            if (shouldFetch('parents')) {
+                console.log('[useSchoolData] 👪 Subscribing to parents...');
+                const unsubParents = onSnapshot(
+                    collection(db, 'parents'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [parents] CACHE' : '📡 [parents] SERVER');
+                        setParents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Parent[]);
+                        console.log(`[useSchoolData] ✅ Parents: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Parents error:', err);
+                        setError(`Parents error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubParents);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== SECTIONS SUBSCRIPTION =====
+            if (shouldFetch('sections')) {
+                console.log('[useSchoolData] 📚 Subscribing to sections...');
+                const unsubSections = onSnapshot(
+                    collection(db, 'sections'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [sections] CACHE' : '📡 [sections] SERVER');
+                        setSections(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Section[]);
+                        console.log(`[useSchoolData] ✅ Sections: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Sections error:', err);
+                        setError(`Sections error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubSections);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== LEARNING AREAS SUBSCRIPTION =====
+            if (shouldFetch('learningAreas')) {
+                console.log('[useSchoolData] 📖 Subscribing to learningAreas...');
+                const unsubLearningAreas = onSnapshot(
+                    collection(db, 'learningAreas'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [learningAreas] CACHE' : '📡 [learningAreas] SERVER');
+                        setLearningAreas(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LearningArea[]);
+                        console.log(`[useSchoolData] ✅ Learning Areas: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Learning Areas error:', err);
+                        setError(`Learning Areas error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubLearningAreas);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== GRADES SUBSCRIPTION =====
+            if (shouldFetch('grades')) {
+                console.log('[useSchoolData] 📊 Subscribing to grades...');
+                const unsubGrades = onSnapshot(
+                    collection(db, 'grades'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [grades] CACHE' : '📡 [grades] SERVER');
+                        setGrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Grade[]);
+                        console.log(`[useSchoolData] ✅ Grades: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Grades error:', err);
+                        setError(`Grades error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubGrades);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== CORE VALUES SUBSCRIPTION =====
+            if (shouldFetch('coreValues')) {
+                console.log('[useSchoolData] 💎 Subscribing to coreValues...');
+                const unsubCoreValues = onSnapshot(
+                    collection(db, 'coreValues'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [coreValues] CACHE' : '📡 [coreValues] SERVER');
+                        setCoreValues(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CoreValue[]);
+                        console.log(`[useSchoolData] ✅ Core Values: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Core Values error:', err);
+                        setError(`Core Values error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubCoreValues);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== CORE VALUE GRADES SUBSCRIPTION =====
+            if (shouldFetch('coreValueGrades')) {
+                console.log('[useSchoolData] 💯 Subscribing to coreValueGrades...');
+                const unsubCoreValueGrades = onSnapshot(
+                    collection(db, 'coreValueGrades'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [coreValueGrades] CACHE' : '📡 [coreValueGrades] SERVER');
+                        setCoreValueGrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CoreValueGrade[]);
+                        console.log(`[useSchoolData] ✅ Core Value Grades: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Core Value Grades error:', err);
+                        setError(`Core Value Grades error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubCoreValueGrades);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== ATTENDANCE RECORDS SUBSCRIPTION =====
+            if (shouldFetch('attendanceRecords')) {
+                console.log('[useSchoolData] 📅 Subscribing to attendanceRecords...');
+                const unsubAttendance = onSnapshot(
+                    collection(db, 'attendanceRecords'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [attendanceRecords] CACHE' : '📡 [attendanceRecords] SERVER');
+                        const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setAttendanceRecords(records as unknown as AttendanceRecord[]);
+                        console.log(`[useSchoolData] ✅ Attendance Records: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Attendance Records error:', err);
+                        setError(`Attendance Records error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubAttendance);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== SUBSTITUTE ASSIGNMENTS SUBSCRIPTION =====
+            if (shouldFetch('substituteAssignments')) {
+                console.log('[useSchoolData] 🔄 Subscribing to substituteAssignments...');
+                const unsubSubstitutes = onSnapshot(
+                    collection(db, 'substituteAssignments'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [substituteAssignments] CACHE' : '📡 [substituteAssignments] SERVER');
+                        setSubstituteAssignments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as SubstituteAssignment[]);
+                        console.log(`[useSchoolData] ✅ Substitute Assignments: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Substitute Assignments error:', err);
+                        setError(`Substitute Assignments error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubSubstitutes);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== CLASS SCHEDULES SUBSCRIPTION =====
+            if (shouldFetch('classSchedules')) {
+                console.log('[useSchoolData] ⏰ Subscribing to classSchedules...');
+                const unsubSchedules = onSnapshot(
+                    collection(db, 'classSchedules'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [classSchedules] CACHE' : '📡 [classSchedules] SERVER');
+                        setClassSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ClassSchedule[]);
+                        console.log(`[useSchoolData] ✅ Class Schedules: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Class Schedules error:', err);
+                        setError(`Class Schedules error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubSchedules);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== ASSIGNMENTS SUBSCRIPTION =====
+            if (shouldFetch('assignments')) {
+                console.log('[useSchoolData] 📝 Subscribing to assignments...');
+                const unsubAssignments = onSnapshot(
+                    collection(db, 'assignments'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [assignments] CACHE' : '📡 [assignments] SERVER');
+                        setAssignments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Assignment[]);
+                        console.log(`[useSchoolData] ✅ Assignments: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Assignments error:', err);
+                        setError(`Assignments error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubAssignments);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== STUDENT ASSIGNMENT GRADES SUBSCRIPTION =====
+            if (shouldFetch('studentAssignmentGrades')) {
+                console.log('[useSchoolData] 📋 Subscribing to studentAssignmentGrades...');
+                const unsubStudentGrades = onSnapshot(
+                    collection(db, 'studentAssignmentGrades'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [studentAssignmentGrades] CACHE' : '📡 [studentAssignmentGrades] SERVER');
+                        setStudentAssignmentGrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as StudentAssignmentGrade[]);
+                        console.log(`[useSchoolData] ✅ Student Assignment Grades: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Student Assignment Grades error:', err);
+                        setError(`Student Assignment Grades error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubStudentGrades);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== LESSON PLANS SUBSCRIPTION =====
+            if (shouldFetch('lessonPlans')) {
+                console.log('[useSchoolData] 📄 Subscribing to lessonPlans...');
+                const unsubLessonPlans = onSnapshot(
+                    collection(db, 'lessonPlans'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [lessonPlans] CACHE' : '📡 [lessonPlans] SERVER');
+                        setLessonPlans(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LessonPlan[]);
+                        console.log(`[useSchoolData] ✅ Lesson Plans: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Lesson Plans error:', err);
+                        setError(`Lesson Plans error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubLessonPlans);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== ANNOUNCEMENTS SUBSCRIPTION =====
+            if (shouldFetch('announcements')) {
+                console.log('[useSchoolData] 📢 Subscribing to announcements...');
+                const unsubAnnouncements = onSnapshot(
+                    collection(db, 'announcements'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [announcements] CACHE' : '📡 [announcements] SERVER');
+                        setAnnouncements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Announcement[]);
+                        console.log(`[useSchoolData] ✅ Announcements: ${snapshot.docs.length} docs`);
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Announcements error:', err);
+                        setError(`Announcements error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubAnnouncements);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== SETTINGS SUBSCRIPTION =====
+            if (shouldFetch('settings')) {
+                console.log('[useSchoolData] ⚙️ Subscribing to settings...');
+                const unsubSettings = onSnapshot(
+                    doc(db, 'settings', 'school'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [settings] CACHE' : '📡 [settings] SERVER');
+                        if (snapshot.exists()) {
+                            setSettings({ ...MOCK_SETTINGS, ...snapshot.data() } as SchoolSettings);
+                            console.log('[useSchoolData] ✅ Settings loaded');
+                        }
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Settings error:', err);
+                        setError(`Settings error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubSettings);
+            } else {
+                checkAllLoaded();
+            }
+
+            // ===== MONTHLY SCHOOL DAYS CONFIG SUBSCRIPTION =====
+            if (shouldFetch('monthlySchoolDaysConfig')) {
+                console.log('[useSchoolData] 📆 Subscribing to monthlySchoolDaysConfig...');
+                const unsubMonthlyDays = onSnapshot(
+                    doc(db, 'settings', 'monthlySchoolDays'),
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        console.log(snapshot.metadata.fromCache ? '📦 [monthlySchoolDaysConfig] CACHE' : '📡 [monthlySchoolDaysConfig] SERVER');
+                        if (snapshot.exists()) {
+                            setMonthlySchoolDaysConfig({ ...DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG, ...snapshot.data() });
+                            console.log('[useSchoolData] ✅ Monthly School Days loaded');
+                        }
+                        checkAllLoaded();
+                    },
+                    (err) => {
+                        console.error('[useSchoolData] ❌ Monthly School Days error:', err);
+                        setError(`Monthly School Days error: ${err.message}`);
+                        checkAllLoaded();
+                    }
+                );
+                unsubscribers.push(unsubMonthlyDays);
+            } else {
+                checkAllLoaded();
+            }
+
+        }).catch((err) => {
+            console.error('[useSchoolData] ❌ Auth error:', err);
+            setError(`Auth error: ${err.message}`);
+            setLoading(false);
         });
-    }, [queries]);
 
-    // Extract students query (first one in collectionConfigs)
-    const studentsQuery = queries[0];
-    const isLoadingStudents = studentsQuery?.isLoading || false;
-    const isFetchingStudents = studentsQuery?.isFetching || false;
-    const studentsError = studentsQuery?.error as string | null;
-    const initialStudentsData = studentsQuery?.data as Student[] | undefined;
+        // ===== CLEANUP =====
+        return () => {
+            console.log('[useSchoolData] 🧹 Cleaning up subscriptions...');
+            unsubscribers.forEach(unsub => unsub());
+        };
+    }, [shouldFetch]); // Re-subscribe if collectionsToFetch changes
 
-    // Update student state when data changes
-    useEffect(() => {
-        if (initialStudentsData) {
-            console.log(`[useSchoolData] ✅ Setting allStudents to ${initialStudentsData.length} items`);
-            setAllStudents(initialStudentsData);
-            setHasMoreStudents(initialStudentsData.length === STUDENTS_PER_PAGE);
-        }
-    }, [initialStudentsData, STUDENTS_PER_PAGE]);
-
-    // Fetch more students (pagination)
+    // ===== PAGINATION: Fetch More Students =====
     const fetchMoreStudents = useCallback(async () => {
         if (!hasMoreStudents || isFetchingStudents || !lastStudentDoc) {
-            console.log('[useSchoolData] ⚠️ Cannot fetch more:', { hasMoreStudents, isFetchingStudents, hasLastDoc: !!lastStudentDoc });
+            console.log('[useSchoolData] ⏭️ Skip fetchMoreStudents:', { 
+                hasMore: hasMoreStudents, 
+                isFetching: isFetchingStudents,
+                hasLastDoc: !!lastStudentDoc 
+            });
             return;
         }
-        
+
+        setIsFetchingStudents(true);
+        console.log('[useSchoolData] 📄 Fetching next page of students...');
+
         try {
-            console.log('[useSchoolData] 📄 Fetching next page of students...');
             await waitForAuthReady();
             const db = getFirestoreInstance();
-            
-            const studentsCol = collection(db, 'students');
-            // Use same ordering as initial query
-            const q = query(studentsCol, orderBy('enrollmentDate', 'desc'), startAfter(lastStudentDoc), limit(STUDENTS_PER_PAGE));
-            
-            const snapshot = await getDocs(q);
-            console.log('[useSchoolData] ✅ Fetched', snapshot.docs.length, 'more students');
-            
-            const newStudents = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })) as Student[];
-            
-            // Update state
-            setAllStudents(prev => [...prev, ...newStudents]);
+
+            const nextQuery = query(
+                collection(db, 'students'),
+                startAfter(lastStudentDoc),
+                limit(100)
+            );
+
+            const snapshot = await getDocs(nextQuery);
+            const moreStudents = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })) as Student[];
+
+            setStudents(prev => [...prev, ...moreStudents]);
             
             if (snapshot.docs.length > 0) {
                 setLastStudentDoc(snapshot.docs[snapshot.docs.length - 1]);
             }
             
-            setHasMoreStudents(snapshot.docs.length === STUDENTS_PER_PAGE);
-        } catch (error) {
-            console.error('[useSchoolData] ❌ Error fetching more students:', error);
+            setHasMoreStudents(snapshot.docs.length === 100);
+            console.log(`[useSchoolData] ✅ Fetched ${moreStudents.length} more students`);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error fetching more students:', err);
+            setError(`Pagination error: ${err.message}`);
+        } finally {
+            setIsFetchingStudents(false);
         }
-    }, [hasMoreStudents, isFetchingStudents, lastStudentDoc, STUDENTS_PER_PAGE]);
+    }, [hasMoreStudents, isFetchingStudents, lastStudentDoc]);
 
-    /**
-     * Server-side search function
-     * Searches ALL students in Firestore by name, email, or LRN
-     * Uses caching to avoid redundant queries
-     */
+    // ===== SEARCH: Students =====
     const searchStudents = useCallback(async (searchQuery: string): Promise<Student[]> => {
         const trimmedQuery = searchQuery.trim().toLowerCase();
-        
-        // Return all loaded students if query is empty
-        if (!trimmedQuery) {
-            return allStudents;
+        if (!trimmedQuery) return students;
+
+        // Check cache
+        if (searchCache.has(`students:${trimmedQuery}`)) {
+            console.log('[useSchoolData] 📦 Returning cached student search results');
+            return searchCache.get(`students:${trimmedQuery}`);
         }
-        
-        // Check cache first
-        if (searchCache.has(trimmedQuery)) {
-            console.log(`[useSchoolData] 📦 Using cached search results for: "${trimmedQuery}"`);
-            return searchCache.get(trimmedQuery)!;
-        }
-        
+
         setIsSearching(true);
-        console.log(`[useSchoolData] 🔍 Server-side search for: "${trimmedQuery}"`);
-        
+        console.log('[useSchoolData] 🔍 Searching students for:', trimmedQuery);
+
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
-            const studentsCol = collection(db, 'students');
-            
-            // Fetch ALL students for client-side filtering
-            // This is acceptable for 7,496 students and provides best search UX
-            // Alternative: Use multiple queries with where() for exact field matches
-            const snapshot = await getDocs(studentsCol);
-            const allStudentsData = snapshot.docs.map((doc: any) => ({ 
-                id: doc.id, 
-                ...doc.data() 
+
+            // Fetch all students (client-side search)
+            const snapshot = await getDocs(collection(db, 'students'));
+            const allStudents = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
             })) as Student[];
-            
-            console.log(`[useSchoolData] ✅ Fetched ${allStudentsData.length} students for search`);
-            
-            // Client-side fuzzy search across name, email, and LRN
-            const results = allStudentsData.filter(student => {
-                const name = student.name?.toLowerCase() || '';
-                const email = student.email?.toLowerCase() || '';
+
+            // Client-side filtering
+            const results = allStudents.filter(student => {
+                const fullName = `${student.lastName} ${student.firstName}`.toLowerCase();
                 const lrn = student.lrn?.toLowerCase() || '';
-                
-                return name.includes(trimmedQuery) || 
-                       email.includes(trimmedQuery) || 
-                       lrn.includes(trimmedQuery);
+                return fullName.includes(trimmedQuery) || lrn.includes(trimmedQuery);
             });
-            
+
+            // Cache results
+            setSearchCache(prev => new Map(prev).set(`students:${trimmedQuery}`, results));
             console.log(`[useSchoolData] ✅ Found ${results.length} matching students`);
-            
-            // Cache the results
-            setSearchCache(prev => new Map(prev).set(trimmedQuery, results));
-            
             return results;
-        } catch (error) {
-            console.error('[useSchoolData] ❌ Error searching students:', error);
-            return [];
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Search error:', err);
+            return students;
         } finally {
             setIsSearching(false);
         }
-    }, [allStudents, searchCache]);
+    }, [students, searchCache]);
 
-    // Server-side search for Teachers (search ALL teachers, not just paginated)
+    // ===== SEARCH: Teachers =====
     const searchTeachers = useCallback(async (searchQuery: string): Promise<Teacher[]> => {
         const trimmedQuery = searchQuery.trim().toLowerCase();
-        
-        if (!trimmedQuery) {
-            return [];
+        if (!trimmedQuery) return teachers;
+
+        if (searchCache.has(`teachers:${trimmedQuery}`)) {
+            console.log('[useSchoolData] 📦 Returning cached teacher search results');
+            return searchCache.get(`teachers:${trimmedQuery}`);
         }
-        
-        // Check cache first
-        const cacheKey = `teachers_${trimmedQuery}`;
-        if (searchCache.has(cacheKey)) {
-            console.log(`[useSchoolData] 📦 Returning cached teacher search results for: "${trimmedQuery}"`);
-            return searchCache.get(cacheKey) as Teacher[];
-        }
-        
+
         setIsSearching(true);
-        console.log(`[useSchoolData] 🔍 Searching ALL teachers for: "${trimmedQuery}"`);
-        
+        console.log('[useSchoolData] 🔍 Searching teachers for:', trimmedQuery);
+
         try {
+            await waitForAuthReady();
             const db = getFirestoreInstance();
-            // Fetch ALL teachers from Firestore
-            const teachersCollection = collection(db, 'teachers');
-            const snapshot = await getDocs(teachersCollection);
-            
-            const allTeachersData: Teacher[] = [];
-            snapshot.forEach(doc => {
-                allTeachersData.push({ id: doc.id, ...doc.data() } as Teacher);
+
+            const snapshot = await getDocs(collection(db, 'teachers'));
+            const allTeachers = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })) as Teacher[];
+
+            const results = allTeachers.filter(teacher => {
+                const fullName = `${(teacher as any).lastName || ''} ${(teacher as any).firstName || ''}`.toLowerCase();
+                const email = (teacher as any).email?.toLowerCase() || '';
+                return fullName.includes(trimmedQuery) || email.includes(trimmedQuery);
             });
-            
-            console.log(`[useSchoolData] 📚 Fetched ${allTeachersData.length} total teachers from Firestore`);
-            
-            // Client-side fuzzy filter
-            const results = allTeachersData.filter(teacher => {
-                const name = (teacher.name || '').toLowerCase();
-                const email = (teacher.email || '').toLowerCase();
-                const contactNumber = (teacher.contactNumber || '').toLowerCase();
-                const query = trimmedQuery;
-                
-                return name.includes(query) || 
-                       email.includes(query) || 
-                       contactNumber.includes(query);
-            });
-            
-            console.log(`[useSchoolData] ✅ Found ${results.length} teachers matching "${trimmedQuery}"`);
-            
-            // Cache the results
-            setSearchCache(prev => new Map(prev).set(cacheKey, results));
-            
+
+            setSearchCache(prev => new Map(prev).set(`teachers:${trimmedQuery}`, results));
+            console.log(`[useSchoolData] ✅ Found ${results.length} matching teachers`);
             return results;
-        } catch (error) {
-            console.error('[useSchoolData] ❌ Error searching teachers:', error);
-            return [];
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Search error:', err);
+            return teachers;
         } finally {
             setIsSearching(false);
         }
-    }, [searchCache]);
+    }, [teachers, searchCache]);
 
-    // Server-side search for Parents (search ALL parents, not just paginated)
+    // ===== SEARCH: Parents =====
     const searchParents = useCallback(async (searchQuery: string): Promise<Parent[]> => {
         const trimmedQuery = searchQuery.trim().toLowerCase();
-        
-        if (!trimmedQuery) {
-            return [];
+        if (!trimmedQuery) return parents;
+
+        if (searchCache.has(`parents:${trimmedQuery}`)) {
+            console.log('[useSchoolData] 📦 Returning cached parent search results');
+            return searchCache.get(`parents:${trimmedQuery}`);
         }
-        
-        // Check cache first
-        const cacheKey = `parents_${trimmedQuery}`;
-        if (searchCache.has(cacheKey)) {
-            console.log(`[useSchoolData] 📦 Returning cached parent search results for: "${trimmedQuery}"`);
-            return searchCache.get(cacheKey) as Parent[];
-        }
-        
+
         setIsSearching(true);
-        console.log(`[useSchoolData] 🔍 Searching ALL parents for: "${trimmedQuery}"`);
-        
+        console.log('[useSchoolData] 🔍 Searching parents for:', trimmedQuery);
+
         try {
+            await waitForAuthReady();
             const db = getFirestoreInstance();
-            // Fetch ALL parents from Firestore
-            const parentsCollection = collection(db, 'parents');
-            const snapshot = await getDocs(parentsCollection);
-            
-            const allParentsData: Parent[] = [];
-            snapshot.forEach(doc => {
-                allParentsData.push({ id: doc.id, ...doc.data() } as Parent);
+
+            const snapshot = await getDocs(collection(db, 'parents'));
+            const allParents = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })) as Parent[];
+
+            const results = allParents.filter(parent => {
+                const fullName = `${(parent as any).lastName || ''} ${(parent as any).firstName || ''}`.toLowerCase();
+                const email = (parent as any).email?.toLowerCase() || '';
+                return fullName.includes(trimmedQuery) || email.includes(trimmedQuery);
             });
-            
-            console.log(`[useSchoolData] 📚 Fetched ${allParentsData.length} total parents from Firestore`);
-            
-            // Client-side fuzzy filter
-            const results = allParentsData.filter(parent => {
-                const name = (parent.name || '').toLowerCase();
-                const email = (parent.email || '').toLowerCase();
-                const query = trimmedQuery;
-                
-                return name.includes(query) || email.includes(query);
-            });
-            
-            console.log(`[useSchoolData] ✅ Found ${results.length} parents matching "${trimmedQuery}"`);
-            
-            // Cache the results
-            setSearchCache(prev => new Map(prev).set(cacheKey, results));
-            
+
+            setSearchCache(prev => new Map(prev).set(`parents:${trimmedQuery}`, results));
+            console.log(`[useSchoolData] ✅ Found ${results.length} matching parents`);
             return results;
-        } catch (error) {
-            console.error('[useSchoolData] ❌ Error searching parents:', error);
-            return [];
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Search error:', err);
+            return parents;
         } finally {
             setIsSearching(false);
         }
-    }, [searchCache]);
+    }, [parents, searchCache]);
 
-    const loading = queries.some(q => q.isLoading);
-    const error = queries.find(q => q.error)?.error as string | null;
-    
-    // Log which queries are still loading
-    useEffect(() => {
-        const stillLoading = queries
-            .map((q, index) => ({ name: collectionConfigs[index]?.name, isLoading: q.isLoading }))
-            .filter(q => q.isLoading);
-        
-        if (stillLoading.length > 0) {
-            console.log('[useSchoolData] ⏳ Still loading:', stillLoading.map(q => q.name));
-        }
-    }, [loading]);
-
-    const queryResultsMap = useMemo(() => {
-        // Don't build map while still loading - return empty to avoid premature empty arrays
-        if (loading) {
-            return {};
-        }
-
-        
-        const map = collectionConfigs
-            .filter(config => shouldFetch(config.name))
-            .reduce((acc, config, index) => {
-                const queryResult = queries[index];
-                if (queryResult) {
-                    acc[config.name] = queryResult.data || [];
-                }
-                return acc;
-            }, {} as Record<string, any>);
-        
-        console.log('[useSchoolData] ✅ Data loaded - Teachers:', map.teachers?.length, 'Parents:', map.parents?.length, 'Students:', allStudents.length, 'Assignments:', map.assignments?.length, 'Sections:', map.sections?.length);
-        return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [queries.map(q => q.data).join(','), collectionConfigs, shouldFetch, loading, allStudents.length]);
-    
+    // ===== REFRESH (Manual) =====
     const refresh = useCallback(() => {
-      // Refetch students by triggering the query
-      studentsQuery?.refetch();
-      // Refetch all other queries
-      queries.forEach(q => q.refetch && q.refetch());
-    }, [studentsQuery, queries]);
-
-    // Helper to invalidate and refetch a query after mutation
-    const invalidate = async (key: QueryKey) => {
-        // Use predicate to match keys with version suffix
-        await queryClient.invalidateQueries({ 
-            predicate: (query) => {
-                const queryKey = query.queryKey;
-                if (Array.isArray(key) && Array.isArray(queryKey)) {
-                    return queryKey[0] === key[0]; // Match first element (collection name)
-                }
-                return false;
-            }
-        });
-        await queryClient.refetchQueries({ 
-            predicate: (query) => {
-                const queryKey = query.queryKey;
-                if (Array.isArray(key) && Array.isArray(queryKey)) {
-                    return queryKey[0] === key[0];
-                }
-                return false;
-            }
-        });
-    };
-
-    // === CRUD OPERATIONS ===
-    // Students
-    const addStudent = useCallback(async (student: Omit<Student, 'id' | 'enrollmentDate'>) => {
-        const newStudent: Student = {
-            ...student,
-            id: `s_${Date.now()}`,
-            enrollmentDate: new Date().toISOString().split('T')[0],
-        };
-        
-        // Optimistically add to local state so it appears immediately
-        setAllStudents(prev => [newStudent, ...prev]); // Add to beginning since we order by date desc
-        
-        await writeToFirestore('students', newStudent.id, newStudent);
-        await invalidate(['students']); // Invalidate the general 'students' key
-        await invalidate(['students', 'initial']); // Invalidate the specific initial students query
-        return { success: true };
+        console.log('[useSchoolData] 🔄 Manual refresh requested (subscriptions auto-update)');
+        // Subscriptions auto-update, but we can clear cache
+        setSearchCache(new Map());
     }, []);
 
-    const updateStudent = useCallback(async (student: Student) => {
-        // Optimistically update local state
-        setAllStudents(prev => prev.map(s => s.id === student.id ? student : s));
-        
-        await writeToFirestore('students', student.id, student);
-        await invalidate(['students']);
-    }, []);
+    // ===== CRUD METHODS =====
+    // All methods use Firestore directly (subscriptions auto-update the state)
 
-    const deleteStudent = useCallback(async (studentId: string) => {
-        // Optimistically remove from local state
-        setAllStudents(prev => prev.filter(s => s.id !== studentId));
-        
-        await deleteFromFirestore('students', studentId);
-        await invalidate(['students']);
-        await invalidate(['grades']);
-        await invalidate(['coreValueGrades']);
-        await invalidate(['attendanceRecords']);
-    }, []);
-
-    // Grades
-    const computeFinalAndRemarks = (g: Grade): { finalGrade?: number; remarks?: 'Passed'|'Failed' } => {
-        const quarters: (keyof Pick<Grade,'q1'|'q2'|'q3'|'q4'>)[] = ['q1','q2','q3','q4'];
-        const values: number[] = [];
-        for (const q of quarters) {
-            const v = g[q];
-            if (typeof v === 'number') values.push(v);
-            else if (v && typeof v === 'object') {
-                const nums = Object.values(v as any).filter(n => typeof n === 'number') as number[];
-                if (nums.length) values.push(Math.round(nums.reduce((a,b)=>a+b,0)/nums.length));
-            }
-        }
-        if (!values.length) return {};
-        const finalGrade = Math.round(values.reduce((a,b)=>a+b,0)/values.length);
-        const remarks = finalGrade >= 75 ? 'Passed' : 'Failed';
-        return { finalGrade, remarks };
-    };
-
-    const updateGrade = useCallback(async (
-        studentId: string, 
-        learningAreaId: string, 
-        quarter: 'q1'|'q2'|'q3'|'q4', 
-        value?: number, 
-        subSubject?: string
-    ) => {
-        const grades: Grade[] = queryClient.getQueryData(['grades', 'v2']) || [];
-        const learningAreas: LearningArea[] = queryClient.getQueryData(['learningAreas', 'v2']) || DEFAULT_LEARNING_AREAS;
-        const learningArea = learningAreas.find(la => la.id === learningAreaId);
-        
-        let existing = grades.find(g => g.studentId === studentId && g.learningAreaId === learningAreaId);
-        if (!existing) {
-            existing = { id: `grade_${studentId}_${learningAreaId}`, studentId, learningAreaId } as Grade;
-        } else {
-            existing = { ...existing };
-        }
-        
-        if (learningArea?.isComposite && subSubject) {
-            const current = (existing[quarter] as Record<string, number | undefined>) || {};
-            const next = { ...current } as any;
-            if (value === undefined) delete next[subSubject];
-            else next[subSubject] = value;
-            (existing as any)[quarter] = next;
-        } else {
-            (existing as any)[quarter] = value as any;
-        }
-        
-        const calc = computeFinalAndRemarks(existing);
-        existing.finalGrade = calc.finalGrade;
-        existing.remarks = calc.remarks;
-        
-        // Optimistically update cache IMMEDIATELY using updater function to avoid race conditions
-        queryClient.setQueryData(['grades', 'v2'], (oldGrades: Grade[] = []) => {
-            const existingIndex = oldGrades.findIndex(g => g.studentId === studentId && g.learningAreaId === learningAreaId);
-            if (existingIndex >= 0) {
-                // Update existing grade
-                return oldGrades.map((g, i) => i === existingIndex ? existing! : g);
-            } else {
-                // Add new grade
-                return [...oldGrades, existing!];
-            }
-        });
-        
-        // Write to Firestore in background - revert optimistic update on failure
+    // ===== STUDENT CRUD =====
+    const addStudent = useCallback(async (student: Omit<Student, 'id' | 'enrollmentDate'>): Promise<{ success: boolean; message?: string }> => {
         try {
-            await writeToFirestore('grades', existing.id, existing);
-            console.log(`✅ SAVED: ${existing.id} → ${quarter.toUpperCase()} = ${value || 'cleared'}`);
-        } catch (error) {
-            console.error('❌ SAVE FAILED:', existing.id, error);
-            // Revert to original grades on failure
-            queryClient.setQueryData(['grades', 'v2'], grades);
-            throw error; // Re-throw so UI can show error
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+
+            // Validate unique email
+            const existingStudent = students.find(s => s.email === student.email);
+            if (existingStudent) {
+                return { success: false, message: 'A student with this email already exists.' };
+            }
+
+            const newStudent = {
+                ...student,
+                enrollmentDate: serverTimestamp(),
+                createdAt: serverTimestamp()
+            };
+
+            const docRef = await addDoc(collection(db, 'students'), newStudent);
+            console.log('[useSchoolData] ✅ Student added:', docRef.id);
+            return { success: true };
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error adding student:', err);
+            return { success: false, message: err.message };
+        }
+    }, [students]);
+
+    const updateStudent = useCallback(async (student: Student): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'students', student.id), {
+                ...student,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Student updated:', student.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating student:', err);
+            throw err;
         }
     }, []);
 
-    // Core Values
-    const updateCoreValueGrade = useCallback(async (
-        studentId: string, 
-        coreValueId: string, 
-        quarter: 'q1'|'q2'|'q3'|'q4', 
-        behavior: string, 
-        value: CoreValueMarking | ''
-    ) => {
-        const coreValueGrades: CoreValueGrade[] = queryClient.getQueryData(['coreValueGrades', 'v2']) || [];
-        let existing = coreValueGrades.find(r => r.studentId === studentId && r.coreValueId === coreValueId);
-        let nextRecord: CoreValueGrade;
-        if (!existing) {
-            nextRecord = { id: `cvg_${studentId}_${coreValueId}`, studentId, coreValueId, q1: {}, q2: {}, q3: {}, q4: {} } as CoreValueGrade;
-        } else {
-            nextRecord = { ...existing, [quarter]: { ...(existing as any)[quarter] } } as any;
-        }
-        if (value === '' || value == null) {
-            delete (nextRecord as any)[quarter][behavior];
-        } else {
-            (nextRecord as any)[quarter][behavior] = value;
-        }
-        await writeToFirestore('coreValueGrades', nextRecord.id, nextRecord);
-        await invalidate(['coreValueGrades']);
-    }, []);
-
-    // Attendance
-    const updateAttendance = useCallback(async (studentId: string, date: string, status: AttendanceStatus) => {
-        const attendanceRecords: AttendanceRecord[] = queryClient.getQueryData(['attendanceRecords', 'v2']) || [];
-        let existing = attendanceRecords.find(ar => ar.studentId === studentId);
-        
-        // Optimistically update the cache IMMEDIATELY using updater function to avoid race conditions
-        queryClient.setQueryData(['attendanceRecords', 'v2'], (oldRecords: AttendanceRecord[] = []) => {
-            const existingRecord = oldRecords.find(ar => ar.studentId === studentId);
-            const updatedRecord = existingRecord 
-                ? { ...existingRecord, dailyStatus: { ...existingRecord.dailyStatus, [date]: status } }
-                : { studentId, dailyStatus: { [date]: status } };
+    const deleteStudent = useCallback(async (studentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
             
-            return existingRecord
-                ? oldRecords.map(ar => ar.studentId === studentId ? updatedRecord : ar)
-                : [...oldRecords, updatedRecord];
-        });
-        
-        // Then write to Firestore using field-level update to prevent data loss
-        const db = getFirestoreInstance();
-        const docRef = doc(db, 'attendanceRecords', studentId);
-        
+            // Delete student and related data
+            await deleteDoc(doc(db, 'students', studentId));
+            
+            // Delete related grades
+            const gradesQuery = query(collection(db, 'grades'), where('studentId', '==', studentId));
+            const gradesSnapshot = await getDocs(gradesQuery);
+            const gradeDeletes = gradesSnapshot.docs.map(d => deleteDoc(d.ref));
+            
+            // Delete related core value grades
+            const cvGradesQuery = query(collection(db, 'coreValueGrades'), where('studentId', '==', studentId));
+            const cvGradesSnapshot = await getDocs(cvGradesQuery);
+            const cvGradeDeletes = cvGradesSnapshot.docs.map(d => deleteDoc(d.ref));
+            
+            // Delete attendance records
+            const attendanceQuery = query(collection(db, 'attendanceRecords'), where('studentId', '==', studentId));
+            const attendanceSnapshot = await getDocs(attendanceQuery);
+            const attendanceDeletes = attendanceSnapshot.docs.map(d => deleteDoc(d.ref));
+            
+            await Promise.all([...gradeDeletes, ...cvGradeDeletes, ...attendanceDeletes]);
+            console.log('[useSchoolData] ✅ Student and related data deleted:', studentId);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error deleting student:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== TEACHER CRUD =====
+    const addTeacher = useCallback(async (teacher: Omit<Teacher, 'id'>): Promise<void> => {
         try {
-            if (existing) {
-                // Use updateDoc with field path to update only the specific date
-                await updateDoc(docRef, {
-                    [`dailyStatus.${date}`]: status,
-                    updatedAt: serverTimestamp(),
-                    updatedBy: auth.currentUser?.uid || 'anon'
-                });
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'teachers'), {
+                ...teacher,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Teacher added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error adding teacher:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateTeacher = useCallback(async (teacher: Teacher): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'teachers', teacher.id), {
+                ...teacher,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Teacher updated:', teacher.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating teacher:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteTeacher = useCallback(async (teacherId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'teachers', teacherId));
+            console.log('[useSchoolData] ✅ Teacher deleted:', teacherId);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error deleting teacher:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== PARENT CRUD =====
+    const addParent = useCallback(async (parent: Omit<Parent, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'parents'), {
+                ...parent,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Parent added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error adding parent:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateParent = useCallback(async (parent: Parent): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'parents', parent.id), {
+                ...parent,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Parent updated:', parent.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating parent:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteParent = useCallback(async (parentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'parents', parentId));
+            console.log('[useSchoolData] ✅ Parent deleted:', parentId);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error deleting parent:', err);
+            throw err;
+        }
+    }, []);
+
+    const assignStudentToParent = useCallback(async (parentId: string, studentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const parentRef = doc(db, 'parents', parentId);
+            const parentDoc = await getDoc(parentRef);
+            
+            if (!parentDoc.exists()) {
+                throw new Error('Parent not found');
+            }
+            
+            const currentStudentIds = parentDoc.data().studentIds || [];
+            const updatedStudentIds = Array.from(new Set([...currentStudentIds, studentId]));
+            
+            await updateDoc(parentRef, {
+                studentIds: updatedStudentIds,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Student assigned to parent:', { parentId, studentId });
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error assigning student to parent:', err);
+            throw err;
+        }
+    }, []);
+
+    const unassignStudentFromParent = useCallback(async (parentId: string, studentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const parentRef = doc(db, 'parents', parentId);
+            const parentDoc = await getDoc(parentRef);
+            
+            if (!parentDoc.exists()) {
+                throw new Error('Parent not found');
+            }
+            
+            const currentStudentIds = parentDoc.data().studentIds || [];
+            const updatedStudentIds = currentStudentIds.filter((id: string) => id !== studentId);
+            
+            await updateDoc(parentRef, {
+                studentIds: updatedStudentIds,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Student unassigned from parent:', { parentId, studentId });
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error unassigning student from parent:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== SECTION CRUD =====
+    const addSection = useCallback(async (section: Omit<Section, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'sections'), {
+                ...section,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Section added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error adding section:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateSection = useCallback(async (section: Section): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'sections', section.id), {
+                ...section,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Section updated:', section.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating section:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteSection = useCallback(async (sectionId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'sections', sectionId));
+            
+            // Update students to remove section reference
+            const studentsInSection = students.filter(s => s.sectionId === sectionId);
+            const updatePromises = studentsInSection.map(student =>
+                updateDoc(doc(db, 'students', student.id), {
+                    sectionId: null,
+                    updatedAt: serverTimestamp()
+                })
+            );
+            await Promise.all(updatePromises);
+            
+            console.log('[useSchoolData] ✅ Section deleted:', sectionId);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error deleting section:', err);
+            throw err;
+        }
+    }, [students]);
+
+    // ===== LEARNING AREA CRUD =====
+    const addLearningArea = useCallback(async (area: Omit<LearningArea, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'learningAreas'), {
+                ...area,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Learning area added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error adding learning area:', err);
+            throw err;
+        }
+    }, []);
+
+    const updateLearningArea = useCallback(async (learningAreaId: string, area: Omit<LearningArea, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'learningAreas', learningAreaId), {
+                ...area,
+                id: learningAreaId,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Learning area updated:', learningAreaId);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating learning area:', err);
+            throw err;
+        }
+    }, []);
+
+    const deleteLearningArea = useCallback(async (learningAreaId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'learningAreas', learningAreaId));
+            
+            // Delete related grades
+            const gradesQuery = query(collection(db, 'grades'), where('learningAreaId', '==', learningAreaId));
+            const gradesSnapshot = await getDocs(gradesQuery);
+            const deletePromises = gradesSnapshot.docs.map(d => deleteDoc(d.ref));
+            await Promise.all(deletePromises);
+            
+            console.log('[useSchoolData] ✅ Learning area and related grades deleted:', learningAreaId);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error deleting learning area:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== GRADE CRUD =====
+    const updateGrade = useCallback(async (
+        studentId: string,
+        learningAreaId: string,
+        quarter: 'q1' | 'q2' | 'q3' | 'q4',
+        value?: number,
+        subSubject?: string
+    ): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            // Find or create grade document
+            const gradesQuery = query(
+                collection(db, 'grades'),
+                where('studentId', '==', studentId),
+                where('learningAreaId', '==', learningAreaId)
+            );
+            const gradesSnapshot = await getDocs(gradesQuery);
+            
+            let gradeRef;
+            let gradeData: any = {};
+            
+            if (gradesSnapshot.empty) {
+                // Create new grade document
+                gradeData = {
+                    studentId,
+                    learningAreaId,
+                    [quarter]: subSubject ? { [subSubject]: value } : value,
+                    createdAt: serverTimestamp()
+                };
+                gradeRef = await addDoc(collection(db, 'grades'), gradeData);
             } else {
-                // Create new document if it doesn't exist
-                await setDoc(docRef, {
+                // Update existing grade document
+                const existingDoc = gradesSnapshot.docs[0];
+                gradeRef = existingDoc.ref;
+                gradeData = existingDoc.data();
+                
+                if (subSubject) {
+                    const currentQuarter = gradeData[quarter] || {};
+                    gradeData[quarter] = { ...currentQuarter, [subSubject]: value };
+                } else {
+                    gradeData[quarter] = value;
+                }
+                
+                // Calculate final grade and remarks
+                const quarters = ['q1', 'q2', 'q3', 'q4'];
+                const quarterGrades = quarters.map(q => {
+                    const qValue = gradeData[q];
+                    if (typeof qValue === 'number') return qValue;
+                    if (typeof qValue === 'object' && qValue !== null) {
+                        const values = Object.values(qValue).filter(v => typeof v === 'number');
+                        return values.length > 0 ? values.reduce((sum: any, v: any) => sum + v, 0) / values.length : undefined;
+                    }
+                    return undefined;
+                }).filter(g => g !== undefined);
+                
+                if (quarterGrades.length > 0) {
+                    gradeData.finalGrade = Math.round(quarterGrades.reduce((sum: any, g: any) => sum + g, 0) / quarterGrades.length);
+                    gradeData.remarks = gradeData.finalGrade >= 75 ? 'Passed' : 'Failed';
+                }
+                
+                await updateDoc(gradeRef, {
+                    ...gradeData,
+                    updatedAt: serverTimestamp()
+                });
+            }
+            
+            console.log('[useSchoolData] ✅ Grade updated:', { studentId, learningAreaId, quarter });
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating grade:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== CORE VALUE GRADE CRUD =====
+    const updateCoreValueGrade = useCallback(async (
+        studentId: string,
+        coreValueId: string,
+        quarter: 'q1' | 'q2' | 'q3' | 'q4',
+        behavior: string,
+        value: CoreValueMarking | ''
+    ): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            // Find or create core value grade document
+            const cvGradesQuery = query(
+                collection(db, 'coreValueGrades'),
+                where('studentId', '==', studentId),
+                where('coreValueId', '==', coreValueId)
+            );
+            const cvGradesSnapshot = await getDocs(cvGradesQuery);
+            
+            let cvGradeData: any = {};
+            
+            if (cvGradesSnapshot.empty) {
+                // Create new core value grade
+                cvGradeData = {
+                    studentId,
+                    coreValueId,
+                    [quarter]: { [behavior]: value },
+                    createdAt: serverTimestamp()
+                };
+                await addDoc(collection(db, 'coreValueGrades'), cvGradeData);
+            } else {
+                // Update existing
+                const existingDoc = cvGradesSnapshot.docs[0];
+                cvGradeData = existingDoc.data();
+                
+                const currentQuarter = cvGradeData[quarter] || {};
+                cvGradeData[quarter] = { ...currentQuarter, [behavior]: value };
+                
+                await updateDoc(existingDoc.ref, {
+                    ...cvGradeData,
+                    updatedAt: serverTimestamp()
+                });
+            }
+            
+            console.log('[useSchoolData] ✅ Core value grade updated:', { studentId, coreValueId, quarter, behavior });
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating core value grade:', err);
+            throw err;
+        }
+    }, []);
+
+    // ===== ATTENDANCE CRUD =====
+    const updateAttendance = useCallback(async (
+        studentId: string,
+        date: string,
+        status: AttendanceStatus
+    ): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            // Find or create attendance record
+            const attendanceQuery = query(
+                collection(db, 'attendanceRecords'),
+                where('studentId', '==', studentId)
+            );
+            const attendanceSnapshot = await getDocs(attendanceQuery);
+            
+            if (attendanceSnapshot.empty) {
+                // Create new attendance record
+                await addDoc(collection(db, 'attendanceRecords'), {
                     studentId,
                     dailyStatus: { [date]: status },
-                    updatedAt: serverTimestamp(),
-                    updatedBy: auth.currentUser?.uid || 'anon'
+                    createdAt: serverTimestamp()
+                });
+            } else {
+                // Update existing
+                const existingDoc = attendanceSnapshot.docs[0];
+                const dailyStatus = existingDoc.data().dailyStatus || {};
+                dailyStatus[date] = status;
+                
+                await updateDoc(existingDoc.ref, {
+                    dailyStatus,
+                    updatedAt: serverTimestamp()
                 });
             }
-            console.log(`[Firestore] ✅ Attendance updated: ${studentId} - ${date} = ${status}`);
-        } catch (error) {
-            console.error('[Firestore] ❌ Attendance update failed:', error);
-            // Rollback optimistic update on error
-            queryClient.setQueryData(['attendanceRecords', 'v2'], attendanceRecords);
-            throw error;
-        }
-        
-        // No refetch needed - cache is already updated and Firestore write is complete
-        // Data is consistent between cache and server
-    }, []);
-
-    // Learning Areas
-    const addLearningArea = useCallback(async (area: Omit<LearningArea, 'id'>) => {
-        const newArea: LearningArea = { id: `la_${Date.now()}`, ...area };
-        await writeToFirestore('learningAreas', newArea.id, newArea);
-        await invalidate(['learningAreas']);
-    }, []);
-
-    const updateLearningArea = useCallback(async (learningAreaId: string, area: Omit<LearningArea, 'id'>) => {
-        const updatedArea: LearningArea = { id: learningAreaId, ...area };
-        await writeToFirestore('learningAreas', learningAreaId, updatedArea);
-        await invalidate(['learningAreas']);
-    }, []);
-
-    const deleteLearningArea = useCallback(async (learningAreaId: string) => {
-        await deleteFromFirestore('learningAreas', learningAreaId);
-        await invalidate(['learningAreas']);
-        await invalidate(['grades']);
-    }, []);
-
-    // Teachers
-    const addTeacher = useCallback(async (teacher: Omit<Teacher, 'id'>) => {
-        const newTeacher: Teacher = { id: `t_${Date.now()}`, ...teacher };
-        await writeToFirestore('teachers', newTeacher.id, newTeacher);
-        await invalidate(['teachers']);
-    }, []);
-
-    const updateTeacher = useCallback(async (teacher: Teacher) => {
-        await writeToFirestore('teachers', teacher.id, teacher);
-        await invalidate(['teachers']);
-    }, []);
-
-    const deleteTeacher = useCallback(async (teacherId: string) => {
-        await deleteFromFirestore('teachers', teacherId);
-        await invalidate(['teachers']);
-    }, []);
-
-    // Parents
-    const addParent = useCallback(async (parent: Omit<Parent, 'id'>) => {
-        const newParent: Parent = { id: `p_${Date.now()}`, ...parent };
-        await writeToFirestore('parents', newParent.id, newParent);
-        await invalidate(['parents']);
-    }, []);
-
-    const updateParent = useCallback(async (parent: Parent) => {
-        await writeToFirestore('parents', parent.id, parent);
-        await invalidate(['parents']);
-    }, []);
-
-    const deleteParent = useCallback(async (parentId: string) => {
-        await deleteFromFirestore('parents', parentId);
-        await invalidate(['parents']);
-    }, []);
-
-    const assignStudentToParent = useCallback(async (parentId: string, studentId: string) => {
-        const parents: Parent[] = queryClient.getQueryData(['parents', 'v2']) || [];
-        const parent = parents.find(p => p.id === parentId);
-        if (parent) {
-            const updated = { ...parent, studentIds: [...(parent.studentIds || []), studentId] };
-            await writeToFirestore('parents', parentId, updated);
-            await invalidate(['parents']);
+            
+            console.log('[useSchoolData] ✅ Attendance updated:', { studentId, date, status });
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating attendance:', err);
+            throw err;
         }
     }, []);
 
-    const unassignStudentFromParent = useCallback(async (parentId: string, studentId: string) => {
-        const parents: Parent[] = queryClient.getQueryData(['parents', 'v2']) || [];
-        const parent = parents.find(p => p.id === parentId);
-        if (parent) {
-            const updated = { ...parent, studentIds: (parent.studentIds || []).filter(id => id !== studentId) };
-            await writeToFirestore('parents', parentId, updated);
-            await invalidate(['parents']);
+    // ===== SETTINGS CRUD =====
+    const updateSettings = useCallback(async (settings: SchoolSettings): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await setDoc(doc(db, 'settings', 'school'), {
+                ...settings,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Settings updated');
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating settings:', err);
+            throw err;
         }
     }, []);
 
-    // Sections
-    const addSection = useCallback(async (section: Omit<Section, 'id'>) => {
-        const newSection: Section = { id: `sec_${Date.now()}`, ...section };
-        await writeToFirestore('sections', newSection.id, newSection);
-        await invalidate(['sections']);
+    // ===== SUBSTITUTE ASSIGNMENT CRUD =====
+    const addSubstituteAssignment = useCallback(async (assignment: Omit<SubstituteAssignment, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'substituteAssignments'), {
+                ...assignment,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Substitute assignment added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error adding substitute assignment:', err);
+            throw err;
+        }
     }, []);
 
-    const updateSection = useCallback(async (section: Section) => {
-        await writeToFirestore('sections', section.id, section);
-        await invalidate(['sections']);
+    const updateSubstituteAssignment = useCallback(async (assignment: SubstituteAssignment): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'substituteAssignments', assignment.id), {
+                ...assignment,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Substitute assignment updated:', assignment.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating substitute assignment:', err);
+            throw err;
+        }
     }, []);
 
-    const deleteSection = useCallback(async (sectionId: string) => {
-        await deleteFromFirestore('sections', sectionId);
-        await invalidate(['sections']);
+    const deleteSubstituteAssignment = useCallback(async (assignmentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'substituteAssignments', assignmentId));
+            console.log('[useSchoolData] ✅ Substitute assignment deleted:', assignmentId);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error deleting substitute assignment:', err);
+            throw err;
+        }
     }, []);
 
-    // Settings
-    const updateSettings = useCallback(async (settings: SchoolSettings) => {
-        await writeToFirestore('settings', 'default', settings);
-        await invalidate(['settings']);
+    // ===== CLASS SCHEDULE CRUD =====
+    const addSchedule = useCallback(async (sched: Omit<ClassSchedule, 'id'>): Promise<{ success: boolean; message?: string }> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            // TODO: Add conflict validation if needed
+            
+            const docRef = await addDoc(collection(db, 'classSchedules'), {
+                ...sched,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Schedule added:', docRef.id);
+            return { success: true };
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error adding schedule:', err);
+            return { success: false, message: err.message };
+        }
     }, []);
 
-    // Substitute Assignments
-    const addSubstituteAssignment = useCallback(async (assignment: Omit<SubstituteAssignment, 'id'>) => {
-        const newAssignment: SubstituteAssignment = { id: `sa_${Date.now()}`, ...assignment };
-        await writeToFirestore('substituteAssignments', newAssignment.id, newAssignment);
-        await invalidate(['substituteAssignments']);
+    const updateSchedule = useCallback(async (sched: ClassSchedule): Promise<{ success: boolean; message?: string }> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'classSchedules', sched.id), {
+                ...sched,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Schedule updated:', sched.id);
+            return { success: true };
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating schedule:', err);
+            return { success: false, message: err.message };
+        }
     }, []);
 
-    const updateSubstituteAssignment = useCallback(async (assignment: SubstituteAssignment) => {
-        await writeToFirestore('substituteAssignments', assignment.id, assignment);
-        await invalidate(['substituteAssignments']);
+    const deleteSchedule = useCallback(async (scheduleId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'classSchedules', scheduleId));
+            console.log('[useSchoolData] ✅ Schedule deleted:', scheduleId);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error deleting schedule:', err);
+            throw err;
+        }
     }, []);
 
-    const deleteSubstituteAssignment = useCallback(async (assignmentId: string) => {
-        await deleteFromFirestore('substituteAssignments', assignmentId);
-        await invalidate(['substituteAssignments']);
+    // ===== ASSIGNMENT CRUD =====
+    const addAssignment = useCallback(async (assignment: Omit<Assignment, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'assignments'), {
+                ...assignment,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Assignment added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error adding assignment:', err);
+            throw err;
+        }
     }, []);
 
-    // Class Schedules
-    const addSchedule = useCallback(async (sched: Omit<ClassSchedule, 'id'>) => {
-        const newSchedule: ClassSchedule = { id: `cs_${Date.now()}`, ...sched };
-        await writeToFirestore('classSchedules', newSchedule.id, newSchedule);
-        await invalidate(['classSchedules']);
-        return { success: true };
+    const updateAssignment = useCallback(async (assignment: Assignment): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'assignments', assignment.id), {
+                ...assignment,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Assignment updated:', assignment.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating assignment:', err);
+            throw err;
+        }
     }, []);
 
-    const updateSchedule = useCallback(async (sched: ClassSchedule) => {
-        await writeToFirestore('classSchedules', sched.id, sched);
-        await invalidate(['classSchedules']);
-        return { success: true };
-    }, []);
-
-    const deleteSchedule = useCallback(async (scheduleId: string) => {
-        await deleteFromFirestore('classSchedules', scheduleId);
-        await invalidate(['classSchedules']);
-    }, []);
-
-    // Assignments
-    const addAssignment = useCallback(async (assignment: Omit<Assignment, 'id'>) => {
-        const newAssignment: Assignment = { id: `a_${Date.now()}`, ...assignment };
-        await writeToFirestore('assignments', newAssignment.id, newAssignment);
-        await invalidate(['assignments']);
-    }, []);
-
-    const updateAssignment = useCallback(async (assignment: Assignment) => {
-        await writeToFirestore('assignments', assignment.id, assignment);
-        await invalidate(['assignments']);
-    }, []);
-
-    const deleteAssignment = useCallback(async (assignmentId: string) => {
-        await deleteFromFirestore('assignments', assignmentId);
-        await invalidate(['assignments']);
-        await invalidate(['studentAssignmentGrades']);
+    const deleteAssignment = useCallback(async (assignmentId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'assignments', assignmentId));
+            
+            // Delete related student grades
+            const gradesQuery = query(collection(db, 'studentAssignmentGrades'), where('assignmentId', '==', assignmentId));
+            const gradesSnapshot = await getDocs(gradesQuery);
+            const deletePromises = gradesSnapshot.docs.map(d => deleteDoc(d.ref));
+            await Promise.all(deletePromises);
+            
+            console.log('[useSchoolData] ✅ Assignment and related grades deleted:', assignmentId);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error deleting assignment:', err);
+            throw err;
+        }
     }, []);
 
     const updateAssignmentGrade = useCallback(async (
-        studentId: string, 
-        assignmentId: string, 
-        score: number | null, 
+        studentId: string,
+        assignmentId: string,
+        score: number | null,
         feedback: string | null
-    ) => {
-        const studentAssignmentGrades: StudentAssignmentGrade[] = queryClient.getQueryData(['studentAssignmentGrades', 'v2']) || [];
-        let existing = studentAssignmentGrades.find(g => g.studentId === studentId && g.assignmentId === assignmentId);
-        if (existing) {
-            const updated = { ...existing, score, feedback, updatedAt: Date.now() };
-            await writeToFirestore('studentAssignmentGrades', existing.id!, updated);
-        } else {
-            const newGrade: StudentAssignmentGrade = {
-                id: `sag_${studentId}_${assignmentId}`,
+    ): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            // Find existing grade or create new
+            const gradesQuery = query(
+                collection(db, 'studentAssignmentGrades'),
+                where('studentId', '==', studentId),
+                where('assignmentId', '==', assignmentId)
+            );
+            const gradesSnapshot = await getDocs(gradesQuery);
+            
+            const gradeData = {
                 studentId,
                 assignmentId,
                 score,
                 feedback,
-                submissionDate: null,
-                filePath: null,
-                updatedAt: Date.now()
             };
-            await writeToFirestore('studentAssignmentGrades', newGrade.id!, newGrade);
+            
+            if (gradesSnapshot.empty) {
+                await addDoc(collection(db, 'studentAssignmentGrades'), {
+                    ...gradeData,
+                    createdAt: serverTimestamp()
+                });
+            } else {
+                await updateDoc(gradesSnapshot.docs[0].ref, {
+                    ...gradeData,
+                    updatedAt: serverTimestamp()
+                });
+            }
+            
+            console.log('[useSchoolData] ✅ Assignment grade updated:', { studentId, assignmentId, score });
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating assignment grade:', err);
+            throw err;
         }
-        await invalidate(['studentAssignmentGrades']);
     }, []);
 
-    const submitAssignment = useCallback(async (studentId: string, assignmentId: string, filePath: string) => {
-        const studentAssignmentGrades: StudentAssignmentGrade[] = queryClient.getQueryData(['studentAssignmentGrades', 'v2']) || [];
-        let existing = studentAssignmentGrades.find(g => g.studentId === studentId && g.assignmentId === assignmentId);
-        if (existing) {
-            const updated = { 
-                ...existing, 
-                submissionDate: new Date().toISOString(), 
-                filePath,
-                updatedAt: Date.now()
-            };
-            await writeToFirestore('studentAssignmentGrades', existing.id!, updated);
-        } else {
-            const newGrade: StudentAssignmentGrade = {
-                id: `sag_${studentId}_${assignmentId}`,
-                studentId,
-                assignmentId,
-                submissionDate: new Date().toISOString(),
-                filePath,
-                score: null,
-                feedback: null,
-                updatedAt: Date.now()
-            };
-            await writeToFirestore('studentAssignmentGrades', newGrade.id!, newGrade);
+    const submitAssignment = useCallback(async (studentId: string, assignmentId: string, submission: any): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            
+            const gradesQuery = query(
+                collection(db, 'studentAssignmentGrades'),
+                where('studentId', '==', studentId),
+                where('assignmentId', '==', assignmentId)
+            );
+            const gradesSnapshot = await getDocs(gradesQuery);
+            
+            if (gradesSnapshot.empty) {
+                await addDoc(collection(db, 'studentAssignmentGrades'), {
+                    studentId,
+                    assignmentId,
+                    submission,
+                    submittedAt: serverTimestamp(),
+                    createdAt: serverTimestamp()
+                });
+            } else {
+                await updateDoc(gradesSnapshot.docs[0].ref, {
+                    submission,
+                    submittedAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                });
+            }
+            
+            console.log('[useSchoolData] ✅ Assignment submitted:', { studentId, assignmentId });
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error submitting assignment:', err);
+            throw err;
         }
-        await invalidate(['studentAssignmentGrades']);
     }, []);
 
-    // Lesson Plans
-    const addLessonPlan = useCallback(async (plan: Omit<LessonPlan, 'id'>) => {
-        const newPlan: LessonPlan = { id: `lp_${Date.now()}`, ...plan };
-        await writeToFirestore('lessonPlans', newPlan.id, newPlan);
-        await invalidate(['lessonPlans']);
+    // ===== LESSON PLAN CRUD =====
+    const addLessonPlan = useCallback(async (lessonPlan: Omit<LessonPlan, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'lessonPlans'), {
+                ...lessonPlan,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Lesson plan added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error adding lesson plan:', err);
+            throw err;
+        }
     }, []);
 
-    const updateLessonPlan = useCallback(async (plan: LessonPlan) => {
-        await writeToFirestore('lessonPlans', plan.id, plan);
-        await invalidate(['lessonPlans']);
+    const updateLessonPlan = useCallback(async (lessonPlan: LessonPlan): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'lessonPlans', lessonPlan.id), {
+                ...lessonPlan,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Lesson plan updated:', lessonPlan.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating lesson plan:', err);
+            throw err;
+        }
     }, []);
 
-    const deleteLessonPlan = useCallback(async (planId: string) => {
-        await deleteFromFirestore('lessonPlans', planId);
-        await invalidate(['lessonPlans']);
+    const deleteLessonPlan = useCallback(async (lessonPlanId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'lessonPlans', lessonPlanId));
+            console.log('[useSchoolData] ✅ Lesson plan deleted:', lessonPlanId);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error deleting lesson plan:', err);
+            throw err;
+        }
     }, []);
 
-    // Announcements
-    const addAnnouncement = useCallback(async (announcement: Omit<Announcement, 'id'>) => {
-        const newAnnouncement: Announcement = { id: `ann_${Date.now()}`, ...announcement };
-        await writeToFirestore('announcements', newAnnouncement.id, newAnnouncement);
-        await invalidate(['announcements']);
+    // ===== ANNOUNCEMENT CRUD =====
+    const addAnnouncement = useCallback(async (announcement: Omit<Announcement, 'id'>): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            const docRef = await addDoc(collection(db, 'announcements'), {
+                ...announcement,
+                createdAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Announcement added:', docRef.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error adding announcement:', err);
+            throw err;
+        }
     }, []);
 
-    const updateAnnouncement = useCallback(async (announcement: Announcement) => {
-        await writeToFirestore('announcements', announcement.id, announcement);
-        await invalidate(['announcements']);
+    const updateAnnouncement = useCallback(async (announcement: Announcement): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await updateDoc(doc(db, 'announcements', announcement.id), {
+                ...announcement,
+                updatedAt: serverTimestamp()
+            });
+            console.log('[useSchoolData] ✅ Announcement updated:', announcement.id);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error updating announcement:', err);
+            throw err;
+        }
     }, []);
 
-    const deleteAnnouncement = useCallback(async (id: string) => {
-        await deleteFromFirestore('announcements', id);
-        await invalidate(['announcements']);
-    }, []);
+    const deleteAnnouncement = useCallback(async (announcementId: string): Promise<void> => {
+        try {
+            await waitForAuthReady();
+            const db = getFirestoreInstance();
+            await deleteDoc(doc(db, 'announcements', announcementId));
+            console.log('[useSchoolData] ✅ Announcement deleted:', announcementId);
+        } catch (err: any) {
+            console.error('[useSchoolData] ❌ Error deleting announcement:', err);
+            throw err;
+        }
+    }, [])
 
-    // Compose the state from queries and return from the hook
+    // ===== RETURN HOOK INTERFACE =====
     return {
-        students: allStudents, // Now using paginated students
-        learningAreas: queryResultsMap.learningAreas ?? [],
-        grades: queryResultsMap.grades ?? [],
-        coreValues: queryResultsMap.coreValues ?? [],
-        coreValueGrades: queryResultsMap.coreValueGrades ?? [],
-        attendanceRecords: queryResultsMap.attendanceRecords ?? [],
-        teachers: queryResultsMap.teachers ?? [],
-        parents: queryResultsMap.parents ?? [],
-        sections: queryResultsMap.sections ?? [],
-        settings: queryResultsMap.settings?.[0] || MOCK_SETTINGS,
-        substituteAssignments: queryResultsMap.substituteAssignments ?? [],
-        classSchedules: queryResultsMap.classSchedules ?? [],
-        assignments: queryResultsMap.assignments ?? [],
-        studentAssignmentGrades: queryResultsMap.studentAssignmentGrades ?? [],
-        lessonPlans: queryResultsMap.lessonPlans ?? [],
-        announcements: queryResultsMap.announcements ?? [],
-        monthlySchoolDaysConfig: DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG,
+        // Collections (16/16 implemented)
+        students,
+        teachers,
+        parents,
+        sections,
+        learningAreas,
+        grades,
+        coreValues,
+        coreValueGrades,
+        attendanceRecords,
+        substituteAssignments,
+        classSchedules,
+        assignments,
+        studentAssignmentGrades,
+        lessonPlans,
+        announcements,
+        settings,
+        monthlySchoolDaysConfig,
+
+        // State
         loading,
-        error: error ? (typeof error === 'string' ? error : JSON.stringify(error)) : null,
+        error,
+
+        // Pagination
+        fetchMoreStudents,
+        hasMoreStudents,
+        isFetchingStudents,
+
+        // Search
+        searchStudents,
+        searchTeachers,
+        searchParents,
+        isSearching,
+
+        // Actions
         refresh,
+
+        // Student CRUD
         addStudent,
         updateStudent,
         deleteStudent,
-        updateGrade,
-        updateCoreValueGrade,
-        addLearningArea,
-        updateLearningArea,
-        deleteLearningArea,
-        updateSettings,
-        updateAttendance,
+
+        // Teacher CRUD
+        addTeacher,
+        updateTeacher,
+        deleteTeacher,
+
+        // Parent CRUD
         addParent,
         updateParent,
         deleteParent,
         assignStudentToParent,
         unassignStudentFromParent,
-        addTeacher,
-        updateTeacher,
-        deleteTeacher,
+
+        // Section CRUD
         addSection,
         updateSection,
         deleteSection,
+
+        // Learning Area CRUD
+        addLearningArea,
+        updateLearningArea,
+        deleteLearningArea,
+
+        // Grade CRUD
+        updateGrade,
+        updateCoreValueGrade,
+
+        // Attendance CRUD
+        updateAttendance,
+
+        // Settings CRUD
+        updateSettings,
+
+        // Substitute Assignment CRUD
         addSubstituteAssignment,
         updateSubstituteAssignment,
         deleteSubstituteAssignment,
+
+        // Class Schedule CRUD
         addSchedule,
         updateSchedule,
         deleteSchedule,
+
+        // Assignment CRUD
         addAssignment,
         updateAssignment,
         deleteAssignment,
         updateAssignmentGrade,
         submitAssignment,
+
+        // Lesson Plan CRUD
         addLessonPlan,
         updateLessonPlan,
         deleteLessonPlan,
+
+        // Announcement CRUD
         addAnnouncement,
         updateAnnouncement,
         deleteAnnouncement,
-        // New pagination exports
-        fetchMoreStudents,
-        hasMoreStudents,
-        isFetchingStudents,
-        // New search exports
-        searchStudents,
-        searchTeachers,
-        searchParents,
-        isSearching,
-    }
+    };
 }
-
-// Explicit type for consumers (matches the return shape of useSchoolData)
-export interface SchoolDataHook {
-    students: Student[];
-    learningAreas: LearningArea[];
-    grades: Grade[];
-    coreValues: CoreValue[];
-    coreValueGrades: CoreValueGrade[];
-    attendanceRecords: AttendanceRecord[];
-    teachers: Teacher[];
-    parents: Parent[];
-    sections: Section[];
-    settings: SchoolSettings;
-    substituteAssignments: SubstituteAssignment[];
-    classSchedules: ClassSchedule[];
-    assignments: Assignment[];
-    studentAssignmentGrades: StudentAssignmentGrade[];
-    lessonPlans: LessonPlan[];
-    announcements: Announcement[];
-    monthlySchoolDaysConfig: Record<string, number>;
-    loading: boolean;
-    error: string | null;
-    refresh: () => void;
-    addStudent: (student: Omit<Student, 'id' | 'enrollmentDate'>) => Promise<{ success: boolean }>;
-    updateStudent: (student: Student) => Promise<void>;
-    deleteStudent: (studentId: string) => Promise<void>;
-    updateGrade: (studentId: string, learningAreaId: string, quarter: 'q1' | 'q2' | 'q3' | 'q4', value?: number, subSubject?: string) => Promise<void>;
-    updateCoreValueGrade: (studentId: string, coreValueId: string, quarter: 'q1' | 'q2' | 'q3' | 'q4', behavior: string, value: CoreValueMarking | '') => Promise<void>;
-    addLearningArea: (area: Omit<LearningArea, 'id'>) => Promise<void>;
-    updateLearningArea: (learningAreaId: string, area: Omit<LearningArea, 'id'>) => Promise<void>;
-    deleteLearningArea: (learningAreaId: string) => Promise<void>;
-    updateSettings: (settings: SchoolSettings) => Promise<void>;
-    updateAttendance: (studentId: string, date: string, status: AttendanceStatus) => Promise<void>;
-    addParent: (parent: Omit<Parent, 'id'>) => Promise<void>;
-    updateParent: (parent: Parent) => Promise<void>;
-    deleteParent: (parentId: string) => Promise<void>;
-    assignStudentToParent: (parentId: string, studentId: string) => Promise<void>;
-    unassignStudentFromParent: (parentId: string, studentId: string) => Promise<void>;
-    addTeacher: (teacher: Omit<Teacher, 'id'>) => Promise<void>;
-    updateTeacher: (teacher: Teacher) => Promise<void>;
-    deleteTeacher: (teacherId: string) => Promise<void>;
-    addSection: (section: Omit<Section, 'id'>) => Promise<void>;
-    updateSection: (section: Section) => Promise<void>;
-    deleteSection: (sectionId: string) => Promise<void>;
-    addSubstituteAssignment: (assignment: Omit<SubstituteAssignment, 'id'>) => Promise<void>;
-    updateSubstituteAssignment: (assignment: SubstituteAssignment) => Promise<void>;
-    deleteSubstituteAssignment: (assignmentId: string) => Promise<void>;
-    addSchedule: (sched: Omit<ClassSchedule, 'id'>) => Promise<{ success: boolean }>;
-    updateSchedule: (sched: ClassSchedule) => Promise<{ success: boolean }>;
-    deleteSchedule: (scheduleId: string) => Promise<void>;
-    addAssignment: (assignment: Omit<Assignment, 'id'>) => Promise<void>;
-    updateAssignment: (assignment: Assignment) => Promise<void>;
-    deleteAssignment: (assignmentId: string) => Promise<void>;
-    updateAssignmentGrade: (studentId: string, assignmentId: string, score: number | null, feedback: string | null) => Promise<void>;
-    submitAssignment: (studentId: string, assignmentId: string, filePath: string) => Promise<void>;
-    addLessonPlan: (plan: Omit<LessonPlan, 'id'>) => Promise<void>;
-    updateLessonPlan: (plan: LessonPlan) => Promise<void>;
-    deleteLessonPlan: (planId: string) => Promise<void>;
-    addAnnouncement: (announcement: Omit<Announcement, 'id'>) => Promise<void>;
-    updateAnnouncement: (announcement: Announcement) => Promise<void>;
-    deleteAnnouncement: (id: string) => Promise<void>;
-    // New pagination exports
-    fetchMoreStudents: () => Promise<void>;
-    hasMoreStudents: boolean;
-    isFetchingStudents: boolean;
-    // New search exports
-    searchStudents: (query: string) => Promise<Student[]>;
-    searchTeachers: (query: string) => Promise<Teacher[]>;
-    searchParents: (query: string) => Promise<Parent[]>;
-    isSearching: boolean;
-}
-
-// Default learning areas (same as original)
-const DEFAULT_LEARNING_AREAS: LearningArea[] = [
-    {
-        id: 'la_filipino_elem',
-        name: 'Filipino',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [1, 2, 3, 4, 5, 6],
-        department: 'Language',
-        kToTwelveCode: 'FIL',
-        isActive: true,
-        order: 1,
-        description: 'Filipino for Elementary'
-    },
-    {
-        id: 'la_english_elem',
-        name: 'English',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [1, 2, 3, 4, 5, 6],
-        department: 'Language',
-        kToTwelveCode: 'ENG',
-        isActive: true,
-        order: 2,
-        description: 'English for Elementary'
-    },
-    {
-        id: 'la_math_elem',
-        name: 'Mathematics',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [1, 2, 3, 4, 5, 6],
-        department: 'STEM',
-        kToTwelveCode: 'MATH',
-        isActive: true,
-        order: 3,
-        description: 'Mathematics for Elementary'
-    },
-    {
-        id: 'la_science_elem',
-        name: 'Science',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [3, 4, 5, 6],
-        department: 'STEM',
-        kToTwelveCode: 'SCI',
-        isActive: true,
-        order: 4,
-        description: 'Science for Elementary (Grades 3-6 only)'
-    },
-    {
-        id: 'la_ap_elem',
-        name: 'Araling Panlipunan',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [1, 2, 3, 4, 5, 6],
-        department: 'Humanities',
-        kToTwelveCode: 'AP',
-        isActive: true,
-        order: 5,
-        description: 'Araling Panlipunan for Elementary'
-    },
-    {
-        id: 'la_esp_elem',
-        name: 'Edukasyon sa Pagpapakatao (EsP)',
-        credits: 2,
-        category: 'core',
-        gradeLevel: [1, 2, 3, 4, 5, 6],
-        department: 'Values Education',
-        kToTwelveCode: 'ESP',
-        isActive: true,
-        order: 6,
-        description: 'Values Education for Elementary'
-    },
-    {
-        id: 'la_mapeh_elem',
-        name: 'MAPEH',
-        credits: 4,
-        isComposite: true,
-        subSubjects: ['Music', 'Arts', 'PE', 'Health'],
-        category: 'specialized',
-        gradeLevel: [1, 2, 3, 4, 5, 6],
-        department: 'Arts & Sports',
-        kToTwelveCode: 'MAPEH',
-        isActive: true,
-        order: 7,
-        description: 'Music, Arts, Physical Education, Health for Elementary'
-    },
-    // ====== MOTHER TONGUE (MTB-MLE) - Elementary Grades 1-3 ======
-    {
-        id: 'la_mtb_elem',
-        name: 'Mother Tongue',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [1, 2, 3],
-        department: 'Language',
-        kToTwelveCode: 'MTB-MLE',
-        isActive: true,
-        order: 0,
-        description: 'Mother Tongue-Based Multilingual Education (MTB-MLE) - Grades 1-3'
-    },
-    // ====== EPP/TLE - Elementary Grades 4-6 ======
-    {
-        id: 'la_epp_elem',
-        name: 'EPP/TLE',
-        credits: 2,
-        category: 'specialized',
-        gradeLevel: [4, 5, 6],
-        department: 'Technical Education',
-        kToTwelveCode: 'EPP',
-        isActive: true,
-        order: 8,
-        description: 'Edukasyong Pantahanan at Pangkabuhayan for Elementary Grades 4-6'
-    },
-    // ====== JUNIOR HIGH SCHOOL (Grades 7-10) ======
-    {
-        id: 'la_filipino_jhs',
-        name: 'Filipino',
-        credits: 5,
-        category: 'core',
-        gradeLevel: [7, 8, 9, 10],
-        department: 'Language',
-        kToTwelveCode: 'FIL-JHS',
-        isActive: true,
-        order: 1,
-        description: 'Filipino for Junior High School'
-    },
-    {
-        id: 'la_english_jhs',
-        name: 'English',
-        credits: 5,
-        category: 'core',
-        gradeLevel: [7, 8, 9, 10],
-        department: 'Language',
-        kToTwelveCode: 'ENG-JHS',
-        isActive: true,
-        order: 2,
-        description: 'English for Junior High School'
-    },
-    {
-        id: 'la_math_jhs',
-        name: 'Mathematics',
-        credits: 5,
-        category: 'core',
-        gradeLevel: [7, 8, 9, 10],
-        department: 'STEM',
-        kToTwelveCode: 'MATH-JHS',
-        isActive: true,
-        order: 3,
-        description: 'Mathematics for Junior High School'
-    },
-    {
-        id: 'la_science_jhs',
-        name: 'Science',
-        credits: 5,
-        category: 'core',
-        gradeLevel: [7, 8, 9, 10],
-        department: 'STEM',
-        kToTwelveCode: 'SCI-JHS',
-        isActive: true,
-        order: 4,
-        description: 'Science for Junior High School'
-    },
-    {
-        id: 'la_ap_jhs',
-        name: 'Araling Panlipunan',
-        credits: 5,
-        category: 'core',
-        gradeLevel: [7, 8, 9, 10],
-        department: 'Humanities',
-        kToTwelveCode: 'AP-JHS',
-        isActive: true,
-        order: 5,
-        description: 'Araling Panlipunan for Junior High School'
-    },
-    {
-        id: 'la_esp_jhs',
-        name: 'Edukasyon sa Pagpapakatao',
-        credits: 5,
-        category: 'core',
-        gradeLevel: [7, 8, 9, 10],
-        department: 'Values Education',
-        kToTwelveCode: 'ESP-JHS',
-        isActive: true,
-        order: 6,
-        description: 'Values Education for Junior High School'
-    },
-    {
-        id: 'la_mapeh_jhs',
-        name: 'MAPEH',
-        credits: 5,
-        isComposite: true,
-        subSubjects: ['Music', 'Arts', 'PE', 'Health'],
-        category: 'specialized',
-        gradeLevel: [7, 8, 9, 10],
-        department: 'Arts & Sports',
-        kToTwelveCode: 'MAPEH-JHS',
-        isActive: true,
-        order: 7,
-        description: 'Music, Arts, Physical Education, Health for Junior High School'
-    },
-    {
-        id: 'la_tle_jhs',
-        name: 'Technology and Livelihood Education',
-        credits: 5,
-        category: 'specialized',
-        gradeLevel: [7, 8, 9, 10],
-        department: 'Technical Education',
-        kToTwelveCode: 'TLE-JHS',
-        isActive: true,
-        order: 8,
-        description: 'TLE for Junior High School'
-    },
-    // ====== SENIOR HIGH SCHOOL - CORE SUBJECTS (All Tracks) ======
-    {
-        id: 'la_oral_comm_shs',
-        name: 'Oral Communication',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [11],
-        department: 'Language',
-        kToTwelveCode: 'ORALCOM',
-        semesterBased: true,
-        semester: 1,
-        isActive: true,
-        order: 1
-    },
-    {
-        id: 'la_reading_writing_shs',
-        name: 'Reading and Writing',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [11],
-        department: 'Language',
-        kToTwelveCode: 'READWRIT',
-        semesterBased: true,
-        semester: 2,
-        isActive: true,
-        order: 2
-    },
-    {
-        id: 'la_gen_math_shs',
-        name: 'General Mathematics',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [11],
-        department: 'STEM',
-        kToTwelveCode: 'GENMATH',
-        semesterBased: true,
-        semester: 1,
-        isActive: true,
-        order: 3
-    },
-    {
-        id: 'la_stats_prob_shs',
-        name: 'Statistics and Probability',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [11],
-        department: 'STEM',
-        kToTwelveCode: 'STATPROB',
-        semesterBased: true,
-        semester: 2,
-        isActive: true,
-        order: 4
-    },
-    {
-        id: 'la_earth_science_shs',
-        name: 'Earth Science',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [11],
-        department: 'STEM',
-        kToTwelveCode: 'EARTHSCI',
-        semesterBased: true,
-        semester: 1,
-        isActive: true,
-        order: 5
-    },
-    {
-        id: 'la_physical_science_shs',
-        name: 'Physical Science',
-        credits: 3,
-        category: 'core',
-        gradeLevel: [11],
-        department: 'STEM',
-        kToTwelveCode: 'PHYSCI',
-        semesterBased: true,
-        semester: 2,
-        isActive: true,
-        order: 6
-    },
-    // ====== SENIOR HIGH SCHOOL - STEM TRACK ======
-    {
-        id: 'la_precalc_stem',
-        name: 'Pre-Calculus',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [11],
-        department: 'STEM',
-        kToTwelveCode: 'PRECALC',
-        trackRequired: ['STEM'],
-        semesterBased: true,
-        isActive: true,
-        order: 1
-    },
-    {
-        id: 'la_basic_calc_stem',
-        name: 'Basic Calculus',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [11, 12],
-        department: 'STEM',
-        kToTwelveCode: 'BASICCALC',
-        trackRequired: ['STEM'],
-        semesterBased: true,
-        isActive: true,
-        order: 2
-    },
-    {
-        id: 'la_gen_bio_stem',
-        name: 'General Biology',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [11, 12],
-        department: 'STEM',
-        kToTwelveCode: 'GENBIO',
-        trackRequired: ['STEM'],
-        semesterBased: true,
-        isActive: true,
-        order: 3
-    },
-    {
-        id: 'la_gen_chem_stem',
-        name: 'General Chemistry',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [11, 12],
-        department: 'STEM',
-        kToTwelveCode: 'GENCHEM',
-        trackRequired: ['STEM'],
-        semesterBased: true,
-        isActive: true,
-        order: 4
-    },
-    {
-        id: 'la_gen_physics_stem',
-        name: 'General Physics',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [12],
-        department: 'STEM',
-        kToTwelveCode: 'GENPHYS',
-        trackRequired: ['STEM'],
-        semesterBased: true,
-        isActive: true,
-        order: 5
-    },
-    // ====== SENIOR HIGH SCHOOL - ABM TRACK ======
-    {
-        id: 'la_fund_abm',
-        name: 'Fundamentals of Accountancy, Business and Management',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [11, 12],
-        department: 'Business',
-        kToTwelveCode: 'FUNDABM',
-        trackRequired: ['ABM'],
-        semesterBased: true,
-        isActive: true,
-        order: 1
-    },
-    {
-        id: 'la_bus_math_abm',
-        name: 'Business Mathematics',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [11],
-        department: 'Business',
-        kToTwelveCode: 'BUSMATH',
-        trackRequired: ['ABM'],
-        semesterBased: true,
-        isActive: true,
-        order: 2
-    },
-    {
-        id: 'la_bus_finance_abm',
-        name: 'Business Finance',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [12],
-        department: 'Business',
-        kToTwelveCode: 'BUSFIN',
-        trackRequired: ['ABM'],
-        semesterBased: true,
-        isActive: true,
-        order: 3
-    },
-    {
-        id: 'la_org_mgmt_abm',
-        name: 'Organization and Management',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [11],
-        department: 'Business',
-        kToTwelveCode: 'ORGMGMT',
-        trackRequired: ['ABM'],
-        semesterBased: true,
-        isActive: true,
-        order: 4
-    },
-    {
-        id: 'la_prin_marketing_abm',
-        name: 'Principles of Marketing',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [12],
-        department: 'Business',
-        kToTwelveCode: 'PRINMKT',
-        trackRequired: ['ABM'],
-        semesterBased: true,
-        isActive: true,
-        order: 5
-    },
-    // ====== SENIOR HIGH SCHOOL - HUMSS TRACK ======
-    {
-        id: 'la_creative_writing_humss',
-        name: 'Creative Writing',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [11],
-        department: 'Humanities',
-        kToTwelveCode: 'CREWRIT',
-        trackRequired: ['HUMSS'],
-        semesterBased: true,
-        isActive: true,
-        order: 1
-    },
-    {
-        id: 'la_creative_nonfic_humss',
-        name: 'Creative Nonfiction',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [12],
-        department: 'Humanities',
-        kToTwelveCode: 'CRENON',
-        trackRequired: ['HUMSS'],
-        semesterBased: true,
-        isActive: true,
-        order: 2
-    },
-    {
-        id: 'la_world_religions_humss',
-        name: 'World Religions and Belief Systems',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [11],
-        department: 'Humanities',
-        kToTwelveCode: 'WORLDREL',
-        trackRequired: ['HUMSS'],
-        semesterBased: true,
-        isActive: true,
-        order: 3
-    },
-    {
-        id: 'la_phil_politics_humss',
-        name: 'Philippine Politics and Governance',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [11],
-        department: 'Humanities',
-        kToTwelveCode: 'PHILPOL',
-        trackRequired: ['HUMSS'],
-        semesterBased: true,
-        isActive: true,
-        order: 4
-    },
-    {
-        id: 'la_trends_networks_humss',
-        name: 'Trends, Networks and Critical Thinking',
-        credits: 3,
-        category: 'specialized',
-        gradeLevel: [12],
-        department: 'Humanities',
-        kToTwelveCode: 'TRENDS',
-        trackRequired: ['HUMSS'],
-        semesterBased: true,
-        isActive: true,
-        order: 5
-    },
-    // ====== SENIOR HIGH SCHOOL - GAS TRACK ======
-    {
-        id: 'la_humanities_gas',
-        name: 'Humanities 1',
-        credits: 3,
-        category: 'elective',
-        gradeLevel: [11],
-        department: 'Humanities',
-        kToTwelveCode: 'HUM1',
-        trackRequired: ['GAS'],
-        semesterBased: true,
-        isActive: true,
-        order: 1
-    },
-    {
-        id: 'la_social_science_gas',
-        name: 'Social Science 1',
-        credits: 3,
-        category: 'elective',
-        gradeLevel: [11],
-        department: 'Humanities',
-        kToTwelveCode: 'SOCSCI1',
-        trackRequired: ['GAS'],
-        semesterBased: true,
-        isActive: true,
-        order: 2
-    },
-    {
-        id: 'la_applied_subjects_gas',
-        name: 'Applied Subjects',
-        credits: 3,
-        category: 'elective',
-        gradeLevel: [11, 12],
-        department: 'Applied',
-        kToTwelveCode: 'APPSUB',
-        trackRequired: ['GAS'],
-        semesterBased: true,
-        isActive: true,
-        order: 3
-    }
-];
