@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'rea
 import { useSchoolData } from './hooks/useSchoolData';
 import { useQueryClient } from '@tanstack/react-query';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
+import { useFirestoreSyncStatus } from './hooks/useFirestoreSyncStatus';
 import type { AuthUser, StudentUser, ParentUser } from './types';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -49,8 +50,9 @@ const App: React.FC = () => {
   // Get React Query client for cache management
   const queryClient = useQueryClient();
   
-  // TIER 1B: Monitor online/offline status
+  // TIER 1B: Monitor online/offline status and pending writes
   const { isOnline, wasOffline } = useOnlineStatus();
+  const { pendingCount } = useFirestoreSyncStatus();
   
   // Ensure we have a Firebase Auth user for Firestore writes (rules require request.auth != null)
   const [authReady, setAuthReady] = useState(false);
@@ -298,7 +300,7 @@ const App: React.FC = () => {
       <OfflineBanner 
         isOnline={isOnline} 
         wasOffline={wasOffline}
-        pendingWrites={0} // Will be connected in Phase 2
+        pendingWrites={pendingCount}
       />
       <div className="flex h-screen bg-slate-100 dark:bg-slate-900">
         <Sidebar 
