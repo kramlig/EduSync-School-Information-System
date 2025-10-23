@@ -3,6 +3,7 @@ import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useSchoolData } from './hooks/useSchoolData';
+import { useQueryClient } from '@tanstack/react-query';
 import type { AuthUser, StudentUser, ParentUser } from './types';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -42,6 +43,9 @@ const Form137CreateWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear }) 
 
 const App: React.FC = () => {
   console.log('[App] Rendering');
+  
+  // Get React Query client for cache management
+  const queryClient = useQueryClient();
   
   // Ensure we have a Firebase Auth user for Firestore writes (rules require request.auth != null)
   const [authReady, setAuthReady] = useState(false);
@@ -105,8 +109,12 @@ const App: React.FC = () => {
     } else {
       localStorage.removeItem('edusync_session');
       console.log('[App] 🗑️ Session removed from localStorage');
+      // TIER 1 FIX: Clear React Query cache when logging out
+      // This prevents cached data from being displayed on login screen
+      queryClient.clear();
+      console.log('[App] 🗑️ React Query cache cleared');
     }
-  }, [session]);
+  }, [session, queryClient]);
   
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
