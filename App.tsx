@@ -170,14 +170,11 @@ const App: React.FC = () => {
 
   console.log('[App] Loading check:', { authReady, loading, studentsCount: students.length, teachersCount: teachers.length, loadTimeout });
   
-  // Improved loading logic with timeout fallback
-  // Don't render login screen until:
-  // 1. Auth is ready
-  // 2. AND (data is loaded OR timeout reached)
-  // 3. AND we have teachers (or timeout to show error)
-  const isInitializing = !authReady || (loading && !loadTimeout);
+  // TIER 1 OPTIMIZATION: Simplified initialization logic
+  // Show login screen as soon as auth is ready
+  // Only wait for data loading AFTER user is logged in
+  const isInitializing = !authReady || (session && loading && !loadTimeout);
   const hasMinimalData = teachers.length > 0;
-  const canShowApp = authReady && (hasMinimalData || loadTimeout);
   
   if (isInitializing) {
     return <FullScreenLoader message="Loading school data..." />;
