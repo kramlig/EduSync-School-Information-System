@@ -79,6 +79,11 @@ test.describe('Offline First Visit - User Workflow', () => {
     const bodyText = await page.textContent('body');
     const hasContent = bodyText && bodyText.length > 100;
     console.log(`Page has content: ${hasContent ? '✅ YES' : '❌ NO'} (${bodyText?.length || 0} chars)`);
+    console.log(`First 200 chars: "${bodyText?.substring(0, 200)}"`);
+
+    // Check if Router is working
+    const currentURL = page.url();
+    console.log(`Current URL: ${currentURL}`);
 
     // ASSERTIONS
     console.log('\n🎯 RUNNING ASSERTIONS:');
