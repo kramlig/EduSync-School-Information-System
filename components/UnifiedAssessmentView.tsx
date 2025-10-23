@@ -596,6 +596,12 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       ? students.filter(s => s.id === session.user.id)
       : isParentView 
       ? students.filter(s => s.id === forceStudentId)
+      : isTeacherView
+      ? students.filter(s => {
+          // Teachers can only see students in sections they teach (matching grade levels)
+          const studentSection = sections.find(sec => sec.id === s.sectionId);
+          return studentSection && teacherGradeLevels.includes(studentSection.gradeLevel);
+        })
       : students;
 
     // Apply section filter (from lifted state)
@@ -785,6 +791,12 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       ? students.filter(s => s.id === session.user.id)
       : isParentView 
       ? students.filter(s => s.id === forceStudentId)
+      : isTeacherView
+      ? students.filter(s => {
+          // Teachers can only see students in sections they teach (matching grade levels)
+          const studentSection = sections.find(sec => sec.id === s.sectionId);
+          return studentSection && teacherGradeLevels.includes(studentSection.gradeLevel);
+        })
       : students;
 
     // Use unified section filter
