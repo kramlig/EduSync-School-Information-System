@@ -45,15 +45,6 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
   const teacherGradeLevels = teacherAssignments.map(a => a.gradeLevel);
   const teacherLearningAreaIds = teacherAssignments.map(a => a.learningAreaId);
 
-  // Debug logging for teacher filters
-  if (isTeacherView) {
-    console.log('[UnifiedAssessmentView] 👨‍🏫 Teacher View Detected');
-    console.log('[UnifiedAssessmentView] Teacher:', (session.user as AuthUser).name);
-    console.log('[UnifiedAssessmentView] Assignments:', teacherAssignments);
-    console.log('[UnifiedAssessmentView] Grade Levels:', teacherGradeLevels);
-    console.log('[UnifiedAssessmentView] Learning Area IDs:', teacherLearningAreaIds);
-  }
-
   // Filter sections based on teacher's grade level assignments
   const availableSections = isTeacherView
     ? sections.filter(s => teacherGradeLevels.includes(s.gradeLevel))
@@ -63,23 +54,6 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
   const availableLearningAreas = isTeacherView
     ? learningAreas.filter(la => teacherLearningAreaIds.includes(la.id))
     : learningAreas;
-
-  // Debug logging for filtered data
-  if (isTeacherView) {
-    console.log('[UnifiedAssessmentView] 📚 Total Sections:', sections.length);
-    console.log('[UnifiedAssessmentView] ✅ Filtered Sections:', availableSections.length, availableSections.map(s => `Grade ${s.gradeLevel} - ${s.name}`));
-    console.log('[UnifiedAssessmentView] 📖 Total Learning Areas:', learningAreas.length);
-    console.log('[UnifiedAssessmentView] ✅ Filtered Learning Areas:', availableLearningAreas.length, availableLearningAreas.map(la => la.name));
-  }
-
-  // Auto-select first section for teachers on mount
-  React.useEffect(() => {
-    if (isTeacherView && availableSections.length > 0 && selectedSectionId === 'all') {
-      const firstSection = availableSections[0];
-      console.log('[UnifiedAssessmentView] 🎯 Auto-selecting first section for teacher:', firstSection.name);
-      setSelectedSectionId(firstSection.id);
-    }
-  }, [isTeacherView, availableSections, selectedSectionId]);
 
   // Base students based on user type
   const baseStudents = isStudentView 
