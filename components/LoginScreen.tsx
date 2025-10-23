@@ -15,9 +15,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  // Debug flags (could later be wired to env)
-  const allowAnyPassword = true; // DEBUG ONLY
-  const enableQuickLogin = true; // DEBUG ONLY
+  
+  // 🔒 SECURITY: Environment-based feature flags
+  // - Development: All debug features enabled
+  // - UAT/Staging: Quick login enabled, password optional
+  // - Production: All debug features DISABLED
+  const isDevelopment = import.meta.env.MODE === 'development';
+  const isProduction = import.meta.env.MODE === 'production';
+  
+  // Allow any password (for demo/UAT, disable in production)
+  const allowAnyPassword = !isProduction;
+  
+  // Show quick login button (dev only, hide in UAT and production)
+  const enableQuickLogin = isDevelopment;
 
   console.log(`[LoginScreen] 🖥️ RENDERING LoginScreen component - type: "${loginType}"`);
 
@@ -206,10 +216,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
                 )}
             </div>
         </form>
-         <div className="text-center text-xs text-slate-500 dark:text-slate-400">
+        {!isProduction && (
+          <div className="text-center text-xs text-slate-500 dark:text-slate-400">
             <p className="font-semibold">Demo Credentials:</p>
-            <p>Email: (any staff email) / Pass: password{allowAnyPassword ? ' (any password accepted in debug)' : ''}</p>
-        </div>
+            <p>Email: admin@school.edu / Pass: {allowAnyPassword ? 'any password accepted' : 'password'}</p>
+            <p className="text-[10px] mt-1 text-amber-600 dark:text-amber-400">
+              ⚠️ {isDevelopment ? 'Development' : 'UAT'} Mode - Debug features enabled
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
