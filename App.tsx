@@ -110,15 +110,17 @@ const App: React.FC = () => {
   
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
-  // REVERT TO SIMPLE APPROACH: Load all collections upfront
-  // Progressive loading was causing circular dependency issues on mobile
-  // The collections are already optimized (students paginated to 10)
-  const schoolData = useSchoolData([
-    'settings', 'teachers', 'students', 'parents', 'sections', 'announcements',
-    'assignments', 'studentAssignmentGrades', 'learningAreas', 'grades',
-    'coreValues', 'coreValueGrades', 'attendanceRecords', 'lessonPlans',
-    'classSchedules', 'substituteAssignments'
-  ]);
+  // TIER 1 OPTIMIZATION: Only load data AFTER login
+  // This fixes the 20-30 second blank screen on initial load
+  // Data is loaded immediately after authentication completes
+  const schoolData = useSchoolData(
+    session ? [
+      'settings', 'teachers', 'students', 'parents', 'sections', 'announcements',
+      'assignments', 'studentAssignmentGrades', 'learningAreas', 'grades',
+      'coreValues', 'coreValueGrades', 'attendanceRecords', 'lessonPlans',
+      'classSchedules', 'substituteAssignments'
+    ] : []  // Don't load any data when logged out
+  );
   
   const { 
     loading, error, settings, students, teachers, parents,
