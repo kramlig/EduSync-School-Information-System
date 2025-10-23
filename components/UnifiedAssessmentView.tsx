@@ -1544,8 +1544,8 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
                   onChange={(e) => setSelectedSectionId(e.target.value)}
                   className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
                 >
-                  <option value="all">All Sections</option>
-                  {schoolData.sections?.map((section) => (
+                  <option value="all">{isTeacherView ? 'All My Sections' : 'All Sections'}</option>
+                  {availableSections?.map((section) => (
                     <option key={section.id} value={section.id}>
                       Grade {section.gradeLevel} - {section.name}
                     </option>
