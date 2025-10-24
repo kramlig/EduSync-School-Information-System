@@ -129,9 +129,18 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     // If searching, use search results instead of paginated students
     const sourceStudents = searchResults !== null ? searchResults : students;
     
+    console.log(`[StudentList] visibleStudents calc: searchResults=${searchResults?.length || 'null'}, students=${students.length}, authorizedSections=${authorizedSectionIds?.size || 'all'}`);
+    
     // Apply section filtering for teachers
     if (authorizedSectionIds && authorizedSectionIds.size > 0) {
-      return sourceStudents.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
+      const filtered = sourceStudents.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
+      console.log(`[StudentList] After section filter: ${filtered.length} students (from ${sourceStudents.length})`);
+      if (searchResults !== null && filtered.length === 0 && sourceStudents.length > 0) {
+        console.warn(`[StudentList] ⚠️ Search found ${sourceStudents.length} students, but none are in authorized sections!`);
+        console.warn(`[StudentList] Authorized section IDs:`, Array.from(authorizedSectionIds));
+        console.warn(`[StudentList] Student section IDs:`, sourceStudents.map(s => s.sectionId));
+      }
+      return filtered;
     }
     return sourceStudents;
   }, [students, authorizedSectionIds, searchResults]);
