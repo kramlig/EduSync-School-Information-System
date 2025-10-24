@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useSchoolData } from '../hooks/useSchoolData';
-import { CheckCircleIcon, XCircleIcon } from './icons';
 import type { AuthUser } from '../types';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getFirestoreInstance } from '../src/services/firestoreService';
@@ -58,11 +57,16 @@ const TeacherValidationWizard: React.FC<TeacherValidationWizardProps> = ({ sessi
   const schoolData = useSchoolData();
   const { students = [], sections = [], learningAreas = [] } = schoolData;
   
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState(-1); // Start at -1 for tester info screen
   const [answers, setAnswers] = useState<Record<number, { answer: string; passed: boolean; autoChecked: boolean }>>({});
   const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  
+  // Tester identity (for shared test accounts)
+  const [testerName, setTesterName] = useState('');
+  const [testerEmail, setTesterEmail] = useState('');
+  const [testerSchool, setTesterSchool] = useState('');
 
   // Get teacher details
   const teacher = session.user;
@@ -282,6 +286,10 @@ const TeacherValidationWizard: React.FC<TeacherValidationWizardProps> = ({ sessi
         teacherId: teacher.id,
         teacherName: teacher.name,
         teacherEmail: teacher.email,
+        // Actual tester info (for shared test accounts)
+        actualTesterName: testerName,
+        actualTesterEmail: testerEmail,
+        actualTesterSchool: testerSchool,
         timestamp: serverTimestamp(),
         answers,
         feedback,
@@ -351,6 +359,104 @@ const TeacherValidationWizard: React.FC<TeacherValidationWizardProps> = ({ sessi
             >
               Back to Dashboard
             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Tester Info Screen (Step -1)
+  if (currentStep === -1) {
+    const canProceed = testerName.trim().length > 0 && testerEmail.trim().length > 0;
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-8">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
+            <div className="text-center mb-8">
+              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-10 h-10 text-blue-600">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                </svg>
+              </div>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+                Welcome to Teacher Validation! 🎓
+              </h1>
+              <p className="text-gray-600">
+                Before we start, please tell us who you are
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-blue-800">
+                <strong>Note:</strong> You're logged in as <strong>{teacher.name}</strong>. 
+                If you're testing with a shared account, please enter YOUR actual information below so we can track individual feedback.
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Your Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={testerName}
+                  onChange={(e) => setTesterName(e.target.value)}
+                  placeholder="e.g., Juan Dela Cruz"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Your Email Address <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={testerEmail}
+                  onChange={(e) => setTesterEmail(e.target.value)}
+                  placeholder="e.g., juan@myschool.edu.ph"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Your School Name <span className="text-gray-400">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={testerSchool}
+                  onChange={(e) => setTesterSchool(e.target.value)}
+                  placeholder="e.g., Manila Science High School"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="bg-purple-50 rounded-lg p-4 mt-6">
+              <h3 className="font-semibold text-purple-900 mb-2">💡 Why do we need this?</h3>
+              <p className="text-purple-800 text-sm">
+                Multiple teachers may test using the same account. Your information helps us:
+              </p>
+              <ul className="text-purple-800 text-sm mt-2 space-y-1 list-disc list-inside">
+                <li>Track individual feedback</li>
+                <li>Contact you if we have follow-up questions</li>
+                <li>Identify which schools are testing</li>
+              </ul>
+            </div>
+
+            <div className="flex justify-end mt-8">
+              <button
+                onClick={() => setCurrentStep(0)}
+                disabled={!canProceed}
+                className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
+              >
+                Start Validation
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
