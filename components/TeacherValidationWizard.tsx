@@ -241,8 +241,10 @@ const TeacherValidationWizard: React.FC<TeacherValidationWizardProps> = ({ sessi
 
   // Auto-check current step on mount/change
   useEffect(() => {
+    if (currentStep < 0) return; // Skip for tester info screen
+    
     const step = steps[currentStep];
-    if (step.validationType === 'auto' && step.autoCheck) {
+    if (step && step.validationType === 'auto' && step.autoCheck) {
       const result = step.autoCheck(null);
       setAnswers(prev => ({
         ...prev,
@@ -267,7 +269,7 @@ const TeacherValidationWizard: React.FC<TeacherValidationWizardProps> = ({ sessi
   };
 
   const handleNext = () => {
-    if (currentStep < steps.length - 1) {
+    if (currentStep < steps.length) {
       setCurrentStep(prev => prev + 1);
     }
   };
@@ -311,11 +313,11 @@ const TeacherValidationWizard: React.FC<TeacherValidationWizardProps> = ({ sessi
     }
   };
 
-  const progress = ((currentStep + 1) / steps.length) * 100;
+  const progress = currentStep >= 0 ? ((currentStep + 1) / steps.length) * 100 : 0;
   const completedSteps = Object.keys(answers).length;
   const passedSteps = Object.values(answers).filter(a => a.passed).length;
-  const currentStepData = steps[currentStep];
-  const currentAnswer = answers[currentStepData.id];
+  const currentStepData = currentStep >= 0 ? steps[currentStep] : null;
+  const currentAnswer = currentStepData ? answers[currentStepData.id] : undefined;
   const canProceed = currentAnswer !== undefined;
 
   if (submitted) {
@@ -513,122 +515,124 @@ const TeacherValidationWizard: React.FC<TeacherValidationWizardProps> = ({ sessi
         </div>
 
         {/* Current Step Card */}
-        <div className="bg-white rounded-lg shadow-lg p-6 md:p-8">
-          <div className="mb-6">
-            <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">
-              {currentStepData.title}
-            </h2>
-            <p className="text-gray-600">{currentStepData.description}</p>
-          </div>
-
-          {/* Instructions */}
-          <div className="bg-blue-50 rounded-lg p-4 md:p-6 mb-6">
-            <h3 className="font-semibold text-gray-900 mb-3">📋 What to do:</h3>
-            <ol className="space-y-2">
-              {currentStepData.instructions.map((instruction, idx) => (
-                <li key={idx} className="flex items-start">
-                  <span className="font-semibold text-blue-600 mr-2">{idx + 1}.</span>
-                  <span className="text-gray-700">{instruction}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          {/* Auto Check Result */}
-          {currentStepData.autoCheck && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-              <div className="flex items-start">
-                <Check className="w-5 h-5 text-green-600 mr-2 flex-shrink-0 mt-0.5" />
-                <p className="text-green-800">{currentStepData.autoCheck(null).message}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Question & Options */}
-          {currentStepData.question && currentStepData.options && (
+        {currentStepData && (
+          <div className="bg-white rounded-lg shadow-lg p-6 md:p-8">
             <div className="mb-6">
-              <h3 className="font-semibold text-gray-900 mb-4">{currentStepData.question}</h3>
-              <div className="space-y-3">
-                {currentStepData.options.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => handleAnswer(currentStepData.id, option.value, option.isCorrect)}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                      currentAnswer?.answer === option.value
-                        ? option.isCorrect
-                          ? 'border-green-500 bg-green-50'
-                          : 'border-yellow-500 bg-yellow-50'
-                        : 'border-gray-200 hover:border-blue-300 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-center">
-                      <div
-                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mr-3 ${
-                          currentAnswer?.answer === option.value
-                            ? 'border-blue-600 bg-blue-600'
-                            : 'border-gray-300'
-                        }`}
-                      >
-                        {currentAnswer?.answer === option.value && (
-                          <div className="w-2 h-2 bg-white rounded-full" />
-                        )}
-                      </div>
-                      <span className="font-medium text-gray-900">{option.label}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">
+                {currentStepData.title}
+              </h2>
+              <p className="text-gray-600">{currentStepData.description}</p>
             </div>
-          )}
 
-          {/* Why This Matters */}
-          <div className="bg-purple-50 rounded-lg p-4 mb-6">
-            <h3 className="font-semibold text-purple-900 mb-2">💡 Why this matters:</h3>
-            <p className="text-purple-800 text-sm">{currentStepData.whyMatters}</p>
-          </div>
+            {/* Instructions */}
+            <div className="bg-blue-50 rounded-lg p-4 md:p-6 mb-6">
+              <h3 className="font-semibold text-gray-900 mb-3">📋 What to do:</h3>
+              <ol className="space-y-2">
+                {currentStepData.instructions.map((instruction, idx) => (
+                  <li key={idx} className="flex items-start">
+                    <span className="font-semibold text-blue-600 mr-2">{idx + 1}.</span>
+                    <span className="text-gray-700">{instruction}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
 
-          {/* Navigation Buttons */}
-          <div className="flex justify-between items-center pt-6 border-t">
-            <button
-              onClick={handleBack}
-              disabled={currentStep === 0}
-              className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5 mr-2" />
-              Back
-            </button>
-
-            {currentStep === steps.length - 1 ? (
-              <button
-                onClick={() => {
-                  // Show feedback form before final submit
-                  if (currentAnswer) {
-                    const shouldSubmit = window.confirm(
-                      'Ready to submit your validation?\n\nYou can add additional comments on the next screen.'
-                    );
-                    if (shouldSubmit) {
-                      handleNext();
-                    }
-                  }
-                }}
-                disabled={!canProceed}
-                className="flex items-center px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
-              >
-                Continue to Submit
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </button>
-            ) : (
-              <button
-                onClick={handleNext}
-                disabled={!canProceed}
-                className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
-              >
-                Next Step
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </button>
+            {/* Auto Check Result */}
+            {currentStepData.autoCheck && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                <div className="flex items-start">
+                  <Check className="w-5 h-5 text-green-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <p className="text-green-800">{currentStepData.autoCheck(null).message}</p>
+                </div>
+              </div>
             )}
+
+            {/* Question & Options */}
+            {currentStepData.question && currentStepData.options && (
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-900 mb-4">{currentStepData.question}</h3>
+                <div className="space-y-3">
+                  {currentStepData.options.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => handleAnswer(currentStepData.id, option.value, option.isCorrect)}
+                      className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                        currentAnswer?.answer === option.value
+                          ? option.isCorrect
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-yellow-500 bg-yellow-50'
+                          : 'border-gray-200 hover:border-blue-300 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center">
+                        <div
+                          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mr-3 ${
+                            currentAnswer?.answer === option.value
+                              ? 'border-blue-600 bg-blue-600'
+                              : 'border-gray-300'
+                          }`}
+                        >
+                          {currentAnswer?.answer === option.value && (
+                            <div className="w-2 h-2 bg-white rounded-full" />
+                          )}
+                        </div>
+                        <span className="font-medium text-gray-900">{option.label}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Why This Matters */}
+            <div className="bg-purple-50 rounded-lg p-4 mb-6">
+              <h3 className="font-semibold text-purple-900 mb-2">💡 Why this matters:</h3>
+              <p className="text-purple-800 text-sm">{currentStepData.whyMatters}</p>
+            </div>
+
+            {/* Navigation Buttons */}
+            <div className="flex justify-between items-center pt-6 border-t">
+              <button
+                onClick={handleBack}
+                disabled={currentStep === 0}
+                className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 mr-2" />
+                Back
+              </button>
+
+              {currentStep === steps.length - 1 ? (
+                <button
+                  onClick={() => {
+                    // Show feedback form before final submit
+                    if (currentAnswer) {
+                      const shouldSubmit = window.confirm(
+                        'Ready to submit your validation?\n\nYou can add additional comments on the next screen.'
+                      );
+                      if (shouldSubmit) {
+                        handleNext();
+                      }
+                    }
+                  }}
+                  disabled={!canProceed}
+                  className="flex items-center px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
+                >
+                  Continue to Submit
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </button>
+              ) : (
+                <button
+                  onClick={handleNext}
+                  disabled={!canProceed}
+                  className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
+                >
+                  Next Step
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Feedback Form (shown after last step) */}
         {currentStep === steps.length && (
