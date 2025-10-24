@@ -25,6 +25,7 @@
     "seed:prod": "cross-env GOOGLE_APPLICATION_CREDENTIALS=$1 node scripts/seed-firestore.cjs",
     "fix:final-grades": "node scripts/fix-final-grades.cjs",
     "seed:attendance": "node scripts/seed-attendance.cjs",
+    "seed:assignments": "node scripts/seed-assignments.cjs",
     "dev:emu": "npm run env:emu && npm run emu:up && node scripts/emu-wait.cjs 127.0.0.1 8085 --timeout=60000 && npm run emu:seed:admin && node scripts/kill-port.cjs 5173 && npx vite --host 127.0.0.1 --port 5173 --strictPort",
     "dev:emu:serve": "npm run env:emu && node scripts/kill-port.cjs 5173 && npx vite --host 127.0.0.1 --port 5173 --strictPort",
     "dev:serve": "node scripts/kill-port.cjs 5173 && npx vite --host 127.0.0.1 --port 5173 --strictPort",

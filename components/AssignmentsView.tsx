@@ -61,13 +61,21 @@ const AssignmentsView: React.FC<{
     const authUser = session.user as AuthUser;
     const isReadOnly = isStaff && authUser.role === 'principal';
     
-    // Teacher View Logic
+    // Teacher View Logic - Filter sections by teacher's assignments
     const visibleSections = useMemo(() => {
         if (!isStaff) return [];
+        // Admin, principal, registrar see all sections
         if (['admin', 'principal', 'registrar'].includes(authUser.role)) return sections;
-    // const teacherAdviserSectionId = sections.find(s => s.adviserId === authUser.id)?.id;
-        const assignedLearningAreaIds = new Set(authUser.assignments?.map(a => a.learningAreaId));
-        return sections.filter(s => s.adviserId === authUser.id || assignedLearningAreaIds.size > 0);
+        
+        // Teachers only see sections they teach
+        const teacherAssignments = authUser.assignments || [];
+        if (teacherAssignments.length === 0) return [];
+        
+        // Get grade levels this teacher is assigned to
+        const assignedGradeLevels = new Set(teacherAssignments.map(a => a.gradeLevel));
+        
+        // Filter sections by grade levels the teacher teaches
+        return sections.filter(s => assignedGradeLevels.has(s.gradeLevel));
     }, [sections, authUser, isStaff]);
     
     useEffect(() => {
@@ -78,11 +86,22 @@ const AssignmentsView: React.FC<{
     
     const learningAreasForSection = useMemo(() => {
         if (!isStaff || !selectedSectionId) return [];
+        // Admin, principal, registrar see all learning areas
         if (['admin', 'principal', 'registrar'].includes(authUser.role)) return learningAreas;
+        
+        // Get the selected section to check grade level
         const section = sections.find(s => s.id === selectedSectionId);
         if (!section) return [];
-        const teacherAssignments = authUser.assignments?.filter(a => a.gradeLevel === section.gradeLevel).map(a => a.learningAreaId) || [];
-        return learningAreas.filter(la => teacherAssignments.includes(la.id));
+        
+        // Filter to learning areas this teacher is assigned to for this grade level
+        const teacherAssignments = authUser.assignments || [];
+        const learningAreaIds = teacherAssignments
+            .filter(a => a.gradeLevel === section.gradeLevel)
+            .map(a => a.learningAreaId);
+        
+        console.log(`[AssignmentsView] Teacher ${authUser.name} assigned to ${learningAreaIds.length} learning areas for Grade ${section.gradeLevel}`);
+        
+        return learningAreas.filter(la => learningAreaIds.includes(la.id));
     }, [learningAreas, selectedSectionId, sections, authUser, isStaff]);
     
     useEffect(() => {
