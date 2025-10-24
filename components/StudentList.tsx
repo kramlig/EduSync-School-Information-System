@@ -51,6 +51,12 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const [searchResults, setSearchResults] = useState<Student[] | null>(null);
   
+  // New UI state
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [gradeFilter, setGradeFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'lrn' | 'grade'>('name');
+  
   const authUser = session.user as AuthUser;
 
   // Feature flag: Server-side pagination is now ENABLED
@@ -313,12 +319,61 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   // Pagination Logic - now fully server-side
   const filteredAndPaginatedStudents = useMemo(() => {
     // Apply client-side search filtering to the already paginated students
-    return visibleStudents.filter(student =>
+    let filtered = visibleStudents.filter(student =>
       student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
       student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
       (student.lrn && student.lrn.includes(debouncedSearchQuery))
     );
-  }, [visibleStudents, debouncedSearchQuery]);
+
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(s => (s.status || 'active') === statusFilter);
+    }
+
+    // Apply grade filter
+    if (gradeFilter !== 'all') {
+      filtered = filtered.filter(s => {
+        const section = sections.find(sec => sec.id === s.sectionId);
+        return section && section.gradeLevel.toString() === gradeFilter;
+      });
+    }
+
+    // Apply sorting
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortBy === 'name') {
+        return a.name.localeCompare(b.name);
+      } else if (sortBy === 'lrn') {
+        return (a.lrn || '').localeCompare(b.lrn || '');
+      } else if (sortBy === 'grade') {
+        const sectionA = sections.find(s => s.id === a.sectionId);
+        const sectionB = sections.find(s => s.id === b.sectionId);
+        return (sectionA?.gradeLevel || 0) - (sectionB?.gradeLevel || 0);
+      }
+      return 0;
+    });
+
+    return sorted;
+  }, [visibleStudents, debouncedSearchQuery, statusFilter, gradeFilter, sortBy, sections]);
+
+  // Calculate statistics
+  const statistics = useMemo(() => {
+    const allStudents = visibleStudents;
+    const activeCount = allStudents.filter(s => (s.status || 'active') === 'active').length;
+    const thisMonth = new Date();
+    thisMonth.setDate(1);
+    thisMonth.setHours(0, 0, 0, 0);
+    const newThisMonth = allStudents.filter(s => {
+      const enrollDate = new Date(s.enrollmentDate);
+      return enrollDate >= thisMonth;
+    }).length;
+
+    return {
+      total: allStudents.length,
+      active: activeCount,
+      newThisMonth,
+      filtered: filteredAndPaginatedStudents.length,
+    };
+  }, [visibleStudents, filteredAndPaginatedStudents]);
 
   const closeAddModal = () => {
     setIsAddModalOpen(false);
@@ -327,94 +382,336 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
 
   const canManageStudents = ['admin', 'registrar'].includes(authUser.role);
 
+  // Get unique grade levels for filter
+  const availableGrades = useMemo(() => {
+    const grades = new Set(sections.map(s => s.gradeLevel.toString()));
+    return Array.from(grades).sort();
+  }, [sections]);
+
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Students</h1>
-        {canManageStudents && (
-          <button onClick={() => setIsAddModalOpen(true)} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Add Student</button>
-        )}
-      </div>
-      
-      <div className="mb-4 flex items-center gap-2">
-        <div className="relative flex-1 max-w-sm">
-          <input 
-            type="text" 
-            placeholder="Search ALL students by name, email, or LRN..." 
-            value={searchQuery} 
-            onChange={(e) => { setSearchQuery(e.target.value); }} 
-            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:bg-slate-700 dark:text-white"
-          />
-          {isSearching && (
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+    <div className="space-y-6">
+      {/* Enhanced Header with Gradient */}
+      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl shadow-lg p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-3 text-white">
+            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
+              <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
             </div>
+            <div>
+              <h1 className="text-3xl font-bold">Students</h1>
+              <p className="text-indigo-100 text-sm mt-1">Manage and track student information</p>
+            </div>
+          </div>
+          {canManageStudents && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-white text-indigo-600 font-semibold py-2.5 px-6 rounded-lg hover:bg-indigo-50 transition-all shadow-lg flex items-center gap-2"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Student
+            </button>
           )}
         </div>
-        {searchResults !== null && (
-          <span className="text-sm text-slate-600 dark:text-slate-400">
-            Found {visibleStudents.length} student{visibleStudents.length !== 1 ? 's' : ''}
-          </span>
-        )}
       </div>
 
-      <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
-        <table className="min-w-full leading-normal">
-          <thead>
-            <tr>
-              <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Name</th>
-              <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">LRN</th>
-              <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Grade & Section</th>
-              <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Status</th>
-              <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAndPaginatedStudents.length === 0 && !schoolData.loading ? (
-              <tr>
-                <td colSpan={5} className="px-5 py-12 text-center">
-                  <div className="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
-                    {!navigator.onLine ? (
-                      <>
-                        <svg className="w-16 h-16 mb-4 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
-                        </svg>
-                        <p className="text-lg font-semibold mb-2">No Cached Student Data</p>
-                        <p className="text-sm max-w-md">
-                          You're offline and haven't visited this page online yet. Please connect to the internet to load student data, then it will be available offline.
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-16 h-16 mb-4 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                        </svg>
-                        <p className="text-lg font-semibold mb-2">No Students Found</p>
-                        <p className="text-sm">
-                          {searchQuery ? 'Try adjusting your search terms.' : 'Start by adding your first student.'}
-                        </p>
-                      </>
-                    )}
+      {/* Statistics Dashboard */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Students */}
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-900/20 dark:to-indigo-900/30 border-2 border-blue-200 dark:border-blue-800 rounded-xl p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Total Students</p>
+              <p className="text-3xl font-bold text-blue-900 dark:text-blue-100 mt-2">{statistics.total}</p>
+            </div>
+            <div className="bg-blue-200 dark:bg-blue-800 p-3 rounded-lg">
+              <svg className="h-8 w-8 text-blue-600 dark:text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Active Students */}
+        <div className="bg-gradient-to-br from-green-50 to-emerald-100 dark:from-green-900/20 dark:to-emerald-900/30 border-2 border-green-200 dark:border-green-800 rounded-xl p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">Active</p>
+              <p className="text-3xl font-bold text-green-900 dark:text-green-100 mt-2">{statistics.active}</p>
+            </div>
+            <div className="bg-green-200 dark:bg-green-800 p-3 rounded-lg">
+              <svg className="h-8 w-8 text-green-600 dark:text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* New This Month */}
+        <div className="bg-gradient-to-br from-purple-50 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/30 border-2 border-purple-200 dark:border-purple-800 rounded-xl p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">New This Month</p>
+              <p className="text-3xl font-bold text-purple-900 dark:text-purple-100 mt-2">{statistics.newThisMonth}</p>
+            </div>
+            <div className="bg-purple-200 dark:bg-purple-800 p-3 rounded-lg">
+              <svg className="h-8 w-8 text-purple-600 dark:text-purple-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Filtered Results */}
+        <div className="bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-900/20 dark:to-orange-900/30 border-2 border-amber-200 dark:border-amber-800 rounded-xl p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Showing</p>
+              <p className="text-3xl font-bold text-amber-900 dark:text-amber-100 mt-2">{statistics.filtered}</p>
+            </div>
+            <div className="bg-amber-200 dark:bg-amber-800 p-3 rounded-lg">
+              <svg className="h-8 w-8 text-amber-600 dark:text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Enhanced Search and Filters */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6">
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Search Box */}
+          <div className="flex-1">
+            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Search Students</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Search by name, email, or LRN..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-10 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+              />
+              {isSearching && (
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                  <div className="animate-spin h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                </div>
+              )}
+              {searchQuery && !isSearching && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Status Filter */}
+          <div className="w-full lg:w-48">
+            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="transferred">Transferred</option>
+              <option value="graduated">Graduated</option>
+              <option value="dropped">Dropped</option>
+            </select>
+          </div>
+
+          {/* Grade Filter */}
+          <div className="w-full lg:w-48">
+            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Grade Level</label>
+            <select
+              value={gradeFilter}
+              onChange={(e) => setGradeFilter(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+            >
+              <option value="all">All Grades</option>
+              {availableGrades.map(grade => (
+                <option key={grade} value={grade}>Grade {grade}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sort By */}
+          <div className="w-full lg:w-48">
+            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Sort By</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'name' | 'lrn' | 'grade')}
+              className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+            >
+              <option value="name">Name</option>
+              <option value="lrn">LRN</option>
+              <option value="grade">Grade Level</option>
+            </select>
+          </div>
+
+          {/* View Toggle */}
+          <div className="w-full lg:w-auto">
+            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">View</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setViewMode('table')}
+                className={`p-3 rounded-lg transition-all ${
+                  viewMode === 'table'
+                    ? 'bg-indigo-600 text-white shadow-lg'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                }`}
+                title="Table View"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-3 rounded-lg transition-all ${
+                  viewMode === 'grid'
+                    ? 'bg-indigo-600 text-white shadow-lg'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                }`}
+                title="Grid View"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Table View */}
+      {viewMode === 'table' && (
+        <div className="bg-white dark:bg-slate-800 shadow-lg rounded-xl overflow-hidden">
+          <table className="min-w-full leading-normal">
+            <thead>
+              <tr className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700">
+                <th className="px-6 py-4 border-b-2 border-slate-200 dark:border-slate-600 text-left text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Name
                   </div>
-                </td>
+                </th>
+                <th className="px-6 py-4 border-b-2 border-slate-200 dark:border-slate-600 text-left text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                    </svg>
+                    LRN
+                  </div>
+                </th>
+                <th className="px-6 py-4 border-b-2 border-slate-200 dark:border-slate-600 text-left text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    Grade & Section
+                  </div>
+                </th>
+                <th className="px-6 py-4 border-b-2 border-slate-200 dark:border-slate-600 text-left text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Status
+                  </div>
+                </th>
+                <th className="px-6 py-4 border-b-2 border-slate-200 dark:border-slate-600 text-left text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAndPaginatedStudents.length === 0 && !schoolData.loading ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-16 text-center">
+                    <div className="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
+                      {!navigator.onLine ? (
+                        <>
+                          <div className="bg-slate-100 dark:bg-slate-700 p-6 rounded-full mb-4">
+                            <svg className="w-16 h-16 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+                            </svg>
+                          </div>
+                          <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">No Cached Student Data</h3>
+                          <p className="text-sm max-w-md text-slate-600 dark:text-slate-400">
+                            You're offline and haven't visited this page online yet. Please connect to the internet to load student data, then it will be available offline.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="bg-indigo-100 dark:bg-indigo-900/30 p-6 rounded-full mb-4">
+                            <svg className="w-16 h-16 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                          </div>
+                          <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">No Students Found</h3>
+                          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                            {searchQuery || statusFilter !== 'all' || gradeFilter !== 'all' 
+                              ? 'Try adjusting your filters or search terms.' 
+                              : 'Start by adding your first student.'}
+                          </p>
+                          {canManageStudents && !searchQuery && statusFilter === 'all' && gradeFilter === 'all' && (
+                            <button
+                              onClick={() => setIsAddModalOpen(true)}
+                              className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-2.5 px-6 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg flex items-center gap-2"
+                            >
+                              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                              Add Your First Student
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </td>
               </tr>
             ) : (
-              filteredAndPaginatedStudents.map((student, index) => {
+              filteredAndPaginatedStudents.map((student) => {
               const section = sections.find(s => s.id === student.sectionId);
               
               const status = student.status || 'active';
               const statusColors = {
-                active: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-                inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
-                transferred: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-                graduated: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-                dropped: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                active: 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 dark:from-green-900/30 dark:to-emerald-900/30 dark:text-green-200 border border-green-200 dark:border-green-800',
+                inactive: 'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-800 dark:from-gray-900/30 dark:to-slate-900/30 dark:text-gray-200 border border-gray-200 dark:border-gray-800',
+                transferred: 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-800 dark:from-blue-900/30 dark:to-cyan-900/30 dark:text-blue-200 border border-blue-200 dark:border-blue-800',
+                graduated: 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-800 dark:from-purple-900/30 dark:to-pink-900/30 dark:text-purple-200 border border-purple-200 dark:border-purple-800',
+                dropped: 'bg-gradient-to-r from-red-100 to-rose-100 text-red-800 dark:from-red-900/30 dark:to-rose-900/30 dark:text-red-200 border border-red-200 dark:border-red-800'
               };
+              
+              const statusIcons = {
+                active: <svg className="h-3 w-3 inline mr-1" fill="currentColor" viewBox="0 0 20 20"><circle cx="10" cy="10" r="5" /></svg>,
+                inactive: <svg className="h-3 w-3 inline mr-1" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" /></svg>,
+                transferred: <svg className="h-3 w-3 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>,
+                graduated: <svg className="h-3 w-3 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M12 14l9-5-9-5-9 5 9 5z" /><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" /></svg>,
+                dropped: <svg className="h-3 w-3 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              };
+
               return (
-              <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
+              <tr key={student.id} className="hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 transition-colors group">
+                <td className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 flex-shrink-0">
+                    <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900 dark:to-purple-900 border-2 border-indigo-200 dark:border-indigo-700 flex-shrink-0 ring-2 ring-transparent group-hover:ring-indigo-300 dark:group-hover:ring-indigo-600 transition-all">
                       {student.photoURL ? (
                         <img 
                           src={student.photoURL} 
@@ -428,34 +725,60 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
                           className="w-full h-full object-cover"
                         />
                       )}
+                      <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-slate-800 ${
+                        status === 'active' ? 'bg-green-500' : 'bg-gray-400'
+                      }`}></div>
                     </div>
-                    <p className="text-slate-900 dark:text-white font-medium">{student.name}</p>
+                    <div>
+                      <p className="text-slate-900 dark:text-white font-semibold">{student.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{student.email || 'No email'}</p>
+                    </div>
                   </div>
                 </td>
-                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                  <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{student.lrn ?? 'N/A'}</p>
+                <td className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+                  <p className="text-slate-700 dark:text-slate-300 font-mono text-sm">{student.lrn ?? 'N/A'}</p>
                 </td>
-                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                  <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                    {section ? `Grade ${section.gradeLevel} - ${section.name}` : 'N/A'}
-                  </p>
+                <td className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-indigo-100 dark:bg-indigo-900/30 p-1.5 rounded-lg">
+                      <svg className="h-4 w-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                    </div>
+                    <span className="text-slate-700 dark:text-slate-300 font-medium">
+                      {section ? `Grade ${section.gradeLevel} - ${section.name}` : 'N/A'}
+                    </span>
+                  </div>
                 </td>
-                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[status]}`}>
+                <td className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+                  <span className={`px-3 py-1.5 text-xs font-bold rounded-lg inline-flex items-center ${statusColors[status]}`}>
+                    {statusIcons[status]}
                     {status.charAt(0).toUpperCase() + status.slice(1)}
                   </span>
                 </td>
-                <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                  <div className="flex items-center space-x-3">
-                    <button onClick={() => handleViewProfile(student)} className="flex items-center text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-semibold text-xs">
-                      <UserCircleIcon /><span className="ml-1">View</span>
+                <td className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleViewProfile(student)}
+                      className="p-2 text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all"
+                      title="View Profile"
+                    >
+                      <UserCircleIcon />
                     </button>
                      {canManageStudents && (<>
-                        <button onClick={() => handleEditProfile(student)} className="flex items-center text-sky-600 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300 font-semibold text-xs">
-                            <PencilIcon /><span className="ml-1">Edit</span>
+                        <button
+                          onClick={() => handleEditProfile(student)}
+                          className="p-2 text-sky-600 hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/30 rounded-lg transition-all"
+                          title="Edit Student"
+                        >
+                            <PencilIcon />
                         </button>
-                        <button onClick={() => handleDeleteClick(student)} className="flex items-center text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-semibold text-xs">
-                            <TrashIcon /><span className="ml-1">Delete</span>
+                        <button
+                          onClick={() => handleDeleteClick(student)}
+                          className="p-2 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"
+                          title="Delete Student"
+                        >
+                            <TrashIcon />
                         </button>
                     </>)}
                   </div>
@@ -467,26 +790,180 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
           </tbody>
         </table>
         {(schoolData.loading || hasMoreStudents) && (
-          <div className="px-5 py-3 bg-white dark:bg-slate-800 border-t flex flex-col xs:flex-row items-center xs:justify-between">
+          <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex flex-col xs:flex-row items-center xs:justify-between">
             {schoolData.loading ? (
-              <span className="text-xs xs:text-sm text-slate-600 dark:text-slate-300">Loading students...</span>
+              <span className="text-sm text-slate-600 dark:text-slate-300 font-medium">Loading students...</span>
             ) : (
-              <span className="text-xs xs:text-sm text-slate-600 dark:text-slate-300">
-                Showing {filteredAndPaginatedStudents.length} of {filteredAndPaginatedStudents.length} Students
+              <span className="text-sm text-slate-600 dark:text-slate-300">
+                Showing <span className="font-bold text-slate-900 dark:text-white">{filteredAndPaginatedStudents.length}</span> students
               </span>
             )}
             <div className="inline-flex mt-2 xs:mt-0">
               <button
                 onClick={fetchMoreStudents}
                 disabled={!hasMoreStudents || isFetchingStudents}
-                className="text-sm bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                className="text-sm bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-2.5 px-6 rounded-lg hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md flex items-center gap-2"
               >
-                {isFetchingStudents ? 'Loading More...' : 'Load More'}
+                {isFetchingStudents ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    Loading More...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                    Load More
+                  </>
+                )}
               </button>
             </div>
           </div>
         )}
       </div>
+      )}
+
+      {/* Grid View */}
+      {viewMode === 'grid' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredAndPaginatedStudents.length === 0 && !schoolData.loading ? (
+            <div className="col-span-full">
+              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-16 text-center">
+                <div className="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
+                  <div className="bg-indigo-100 dark:bg-indigo-900/30 p-6 rounded-full mb-4">
+                    <svg className="w-16 h-16 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">No Students Found</h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                    {searchQuery || statusFilter !== 'all' || gradeFilter !== 'all' 
+                      ? 'Try adjusting your filters or search terms.' 
+                      : 'Start by adding your first student.'}
+                  </p>
+                  {canManageStudents && !searchQuery && statusFilter === 'all' && gradeFilter === 'all' && (
+                    <button
+                      onClick={() => setIsAddModalOpen(true)}
+                      className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-2.5 px-6 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg flex items-center gap-2"
+                    >
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add Your First Student
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            filteredAndPaginatedStudents.map(student => {
+              const section = sections.find(s => s.id === student.sectionId);
+              const status = student.status || 'active';
+              
+              const statusColors = {
+                active: 'border-green-400 dark:border-green-600',
+                inactive: 'border-gray-400 dark:border-gray-600',
+                transferred: 'border-blue-400 dark:border-blue-600',
+                graduated: 'border-purple-400 dark:border-purple-600',
+                dropped: 'border-red-400 dark:border-red-600'
+              };
+              
+              const statusBadges = {
+                active: 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 dark:from-green-900/30 dark:to-emerald-900/30 dark:text-green-200 border border-green-200 dark:border-green-800',
+                inactive: 'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-800 dark:from-gray-900/30 dark:to-slate-900/30 dark:text-gray-200 border border-gray-200 dark:border-gray-800',
+                transferred: 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-800 dark:from-blue-900/30 dark:to-cyan-900/30 dark:text-blue-200 border border-blue-200 dark:border-blue-800',
+                graduated: 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-800 dark:from-purple-900/30 dark:to-pink-900/30 dark:text-purple-200 border border-purple-200 dark:border-purple-800',
+                dropped: 'bg-gradient-to-r from-red-100 to-rose-100 text-red-800 dark:from-red-900/30 dark:to-rose-900/30 dark:text-red-200 border border-red-200 dark:border-red-800'
+              };
+
+              return (
+                <div
+                  key={student.id}
+                  className={`bg-white dark:bg-slate-800 rounded-xl shadow-md hover:shadow-xl transition-all p-6 border-t-4 ${statusColors[status]} group cursor-pointer`}
+                  onClick={() => handleViewProfile(student)}
+                >
+                  {/* Student Photo & Status */}
+                  <div className="flex flex-col items-center mb-4">
+                    <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900 dark:to-purple-900 border-4 border-indigo-200 dark:border-indigo-700 mb-3 ring-4 ring-transparent group-hover:ring-indigo-300 dark:group-hover:ring-indigo-600 transition-all">
+                      {student.photoURL ? (
+                        <img 
+                          src={student.photoURL} 
+                          alt={student.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <img 
+                          src={getPlaceholderAvatar(student.name)} 
+                          alt={student.name}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                      <div className={`absolute bottom-1 right-1 w-5 h-5 rounded-full border-2 border-white dark:border-slate-800 ${
+                        status === 'active' ? 'bg-green-500' : 'bg-gray-400'
+                      }`}></div>
+                    </div>
+                    <span className={`px-3 py-1 text-xs font-bold rounded-lg ${statusBadges[status]}`}>
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </span>
+                  </div>
+
+                  {/* Student Info */}
+                  <div className="text-center mb-4">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1">{student.name}</h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mb-2 line-clamp-1">{student.email || 'No email'}</p>
+                    <div className="flex items-center justify-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                      </svg>
+                      <span className="font-mono">{student.lrn ?? 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  {/* Section Info */}
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg p-3 mb-4">
+                    <div className="flex items-center justify-center gap-2 text-sm text-indigo-700 dark:text-indigo-300">
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                      <span className="font-semibold">{section ? `Grade ${section.gradeLevel} - ${section.name}` : 'No Section'}</span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleViewProfile(student); }}
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-3 rounded-lg transition-all text-sm flex items-center justify-center gap-2"
+                    >
+                      <UserCircleIcon />
+                      View
+                    </button>
+                    {canManageStudents && (
+                      <>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleEditProfile(student); }}
+                          className="flex-1 bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 px-3 rounded-lg transition-all text-sm flex items-center justify-center gap-2"
+                        >
+                          <PencilIcon />
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteClick(student); }}
+                          className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-3 rounded-lg transition-all text-sm flex items-center justify-center"
+                          title="Delete"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
       <Modal isOpen={isAddModalOpen} onClose={closeAddModal} title="Add New Student" size="2xl">
         <form onSubmit={handleAddStudent} className="space-y-6">
