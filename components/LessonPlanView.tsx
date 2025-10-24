@@ -4,7 +4,7 @@ import type { LessonPlan, AuthUser, StudentUser } from '../types';
 import { generateLessonPlan, GeneratedLessonPlan } from '../services/geminiService';
 import Modal from './Modal';
 import Spinner from './Spinner';
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, TrashIcon, CloseIcon, SparklesIcon, FunnelIcon, MagnifyingGlassIcon, CalendarIcon, ClipboardDocumentListIcon, CalendarDaysIcon, ClockIcon, ChartBarIcon, BookOpenIcon } from './icons';
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, TrashIcon, CloseIcon, SparklesIcon, FunnelIcon, MagnifyingGlassIcon, CalendarIcon, ClipboardDocumentListIcon, CalendarDaysIcon, ClockIcon, ChartBarIcon, BookOpenIcon, CheckCircleIcon } from './icons';
 
 const AIGeneratorModal: React.FC<{
     isOpen: boolean;
@@ -77,48 +77,234 @@ const AIGeneratorModal: React.FC<{
         };
 
         const list = (generatedPlan[field] as string[]) || [];
+        
+        // Icon mapping for each section
+        const icons: Record<string, React.ReactNode> = {
+            objectives: <ClipboardDocumentListIcon />,
+            activities: <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" /></svg>,
+            materials: <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>,
+            assessment: <CheckCircleIcon className="h-5 w-5" />,
+        };
+        
+        // Color schemes for each section
+        const colorSchemes: Record<string, string> = {
+            objectives: 'from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800',
+            activities: 'from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800',
+            materials: 'from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-amber-200 dark:border-amber-800',
+            assessment: 'from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800',
+        };
+        
         return (
-            <div>
-                <label className="font-bold capitalize">{field}</label>
-                {list.map((item, index) => (
-                    <textarea
-                        key={`${String(field)}-${index}`}
-                        value={item ?? ''}
-                        onChange={(e) => handleItemChange(index, e.target.value)}
-                        className="w-full input-style mb-2"
-                        rows={2}
-                    />
-                ))}
+            <div className={`bg-gradient-to-r ${colorSchemes[field]} p-5 rounded-xl border-2`}>
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                    {icons[field]}
+                    <span className="capitalize">{field}</span>
+                    <span className="ml-auto text-xs bg-white/50 dark:bg-slate-800/50 px-2 py-1 rounded-full">{list.length} items</span>
+                </label>
+                <div className="space-y-3">
+                    {list.map((item, index) => (
+                        <div key={`${String(field)}-${index}`} className="relative group">
+                            <div className="absolute left-3 top-3 text-xs font-bold text-slate-400 bg-white dark:bg-slate-700 px-2 py-0.5 rounded-full">
+                                {index + 1}
+                            </div>
+                            <textarea
+                                value={item ?? ''}
+                                onChange={(e) => handleItemChange(index, e.target.value)}
+                                className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none"
+                                rows={2}
+                                placeholder={`Enter ${field.slice(0, -1)} ${index + 1}...`}
+                            />
+                        </div>
+                    ))}
+                </div>
             </div>
         );
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="AI Lesson Plan Generator" size="3xl">
+        <Modal isOpen={isOpen} onClose={onClose} title="" size="3xl">
             {!generatedPlan ? (
-                <div className="space-y-4">
-                    <div><label className="font-bold">Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full input-style" required /></div>
-                    <div><label className="font-bold">Lesson Topic</label><input type="text" placeholder="e.g., The Solar System" value={topic} onChange={e => setTopic(e.target.value)} className="w-full input-style" required /></div>
-                    <div><label className="font-bold">Learning Objectives</label><textarea placeholder="e.g., Students will be able to name the planets in order." value={objectives} onChange={e => setObjectives(e.target.value)} className="w-full input-style" rows={3} required /></div>
-                    
-                    {error && <p className="text-red-500 text-sm">{error}</p>}
+                <div className="space-y-6">
+                    {/* Header with gradient */}
+                    <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 -mx-6 -mt-6 px-6 py-8 rounded-t-xl">
+                        <div className="flex items-center gap-3 text-white">
+                            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
+                                <SparklesIcon className="h-8 w-8" />
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-bold">AI Lesson Plan Generator</h2>
+                                <p className="text-indigo-100 text-sm mt-1">Let AI create a comprehensive lesson plan tailored to your needs</p>
+                            </div>
+                        </div>
+                    </div>
 
-                    <div className="flex justify-end pt-2">
-                        <button onClick={handleGenerate} disabled={isLoading} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center disabled:bg-slate-400">
-                            {isLoading ? <><Spinner /> Generating...</> : <><SparklesIcon/> Generate Plan</>}
+                    {/* Form Section */}
+                    <div className="space-y-6 px-2">
+                        {/* Date Field */}
+                        <div className="relative">
+                            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                                <CalendarDaysIcon />
+                                Date
+                            </label>
+                            <input
+                                type="date"
+                                value={date}
+                                onChange={e => setDate(e.target.value)}
+                                className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                                required
+                            />
+                        </div>
+
+                        {/* Topic Field */}
+                        <div className="relative">
+                            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                                <BookOpenIcon />
+                                Lesson Topic
+                            </label>
+                            <input
+                                type="text"
+                                placeholder="e.g., The Solar System, Photosynthesis, Philippine Heroes..."
+                                value={topic}
+                                onChange={e => setTopic(e.target.value)}
+                                className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                                required
+                            />
+                        </div>
+
+                        {/* Objectives Field */}
+                        <div className="relative">
+                            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                                <ClipboardDocumentListIcon />
+                                Learning Objectives
+                            </label>
+                            <textarea
+                                placeholder="Describe what students should learn. e.g., 'Students will be able to identify the eight planets in order from the sun and describe key characteristics of each planet.'"
+                                value={objectives}
+                                onChange={e => setObjectives(e.target.value)}
+                                className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none"
+                                rows={4}
+                                required
+                            />
+                            <div className="absolute bottom-3 right-3 text-xs text-slate-400">
+                                {objectives.length} characters
+                            </div>
+                        </div>
+
+                        {/* Error Message */}
+                        {error && (
+                            <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                    <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <p className="text-red-700 dark:text-red-400 text-sm font-medium">{error}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Loading State */}
+                        {isLoading && (
+                            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 border border-indigo-200 dark:border-indigo-800 p-6 rounded-xl">
+                                <div className="flex items-center gap-4">
+                                    <Spinner />
+                                    <div>
+                                        <p className="font-semibold text-indigo-900 dark:text-indigo-200">Generating your lesson plan...</p>
+                                        <p className="text-sm text-indigo-700 dark:text-indigo-400 mt-1">AI is crafting objectives, activities, materials, and assessments</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex justify-between items-center pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-6 py-2.5 text-slate-700 dark:text-slate-300 font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleGenerate}
+                            disabled={isLoading || !topic || !objectives}
+                            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-2.5 px-6 rounded-lg flex items-center gap-2 hover:from-indigo-700 hover:to-purple-700 disabled:from-slate-400 disabled:to-slate-400 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all">
+                            {isLoading ? (
+                                <>
+                                    <Spinner />
+                                    <span>Generating...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <SparklesIcon className="h-5 w-5"/>
+                                    <span>Generate Plan</span>
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>
             ) : (
-                 <div className="space-y-4">
-                    <div><label className="font-bold">Title</label><input type="text" value={generatedPlan.title} onChange={e => setGeneratedPlan(p => p ? {...p, title: e.target.value} : null)} className="w-full input-style" /></div>
-                    {renderEditableList('objectives')}
-                    {renderEditableList('activities')}
-                    {renderEditableList('materials')}
-                    {renderEditableList('assessment')}
-                    <div className="flex justify-between items-center pt-4">
-                        <button type="button" onClick={() => setGeneratedPlan(null)} className="font-semibold text-slate-600 hover:text-slate-800">« Back</button>
-                        <button onClick={handleCreatePlan} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg">Create Lesson Plan</button>
+                <div className="space-y-6">
+                    {/* Success Header */}
+                    <div className="bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 -mx-6 -mt-6 px-6 py-8 rounded-t-xl">
+                        <div className="flex items-center gap-3 text-white">
+                            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
+                                <CheckCircleIcon className="h-8 w-8" />
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-bold">Lesson Plan Generated!</h2>
+                                <p className="text-green-100 text-sm mt-1">Review and customize your AI-generated lesson plan below</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Editable Content */}
+                    <div className="space-y-6 px-2 max-h-[60vh] overflow-y-auto">
+                        {/* Title */}
+                        <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-xl border-2 border-slate-200 dark:border-slate-700">
+                            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                                </svg>
+                                Lesson Title
+                            </label>
+                            <input
+                                type="text"
+                                value={generatedPlan.title}
+                                onChange={e => setGeneratedPlan(p => p ? {...p, title: e.target.value} : null)}
+                                className="w-full px-4 py-3 border-2 border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white font-semibold text-lg focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                            />
+                        </div>
+
+                        {/* Objectives */}
+                        {renderEditableList('objectives')}
+                        
+                        {/* Activities */}
+                        {renderEditableList('activities')}
+                        
+                        {/* Materials */}
+                        {renderEditableList('materials')}
+                        
+                        {/* Assessment */}
+                        {renderEditableList('assessment')}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex justify-between items-center pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <button
+                            type="button"
+                            onClick={() => setGeneratedPlan(null)}
+                            className="px-6 py-2.5 text-slate-700 dark:text-slate-300 font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-2">
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                            Back to Form
+                        </button>
+                        <button
+                            onClick={handleCreatePlan}
+                            className="bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold py-2.5 px-6 rounded-lg flex items-center gap-2 hover:from-green-700 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all">
+                            <CheckCircleIcon className="h-5 w-5" />
+                            <span>Create Lesson Plan</span>
+                        </button>
                     </div>
                 </div>
             )}
@@ -334,21 +520,68 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
     
         const renderPlanEditableList = (field: 'objectives' | 'activities' | 'materials' | 'assessment') => {
             const list = (planToEdit?.[field] || []) as string[];
+            
+            // Icon mapping for each section type
+            const icons: Record<string, React.ReactNode> = {
+                objectives: <ClipboardDocumentListIcon className="h-5 w-5" />,
+                activities: <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+                materials: <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>,
+                assessment: <CheckCircleIcon className="h-5 w-5" />,
+            };
+            
+            // Color schemes for each section
+            const colorSchemes: Record<string, string> = {
+                objectives: 'from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800',
+                activities: 'from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800',
+                materials: 'from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-amber-200 dark:border-amber-800',
+                assessment: 'from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800',
+            };
+            
+            const buttonColors: Record<string, string> = {
+                objectives: 'text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300',
+                activities: 'text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300',
+                materials: 'text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300',
+                assessment: 'text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300',
+            };
+            
             return (
-                <div>
-                    <label className="font-bold capitalize">{field}</label>
-                    {list.map((item, index) => (
-                        <div key={`${field}-${index}`} className="flex items-center gap-2 mb-2">
-                            <textarea
-                                value={item ?? ''}
-                                onChange={e => handleListItemChange(field, index, e.target.value)}
-                                className="w-full input-style"
-                                rows={2}
-                            />
-                            <button type="button" onClick={() => removeListItem(field, index)} className="text-red-500"><CloseIcon/></button>
-                        </div>
-                    ))}
-                    <button type="button" onClick={() => addListItem(field)} className="text-sm text-indigo-600 font-semibold flex items-center"><PlusIcon/> Add {field.slice(0, -1)}</button>
+                <div className={`bg-gradient-to-r ${colorSchemes[field]} p-5 rounded-xl border-2`}>
+                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                        {icons[field]}
+                        <span className="capitalize">{field}</span>
+                        <span className="ml-auto text-xs bg-white/50 dark:bg-slate-800/50 px-2 py-1 rounded-full">{list.length} items</span>
+                    </label>
+                    <div className="space-y-3">
+                        {list.map((item, index) => (
+                            <div key={`${field}-${index}`} className="relative group">
+                                <div className="absolute left-3 top-3 text-xs font-bold text-slate-400 bg-white dark:bg-slate-700 px-2 py-0.5 rounded-full z-10">
+                                    {index + 1}
+                                </div>
+                                <textarea
+                                    value={item ?? ''}
+                                    onChange={e => handleListItemChange(field, index, e.target.value)}
+                                    className="w-full pl-12 pr-12 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none"
+                                    rows={2}
+                                    placeholder={`Enter ${field.slice(0, -1)} ${index + 1}...`}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => removeListItem(field, index)}
+                                    className="absolute right-3 top-3 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 bg-white dark:bg-slate-700 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                    title="Remove item"
+                                >
+                                    <CloseIcon />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => addListItem(field)}
+                        className={`mt-3 text-sm font-semibold flex items-center gap-1 ${buttonColors[field]} transition-colors`}
+                    >
+                        <PlusIcon /> Add {field.slice(0, -1)}
+                    </button>
                 </div>
             );
         };
@@ -716,24 +949,123 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
                 </div>
             )}
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={planToEdit?.id ? 'Edit Lesson Plan' : 'Create Lesson Plan'} size="3xl">
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="" size="3xl">
                 {planToEdit && (
-                    <form onSubmit={handleSavePlan} className="space-y-4">
-                        <p className="font-semibold text-lg">{new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                        <div><label className="font-bold">Lesson Title</label><input type="text" value={planToEdit.title ?? ''} onChange={e => handleFieldChange('title', e.target.value)} className="w-full input-style" required /></div>
-                        {renderPlanEditableList('objectives')}
-                        {renderPlanEditableList('activities')}
-                        {renderPlanEditableList('materials')}
-                        {renderPlanEditableList('assessment')}
-                        <div><label className="font-bold">Assignments</label><select multiple value={planToEdit.assignmentIds ?? []} onChange={e => handleFieldChange('assignmentIds', Array.from(e.target.selectedOptions, (option: HTMLOptionElement) => option.value))} className="w-full input-style h-24">{availableAssignments.map(a => (<option key={a.id} value={a.id}>{a.title}</option>))}</select></div>
-                        <div className="flex justify-between items-center pt-4">
-                            {planToEdit.id && <button type="button" onClick={handleDeletePlan} className="text-red-600 font-semibold flex items-center"><TrashIcon/> Delete</button>}
-                            <div className="space-x-2 ml-auto">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="bg-slate-200 dark:bg-slate-600 font-semibold py-2 px-4 rounded-lg">Cancel</button>
-                                <button type="submit" className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg">Save</button>
+                    <div className="relative">
+                        {/* Gradient Header */}
+                        <div className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-600 -mx-6 -mt-6 px-6 py-8 rounded-t-xl">
+                            <div className="flex items-center gap-3 text-white">
+                                <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
+                                    {planToEdit.id ? (
+                                        <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                    ) : (
+                                        <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                        </svg>
+                                    )}
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-bold">{planToEdit.id ? 'Edit Lesson Plan' : 'Create New Lesson Plan'}</h2>
+                                    <p className="text-blue-100 text-sm mt-1">
+                                        {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                    </form>
+
+                        {/* Scrollable Content */}
+                        <form onSubmit={handleSavePlan} className="space-y-6 max-h-[65vh] overflow-y-auto px-1 py-6">
+                            {/* Lesson Title */}
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                                    <BookOpenIcon />
+                                    Lesson Title
+                                </label>
+                                <input
+                                    type="text"
+                                    value={planToEdit.title ?? ''}
+                                    onChange={e => handleFieldChange('title', e.target.value)}
+                                    className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-lg font-semibold focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                                    placeholder="Enter a descriptive lesson title..."
+                                    required
+                                />
+                            </div>
+
+                            {/* Objectives */}
+                            {renderPlanEditableList('objectives')}
+
+                            {/* Activities */}
+                            {renderPlanEditableList('activities')}
+
+                            {/* Materials */}
+                            {renderPlanEditableList('materials')}
+
+                            {/* Assessment */}
+                            {renderPlanEditableList('assessment')}
+
+                            {/* Assignments */}
+                            <div className="bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-800/50 dark:to-gray-800/50 p-5 rounded-xl border-2 border-slate-200 dark:border-slate-700">
+                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+                                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                    </svg>
+                                    Linked Assignments
+                                    <span className="ml-auto text-xs bg-white/50 dark:bg-slate-800/50 px-2 py-1 rounded-full">
+                                        {(planToEdit.assignmentIds ?? []).length} selected
+                                    </span>
+                                </label>
+                                <select
+                                    multiple
+                                    value={planToEdit.assignmentIds ?? []}
+                                    onChange={e => handleFieldChange('assignmentIds', Array.from(e.target.selectedOptions, (option: HTMLOptionElement) => option.value))}
+                                    className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                                    style={{ minHeight: '120px' }}
+                                    title="Select assignments"
+                                >
+                                    {availableAssignments.map((a: { id: string; title: string }) => (
+                                        <option key={a.id} value={a.id} className="py-2">
+                                            {a.title}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                                    Hold Ctrl/Cmd to select multiple assignments
+                                </p>
+                            </div>
+                        </form>
+
+                        {/* Action Buttons */}
+                        <div className="flex justify-between items-center pt-6 border-t border-slate-200 dark:border-slate-700 -mx-6 px-6 -mb-6 pb-6 bg-slate-50 dark:bg-slate-800/50">
+                            {planToEdit.id && (
+                                <button
+                                    type="button"
+                                    onClick={handleDeletePlan}
+                                    className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-semibold flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                                >
+                                    <TrashIcon /> Delete Lesson Plan
+                                </button>
+                            )}
+                            <div className="flex gap-3 ml-auto">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsModalOpen(false)}
+                                    className="bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold py-2.5 px-6 rounded-lg transition-all shadow-sm"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    onClick={handleSavePlan}
+                                    className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-semibold py-2.5 px-6 rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/30"
+                                >
+                                    <CheckCircleIcon />
+                                    {planToEdit.id ? 'Save Changes' : 'Create Lesson Plan'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </Modal>
             
