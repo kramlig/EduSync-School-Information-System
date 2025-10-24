@@ -140,15 +140,28 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
     const [isAIGeneratorOpen, setIsAIGeneratorOpen] = useState(false);
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [planToEdit, setPlanToEdit] = useState<Partial<LessonPlan> | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
     
     const authUser = session.user as AuthUser;
+    const isStaff = ['admin', 'principal', 'registrar'].includes(authUser.role);
     
+    // Only show sections for grade levels the teacher is assigned to
     const visibleSections = useMemo(() => {
-        if (['admin', 'principal', 'registrar'].includes(authUser.role)) return sections;
-    // const teacherAdviserSectionId = sections.find(s => s.adviserId === authUser.id)?.id;
-        const assignedLearningAreaIds = new Set(authUser.assignments?.map(a => a.learningAreaId));
-        return sections.filter(s => s.adviserId === authUser.id || assignedLearningAreaIds.size > 0);
-    }, [sections, authUser]);
+        if (isStaff) return sections;
+        
+        const teacherAssignments = authUser.assignments || [];
+        if (teacherAssignments.length === 0) {
+            console.warn('Teacher has no assignments');
+            return [];
+        }
+        
+        // Get unique grade levels this teacher is assigned to
+        const assignedGradeLevels = new Set(teacherAssignments.map(a => a.gradeLevel));
+        console.log(`Teacher assigned to grade levels: ${Array.from(assignedGradeLevels).join(', ')}`);
+        
+        return sections.filter(s => assignedGradeLevels.has(s.gradeLevel));
+    }, [sections, authUser, isStaff]);
 
     useEffect(() => {
         if (!selectedSectionId && visibleSections.length > 0) {
@@ -156,17 +169,23 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
         }
     }, [visibleSections, selectedSectionId]);
 
+    // Filter learning areas based on teacher assignments for the selected section's grade level
     const learningAreasForSection = useMemo(() => {
         if (!selectedSectionId) return [];
-        if (['admin', 'principal', 'registrar'].includes(authUser.role)) return learningAreas;
+        if (isStaff) return learningAreas;
         
         const section = sections.find(s => s.id === selectedSectionId);
         if (!section) return [];
         
-        const teacherAssignments = authUser.assignments?.filter(a => a.gradeLevel === section.gradeLevel).map(a => a.learningAreaId) || [];
+        const teacherAssignments = authUser.assignments || [];
+        const learningAreaIds = teacherAssignments
+            .filter(a => a.gradeLevel === section.gradeLevel)
+            .map(a => a.learningAreaId);
         
-        return learningAreas.filter(la => teacherAssignments.includes(la.id));
-    }, [learningAreas, selectedSectionId, sections, authUser]);
+        console.log(`Teacher assigned to ${learningAreaIds.length} learning areas for Grade ${section.gradeLevel}`);
+        
+        return learningAreas.filter(la => learningAreaIds.includes(la.id));
+    }, [learningAreas, selectedSectionId, sections, authUser, isStaff]);
     
     useEffect(() => {
         if (selectedSectionId && !learningAreasForSection.some(la => la.id === selectedLearningAreaId)) {
@@ -174,18 +193,65 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
         }
     }, [selectedSectionId, learningAreasForSection, selectedLearningAreaId]);
     
+    // Filter lesson plans by section, learning area, and search query
+    const filteredLessonPlans = useMemo(() => {
+        if (!selectedSectionId || !selectedLearningAreaId) return [];
+        
+        let filtered = lessonPlans.filter((p: any) => 
+            p.sectionId === selectedSectionId && p.learningAreaId === selectedLearningAreaId
+        );
+        
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            filtered = filtered.filter((p: any) => 
+                p.title?.toLowerCase().includes(query) ||
+                p.objectives?.some((obj: string) => obj?.toLowerCase().includes(query)) ||
+                p.activities?.some((act: string) => act?.toLowerCase().includes(query))
+            );
+        }
+        
+        return filtered;
+    }, [lessonPlans, selectedSectionId, selectedLearningAreaId, searchQuery]);
+    
     const plansByDate = useMemo(() => {
-        if (!selectedSectionId || !selectedLearningAreaId) return new Map();
         const map = new Map<string, LessonPlan[]>();
-        lessonPlans
-            .filter(p => p.sectionId === selectedSectionId && p.learningAreaId === selectedLearningAreaId)
-            .forEach(plan => {
-                const dateKey = plan.date;
-                if (!map.has(dateKey)) map.set(dateKey, []);
-                map.get(dateKey)!.push(plan);
-            });
+        filteredLessonPlans.forEach((plan: any) => {
+            const dateKey = plan.date;
+            if (!map.has(dateKey)) map.set(dateKey, []);
+            map.get(dateKey)!.push(plan);
+        });
         return map;
-    }, [lessonPlans, selectedSectionId, selectedLearningAreaId]);
+    }, [filteredLessonPlans]);
+    
+    // Calculate statistics
+    const lessonPlanStats = useMemo(() => {
+        const today = new Date().toISOString().split('T')[0];
+        const thisWeekStart = new Date();
+        thisWeekStart.setDate(thisWeekStart.getDate() - thisWeekStart.getDay());
+        const thisWeekStartStr = thisWeekStart.toISOString().split('T')[0];
+        
+        const nextWeekStart = new Date(thisWeekStart);
+        nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+        const nextWeekStartStr = nextWeekStart.toISOString().split('T')[0];
+        
+        let total = filteredLessonPlans.length;
+        let thisWeek = 0;
+        let nextWeek = 0;
+        let thisMonth = 0;
+        
+        filteredLessonPlans.forEach((plan: any) => {
+            if (plan.date >= thisWeekStartStr && plan.date < nextWeekStartStr) thisWeek++;
+            if (plan.date >= nextWeekStartStr) {
+                const planDate = new Date(plan.date);
+                const weekEnd = new Date(nextWeekStart);
+                weekEnd.setDate(weekEnd.getDate() + 7);
+                if (planDate < weekEnd) nextWeek++;
+            }
+            if (plan.date.startsWith(currentDate.toISOString().slice(0, 7))) thisMonth++;
+        });
+        
+        return { total, thisWeek, nextWeek, thisMonth };
+    }, [filteredLessonPlans, currentDate]);
 
     const calendarGrid = useMemo(() => {
         const year = currentDate.getFullYear();
