@@ -83,159 +83,424 @@ const TeacherValidationWizard: React.FC<TeacherValidationWizardProps> = ({ sessi
   const teacherSections = sections.filter(s => teacherGradeLevels.includes(s.gradeLevel));
   const teacherLearningAreas = learningAreas.filter(la => teacherLearningAreaIds.includes(la.id));
 
-  // Define validation steps
+  // Define validation steps - Comprehensive UAT covering CRUD, offline, and real-world scenarios
   const steps: ValidationStep[] = [
+    // ========== SECTION 1: AUTHENTICATION & AUTHORIZATION ==========
     {
       id: 1,
-      title: 'Login Successful',
-      description: 'Verify you can access the system',
+      title: '🔐 Login & Authentication',
+      description: 'Verify secure access to the system',
       instructions: [
         'You\'re already logged in! ✅',
-        'Your account is active and working',
+        'Your account credentials have been validated',
+        'Session is active and secure',
       ],
       validationType: 'auto',
       autoCheck: () => ({
         passed: true,
-        message: `Welcome, ${teacher.name}! Your login is working perfectly.`
+        message: `✅ Welcome, ${teacher.name}! Authentication successful. Your role: ${teacher.role}`
       }),
-      whyMatters: 'If you can see this page, your login credentials are working correctly.'
+      whyMatters: 'Secure authentication prevents unauthorized access to sensitive student data. Your session is encrypted and tracked for audit purposes.'
     },
     {
       id: 2,
-      title: 'Student Count Check',
-      description: 'Verify you see the correct number of students',
+      title: '👥 Role-Based Access Control',
+      description: 'Verify you see only what you\'re authorized to access',
       instructions: [
-        'Click on "Grades & Reports" in the sidebar',
-        'Look at the "Overview & Analytics" tab',
-        'Check the total number of students shown',
+        'Look at the sidebar navigation menu',
+        'Note which options are available to you',
+        'You should NOT see admin-only features (User Management, System Settings)',
+      ],
+      validationType: 'manual',
+      question: 'Do you see only Teacher-appropriate menu items (Dashboard, Students, Grades, Attendance, Lessons)?',
+      options: [
+        { value: 'yes', label: '✅ Yes, only teacher features visible', isCorrect: true },
+        { value: 'admin-visible', label: '⚠️ I see admin features too', isCorrect: false },
+        { value: 'missing', label: '❌ Some teacher features are missing', isCorrect: false },
+      ],
+      whyMatters: 'Role-based access prevents teachers from accidentally accessing admin functions or other teachers\' data, ensuring data privacy and system integrity.'
+    },
+
+    // ========== SECTION 2: DATA FILTERING & PRIVACY ==========
+    {
+      id: 3,
+      title: '📊 Student Data Filtering',
+      description: 'Verify you see ONLY your assigned students',
+      instructions: [
+        'Click "Students" in the sidebar',
+        'Count the total number of students displayed',
+        'Check if you recognize all students as yours',
       ],
       validationType: 'hybrid',
       autoCheck: () => ({
         passed: teacherStudents.length > 0,
-        message: `✅ You have ${teacherStudents.length} students assigned to you.`
+        message: `✅ Expected: ${teacherStudents.length} students (from your assigned grade levels).`
       }),
-      question: 'Does the number match what you see on the screen?',
+      question: 'Do you see ONLY students from YOUR sections? (Not the entire school)',
       options: [
-        { value: 'yes', label: '✅ Yes, the count matches', isCorrect: true },
-        { value: 'no', label: '❌ No, I see a different number', isCorrect: false },
+        { value: 'yes', label: '✅ Yes, only my students', isCorrect: true },
+        { value: 'more', label: '⚠️ I see students from other sections too', isCorrect: false },
+        { value: 'less', label: '❌ Some of my students are missing', isCorrect: false },
       ],
-      whyMatters: 'You should only see YOUR students, not all students in the school.'
+      whyMatters: 'Data isolation ensures DepEd privacy compliance. Teachers should never access student records outside their teaching assignments.'
     },
     {
-      id: 3,
-      title: 'Section Filtering',
-      description: 'Check if you see only your assigned sections',
+      id: 4,
+      title: '🏫 Section-Based Filtering',
+      description: 'Test section dropdown shows only your assigned sections',
       instructions: [
-        'Stay on "Grades & Reports"',
-        'Look at the "Section" dropdown menu',
-        'Check which grade levels appear',
+        'Go to "Grades & Reports" in sidebar',
+        'Click on "Section" dropdown filter',
+        'Check which grade levels and sections appear',
       ],
       validationType: 'hybrid',
       autoCheck: () => {
         const gradeLevels = [...new Set(teacherSections.map(s => s.gradeLevel))];
         return {
           passed: gradeLevels.length > 0,
-          message: `✅ You should see Grade ${gradeLevels.join(', ')} sections only.`
+          message: `✅ You should see Grade ${gradeLevels.join(', ')} sections only (${teacherSections.length} sections total).`
         };
       },
-      question: 'Do you see ONLY your assigned grade level sections?',
+      question: 'Does the dropdown show ONLY your assigned sections?',
       options: [
-        { value: 'yes', label: '✅ Yes, only my grade levels', isCorrect: true },
-        { value: 'no', label: '❌ No, I see other grade levels too', isCorrect: false },
+        { value: 'yes', label: '✅ Yes, only my sections', isCorrect: true },
+        { value: 'other-grades', label: '❌ I see sections from other grade levels', isCorrect: false },
+        { value: 'all-sections', label: '❌ I see ALL school sections', isCorrect: false },
       ],
-      whyMatters: 'Teachers should only access sections they teach for privacy and security.'
-    },
-    {
-      id: 4,
-      title: 'Enter a Grade',
-      description: 'Test if you can add grades for students',
-      instructions: [
-        'Go to "Grades & Reports"',
-        'Click "Academic Gradebook" tab',
-        'Try entering a test grade for any student',
-        'Click outside the field to save',
-      ],
-      validationType: 'manual',
-      question: 'Were you able to enter and save a grade?',
-      options: [
-        { value: 'yes', label: '✅ Yes, it saved successfully', isCorrect: true },
-        { value: 'partial', label: '⚠️ Entered but not sure if saved', isCorrect: false },
-        { value: 'no', label: '❌ No, couldn\'t enter or save', isCorrect: false },
-      ],
-      whyMatters: 'Entering grades is your most frequent task. It must work reliably.'
+      whyMatters: 'Section filtering prevents cross-contamination of grades and maintains clear teaching boundaries per DepEd guidelines.'
     },
     {
       id: 5,
-      title: 'Edit a Grade',
-      description: 'Test if you can modify existing grades',
-      instructions: [
-        'Stay in "Academic Gradebook"',
-        'Find the grade you just entered',
-        'Click on it and change the value',
-        'Click outside to save the change',
-      ],
-      validationType: 'manual',
-      question: 'Could you edit and update the grade?',
-      options: [
-        { value: 'yes', label: '✅ Yes, changes saved', isCorrect: true },
-        { value: 'no', label: '❌ No, couldn\'t edit', isCorrect: false },
-      ],
-      whyMatters: 'You need to correct mistakes or update grades as students improve.'
-    },
-    {
-      id: 6,
-      title: 'Report Cards Access',
-      description: 'Verify Report Cards filtering works',
-      instructions: [
-        'Click "Report Cards" tab',
-        'Check the "Section" dropdown',
-        'Try selecting different sections',
-      ],
-      validationType: 'manual',
-      question: 'Does the Report Cards section dropdown show only your sections?',
-      options: [
-        { value: 'yes', label: '✅ Yes, only my sections', isCorrect: true },
-        { value: 'no', label: '❌ No, I see other sections', isCorrect: false },
-      ],
-      whyMatters: 'Report cards contain private student data - access must be restricted.'
-    },
-    {
-      id: 7,
-      title: 'Subject Filtering',
-      description: 'Check if you see only your teaching subjects',
+      title: '📚 Subject/Learning Area Filtering',
+      description: 'Verify you see only subjects you teach',
       instructions: [
         'Stay on "Grades & Reports"',
-        'Look at any subject/learning area filters or columns',
-        'Note which subjects appear',
+        'Look at subject columns or subject filter dropdown',
+        'Note which learning areas appear',
       ],
       validationType: 'hybrid',
       autoCheck: () => ({
         passed: teacherLearningAreas.length > 0,
-        message: `✅ You should see ${teacherLearningAreas.length} subject(s): ${teacherLearningAreas.map(la => la.name).join(', ')}`
+        message: `✅ Expected subjects: ${teacherLearningAreas.map(la => la.name).join(', ')} (${teacherLearningAreas.length} total)`
       }),
-      question: 'Do you see only the subjects you teach?',
+      question: 'Can you grade ONLY the subjects you\'re assigned to teach?',
       options: [
         { value: 'yes', label: '✅ Yes, only my subjects', isCorrect: true },
-        { value: 'no', label: '❌ No, I see other subjects', isCorrect: false },
+        { value: 'all-subjects', label: '❌ I see all subjects', isCorrect: false },
+        { value: 'wrong-subjects', label: '❌ I see wrong subjects', isCorrect: false },
       ],
-      whyMatters: 'You should only grade subjects you\'re assigned to teach.'
+      whyMatters: 'Subject specialization is critical - you should only grade subjects where you have domain expertise and teaching authority.'
     },
+
+    // ========== SECTION 3: CRUD OPERATIONS - CREATE ==========
     {
-      id: 8,
-      title: 'Overall Performance',
-      description: 'Rate your experience with the system',
+      id: 6,
+      title: '✏️ CREATE: Add New Grade',
+      description: 'Test ability to enter fresh grades for students',
       instructions: [
-        'Think about your overall experience',
-        'Consider speed, ease of use, and reliability',
+        'Go to "Grades & Reports" → "Academic Gradebook"',
+        'Find a student with an empty grade cell',
+        'Click the cell and enter a test score (e.g., 85)',
+        'Press Enter or click outside to save',
+        'Wait 2 seconds for confirmation',
       ],
       validationType: 'manual',
-      question: 'How fast and responsive does the system feel?',
+      question: 'Were you able to CREATE a new grade entry?',
       options: [
-        { value: 'fast', label: '🚀 Fast and smooth', isCorrect: true },
-        { value: 'okay', label: '👍 Acceptable speed', isCorrect: true },
-        { value: 'slow', label: '🐌 Slow or laggy', isCorrect: false },
+        { value: 'success', label: '✅ Yes, saved instantly with confirmation', isCorrect: true },
+        { value: 'delayed', label: '⚠️ Saved but took more than 3 seconds', isCorrect: false },
+        { value: 'no-feedback', label: '⚠️ Saved but no visual confirmation', isCorrect: false },
+        { value: 'failed', label: '❌ Could not save or got error', isCorrect: false },
       ],
-      whyMatters: 'The system should be fast enough for daily use without frustration.'
+      whyMatters: 'Creating grades is the most frequent teacher action. Instant saves prevent data loss if connection drops unexpectedly.'
+    },
+    {
+      id: 7,
+      title: '📝 CREATE: Add Attendance Record',
+      description: 'Test marking student attendance',
+      instructions: [
+        'Click "Attendance" in sidebar',
+        'Select today\'s date',
+        'Choose one of your sections',
+        'Mark a student as "Present" or "Absent"',
+        'Observe if it saves automatically',
+      ],
+      validationType: 'manual',
+      question: 'Could you CREATE attendance records successfully?',
+      options: [
+        { value: 'instant', label: '✅ Yes, saved instantly with visual feedback', isCorrect: true },
+        { value: 'slow', label: '⚠️ Saved but felt slow (>2 seconds)', isCorrect: false },
+        { value: 'error', label: '❌ Got error or couldn\'t save', isCorrect: false },
+      ],
+      whyMatters: 'Attendance must be quick - teachers mark 30-40 students daily. Any delay multiplies frustration during morning rush.'
+    },
+
+    // ========== SECTION 4: CRUD OPERATIONS - READ ==========
+    {
+      id: 8,
+      title: '👀 READ: View Student Profile',
+      description: 'Test accessing complete student information',
+      instructions: [
+        'Go to "Students" page',
+        'Click on any student\'s name',
+        'Review the profile page that opens',
+        'Check if you see grades, attendance, and personal info',
+      ],
+      validationType: 'manual',
+      question: 'Can you READ complete student data without errors?',
+      options: [
+        { value: 'complete', label: '✅ Yes, all data loaded quickly and completely', isCorrect: true },
+        { value: 'partial', label: '⚠️ Some sections missing or slow to load', isCorrect: false },
+        { value: 'error', label: '❌ Error loading or missing critical data', isCorrect: false },
+      ],
+      whyMatters: 'Quick access to student profiles is essential for parent meetings, guidance counseling, and academic intervention planning.'
+    },
+    {
+      id: 9,
+      title: '📈 READ: View Grade Reports',
+      description: 'Test reading report cards and grade summaries',
+      instructions: [
+        'Go to "Grades & Reports" → "Report Cards"',
+        'Select a section and grading period',
+        'Try to view a student\'s report card',
+        'Check if calculations (averages, GPA) are correct',
+      ],
+      validationType: 'manual',
+      question: 'Can you READ report cards with correct calculations?',
+      options: [
+        { value: 'correct', label: '✅ Yes, all calculations correct and clear', isCorrect: true },
+        { value: 'slow', label: '⚠️ Correct but very slow to generate', isCorrect: false },
+        { value: 'wrong-calc', label: '❌ Calculations seem incorrect', isCorrect: false },
+        { value: 'error', label: '❌ Cannot generate report card', isCorrect: false },
+      ],
+      whyMatters: 'Report cards are official documents. Calculation errors can affect student promotions, honors eligibility, and academic records.'
+    },
+
+    // ========== SECTION 5: CRUD OPERATIONS - UPDATE ==========
+    {
+      id: 10,
+      title: '🔄 UPDATE: Edit Existing Grade',
+      description: 'Test modifying previously entered grades',
+      instructions: [
+        'Return to "Academic Gradebook"',
+        'Find the grade you entered in Step 6',
+        'Click on it and change to a different value (e.g., 85 → 90)',
+        'Press Enter to save',
+        'Refresh the page and verify the change persisted',
+      ],
+      validationType: 'manual',
+      question: 'Could you UPDATE the grade and see it persist after refresh?',
+      options: [
+        { value: 'success', label: '✅ Yes, updated instantly and persisted', isCorrect: true },
+        { value: 'reverted', label: '❌ Changed but reverted after refresh', isCorrect: false },
+        { value: 'error', label: '❌ Could not update or got error', isCorrect: false },
+      ],
+      whyMatters: 'Teachers frequently correct grading errors. Updates must be reliable - lost corrections mean inaccurate permanent records.'
+    },
+    {
+      id: 11,
+      title: '✏️ UPDATE: Modify Attendance',
+      description: 'Test changing attendance records',
+      instructions: [
+        'Go to "Attendance"',
+        'Find the attendance record you created in Step 7',
+        'Change it (e.g., Present → Absent or vice versa)',
+        'Observe if change saves automatically',
+      ],
+      validationType: 'manual',
+      question: 'Were you able to UPDATE attendance successfully?',
+      options: [
+        { value: 'yes', label: '✅ Yes, updated with visual confirmation', isCorrect: true },
+        { value: 'no-feedback', label: '⚠️ Updated but unclear if saved', isCorrect: false },
+        { value: 'failed', label: '❌ Could not update', isCorrect: false },
+      ],
+      whyMatters: 'Attendance corrections are common (late arrivals marked absent). Reliable updates prevent reporting errors to DepEd.'
+    },
+
+    // ========== SECTION 6: CRUD OPERATIONS - DELETE (Soft Delete) ==========
+    {
+      id: 12,
+      title: '🗑️ DELETE: Remove Grade Entry',
+      description: 'Test clearing or deleting grades (soft delete)',
+      instructions: [
+        'In "Academic Gradebook", find a test grade',
+        'Try to clear it (backspace/delete key or clear button)',
+        'Verify if the system allows removal',
+        'Note: Real grades shouldn\'t be easily deleted for audit reasons',
+      ],
+      validationType: 'manual',
+      question: 'What happened when you tried to DELETE a grade?',
+      options: [
+        { value: 'confirmed', label: '✅ System asked for confirmation before deleting', isCorrect: true },
+        { value: 'no-confirm', label: '⚠️ Deleted instantly without confirmation', isCorrect: false },
+        { value: 'cant-delete', label: '✅ System prevented deletion (good for audit trail)', isCorrect: true },
+        { value: 'error', label: '❌ Got error when trying to delete', isCorrect: false },
+      ],
+      whyMatters: 'Grade deletion should be restricted or logged. DepEd requires audit trails for all grade changes to prevent fraud.'
+    },
+
+    // ========== SECTION 7: OFFLINE-FIRST FUNCTIONALITY ==========
+    {
+      id: 13,
+      title: '📡 Offline Detection',
+      description: 'Test if system detects when you go offline',
+      instructions: [
+        'Turn OFF your WiFi or disconnect internet',
+        'Wait 5 seconds',
+        'Look for an offline indicator (banner, icon, or message)',
+        'Turn WiFi back ON when done',
+      ],
+      validationType: 'manual',
+      question: 'Did the system detect and notify you of offline status?',
+      options: [
+        { value: 'clear-indicator', label: '✅ Yes, clear offline indicator appeared', isCorrect: true },
+        { value: 'subtle', label: '⚠️ Indicator present but hard to notice', isCorrect: false },
+        { value: 'none', label: '❌ No offline indicator at all', isCorrect: false },
+      ],
+      whyMatters: 'Many Philippine schools have unreliable internet. Teachers need clear feedback on connection status to know if their work is being saved.'
+    },
+    {
+      id: 14,
+      title: '💾 Offline Data Entry',
+      description: 'Test entering data while offline',
+      instructions: [
+        'Make sure you\'re OFFLINE (WiFi off)',
+        'Go to "Academic Gradebook"',
+        'Try entering a new grade for any student',
+        'Note if you see a "pending sync" or "offline" indicator',
+      ],
+      validationType: 'manual',
+      question: 'Could you enter grades while offline?',
+      options: [
+        { value: 'works-queued', label: '✅ Yes, works with "pending sync" indicator', isCorrect: true },
+        { value: 'works-no-indicator', label: '⚠️ Works but no indicator it\'s queued', isCorrect: false },
+        { value: 'blocked', label: '❌ Blocked from entering data offline', isCorrect: false },
+      ],
+      whyMatters: 'Offline-first design lets teachers continue working during internet outages. Data queues locally and syncs when connection returns.'
+    },
+    {
+      id: 15,
+      title: '🔄 Offline-to-Online Sync',
+      description: 'Test automatic sync when connection returns',
+      instructions: [
+        'Turn WiFi back ON',
+        'Wait 10 seconds',
+        'Check if offline data syncs automatically',
+        'Look for sync success confirmation or any errors',
+      ],
+      validationType: 'manual',
+      question: 'Did offline data sync automatically when back online?',
+      options: [
+        { value: 'auto-success', label: '✅ Yes, synced automatically with confirmation', isCorrect: true },
+        { value: 'auto-no-confirm', label: '⚠️ Synced but no confirmation shown', isCorrect: false },
+        { value: 'manual-required', label: '⚠️ Had to manually refresh to sync', isCorrect: false },
+        { value: 'failed', label: '❌ Data lost or sync failed', isCorrect: false },
+      ],
+      whyMatters: 'Automatic background sync prevents data loss and reduces teacher burden. Manual syncing is error-prone and often forgotten.'
+    },
+
+    // ========== SECTION 8: PERFORMANCE & RESPONSIVENESS ==========
+    {
+      id: 16,
+      title: '⚡ Page Load Speed',
+      description: 'Evaluate initial page load and navigation speed',
+      instructions: [
+        'Navigate between pages: Dashboard → Students → Grades → Attendance',
+        'Note how fast each page loads',
+        'Refresh the browser and observe reload speed',
+      ],
+      validationType: 'manual',
+      question: 'How would you rate the overall page load speed?',
+      options: [
+        { value: 'instant', label: '🚀 Instant (<1 second)', isCorrect: true },
+        { value: 'fast', label: '✅ Fast (1-2 seconds)', isCorrect: true },
+        { value: 'acceptable', label: '⚠️ Acceptable (2-4 seconds)', isCorrect: false },
+        { value: 'slow', label: '❌ Slow (>4 seconds)', isCorrect: false },
+      ],
+      whyMatters: 'Teachers have limited time between classes. Every second counts. Slow systems reduce actual teaching time.'
+    },
+    {
+      id: 17,
+      title: '📊 Large Dataset Handling',
+      description: 'Test performance with many students',
+      instructions: [
+        'Go to "Grades & Reports" → "Academic Gradebook"',
+        'Select your largest section (most students)',
+        'Scroll through the entire grade table',
+        'Note if scrolling is smooth or laggy',
+      ],
+      validationType: 'manual',
+      question: 'How did the system handle a full class roster?',
+      options: [
+        { value: 'smooth', label: '✅ Smooth scrolling, no lag', isCorrect: true },
+        { value: 'slight-lag', label: '⚠️ Slight lag but usable', isCorrect: false },
+        { value: 'very-laggy', label: '❌ Very laggy or freezes', isCorrect: false },
+      ],
+      whyMatters: 'Classes can have 40+ students with multiple grading periods. Poor performance with large datasets makes grading painful.'
+    },
+
+    // ========== SECTION 9: USER EXPERIENCE & USABILITY ==========
+    {
+      id: 18,
+      title: '🎨 Visual Feedback & Clarity',
+      description: 'Evaluate if actions provide clear visual feedback',
+      instructions: [
+        'Think about all the actions you\'ve performed',
+        'Did buttons show hover states?',
+        'Were success/error messages clear?',
+        'Could you always tell what was happening?',
+      ],
+      validationType: 'manual',
+      question: 'Did the system provide clear visual feedback for your actions?',
+      options: [
+        { value: 'excellent', label: '✅ Excellent - always knew what was happening', isCorrect: true },
+        { value: 'good', label: '👍 Good - mostly clear', isCorrect: true },
+        { value: 'confusing', label: '⚠️ Sometimes confusing or unclear', isCorrect: false },
+        { value: 'poor', label: '❌ Poor - often didn\'t know if actions worked', isCorrect: false },
+      ],
+      whyMatters: 'Clear feedback reduces errors and anxiety. Teachers shouldn\'t have to guess if their grade entries were saved.'
+    },
+    {
+      id: 19,
+      title: '📱 Mobile Responsiveness (if applicable)',
+      description: 'Test mobile device compatibility',
+      instructions: [
+        'If you have a smartphone or tablet, try accessing the system',
+        'If not, resize your browser window to phone size',
+        'Try key actions: viewing students, entering grades',
+      ],
+      validationType: 'manual',
+      question: 'How well does the system work on mobile devices?',
+      options: [
+        { value: 'excellent', label: '✅ Excellent - fully responsive', isCorrect: true },
+        { value: 'usable', label: '👍 Usable but not ideal', isCorrect: true },
+        { value: 'difficult', label: '⚠️ Difficult to use on mobile', isCorrect: false },
+        { value: 'broken', label: '❌ Broken or unusable on mobile', isCorrect: false },
+        { value: 'not-tested', label: '➖ Did not test on mobile', isCorrect: true },
+      ],
+      whyMatters: 'Many teachers only have smartphones. Mobile accessibility ensures equitable access regardless of device availability.'
+    },
+
+    // ========== SECTION 10: ERROR HANDLING & EDGE CASES ==========
+    {
+      id: 20,
+      title: '🚨 Error Messages Quality',
+      description: 'Evaluate if errors are helpful and user-friendly',
+      instructions: [
+        'Think about any errors you encountered during testing',
+        'Were error messages in plain English/Filipino?',
+        'Did they tell you HOW to fix the problem?',
+        'If no errors, that\'s excellent!',
+      ],
+      validationType: 'manual',
+      question: 'If you saw errors, were they helpful?',
+      options: [
+        { value: 'no-errors', label: '✅ No errors encountered - perfect!', isCorrect: true },
+        { value: 'helpful', label: '✅ Errors were clear and helpful', isCorrect: true },
+        { value: 'cryptic', label: '⚠️ Errors were technical/cryptic', isCorrect: false },
+        { value: 'unhelpful', label: '❌ Errors gave no guidance', isCorrect: false },
+      ],
+      whyMatters: 'Good error messages help teachers self-solve issues. Bad errors require support tickets, wasting everyone\'s time.'
     },
   ];
 
