@@ -544,14 +544,6 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
                     <EmptyStateSelectFilters />
                 </div>
-            ) : filteredLessonPlans.length === 0 && searchQuery.trim() ? (
-                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
-                    <EmptyStateNoResults />
-                </div>
-            ) : filteredLessonPlans.length === 0 ? (
-                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
-                    <EmptyStateNoPlans />
-                </div>
             ) : viewMode === 'calendar' ? (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
                     <div className="flex justify-between items-center mb-6">
@@ -607,9 +599,67 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
                             );
                         })}
                     </div>
+                    
+                    {/* Empty state message within calendar */}
+                    {filteredLessonPlans.length === 0 && !searchQuery.trim() && (
+                        <div className="mt-8 text-center py-8">
+                            <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 rounded-full mb-4">
+                                <ClipboardDocumentListIcon />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">No Lesson Plans Yet</h3>
+                            <p className="text-slate-600 dark:text-slate-400 mb-4">Click on any date to create your first lesson plan.</p>
+                            <button
+                                onClick={() => setIsAIGeneratorOpen(true)}
+                                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-2 px-4 rounded-lg inline-flex items-center gap-2 hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md">
+                                <SparklesIcon className="h-5 w-5"/> Generate with AI
+                            </button>
+                        </div>
+                    )}
+                    
+                    {filteredLessonPlans.length === 0 && searchQuery.trim() && (
+                        <div className="mt-8 text-center py-8">
+                            <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full mb-4">
+                                <MagnifyingGlassIcon />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">No Results Found</h3>
+                            <p className="text-slate-600 dark:text-slate-400 mb-4">No lesson plans match "{searchQuery}"</p>
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
+                                Clear Search
+                            </button>
+                        </div>
+                    )}
                 </div>
             ) : (
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
+                    {filteredLessonPlans.length === 0 && !searchQuery.trim() ? (
+                        <div className="text-center py-16">
+                            <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 rounded-full mb-4">
+                                <ClipboardDocumentListIcon />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">No Lesson Plans Yet</h3>
+                            <p className="text-slate-600 dark:text-slate-400 mb-4">Get started by creating your first lesson plan.</p>
+                            <button
+                                onClick={() => setIsAIGeneratorOpen(true)}
+                                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-2 px-4 rounded-lg inline-flex items-center gap-2 hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md">
+                                <SparklesIcon className="h-5 w-5"/> Generate with AI
+                            </button>
+                        </div>
+                    ) : filteredLessonPlans.length === 0 && searchQuery.trim() ? (
+                        <div className="text-center py-16">
+                            <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full mb-4">
+                                <MagnifyingGlassIcon />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-2">No Results Found</h3>
+                            <p className="text-slate-600 dark:text-slate-400 mb-4">No lesson plans match "{searchQuery}"</p>
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
+                                Clear Search
+                            </button>
+                        </div>
+                    ) : (
                     <div className="space-y-3">
                         {filteredLessonPlans.map((plan: any) => {
                             const planDate = new Date(plan.date);
@@ -662,6 +712,7 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
                             );
                         })}
                     </div>
+                    )}
                 </div>
             )}
 
