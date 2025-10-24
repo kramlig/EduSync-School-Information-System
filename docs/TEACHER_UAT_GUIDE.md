@@ -209,7 +209,118 @@ Second class (Section B): __________ students
 
 ---
 
-### ☑️ Check 9: Try refreshing the page
+## 📝 Testing Your Daily Tasks (CRUD Operations)
+
+**💡 Why this section matters:** These are the things you'll do every day - entering grades, updating information, etc. We need to make sure these work perfectly!
+
+---
+
+### ☑️ Check 9: Can you enter and save grades?
+
+**What to do:**
+1. Go to "Grades & Report" → "Academic Gradebook" tab
+2. Find a student in your class
+3. Try to enter a grade (like 85 for Math)
+4. Click "Save" or the save button
+5. Refresh the page and check if the grade is still there
+
+**What you should see:**
+- ✅ You can easily type in grades
+- ✅ The grade saves successfully (you see a confirmation)
+- ✅ After refreshing, the grade is still there (not lost!)
+- ✅ You can only enter grades for YOUR subjects (Math, English, ESP)
+
+**💡 Why this matters:** You need to enter grades quickly and trust they'll be saved!
+
+**Did it work?** [ ] Yes, grades save perfectly  [ ] No, grades disappear or won't save
+
+**Try entering a grade here:**
+```
+Student name: _____________________________
+Subject: Math   Grade entered: ________
+After refresh, grade shows: [ ] Yes [ ] No
+```
+
+---
+
+### ☑️ Check 10: Can you edit/update grades you already entered?
+
+**What to do:**
+1. Find a grade you just entered
+2. Click on it to edit
+3. Change it to a different number (like change 85 to 90)
+4. Save it
+5. Check if the new grade appears
+
+**What you should see:**
+- ✅ You can click on existing grades to edit them
+- ✅ The updated grade saves successfully
+- ✅ The new grade shows correctly after saving
+
+**💡 Why this matters:** Sometimes you need to correct grades or update them!
+
+**Did it work?** [ ] Yes, editing works great  [ ] No, can't change grades
+
+---
+
+### ☑️ Check 11: Can you add remarks or comments for students?
+
+**What to do:**
+1. Look for a "Remarks" or "Comments" section for a student
+2. Try typing a comment like "Needs extra help in Math"
+3. Save it
+4. Go back and check if the comment is still there
+
+**What you should see:**
+- ✅ You can add notes about students
+- ✅ Comments save properly
+- ✅ You can see your comments later
+
+**💡 Why this matters:** You need to keep notes about students who need help!
+
+**Did it work?** [ ] Yes, comments save  [ ] No, comments disappear
+
+---
+
+### ☑️ Check 12: Can you view student information?
+
+**What to do:**
+1. Click on a student's name
+2. Look at their profile or information page
+3. Check what information you can see
+
+**What you should see:**
+- ✅ You see the student's complete information
+- ✅ You see their grades across all subjects
+- ✅ You see attendance records
+- ✅ Everything loads quickly
+
+**💡 Why this matters:** You need quick access to student details when parents call!
+
+**Did it work?** [ ] Yes, all info shows correctly  [ ] No, missing information
+
+---
+
+### ☑️ Check 13: Can you mark attendance?
+
+**What to do:**
+1. Go to the Attendance section (if available)
+2. Try marking a student as Present or Absent
+3. Save the attendance
+4. Check if it saves correctly
+
+**What you should see:**
+- ✅ Easy to mark attendance (checkboxes or simple clicks)
+- ✅ Attendance saves immediately
+- ✅ You can only mark attendance for YOUR students
+
+**💡 Why this matters:** Daily attendance is quick and shouldn't be complicated!
+
+**Did it work?** [ ] Yes, attendance is easy  [ ] No, attendance is confusing  [ ] Not tested (no attendance feature)
+
+---
+
+### ☑️ Check 14: Try refreshing the page
 
 **What to do:**
 1. Look at your current student count
@@ -228,7 +339,7 @@ Second class (Section B): __________ students
 
 ---
 
-### ☑️ Check 10: Does everything feel smooth and quick?
+### ☑️ Check 15: Does everything feel smooth and quick?
 
 **What to do:**
 1. Click around the system - switch tabs, change classes, etc.
@@ -252,7 +363,7 @@ _____________________________________________
 
 ---
 
-### ☑️ Check 11: Try it in a different browser (Optional)
+### ☑️ Check 16: Try it in a different browser (Optional)
 
 **What to do:**
 1. If you have time, try opening the site in a different browser
@@ -310,13 +421,23 @@ _____________________________________________
 
 Before we finish, let's make sure these KEY things work:
 
-**The most important things:**
+**Viewing & Filtering (Most Important):**
 - [ ] ✅ I see ONLY my Grade 4 students (around 18-20 students, not 100!)
 - [ ] ✅ The class selection shows "All My Sections" and only my classes
 - [ ] ✅ I can't accidentally see students from other grade levels
 - [ ] ✅ Report Cards also shows only my students
 - [ ] ✅ I only see data for subjects I teach (Math, English, ESP)
+
+**Daily Tasks (CRUD - Very Important):**
+- [ ] ✅ I can enter grades and they save correctly
+- [ ] ✅ I can edit/update grades I already entered
+- [ ] ✅ I can add comments or remarks about students
+- [ ] ✅ I can view complete student information
+- [ ] ✅ Attendance marking works (if available)
+
+**Overall Experience:**
 - [ ] ✅ The system feels easy and quick to use
+- [ ] ✅ Nothing gets lost when I refresh the page
 
 **Overall, how did it go?**
 [ ] 😊 Everything works great! Ready to use!
