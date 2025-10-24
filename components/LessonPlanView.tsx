@@ -4,7 +4,7 @@ import type { LessonPlan, AuthUser, StudentUser } from '../types';
 import { generateLessonPlan, GeneratedLessonPlan } from '../services/geminiService';
 import Modal from './Modal';
 import Spinner from './Spinner';
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, TrashIcon, CloseIcon, SparklesIcon } from './icons';
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, TrashIcon, CloseIcon, SparklesIcon, FunnelIcon, MagnifyingGlassIcon, CalendarIcon, ClipboardDocumentListIcon, CalendarDaysIcon, ClockIcon, ChartBarIcon, BookOpenIcon } from './icons';
 
 const AIGeneratorModal: React.FC<{
     isOpen: boolean;
@@ -353,54 +353,317 @@ const LessonPlanView: React.FC<{ schoolData: SchoolDataHook, session: { user: Au
             );
         };
 
-    return (
-        <div>
-            <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">Lesson Plans</h1>
+    // Empty state components
+    const EmptyStateSelectFilters = () => (
+        <div className="flex flex-col items-center justify-center py-16 px-4">
+            <div className="bg-slate-100 dark:bg-slate-700 p-6 rounded-full mb-4">
+                <FunnelIcon />
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Select Class and Learning Area</h3>
+            <p className="text-slate-600 dark:text-slate-400 text-center max-w-md">Choose a class and learning area from the filters above to view and manage lesson plans.</p>
+        </div>
+    );
 
-            <div className="mb-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm flex flex-wrap items-center justify-between gap-4">
-                <div className="flex flex-wrap items-center gap-4">
-                    <div>
-                        <label className="font-semibold mr-2">Class:</label>
-                        <select value={selectedSectionId ?? ''} onChange={e => setSelectedSectionId(e.target.value)} className="input-style">
-                            {visibleSections.map(s => <option key={s.id} value={s.id}>Grade {s.gradeLevel} - {s.name}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="font-semibold mr-2">Learning Area:</label>
-                        <select value={selectedLearningAreaId ?? ''} onChange={e => setSelectedLearningAreaId(e.target.value)} className="input-style">
-                            {learningAreasForSection.map(la => <option key={la.id} value={la.id}>{la.name}</option>)}
-                        </select>
-                    </div>
-                </div>
-                <button onClick={() => setIsAIGeneratorOpen(true)} disabled={!selectedSectionId || !selectedLearningAreaId} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center disabled:bg-slate-400">
-                    <SparklesIcon className="mr-2"/> Generate with AI
+    const EmptyStateNoPlans = () => (
+        <div className="flex flex-col items-center justify-center py-16 px-4">
+            <div className="bg-indigo-100 dark:bg-indigo-900/30 p-6 rounded-full mb-4">
+                <ClipboardDocumentListIcon />
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">No Lesson Plans Yet</h3>
+            <p className="text-slate-600 dark:text-slate-400 text-center max-w-md mb-4">
+                Get started by creating your first lesson plan for this class and subject.
+            </p>
+            <button
+                onClick={() => setIsAIGeneratorOpen(true)}
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-2.5 px-5 rounded-lg flex items-center gap-2 hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md">
+                <SparklesIcon className="h-5 w-5"/> Generate with AI
+            </button>
+        </div>
+    );
+
+    const EmptyStateNoResults = () => (
+        <div className="flex flex-col items-center justify-center py-16 px-4">
+            <div className="bg-amber-100 dark:bg-amber-900/30 p-6 rounded-full mb-4">
+                <MagnifyingGlassIcon />
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">No Results Found</h3>
+            <p className="text-slate-600 dark:text-slate-400 text-center max-w-md">
+                No lesson plans match your search. Try different keywords or clear your search.
+            </p>
+            <button
+                onClick={() => setSearchQuery('')}
+                className="mt-4 text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
+                Clear Search
+            </button>
+        </div>
+    );
+
+    return (
+        <div className="space-y-6">
+            {/* Header Section */}
+            <div className="flex flex-wrap justify-between items-center gap-4">
+                <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Lesson Plans</h1>
+                <button
+                    onClick={() => setIsAIGeneratorOpen(true)}
+                    disabled={!selectedSectionId || !selectedLearningAreaId}
+                    className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-2.5 px-5 rounded-lg flex items-center gap-2 hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md disabled:from-slate-400 disabled:to-slate-400 disabled:cursor-not-allowed"
+                    aria-label="Generate lesson plan with AI">
+                    <SparklesIcon className="h-5 w-5"/> Generate with AI
                 </button>
             </div>
 
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-md">
-                <div className="flex justify-between items-center mb-4">
-                    <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))}><ChevronLeftIcon/></button>
-                    <h2 className="text-xl font-bold">{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
-                    <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))}><ChevronRightIcon/></button>
-                </div>
-                <div className="grid grid-cols-7 gap-1 text-center text-sm">
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <div key={day} className="font-semibold p-2">{day}</div>)}
-                    {calendarGrid.map((date, index) => {
-                        const dateStr = date?.toISOString().split('T')[0];
-                        const plans = dateStr ? plansByDate.get(dateStr) : undefined;
-                        return (
-                            <div key={index} onClick={() => handleDateClick(date)} className={`p-2 border rounded-md min-h-[100px] ${date ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700' : 'bg-slate-50 dark:bg-slate-800/50'}`}>
-                                <div className="font-bold">{date?.getDate()}</div>
-                                <div className="text-xs space-y-1 mt-1">
-                                    {plans?.map((plan: LessonPlan) => (
-                                        <div key={plan.id} className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200 p-1 rounded truncate">{plan.title}</div>
-                                    ))}
-                                </div>
+            {/* Statistics Cards */}
+            {selectedSectionId && selectedLearningAreaId && filteredLessonPlans.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-2xl font-bold text-slate-800 dark:text-white">{lessonPlanStats.total}</div>
+                                <div className="text-xs text-slate-600 dark:text-slate-400 font-medium mt-1">Total Plans</div>
                             </div>
-                        )
-                    })}
+                            <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg">
+                                <ClipboardDocumentListIcon />
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-2xl font-bold text-green-700 dark:text-green-400">{lessonPlanStats.thisWeek}</div>
+                                <div className="text-xs text-green-600 dark:text-green-500 font-medium mt-1">This Week</div>
+                            </div>
+                            <div className="bg-green-100 dark:bg-green-800/30 p-3 rounded-lg">
+                                <CalendarDaysIcon />
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 rounded-xl p-4 border border-amber-200 dark:border-amber-800 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">{lessonPlanStats.nextWeek}</div>
+                                <div className="text-xs text-amber-600 dark:text-amber-500 font-medium mt-1">Next Week</div>
+                            </div>
+                            <div className="bg-amber-100 dark:bg-amber-800/30 p-3 rounded-lg">
+                                <ClockIcon />
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">{lessonPlanStats.thisMonth}</div>
+                                <div className="text-xs text-purple-600 dark:text-purple-500 font-medium mt-1">This Month</div>
+                            </div>
+                            <div className="bg-purple-100 dark:bg-purple-800/30 p-3 rounded-lg">
+                                <ChartBarIcon />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Filters and Search Bar */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
+                <div className="flex flex-wrap items-end gap-4">
+                    <div className="flex-1 min-w-[200px]">
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Class</label>
+                        <select
+                            value={selectedSectionId ?? ''}
+                            onChange={e => setSelectedSectionId(e.target.value)}
+                            className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                            aria-label="Select class">
+                            <option value="">Select a class...</option>
+                            {visibleSections.map((s: any) => (
+                                <option key={s.id} value={s.id}>Grade {s.gradeLevel} - {s.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    
+                    <div className="flex-1 min-w-[200px]">
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Learning Area</label>
+                        <select
+                            value={selectedLearningAreaId ?? ''}
+                            onChange={e => setSelectedLearningAreaId(e.target.value)}
+                            className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                            aria-label="Select learning area"
+                            disabled={!selectedSectionId || learningAreasForSection.length === 0}>
+                            <option value="">Select a learning area...</option>
+                            {learningAreasForSection.map((la: any) => (
+                                <option key={la.id} value={la.id}>{la.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    
+                    <div className="flex-1 min-w-[200px]">
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Search</label>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <MagnifyingGlassIcon />
+                            </div>
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="Search lesson plans..."
+                                className="w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                aria-label="Search lesson plans"
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setViewMode('calendar')}
+                            className={`px-4 py-2.5 rounded-lg font-medium transition-all ${
+                                viewMode === 'calendar'
+                                    ? 'bg-indigo-600 text-white shadow-md'
+                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                            }`}
+                            aria-label="Calendar view">
+                            <CalendarIcon />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`px-4 py-2.5 rounded-lg font-medium transition-all ${
+                                viewMode === 'list'
+                                    ? 'bg-indigo-600 text-white shadow-md'
+                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                            }`}
+                            aria-label="List view">
+                            <ClipboardDocumentListIcon />
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            {/* Main Content Area */}
+            {!selectedSectionId || !selectedLearningAreaId ? (
+                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
+                    <EmptyStateSelectFilters />
+                </div>
+            ) : filteredLessonPlans.length === 0 && searchQuery.trim() ? (
+                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
+                    <EmptyStateNoResults />
+                </div>
+            ) : filteredLessonPlans.length === 0 ? (
+                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
+                    <EmptyStateNoPlans />
+                </div>
+            ) : viewMode === 'calendar' ? (
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
+                    <div className="flex justify-between items-center mb-6">
+                        <button
+                            onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))}
+                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                            aria-label="Previous month">
+                            <ChevronLeftIcon/>
+                        </button>
+                        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">
+                            {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                        </h2>
+                        <button
+                            onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))}
+                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                            aria-label="Next month">
+                            <ChevronRightIcon/>
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-7 gap-2 text-center">
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                            <div key={day} className="font-bold text-slate-700 dark:text-slate-300 p-3 text-sm">{day}</div>
+                        ))}
+                        {calendarGrid.map((date, index) => {
+                            const dateStr = date?.toISOString().split('T')[0];
+                            const plans = dateStr ? plansByDate.get(dateStr) : undefined;
+                            const today = new Date().toISOString().split('T')[0];
+                            const isToday = dateStr === today;
+                            
+                            return (
+                                <div
+                                    key={index}
+                                    onClick={() => handleDateClick(date)}
+                                    className={`p-3 border rounded-lg min-h-[120px] transition-all ${
+                                        date
+                                            ? 'cursor-pointer hover:border-indigo-400 hover:shadow-md bg-white dark:bg-slate-700/50'
+                                            : 'bg-slate-50 dark:bg-slate-800/30 cursor-default'
+                                    } ${isToday ? 'border-2 border-indigo-500 shadow-md' : 'border-slate-200 dark:border-slate-600'}`}>
+                                    <div className={`font-semibold mb-2 ${isToday ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                                        {date?.getDate()}
+                                    </div>
+                                    <div className="space-y-1">
+                                        {plans?.slice(0, 2).map((plan: LessonPlan) => (
+                                            <div key={plan.id} className="bg-gradient-to-r from-indigo-100 to-purple-100 dark:from-indigo-900/50 dark:to-purple-900/50 text-indigo-800 dark:text-indigo-200 p-1.5 rounded text-xs font-medium truncate border border-indigo-200 dark:border-indigo-700">
+                                                {plan.title}
+                                            </div>
+                                        ))}
+                                        {plans && plans.length > 2 && (
+                                            <div className="text-xs text-slate-600 dark:text-slate-400 font-semibold">+{plans.length - 2} more</div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            ) : (
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-md border border-slate-200 dark:border-slate-700">
+                    <div className="space-y-3">
+                        {filteredLessonPlans.map((plan: any) => {
+                            const planDate = new Date(plan.date);
+                            const today = new Date();
+                            const isPast = planDate < new Date(today.setHours(0, 0, 0, 0));
+                            const isToday = plan.date === new Date().toISOString().split('T')[0];
+                            
+                            return (
+                                <div
+                                    key={plan.id}
+                                    onClick={() => {
+                                        setSelectedDate(plan.date);
+                                        setPlanToEdit({ ...plan });
+                                        setIsModalOpen(true);
+                                    }}
+                                    className="p-4 border border-slate-200 dark:border-slate-600 rounded-lg hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer bg-gradient-to-r from-white to-slate-50 dark:from-slate-700 dark:to-slate-800">
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <h3 className="text-lg font-bold text-slate-800 dark:text-white">{plan.title}</h3>
+                                                {isToday && (
+                                                    <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-bold px-2 py-1 rounded-full border border-green-300 dark:border-green-700">
+                                                        TODAY
+                                                    </span>
+                                                )}
+                                                {isPast && !isToday && (
+                                                    <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 text-xs font-semibold px-2 py-1 rounded-full">
+                                                        Completed
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
+                                                <div className="flex items-center gap-1">
+                                                    <CalendarDaysIcon />
+                                                    <span>{planDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <ClipboardDocumentListIcon />
+                                                    <span>{plan.objectives?.length || 0} objectives</span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <BookOpenIcon />
+                                                    <span>{plan.activities?.length || 0} activities</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <ChevronRightIcon />
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={planToEdit?.id ? 'Edit Lesson Plan' : 'Create Lesson Plan'} size="3xl">
                 {planToEdit && (
