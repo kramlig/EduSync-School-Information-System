@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
-import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronLeftIcon, ChevronRightIcon, BuildingOfficeIcon } from './icons';
+import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronLeftIcon, ChevronRightIcon, BuildingOfficeIcon, CheckBadgeIcon } from './icons';
 import DepEdLogo from './DepEdLogo';
 
 interface SidebarProps {
@@ -47,6 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
       title: 'System',
       items: [
         { path: '/settings', label: 'Settings', icon: <CogIcon />, roles: ['admin'] },
+        { path: '/teacher-validation', label: 'Account Validation', icon: <CheckBadgeIcon />, roles: ['teacher'] },
       ]
     }
   ];
