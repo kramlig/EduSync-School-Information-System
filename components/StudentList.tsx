@@ -318,12 +318,9 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
 
   // Pagination Logic - now fully server-side
   const filteredAndPaginatedStudents = useMemo(() => {
-    // Apply client-side search filtering to the already paginated students
-    let filtered = visibleStudents.filter(student =>
-      student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-      student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-      (student.lrn && student.lrn.includes(debouncedSearchQuery))
-    );
+    // Start with visible students (already filtered by server-side search if applicable)
+    // Don't apply client-side search filter again - server already did that
+    let filtered = visibleStudents;
 
     // Apply status filter
     if (statusFilter !== 'all') {
@@ -353,7 +350,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     });
 
     return sorted;
-  }, [visibleStudents, debouncedSearchQuery, statusFilter, gradeFilter, sortBy, sections]);
+  }, [visibleStudents, statusFilter, gradeFilter, sortBy, sections]);
 
   // Calculate statistics
   const statistics = useMemo(() => {
