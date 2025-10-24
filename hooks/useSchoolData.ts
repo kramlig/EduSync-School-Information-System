@@ -678,23 +678,38 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             await waitForAuthReady();
             const db = getFirestoreInstance();
 
-            // Fetch all students (client-side search)
+            // Fetch all students for search (this gives us the full database to search from)
             const snapshot = await getDocs(collection(db, 'students'));
             const allStudents = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             })) as Student[];
 
-            // Client-side filtering
+            // Client-side filtering - search by name and LRN
+            console.log('[useSchoolData] Searching through', allStudents.length, 'students for:', trimmedQuery);
             const results = allStudents.filter(student => {
-                const fullName = `${student.lastName} ${student.firstName}`.toLowerCase();
+                // Check both name formats: full name field OR firstName/lastName combo
+                const fullName = student.name?.toLowerCase() || '';
+                const separateName = `${student.firstName || ''} ${student.lastName || ''}`.toLowerCase().trim();
                 const lrn = student.lrn?.toLowerCase() || '';
-                return fullName.includes(trimmedQuery) || lrn.includes(trimmedQuery);
+                
+                const matches = fullName.includes(trimmedQuery) || 
+                       separateName.includes(trimmedQuery) || 
+                       lrn.includes(trimmedQuery);
+                
+                if (matches && allStudents.indexOf(student) < 5) {
+                    console.log('[useSchoolData] Match found:', { name: student.name, fullName, separateName, lrn, query: trimmedQuery });
+                }
+                
+                return matches;
             });
 
             // Cache results
             setSearchCache(prev => new Map(prev).set(`students:${trimmedQuery}`, results));
-            console.log(`[useSchoolData] ✅ Found ${results.length} matching students`);
+            console.log(`[useSchoolData] ✅ Found ${results.length} matching students (will be filtered by authorized sections in component)`);
+            if (results.length > 0) {
+                console.log('[useSchoolData] Sample result:', { name: results[0].name, sectionId: results[0].sectionId });
+            }
             return results;
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Search error:', err);
