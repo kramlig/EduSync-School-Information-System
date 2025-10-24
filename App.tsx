@@ -34,6 +34,7 @@ const FormsLibrary = lazy(() => import('./components/forms/FormsLibrary'));
 const Form137Dashboard = lazy(() => import('./components/forms/Form137/Form137Dashboard'));
 const Form137Manager = lazy(() => import('./components/forms/Form137/Form137Manager'));
 const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard'));
+const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
 
 // Wrapper components to extract URL params
 const Form137ManagerWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear }) => {
@@ -345,6 +346,9 @@ const App: React.FC = () => {
                         <Route path="/settings" element={<SettingsView schoolData={schoolData} />} />
                         {staffSession.user.role === 'teacher' && (
                           <Route path="/teacher-validation" element={<TeacherValidationWizard session={staffSession} />} />
+                        )}
+                        {staffSession.user.role === 'admin' && (
+                          <Route path="/validation-results" element={<ValidationResultsDashboard />} />
                         )}
                     </>
                 )}
