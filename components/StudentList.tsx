@@ -382,14 +382,20 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
 
   const canManageStudents = ['admin', 'registrar'].includes(authUser.role);
 
-  // Get unique grade levels for filter
+  // Get unique grade levels for filter - ONLY from authorized sections
   const availableGrades = useMemo(() => {
-    const grades = new Set(sections.map(s => s.gradeLevel.toString()));
-    return Array.from(grades).sort();
-  }, [sections]);
+    // Filter sections based on authorization
+    let authorizedSections = sections;
+    if (authorizedSectionIds !== null) {
+      authorizedSections = sections.filter(s => authorizedSectionIds.has(s.id));
+    }
+    
+    const grades = new Set(authorizedSections.map(s => s.gradeLevel.toString()));
+    return Array.from(grades).sort((a, b) => parseInt(a) - parseInt(b));
+  }, [sections, authorizedSectionIds]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-6">
       {/* Enhanced Header with Gradient */}
       <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl shadow-lg p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -508,7 +514,9 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
               {searchQuery && !isSearching && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors z-10"
+                  title="Clear search"
+                  type="button"
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -524,6 +532,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
+              title="Filter by student status"
               className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
             >
               <option value="all">All Status</option>
@@ -541,6 +550,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             <select
               value={gradeFilter}
               onChange={(e) => setGradeFilter(e.target.value)}
+              title="Filter by grade level"
               className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
             >
               <option value="all">All Grades</option>
@@ -556,6 +566,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as 'name' | 'lrn' | 'grade')}
+              title="Sort students by"
               className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
             >
               <option value="name">Name</option>
