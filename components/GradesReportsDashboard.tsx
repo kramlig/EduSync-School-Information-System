@@ -53,6 +53,28 @@ const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session
       shadowColor: 'shadow-rose-500/25',
       roles: ['admin', 'principal', 'registrar'],
       stats: { label: 'Student Records', value: '567' }
+    },
+    {
+      id: 'school-forms',
+      title: 'School Forms (EBEIS)',
+      description: 'SF1 Enrollment, SF2 Attendance, SF9 Promotion - Government reporting forms',
+      route: '/grades/schoolforms',
+      icon: ChartBarIcon,
+      gradient: 'from-amber-600 via-orange-600 to-red-600',
+      shadowColor: 'shadow-amber-500/25',
+      roles: ['admin', 'principal', 'registrar'],
+      stats: { label: 'Reports Filed', value: '24' }
+    },
+    {
+      id: 'elln-assessment',
+      title: 'ELLN Assessment (K-3)',
+      description: 'Early Literacy and Numeracy assessments for Kindergarten to Grade 3',
+      route: '/grades/elln',
+      icon: BookOpenIcon,
+      gradient: 'from-indigo-600 via-blue-600 to-cyan-600',
+      shadowColor: 'shadow-indigo-500/25',
+      roles: ['admin', 'teacher', 'principal'],
+      stats: { label: 'Assessments', value: '189' }
     }
   ];
 

@@ -54,6 +54,10 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({ customItems, studentName, recor
     '/announcements': { label: 'Announcements', parent: '/' },
     '/core-values': { label: 'Core Values', parent: '/' },
     '/lesson-plans': { label: 'Lesson Plans', parent: '/' },
+    '/grades/schoolforms': { label: 'School Forms (EBEIS)', parent: '/grades' },
+    '/grades/schoolforms/sf1': { label: 'SF1 - Enrollment Record', parent: '/grades/schoolforms' },
+    '/grades/schoolforms/sf2': { label: 'SF2 - Daily Attendance Record', parent: '/grades/schoolforms' },
+    '/grades/schoolforms/sf9': { label: 'SF9 - Promotion/Retention Report', parent: '/grades/schoolforms' },
   });
 
   // Generate breadcrumb items from current path
