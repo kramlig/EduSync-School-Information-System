@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import DepEdLogo from './DepEdLogo';
 // Deterministic PDF generation: render each page to canvas, then compose into jsPDF
 import html2canvas from 'html2canvas';
@@ -42,9 +42,9 @@ const Th: React.FC<{ children?: React.ReactNode; className?: string, colSpan?: n
   <th className={`border border-black p-1 text-center font-bold bg-gray-100 text-[9px] ${className ?? ''}`} colSpan={colSpan} rowSpan={rowSpan}>{children}</th>
 );
 const InfoField: React.FC<{ label: string; value: React.ReactNode, className?: string }> = ({ label, value, className }) => (
-    <div className={`flex items-end ${className}`}>
+    <div className={`flex items-baseline ${className}`}>
         <span className="font-bold">{label}</span>
-        <span className="flex-1 border-b border-black text-center font-semibold">{value}</span>
+        <span className="flex-1 border-b border-black text-center font-semibold pb-1">{value}</span>
     </div>
 );
 
@@ -145,12 +145,46 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, 
     return filtered;
   }, [learningAreas, section, studentGrades]);
 
+  // Calculate final grade dynamically if not stored in database
+  const getFinalGrade = useCallback((grade: Grade | undefined): number | undefined => {
+    if (!grade) return undefined;
+    
+    // If stored finalGrade exists, use it
+    if (grade.finalGrade !== undefined) return grade.finalGrade;
+    
+    // Otherwise calculate it on-the-fly from quarterly grades
+    const quarters: ('q1' | 'q2' | 'q3' | 'q4')[] = ['q1', 'q2', 'q3', 'q4'];
+    const values: number[] = [];
+    
+    for (const q of quarters) {
+      const v = grade[q];
+      if (typeof v === 'number') {
+        values.push(v);
+      } else if (v && typeof v === 'object') {
+        // Handle composite subjects (e.g., MAPEH with sub-subjects)
+        const nums = Object.values(v as Record<string, any>).filter(n => typeof n === 'number') as number[];
+        if (nums.length) {
+          values.push(Math.round(nums.reduce((a, b) => a + b, 0) / nums.length));
+        }
+      }
+    }
+    
+    if (!values.length) return undefined;
+    return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+  }, []);
+
+  // Calculate remarks based on final grade
+  const getRemarks = useCallback((finalGrade: number | undefined): 'Passed' | 'Failed' | undefined => {
+    if (finalGrade === undefined) return undefined;
+    return finalGrade >= 75 ? 'Passed' : 'Failed';
+  }, []);
+
   const generalAverage = useMemo(() => {
-    const finalGrades = Array.from(studentGrades.values()).map((g: Grade) => g.finalGrade).filter((g): g is number => typeof g === 'number');
+    const finalGrades = Array.from(studentGrades.values()).map((g: Grade) => getFinalGrade(g)).filter((g): g is number => typeof g === 'number');
     if (finalGrades.length === 0) return null;
     const total = finalGrades.reduce((sum: number, grade: number) => sum + grade, 0);
     return (total / finalGrades.length).toFixed(2);
-  }, [studentGrades]);
+  }, [studentGrades, getFinalGrade]);
 
   const months = ['Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
   
@@ -273,10 +307,10 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, 
               
               <h3 className="font-bold text-center mb-1 text-xs mt-12">PARENTS / GUARDIAN'S SIGNATURE</h3>
               <div className="mt-8 space-y-10 p-2">
-                  <div className="flex items-end"><span className="w-24">1st Quarter</span><div className="flex-1 border-b border-black"></div></div>
-                  <div className="flex items-end"><span className="w-24">2nd Quarter</span><div className="flex-1 border-b border-black"></div></div>
-                  <div className="flex items-end"><span className="w-24">3rd Quarter</span><div className="flex-1 border-b border-black"></div></div>
-                  <div className="flex items-end"><span className="w-24">4th Quarter</span><div className="flex-1 border-b border-black"></div></div>
+                  <div className="flex items-baseline"><span className="w-24">1st Quarter</span><div className="flex-1 border-b border-black pb-1"></div></div>
+                  <div className="flex items-baseline"><span className="w-24">2nd Quarter</span><div className="flex-1 border-b border-black pb-1"></div></div>
+                  <div className="flex items-baseline"><span className="w-24">3rd Quarter</span><div className="flex-1 border-b border-black pb-1"></div></div>
+                  <div className="flex items-baseline"><span className="w-24">4th Quarter</span><div className="flex-1 border-b border-black pb-1"></div></div>
               </div>
             </div>
 
@@ -317,28 +351,28 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, 
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mt-8 text-[10px]">
-                    <div className="text-center"><div className="border-b border-black w-4/5 mx-auto font-bold pt-1">{principal?.name ?? ''}</div><p>Principal</p></div>
-                    <div className="text-center"><div className="border-b border-black w-4/5 mx-auto font-bold pt-1">{adviser?.name}</div><p>Teacher</p></div>
+                    <div className="text-center"><div className="border-b border-black w-4/5 mx-auto font-bold pb-1">{principal?.name ?? ''}</div><p>Principal</p></div>
+                    <div className="text-center"><div className="border-b border-black w-4/5 mx-auto font-bold pb-1">{adviser?.name}</div><p>Teacher</p></div>
                 </div>
 
                 <div className="mt-8 text-[10px]">
                     <h3 className="font-bold text-center">Certificate of Transfer</h3>
                      <div className="mt-2 space-y-1">
-                        <div className="flex items-end"><span className="w-28">Admitted to Grade:</span><span className="flex-1 border-b border-black"></span><span className="w-16 ml-2">Section:</span><span className="flex-1 border-b border-black"></span></div>
-                        <div className="flex items-end mt-2"><span className="w-44">Eligible for Admission to Grade:</span><span className="flex-1 border-b border-black"></span></div>
-                        <div className="flex items-end mt-2"><span className="w-16">Approved:</span><span className="flex-1 border-b border-black"></span></div>
+                        <div className="flex items-baseline"><span className="w-28">Admitted to Grade:</span><span className="flex-1 border-b border-black pb-1"></span><span className="w-16 ml-2">Section:</span><span className="flex-1 border-b border-black pb-1"></span></div>
+                        <div className="flex items-baseline mt-2"><span className="w-44">Eligible for Admission to Grade:</span><span className="flex-1 border-b border-black pb-1"></span></div>
+                        <div className="flex items-baseline mt-2"><span className="w-16">Approved:</span><span className="flex-1 border-b border-black pb-1"></span></div>
                     </div>
                      <div className="grid grid-cols-2 gap-4 mt-12">
-                       <div className="text-center"><div className="border-b border-black w-4/5 mx-auto"></div><p>Principal</p></div>
-                       <div className="text-center"><div className="border-b border-black w-4/5 mx-auto"></div><p>Teacher</p></div>
+                       <div className="text-center"><div className="border-b border-black w-4/5 mx-auto pb-1"></div><p>Principal</p></div>
+                       <div className="text-center"><div className="border-b border-black w-4/5 mx-auto pb-1"></div><p>Teacher</p></div>
                     </div>
                 </div>
                  <div className="mt-8 text-[10px]">
                     <h3 className="font-bold text-center">Cancellation of Eligibility to Transfer</h3>
                      <div className="mt-2 space-y-1">
-                        <div className="flex items-end"><span className="w-20">Admitted in:</span><span className="flex-1 border-b border-black"></span></div>
-                        <div className="flex items-end mt-4"><span className="w-10">Date:</span><span className="flex-1 border-b border-black mr-20"></span><span className="flex-1 border-b border-black"></span></div>
-                        <div className="flex items-end"><span className="w-10"></span><span className="flex-1 mr-20"></span><span className="flex-1 text-center">Principal</span></div>
+                        <div className="flex items-baseline"><span className="w-20">Admitted in:</span><span className="flex-1 border-b border-black pb-1"></span></div>
+                        <div className="flex items-baseline mt-4"><span className="w-10">Date:</span><span className="flex-1 border-b border-black mr-20 pb-1"></span><span className="flex-1 border-b border-black pb-1"></span></div>
+                        <div className="flex items-baseline"><span className="w-10"></span><span className="flex-1 mr-20"></span><span className="flex-1 text-center">Principal</span></div>
 
                     </div>
                 </div>
@@ -362,11 +396,13 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, 
                         <tbody>
                             {studentLearningAreas.map(la => {
                                 const grade = studentGrades.get(la.id);
+                                const finalGrade = getFinalGrade(grade);
+                                const remarks = grade?.remarks || getRemarks(finalGrade);
                                 return (<React.Fragment key={la.id}>
                                         <tr>
                                             <Td className="text-left font-bold">{la.name}</Td>
                                             <Td>{calculateQuarterAverage(grade?.q1)}</Td><Td>{calculateQuarterAverage(grade?.q2)}</Td><Td>{calculateQuarterAverage(grade?.q3)}</Td><Td>{calculateQuarterAverage(grade?.q4)}</Td>
-                                            <Td className="font-bold">{grade?.finalGrade ?? ''}</Td><Td className="font-bold">{grade?.remarks ?? ''}</Td>
+                                            <Td className="font-bold">{finalGrade ?? ''}</Td><Td className="font-bold">{remarks ?? ''}</Td>
                                         </tr>
                                         {la.isComposite && la.subSubjects?.map(sub => (
                                             <tr key={sub}>

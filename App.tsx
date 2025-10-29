@@ -8,6 +8,7 @@ import { useFirestoreSyncStatus } from './hooks/useFirestoreSyncStatus';
 import type { AuthUser, StudentUser, ParentUser } from './types';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import Breadcrumb from './components/Breadcrumb';
 import LoginScreen from './components/LoginScreen';
 import FullScreenLoader from './components/FullScreenLoader';
 import OfflineBanner from './components/OfflineBanner';
@@ -33,6 +34,10 @@ const ParentDashboard = lazy(() => import('./components/ParentDashboard'));
 const FormsLibrary = lazy(() => import('./components/forms/FormsLibrary'));
 const Form137Dashboard = lazy(() => import('./components/forms/Form137/Form137Dashboard'));
 const Form137Manager = lazy(() => import('./components/forms/Form137/Form137Manager'));
+const Form138Dashboard = lazy(() => import('./components/forms/Form138/Form138Dashboard'));
+const Form138View = lazy(() => import('./components/forms/Form138/Form138View'));
+const Form138Print = lazy(() => import('./components/forms/Form138/Form138Print'));
+const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDashboard'));
 const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard'));
 const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
 
@@ -318,7 +323,8 @@ const App: React.FC = () => {
             parentSelectedChildId={parentSelectedChildId}
             onParentChildChange={(id) => setParentSelectedChildId(id)}
           />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-100 dark:bg-slate-900 p-6">
+          <Breadcrumb />
+          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-100 dark:bg-slate-900 px-6 pb-6">
             <Suspense fallback={<FullScreenLoader message="Loading page..." />}>
               <Routes>
                 {session.type === 'staff' && (
@@ -332,7 +338,15 @@ const App: React.FC = () => {
                         <Route path="/forms/137" element={<Form137Dashboard />} />
                         <Route path="/forms/137/:studentId" element={<Form137ManagerWrapper schoolYear={settings.schoolYear} />} />
                         <Route path="/forms/137/new" element={<Form137CreateWrapper schoolYear={settings.schoolYear} />} />
-                        <Route path="/grades" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/forms/138" element={<Form138Dashboard />} />
+                        <Route path="/grades" element={<GradesReportsDashboard session={staffSession} />} />
+                        <Route path="/grades/entry" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/grades/form137" element={<Form137Dashboard />} />
+                        <Route path="/grades/form137/:studentId" element={<Form137ManagerWrapper schoolYear={settings.schoolYear} />} />
+                        <Route path="/grades/form137/new" element={<Form137CreateWrapper schoolYear={settings.schoolYear} />} />
+                        <Route path="/grades/form138" element={<Form138Dashboard />} />
+                        <Route path="/grades/form138/view/:studentId" element={<Form138View />} />
+                        <Route path="/grades/form138/print" element={<Form138Print />} />
                         <Route path="/gradebook" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values-gradebook" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
