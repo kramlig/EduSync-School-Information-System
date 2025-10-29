@@ -178,40 +178,55 @@ const FormsLibrary: React.FC<FormsLibraryProps> = ({ user }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-6">
-      {/* Header */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-purple-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-6">
+      {/* Premium Header with Glassmorphism */}
       <div className="max-w-7xl mx-auto mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-2">
-              📚 DepEd Forms Library
-            </h1>
-            <p className="text-lg text-slate-600 dark:text-slate-400">
-              Generate official DepEd-compliant forms and reports
-            </p>
-          </div>
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 dark:from-indigo-500/20 dark:via-purple-500/20 dark:to-pink-500/20 backdrop-blur-xl border border-white/20 dark:border-slate-700/50 p-8 shadow-2xl">
+          {/* Background decoration */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-indigo-500/20 to-purple-600/20 rounded-full blur-3xl -z-10"></div>
+          <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-purple-500/20 to-pink-600/20 rounded-full blur-3xl -z-10"></div>
           
-          {/* Quick Stats */}
-          <div className="hidden lg:flex gap-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
-                {stats.totalFormsThisMonth}
-              </div>
-              <div className="text-sm text-slate-600 dark:text-slate-400">This Month</div>
-            </div>
-            {stats.pendingForms > 0 && (
-              <div className="text-center">
-                <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">
-                  {stats.pendingForms}
+          <div className="flex items-center justify-between relative z-10">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/50 w-14 h-14 flex items-center justify-center">
+                  <ClipboardDocumentListIcon />
                 </div>
-                <div className="text-sm text-slate-600 dark:text-slate-400">Pending</div>
+                <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 dark:from-indigo-400 dark:via-purple-400 dark:to-pink-400">
+                  DepEd Forms Library
+                </h1>
               </div>
-            )}
+              <p className="text-lg text-slate-700 dark:text-slate-300 font-medium ml-1">
+                Generate official DepEd-compliant forms and reports with one click
+              </p>
+            </div>
+            
+            {/* Premium Quick Stats */}
+            <div className="hidden lg:flex gap-4">
+              <div className="px-6 py-4 rounded-xl bg-gradient-to-br from-white/60 to-white/40 dark:from-slate-800/60 dark:to-slate-800/40 backdrop-blur-sm border border-white/40 dark:border-slate-700/50 shadow-lg hover:scale-105 transition-transform duration-300">
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400">
+                    {stats.totalFormsThisMonth}
+                  </div>
+                  <div className="text-sm font-medium text-slate-600 dark:text-slate-400 mt-1">Generated This Month</div>
+                </div>
+              </div>
+              {stats.pendingForms > 0 && (
+                <div className="px-6 py-4 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 backdrop-blur-sm border border-amber-500/30 shadow-lg hover:scale-105 transition-transform duration-300">
+                  <div className="text-center">
+                    <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-orange-600 dark:from-amber-400 dark:to-orange-400 animate-pulse">
+                      {stats.pendingForms}
+                    </div>
+                    <div className="text-sm font-medium text-amber-700 dark:text-amber-300 mt-1">Pending Review</div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Forms Grid */}
+      {/* Premium Forms Grid */}
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {accessibleForms.map(form => {
@@ -221,50 +236,64 @@ const FormsLibrary: React.FC<FormsLibraryProps> = ({ user }) => {
               <a
                 key={form.id}
                 href={form.route}
-                className={`
-                  block p-6 rounded-xl border-2 transition-all duration-200
-                  ${colorClasses.bg} ${colorClasses.border} ${colorClasses.hover}
-                  hover:shadow-lg hover:scale-105
-                `}
+                className="group relative block"
               >
-                {/* Icon and Badge */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className={`p-3 rounded-lg ${colorClasses.badge}`}>
-                    <div className={colorClasses.icon}>
-                      {form.icon}
+                {/* Glassmorphism Card */}
+                <div className={`
+                  relative overflow-hidden p-6 rounded-2xl border-2 transition-all duration-300
+                  ${colorClasses.bg} ${colorClasses.border}
+                  backdrop-blur-sm shadow-lg
+                  hover:shadow-2xl hover:scale-[1.03] hover:-translate-y-1
+                `}>
+                  {/* Gradient overlay on hover */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/0 to-white/20 dark:from-white/0 dark:to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  
+                  {/* Animated glow effect */}
+                  <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${colorClasses.bg} blur-xl -z-10`}></div>
+                  
+                  <div className="relative z-10">
+                    {/* Icon and Badge */}
+                    <div className="flex items-start justify-between mb-5">
+                      <div className={`p-4 rounded-xl ${colorClasses.badge} shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                        <div className={`${colorClasses.icon} transform group-hover:rotate-6 transition-transform duration-300`}>
+                          {form.icon}
+                        </div>
+                      </div>
+                      {form.badge && (
+                        <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${colorClasses.badge} shadow-md border border-white/20`}>
+                          {form.badge}
+                        </span>
+                      )}
                     </div>
-                  </div>
-                  {form.badge && (
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${colorClasses.badge}`}>
-                      {form.badge}
-                    </span>
-                  )}
-                </div>
 
-                {/* Title */}
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-                  {form.title}
-                </h3>
+                    {/* Title */}
+                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-3 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-indigo-600 group-hover:to-purple-600 dark:group-hover:from-indigo-400 dark:group-hover:to-purple-400 transition-all duration-300">
+                      {form.title}
+                    </h3>
 
-                {/* Description */}
-                <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 line-clamp-2">
-                  {form.description}
-                </p>
+                    {/* Description */}
+                    <p className="text-sm text-slate-700 dark:text-slate-300 mb-5 line-clamp-2 leading-relaxed">
+                      {form.description}
+                    </p>
 
-                {/* Stats and Arrow */}
-                <div className="flex items-center justify-between">
-                  {form.stats && (
-                    <div className="text-sm">
-                      <span className="text-slate-500 dark:text-slate-400">
-                        {form.stats.label}:{' '}
-                      </span>
-                      <span className="font-bold text-slate-900 dark:text-white">
-                        {form.stats.value}
-                      </span>
+                    {/* Stats and Arrow */}
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-200/50 dark:border-slate-700/50">
+                      {form.stats && (
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm">
+                            <span className="text-slate-500 dark:text-slate-400 font-medium">
+                              {form.stats.label}:{' '}
+                            </span>
+                            <span className={`font-bold text-lg ${colorClasses.icon}`}>
+                              {form.stats.value}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      <div className={`${colorClasses.icon} transform group-hover:translate-x-1 transition-transform duration-300`}>
+                        <ChevronRightIcon />
+                      </div>
                     </div>
-                  )}
-                  <div className={colorClasses.icon}>
-                    <ChevronRightIcon />
                   </div>
                 </div>
               </a>
@@ -273,41 +302,75 @@ const FormsLibrary: React.FC<FormsLibraryProps> = ({ user }) => {
         </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* Premium Quick Actions */}
       <div className="max-w-7xl mx-auto mt-8">
-        <div className="bg-white dark:bg-slate-800 rounded-xl border-2 border-slate-200 dark:border-slate-700 p-6">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">
-            Quick Actions
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button className="px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium">
-              📄 Generate Report Card (Form 138)
-            </button>
-            <button className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
-              📊 Export EBEIS Forms
-            </button>
-            <button className="px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium">
-              📈 View Statistics
-            </button>
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white/60 to-white/40 dark:from-slate-800/60 dark:to-slate-800/40 backdrop-blur-xl border border-white/40 dark:border-slate-700/50 p-8 shadow-xl">
+          {/* Background decoration */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-500/10 to-purple-600/10 rounded-full blur-3xl -z-10"></div>
+          
+          <div className="relative z-10">
+            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 mb-6">
+              ⚡ Quick Actions
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <button className="group px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-500/50 hover:scale-105 transition-all duration-300 font-semibold text-left relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div className="relative z-10 flex items-center gap-3">
+                  <span className="text-2xl">📄</span>
+                  <span>Generate Report Card</span>
+                </div>
+              </button>
+              <button className="group px-6 py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl hover:shadow-lg hover:shadow-blue-500/50 hover:scale-105 transition-all duration-300 font-semibold text-left relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div className="relative z-10 flex items-center gap-3">
+                  <span className="text-2xl">📊</span>
+                  <span>Export EBEIS Forms</span>
+                </div>
+              </button>
+              <button className="group px-6 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:shadow-lg hover:shadow-green-500/50 hover:scale-105 transition-all duration-300 font-semibold text-left relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div className="relative z-10 flex items-center gap-3">
+                  <span className="text-2xl">📈</span>
+                  <span>View Statistics</span>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Information Banner */}
+      {/* Premium Information Banner */}
       <div className="max-w-7xl mx-auto mt-8">
-        <div className="bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-xl p-6">
-          <div className="flex items-start gap-4">
-            <div className="text-blue-600 dark:text-blue-400 text-2xl">ℹ️</div>
-            <div>
-              <h4 className="text-lg font-bold text-blue-900 dark:text-blue-100 mb-2">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-purple-500/10 dark:from-blue-500/20 dark:via-indigo-500/20 dark:to-purple-500/20 backdrop-blur-xl border-2 border-blue-200/50 dark:border-blue-700/50 p-8 shadow-xl">
+          {/* Decorative elements */}
+          <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-blue-500/20 to-indigo-600/20 rounded-full blur-3xl -z-10"></div>
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-indigo-500/20 to-purple-600/20 rounded-full blur-3xl -z-10"></div>
+          
+          <div className="flex items-start gap-6 relative z-10">
+            <div className="flex-shrink-0 w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-3xl shadow-lg shadow-blue-500/30">
+              ℹ️
+            </div>
+            <div className="flex-1">
+              <h4 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-300 dark:to-indigo-300 mb-3">
                 About DepEd Forms
               </h4>
-              <p className="text-blue-800 dark:text-blue-200 text-sm">
-                All forms generated by this system comply with DepEd Order No. 8, s. 2015 (Classroom Assessment), 
-                DepEd Order No. 21, s. 2019 (Grading System), and EBEIS Guidelines (Memorandum No. 160, s. 2012). 
+              <p className="text-blue-900 dark:text-blue-100 text-base leading-relaxed">
+                All forms generated by this system comply with <span className="font-semibold">DepEd Order No. 8, s. 2015</span> (Classroom Assessment), 
+                <span className="font-semibold"> DepEd Order No. 21, s. 2019</span> (Grading System), and <span className="font-semibold">EBEIS Guidelines</span> (Memorandum No. 160, s. 2012). 
                 Forms are automatically populated with data from the school information system and are ready for 
                 printing or digital submission.
               </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-semibold border border-blue-500/30">
+                  ✓ DepEd Compliant
+                </span>
+                <span className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs font-semibold border border-indigo-500/30">
+                  ✓ Auto-Populated
+                </span>
+                <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-700 dark:text-purple-300 text-xs font-semibold border border-purple-500/30">
+                  ✓ Print Ready
+                </span>
+              </div>
             </div>
           </div>
         </div>

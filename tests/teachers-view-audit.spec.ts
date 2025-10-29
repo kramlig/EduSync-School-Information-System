@@ -1,34 +1,46 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * TEACHERS VIEW AUDIT TEST
+ * TEACHERS VIEW COMPREHENSIVE AUDIT
  * 
- * Purpose: Comprehensive audit of Teachers view to identify data fetching issues
+ * Purpose: End-to-end audit of Teachers view functionality on PRODUCTION
+ * Modeled after Account Validation test structure
  * 
- * Tests:
- * 1. Navigation and loading
- * 2. Data presence and structure
- * 3. Teacher card rendering
- * 4. Search functionality
- * 5. Add/Edit teacher forms
- * 6. Console errors and warnings
- * 7. Network requests
+ * Test Coverage:
+ * 1. Page Load & Navigation
+ * 2. Data Fetching & Display
+ * 3. Search Functionality
+ * 4. Filter & Sort Operations
+ * 5. Add Teacher Modal
+ * 6. Edit Teacher Modal
+ * 7. Teacher Profile View
+ * 8. Responsive Design
+ * 9. Error Handling
+ * 10. Performance Metrics
+ * 
+ * Test Environment: PRODUCTION (https://edusync-sis.web.app)
+ * Test Account: pedro.reyes@edusync.edu / teacher123
  */
 
-test.describe('Teachers View - Comprehensive Audit', () => {
+test.describe('Teachers View - Production Audit', () => {
+  
+  // Constants
+  const PRODUCTION_URL = 'https://edusync-sis.web.app';
+  const TEST_EMAIL = 'pedro.reyes@edusync.edu';
+  const TEST_PASSWORD = 'teacher123';
   
   // Login helper
   async function login(page) {
-    console.log('[Test] 🔐 Logging in...');
-    await page.goto('http://localhost:5175/');
+    console.log('[Test] 🔐 Logging in to production...');
+    await page.goto(PRODUCTION_URL);
     
     // Fill login form
-    await page.fill('input[name="email"]', 'admin@school.edu');
-    await page.fill('input[name="password"]', 'password');
+    await page.fill('input[type="email"]', TEST_EMAIL);
+    await page.fill('input[type="password"]', TEST_PASSWORD);
     await page.click('button[type="submit"]');
     
-    // Wait for login to complete
-    await page.waitForSelector('[title="Online"], [title="Offline"]', { timeout: 15000 });
+    // Wait for dashboard to load
+    await page.getByRole('heading', { name: 'Dashboard' }).waitFor({ timeout: 30000 });
     console.log('[Test] ✅ Login successful');
   }
 

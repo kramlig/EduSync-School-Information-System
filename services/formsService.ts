@@ -27,6 +27,7 @@ import {
 import { getFirestoreInstance } from '../src/services/firestoreService';
 import type {
   AcademicHistory,
+  SchoolYearRecord,
   ReportCard,
   SchoolForm,
   ELLNAssessment,
@@ -50,37 +51,79 @@ const COLLECTIONS = {
  */
 export const Form137Service = {
   /**
-   * Get academic history for a specific student
+   * Get all academic history records
    */
-  async getByStudentId(studentId: string): Promise<AcademicHistory[]> {
+  async getAll(): Promise<AcademicHistory[]> {
+    try {
+      const q = query(collection(db, COLLECTIONS.FORM137));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as AcademicHistory));
+    } catch (error) {
+      console.error('Error fetching all Form 137 records:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get academic history for a specific student
+   * Returns ONE cumulative record (not array) per new Form 137 design
+   */
+  async getByStudentId(studentId: string): Promise<AcademicHistory | null> {
+    console.log('[Form137Service.getByStudentId] Fetching for:', studentId);
+    
     const q = query(
       collection(db, COLLECTIONS.FORM137),
       where('studentId', '==', studentId),
-      orderBy('schoolYear', 'desc')
+      limit(1) // Should only be one record per student
     );
     
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
+    
+    console.log('[Form137Service.getByStudentId] Snapshot empty?', snapshot.empty);
+    console.log('[Form137Service.getByStudentId] Docs count:', snapshot.docs.length);
+    
+    if (snapshot.empty) {
+      console.log('[Form137Service.getByStudentId] No record found');
+      return null;
+    }
+    
+    const doc = snapshot.docs[0];
+    const data = {
       id: doc.id,
       ...doc.data()
-    } as AcademicHistory));
+    } as AcademicHistory;
+    
+    console.log('[Form137Service.getByStudentId] Found record:', {
+      id: data.id,
+      studentName: data.studentName,
+      yearsCount: data.schoolYears?.length
+    });
+    
+    return data;
   },
 
   /**
    * Get academic history for a specific school year
    */
   async getBySchoolYear(schoolYear: string): Promise<AcademicHistory[]> {
-    const q = query(
-      collection(db, COLLECTIONS.FORM137),
-      where('schoolYear', '==', schoolYear),
-      orderBy('studentId', 'asc')
-    );
-    
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as AcademicHistory));
+    try {
+      const q = query(
+        collection(db, COLLECTIONS.FORM137),
+        where('schoolYear', '==', schoolYear)
+      );
+      
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as AcademicHistory));
+    } catch (error) {
+      console.error('Error fetching Form 137 records by school year:', error);
+      throw error;
+    }
   },
 
   /**
@@ -99,16 +142,132 @@ export const Form137Service = {
   },
 
   /**
-   * Create new academic history record
+   * Check if a Form 137 record already exists for a student
+   * In the new cumulative design, there should only be one Form 137 per student
+   */
+  async exists(studentId: string): Promise<string | null> {
+    try {
+      const q = query(
+        collection(db, COLLECTIONS.FORM137),
+        where('studentId', '==', studentId),
+        limit(1)
+      );
+      
+      const snapshot = await getDocs(q);
+      return snapshot.empty ? null : snapshot.docs[0].id;
+    } catch (error) {
+      console.error('Error checking Form 137 existence:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Create new academic history record with first school year
+   * Should only be called when student has no Form 137 yet
    */
   async create(data: Omit<AcademicHistory, 'id'>): Promise<string> {
+    console.log('[Form137Service.create] Creating Form 137 for:', data.studentName);
+    console.log('[Form137Service.create] Student ID:', data.studentId);
+    console.log('[Form137Service.create] School years:', data.schoolYears?.length);
+    
+    // Check if student already has a Form 137
+    const existingId = await this.exists(data.studentId);
+    
+    if (existingId) {
+      console.error('[Form137Service.create] Record already exists:', existingId);
+      throw new Error(
+        `A Form 137 record already exists for this student (${data.studentName}). ` +
+        `Use addSchoolYear() to add a new year instead of creating a new record.`
+      );
+    }
+    
+    console.log('[Form137Service.create] Adding document to Firestore...');
     const docRef = await addDoc(collection(db, COLLECTIONS.FORM137), {
       ...data,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
     
+    console.log('[Form137Service.create] ✅ Created with ID:', docRef.id);
     return docRef.id;
+  },
+
+  /**
+   * Add a new school year to an existing Form 137 record
+   */
+  async addSchoolYear(studentId: string, yearData: SchoolYearRecord): Promise<void> {
+    const existingRecord = await this.getByStudentId(studentId);
+    
+    if (!existingRecord) {
+      throw new Error(
+        `No Form 137 found for student ${studentId}. Create a new Form 137 first.`
+      );
+    }
+
+    // Check if this school year already exists
+    const yearExists = existingRecord.schoolYears.some(
+      yr => yr.schoolYear === yearData.schoolYear
+    );
+
+    if (yearExists) {
+      throw new Error(
+        `School year ${yearData.schoolYear} already exists in this student's Form 137. ` +
+        `Use updateSchoolYear() to update it instead.`
+      );
+    }
+
+    // Add new year to the array
+    const updatedYears = [...existingRecord.schoolYears, yearData];
+
+    // Update the document
+    const docRef = doc(db, COLLECTIONS.FORM137, existingRecord.id);
+    await updateDoc(docRef, {
+      schoolYears: updatedYears,
+      updatedAt: serverTimestamp(),
+      updatedBy: yearData.recordedBy
+    });
+  },
+
+  /**
+   * Update an existing school year in a Form 137 record
+   */
+  async updateSchoolYear(
+    studentId: string, 
+    schoolYear: string, 
+    yearData: Partial<SchoolYearRecord>
+  ): Promise<void> {
+    const existingRecord = await this.getByStudentId(studentId);
+    
+    if (!existingRecord) {
+      throw new Error(`No Form 137 found for student ${studentId}.`);
+    }
+
+    // Find the year index
+    const yearIndex = existingRecord.schoolYears.findIndex(
+      yr => yr.schoolYear === schoolYear
+    );
+
+    if (yearIndex === -1) {
+      throw new Error(
+        `School year ${schoolYear} not found in this student's Form 137.`
+      );
+    }
+
+    // Update the year data
+    const updatedYears = [...existingRecord.schoolYears];
+    updatedYears[yearIndex] = {
+      ...updatedYears[yearIndex],
+      ...yearData,
+      recordedAt: new Date().toISOString()
+    };
+
+    // Update the document
+    const docRef = doc(db, COLLECTIONS.FORM137, existingRecord.id);
+    await updateDoc(docRef, {
+      schoolYears: updatedYears,
+      updatedAt: serverTimestamp(),
+      updatedBy: yearData.recordedBy || existingRecord.updatedBy
+    });
   },
 
   /**
@@ -494,7 +653,8 @@ export async function getLatestReportCard(studentId: string): Promise<ReportCard
 
 /**
  * Utility function to get complete academic history for a student
+ * Returns the one cumulative Form 137 record for the student
  */
-export async function getCompleteAcademicHistory(studentId: string): Promise<AcademicHistory[]> {
+export async function getCompleteAcademicHistory(studentId: string): Promise<AcademicHistory | null> {
   return await Form137Service.getByStudentId(studentId);
 }

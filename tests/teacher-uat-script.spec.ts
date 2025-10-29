@@ -23,17 +23,18 @@ test.describe('Teacher UAT - Assignment Filtering', () => {
     await page.fill('input[type="password"]', 'teacher123');
     await page.click('button[type="submit"]');
     
-    // Wait for dashboard to load
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('text=Dashboard')).toBeVisible({ timeout: 10000 });
+  // Wait for the Dashboard heading to appear (disambiguate from sidebar link)
+  await page.getByRole('heading', { name: 'Dashboard' }).waitFor({ timeout: 30000 });
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({ timeout: 10000 });
   });
 
   test('TC001: Teacher should only see assigned grade level sections in dropdown', async ({ page }) => {
     console.log('\n=== TC001: Section Filtering ===');
     
-    // Navigate to Grades & Report
-    await page.click('text=Grades & Report');
-    await page.waitForLoadState('networkidle');
+  // Navigate to Grades & Report
+  await page.click('text=Grades & Report');
+  // Wait for Grades page heading to appear (avoid networkidle)
+  await page.getByRole('heading', { name: /Grades/i }).waitFor({ timeout: 30000 });
     
     // Check Overview & Analytics tab
     await page.click('text=Overview & Analytics');
@@ -66,9 +67,10 @@ test.describe('Teacher UAT - Assignment Filtering', () => {
   test('TC002: Total Students count should reflect only assigned students', async ({ page }) => {
     console.log('\n=== TC002: Student Count Validation ===');
     
-    // Navigate to Grades & Report
-    await page.click('text=Grades & Report');
-    await page.waitForLoadState('networkidle');
+  // Navigate to Grades & Report
+  await page.click('text=Grades & Report');
+  // Wait for Grades page heading to appear (avoid networkidle)
+  await page.getByRole('heading', { name: /Grades/i }).waitFor({ timeout: 30000 });
     
     // Check Overview & Analytics tab
     await page.click('text=Overview & Analytics');
@@ -103,9 +105,10 @@ test.describe('Teacher UAT - Assignment Filtering', () => {
   test('TC003: Class average should be calculated from assigned students only', async ({ page }) => {
     console.log('\n=== TC003: Class Average Validation ===');
     
-    // Navigate to Grades & Report
-    await page.click('text=Grades & Report');
-    await page.waitForLoadState('networkidle');
+  // Navigate to Grades & Report
+  await page.click('text=Grades & Report');
+  // Wait for Grades page heading to appear (avoid networkidle)
+  await page.getByRole('heading', { name: /Grades/i }).waitFor({ timeout: 30000 });
     
     // Check Overview & Analytics tab
     await page.click('text=Overview & Analytics');
@@ -124,9 +127,10 @@ test.describe('Teacher UAT - Assignment Filtering', () => {
   test('TC004: Report Cards tab should show filtered sections', async ({ page }) => {
     console.log('\n=== TC004: Report Cards Section Filter ===');
     
-    // Navigate to Grades & Report
-    await page.click('text=Grades & Report');
-    await page.waitForLoadState('networkidle');
+  // Navigate to Grades & Report
+  await page.click('text=Grades & Report');
+  // Wait for Grades page heading to appear (avoid networkidle)
+  await page.getByRole('heading', { name: /Grades/i }).waitFor({ timeout: 30000 });
     
     // Click Report Cards tab
     await page.click('text=Report Cards');
@@ -159,9 +163,10 @@ test.describe('Teacher UAT - Assignment Filtering', () => {
   test('TC005: Section selection should filter students correctly', async ({ page }) => {
     console.log('\n=== TC005: Section Selection Filtering ===');
     
-    // Navigate to Grades & Report
-    await page.click('text=Grades & Report');
-    await page.waitForLoadState('networkidle');
+  // Navigate to Grades & Report
+  await page.click('text=Grades & Report');
+  // Wait for Grades page heading to appear (avoid networkidle)
+  await page.getByRole('heading', { name: /Grades/i }).waitFor({ timeout: 30000 });
     
     // Click Overview & Analytics tab
     await page.click('text=Overview & Analytics');
@@ -212,7 +217,8 @@ test.describe('Teacher UAT - Assignment Filtering', () => {
     const studentListVisible = await page.locator('text=Student List').isVisible().catch(() => false);
     
     if (studentListVisible) {
-      await page.waitForLoadState('networkidle');
+      // Wait for student list to render
+      await page.getByRole('heading', { name: /Student List|Students/ }).first().waitFor({ timeout: 30000 }).catch(() => {});
       
       // Check if grade level filter exists
       const gradeFilter = page.locator('select').filter({ hasText: /Grade Level|Grade/ }).first();
@@ -239,9 +245,10 @@ test.describe('Teacher UAT - Assignment Filtering', () => {
   test('TC007: Deep Analytics should show teacher-specific data', async ({ page }) => {
     console.log('\n=== TC007: Deep Analytics Validation ===');
     
-    // Navigate to Grades & Report
-    await page.click('text=Grades & Report');
-    await page.waitForLoadState('networkidle');
+  // Navigate to Grades & Report
+  await page.click('text=Grades & Report');
+  // Wait for Grades page heading to appear (avoid networkidle)
+  await page.getByRole('heading', { name: /Grades/i }).waitFor({ timeout: 30000 });
     
     // Click Deep Analytics tab
     const deepAnalyticsTab = page.locator('text=Deep Analytics');
@@ -273,9 +280,10 @@ test.describe('Teacher UAT - Assignment Filtering', () => {
   test('TC008: Export functionality should export teacher data only', async ({ page }) => {
     console.log('\n=== TC008: Export Functionality ===');
     
-    // Navigate to Grades & Report
-    await page.click('text=Grades & Report');
-    await page.waitForLoadState('networkidle');
+  // Navigate to Grades & Report
+  await page.click('text=Grades & Report');
+  // Wait for Grades page heading to appear (avoid networkidle)
+  await page.getByRole('heading', { name: /Grades/i }).waitFor({ timeout: 30000 });
     
     // Check for export buttons
     const exportButtons = page.locator('button').filter({ hasText: /Export|Download|CSV|Excel|PDF/i });

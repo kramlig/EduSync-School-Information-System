@@ -6,9 +6,132 @@
  */
 
 // ============================================================================
-// FORM 137 - PERMANENT RECORD
+// FORM 137 - PERMANENT RECORD (CUMULATIVE)
 // ============================================================================
 
+/**
+ * School Transfer Record
+ * Tracks when student transfers between schools
+ */
+export interface SchoolTransferRecord {
+  fromSchoolName: string;
+  fromSchoolId?: string;
+  toSchoolName: string;
+  toSchoolId?: string;
+  transferDate: string;
+  gradeLevel: number;
+  reasonForTransfer?: string;
+  documentsTransferred?: string[]; // List of document types transferred
+  receivedBy?: string; // Name of receiving school official
+  transferCertificateNumber?: string;
+}
+
+/**
+ * Health Record
+ * Basic health information for the student
+ */
+export interface HealthRecord {
+  schoolYear: string;
+  dateOfExamination?: string;
+  height?: number; // in cm
+  weight?: number; // in kg
+  bmi?: number;
+  nutritionalStatus?: 'Normal' | 'Wasted' | 'Severely Wasted' | 'Overweight' | 'Obese';
+  visionScreening?: 'Normal' | 'Defective';
+  hearingScreening?: 'Normal' | 'Defective';
+  dentalStatus?: 'Good' | 'Fair' | 'Poor';
+  immunizationComplete?: boolean;
+  medicalConditions?: string; // Chronic conditions, allergies, etc.
+  remarks?: string;
+  examinedBy?: string; // School nurse/doctor name
+}
+
+/**
+ * Extracurricular Activity
+ * Clubs, sports, competitions, awards, etc.
+ */
+export interface ExtracurricularActivity {
+  schoolYear: string;
+  activityType: 'Club' | 'Sport' | 'Competition' | 'Award' | 'Community Service' | 'Leadership' | 'Other';
+  activityName: string;
+  role?: string; // President, Member, Team Captain, etc.
+  achievementLevel?: 'School' | 'Division' | 'Regional' | 'National' | 'International';
+  award?: string; // 1st Place, Gold Medal, etc.
+  dateAchieved?: string;
+  description?: string;
+}
+
+/**
+ * Eligibility Record
+ * For admission to high school or senior high school
+ */
+export interface EligibilityRecord {
+  eligibleForJuniorHigh?: boolean;
+  eligibleForSeniorHigh?: boolean;
+  eligibilityDate?: string;
+  
+  // Elementary Completion
+  elementaryCompletionCertificate?: string; // Certificate number
+  elementaryCompletionDate?: string;
+  
+  // Junior High Completion
+  juniorHighCompletionCertificate?: string;
+  juniorHighCompletionDate?: string;
+  
+  // Special Programs
+  specialProgramEligibility?: string[]; // STEM, ABM, HUMSS, etc.
+  honorsEligibility?: string; // With Honors, With High Honors, With Highest Honors
+  
+  // PEPT/ALS (Philippine Educational Placement Test / Alternative Learning System)
+  peptRating?: number;
+  peptPassingDate?: string;
+  alsRating?: string;
+  alsCompletionDate?: string;
+  
+  remarks?: string;
+}
+
+/**
+ * Certification Record
+ * Official certification by school officials
+ */
+export interface CertificationRecord {
+  certifiedBy?: string; // Principal name
+  certifiedByPosition?: string; // Position title
+  certifiedBySignature?: string; // Signature image URL or data
+  certificationDate?: string;
+  
+  registrarName?: string;
+  registrarSignature?: string;
+  registrarDate?: string;
+  
+  schoolSealImage?: string; // School seal image URL or data
+  
+  certificationText?: string; // Custom certification statement
+}
+
+/**
+ * Amendment Record
+ * Tracks corrections and updates to the permanent record
+ */
+export interface AmendmentRecord {
+  amendmentDate: string;
+  amendedBy: string; // User who made the change
+  amendedByPosition?: string;
+  approvedBy?: string; // Principal or authorized official
+  approvalDate?: string;
+  
+  fieldAmended: string; // Which field was changed
+  oldValue: string; // Previous value
+  newValue: string; // New value
+  reasonForAmendment: string;
+  supportingDocuments?: string[]; // References to supporting documents
+}
+
+/**
+ * Form 137 - Learner's Permanent Academic Record
+ * ONE record per student containing ALL school years
+ */
 export interface AcademicHistory {
   id: string;
   studentId: string;
@@ -16,40 +139,112 @@ export interface AcademicHistory {
   studentName: string;
   birthDate?: string;
   birthPlace?: string;
-  parentGuardian?: string;
   
-  schoolYear: string; // Format: "2024-2025"
-  gradeLevel: number; // 0 = Kinder, 1-12 = Grade levels
-  section: string;
-  adviserName: string;
-  schoolName: string;
-  schoolId: string;
+  // Family Background (Complete)
+  motherName?: string;
+  motherOccupation?: string;
+  fatherName?: string;
+  fatherOccupation?: string;
+  guardianName?: string;
+  guardianRelationship?: string;
+  guardianContactNumber?: string;
+  parentGuardian?: string; // Legacy field for backward compatibility
   
-  // Quarterly grades per subject
-  subjects: SubjectGrade[];
+  // Additional Student Info
+  sex?: 'Male' | 'Female';
+  age?: number;
+  motherTongue?: string; // MTB-MLE requirement
+  religion?: string;
+  indigenousPeople?: string; // IP affiliation if applicable
   
-  // General average
-  generalAverage: number;
+  // Address Information
+  completeAddress?: string;
+  barangay?: string;
+  municipality?: string;
+  province?: string;
   
-  // Attendance
-  daysOfSchool: number;
-  daysPresent: number;
+  // School information (can change if student transfers)
+  currentSchoolName: string;
+  currentSchoolId: string;
   
-  // Promotion status
-  promotionStatus: 'PROMOTED' | 'RETAINED' | 'CONDITIONAL';
-  remarks?: string; // Additional remarks/notes
+  // Transfer History
+  transferHistory?: SchoolTransferRecord[];
   
-  // Core values (behavior)
-  coreValues?: {
-    behavior?: Record<string, number>; // e.g., { "Respect": 95, "Excellence": 92 }
-    observedValues?: Record<string, ObservedValue>; // e.g., { "Respect": "SO", "Excellence": "AO" }
-  };
+  // Health Records
+  healthRecords?: HealthRecord[];
+  
+  // Extracurricular Activities
+  extracurricularActivities?: ExtracurricularActivity[];
+  
+  // Eligibility Information
+  eligibility?: EligibilityRecord;
+  
+  // Certification/Verification
+  certification?: CertificationRecord;
+  
+  // Document Verification
+  documentReferenceNumber?: string; // Unique identifier for verification
+  qrCodeData?: string; // QR code for digital verification
+  
+  // Amendment History
+  amendments?: AmendmentRecord[];
+  
+  // Array of academic years - ONE entry per school year
+  schoolYears: SchoolYearRecord[];
   
   // Metadata
   createdAt: string;
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
+}
+
+/**
+ * ONE school year entry in Form 137
+ * This is what gets added each year
+ */
+export interface SchoolYearRecord {
+  schoolYear: string; // Format: "2024-2025"
+  gradeLevel: number; // 0 = Kinder, 1-12 = Grade levels
+  section: string;
+  adviserName: string;
+  schoolName: string; // May differ if student transferred
+  schoolId: string;
+  
+  // Senior High School specific (Grades 11-12)
+  track?: 'Academic' | 'Technical-Vocational-Livelihood' | 'Sports' | 'Arts and Design';
+  strand?: 'STEM' | 'ABM' | 'HUMSS' | 'GAS' | 'TVL' | 'Sports' | 'Arts';
+  specializationSubject?: string; // For TVL strand
+  
+  // Quarterly grades per subject for THIS year
+  grades: SubjectGrade[];
+  
+  // General average for THIS year
+  generalAverage: number;
+  
+  // Attendance for THIS year
+  daysOfSchool: number;
+  daysPresent: number;
+  
+  // Promotion status for THIS year
+  promotionStatus: 'Promoted' | 'Retained' | 'Conditional';
+  remarks?: string;
+  
+  // Core values for THIS year
+  coreValues?: CoreValuesRecord[];
+  
+  // When this year's data was added/updated
+  recordedAt: string;
+  recordedBy: string;
+}
+
+/**
+ * Core values assessment for one school year
+ */
+export interface CoreValuesRecord {
+  valueName: string; // e.g., "Maka-Diyos", "Makatao"
+  rating: ObservedValue; // SO, AO, RO, NO
+  quarter?: 1 | 2 | 3 | 4; // Optional: if tracked per quarter
 }
 
 export interface QuarterGrade {
@@ -66,7 +261,7 @@ export interface SubjectGrade {
   q2?: number | QuarterGrade;
   q3?: number | QuarterGrade;
   q4?: number | QuarterGrade;
-  finalRating: number; // Final average for the school year
+  finalGrade: number; // Final average for the school year
   remarks: 'Passed' | 'Failed';
 }
 
