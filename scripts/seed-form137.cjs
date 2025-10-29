@@ -20,7 +20,7 @@ const db = admin.firestore();
 const sampleRecords = [
   {
     studentId: '1',
-    schoolYear: '2023-2024',
+    schoolYear: '2025-2026',
     gradeLevel: 7,
     section: 'Sampaguita',
     lrn: '123456789012',
@@ -114,7 +114,7 @@ const sampleRecords = [
   },
   {
     studentId: '2',
-    schoolYear: '2023-2024',
+    schoolYear: '2025-2026',
     gradeLevel: 7,
     section: 'Rosal',
     lrn: '123456789013',
@@ -208,7 +208,7 @@ const sampleRecords = [
   },
   {
     studentId: '3',
-    schoolYear: '2023-2024',
+    schoolYear: '2025-2026',
     gradeLevel: 8,
     section: 'Gumamela',
     lrn: '123456789014',
@@ -310,7 +310,7 @@ async function seedForm137Data() {
     let count = 0;
 
     for (const record of sampleRecords) {
-      const docRef = db.collection('form137').doc();
+      const docRef = db.collection('academicHistory').doc();
       batch.set(docRef, record);
       count++;
       console.log(`✅ Added record ${count}/${sampleRecords.length}: ${record.studentName} (${record.schoolYear})`);

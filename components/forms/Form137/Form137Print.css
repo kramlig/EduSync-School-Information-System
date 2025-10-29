@@ -1,0 +1,723 @@
+/**
+ * Print Stylesheet for Form 137 (DepEd-Compliant)
+ * Ensures proper formatting when printing Form 137
+ * 
+ * Usage: Import this in Form137View.tsx or add to global styles
+ */
+
+@media print {
+  /* ===========================
+     GENERAL PRINT SETTINGS
+     =========================== */
+  
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 1.5cm 2cm;
+  }
+
+  body {
+    background: white !important;
+    font-size: 11pt;
+    line-height: 1.4;
+    color: black !important;
+  }
+
+  /* ===========================
+     HIDE NON-PRINTABLE ELEMENTS
+     =========================== */
+  
+  /* Hide navigation, buttons, and controls */
+  .print\\:hidden,
+  button:not(.print-show),
+  nav,
+  aside,
+  .sidebar,
+  [data-print="hide"] {
+    display: none !important;
+  }
+
+  /* ===========================
+     FORM 137 CONTAINER
+     =========================== */
+  
+  #print-content {
+    width: 100%;
+    max-width: 100%;
+    padding: 0;
+    margin: 0;
+    background: white !important;
+  }
+
+  /* ===========================
+     FORM HEADER (DepEd Logo & Title)
+     =========================== */
+  
+  .form-header {
+    border: 2px solid black;
+    padding: 12pt;
+    margin-bottom: 16pt;
+    page-break-after: avoid;
+    background: white !important;
+  }
+
+  .deped-logo {
+    width: 60pt;
+    height: 60pt;
+  }
+
+  .form-title {
+    font-size: 14pt;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 6pt;
+    color: black !important;
+  }
+
+  .form-code {
+    font-size: 10pt;
+    text-align: center;
+    color: #333 !important;
+  }
+
+  /* ===========================
+     SCHOOL INFORMATION
+     =========================== */
+  
+  .school-info {
+    margin-bottom: 12pt;
+    padding: 8pt;
+    border: 1px solid #999;
+    background: white !important;
+  }
+
+  .school-name {
+    font-size: 12pt;
+    font-weight: bold;
+    color: black !important;
+  }
+
+  /* ===========================
+     SECTIONS & HEADINGS
+     =========================== */
+  
+  .section-header {
+    font-size: 12pt;
+    font-weight: bold;
+    margin-top: 16pt;
+    margin-bottom: 8pt;
+    padding-bottom: 4pt;
+    border-bottom: 2px solid black;
+    page-break-after: avoid;
+    color: black !important;
+    background: white !important;
+  }
+
+  .subsection-header {
+    font-size: 10pt;
+    font-weight: bold;
+    margin-top: 12pt;
+    margin-bottom: 6pt;
+    color: black !important;
+  }
+
+  /* ===========================
+     STUDENT INFORMATION
+     =========================== */
+  
+  .student-info {
+    margin-bottom: 16pt;
+    background: white !important;
+  }
+
+  .info-row {
+    display: flex;
+    margin-bottom: 6pt;
+    page-break-inside: avoid;
+  }
+
+  .info-label {
+    font-weight: bold;
+    min-width: 120pt;
+    color: black !important;
+  }
+
+  .info-value {
+    flex: 1;
+    color: black !important;
+  }
+
+  /* ===========================
+     GRADES TABLE
+     =========================== */
+  
+  .grades-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16pt;
+    page-break-inside: avoid;
+    background: white !important;
+  }
+
+  .grades-table thead {
+    background: #f0f0f0 !important;
+  }
+
+  .grades-table th {
+    font-size: 9pt;
+    font-weight: bold;
+    padding: 6pt 4pt;
+    border: 1px solid black;
+    text-align: center;
+    color: black !important;
+    background: #e0e0e0 !important;
+  }
+
+  .grades-table td {
+    font-size: 9pt;
+    padding: 4pt;
+    border: 1px solid #666;
+    text-align: center;
+    color: black !important;
+  }
+
+  .grades-table td.subject-name {
+    text-align: left;
+    font-weight: 500;
+  }
+
+  .grades-table td.final-grade {
+    font-weight: bold;
+  }
+
+  /* ===========================
+     ACADEMIC SUMMARY
+     =========================== */
+  
+  .academic-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8pt;
+    margin-bottom: 16pt;
+    page-break-inside: avoid;
+  }
+
+  .summary-card {
+    border: 1px solid black;
+    padding: 8pt;
+    text-align: center;
+    background: white !important;
+  }
+
+  .summary-label {
+    font-size: 8pt;
+    color: #333 !important;
+    margin-bottom: 4pt;
+  }
+
+  .summary-value {
+    font-size: 16pt;
+    font-weight: bold;
+    color: black !important;
+  }
+
+  .summary-subtitle {
+    font-size: 7pt;
+    color: #666 !important;
+    margin-top: 2pt;
+  }
+
+  /* ===========================
+     ATTENDANCE
+     =========================== */
+  
+  .attendance-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8pt;
+    margin-bottom: 16pt;
+    page-break-inside: avoid;
+  }
+
+  .attendance-card {
+    border: 1px solid black;
+    padding: 8pt;
+    text-align: center;
+    background: white !important;
+  }
+
+  /* ===========================
+     CORE VALUES
+     =========================== */
+  
+  .core-values-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8pt;
+    margin-bottom: 16pt;
+    page-break-inside: avoid;
+  }
+
+  .core-value-card {
+    border: 1px solid #666;
+    padding: 6pt;
+    text-align: center;
+    background: white !important;
+  }
+
+  .core-value-name {
+    font-size: 9pt;
+    font-weight: 600;
+    margin-bottom: 4pt;
+    color: black !important;
+  }
+
+  .core-value-rating {
+    font-size: 11pt;
+    font-weight: bold;
+    color: black !important;
+  }
+
+  /* ===========================
+     TRANSFER HISTORY
+     =========================== */
+  
+  .transfer-record {
+    margin-bottom: 8pt;
+    padding: 8pt;
+    border: 1px solid #999;
+    page-break-inside: avoid;
+    background: white !important;
+  }
+
+  /* ===========================
+     EXTRACURRICULAR ACTIVITIES
+     =========================== */
+  
+  .activity-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8pt;
+    margin-bottom: 16pt;
+  }
+
+  .activity-card {
+    border: 1px solid #999;
+    padding: 8pt;
+    page-break-inside: avoid;
+    background: white !important;
+  }
+
+  .activity-name {
+    font-size: 10pt;
+    font-weight: bold;
+    margin-bottom: 4pt;
+    color: black !important;
+  }
+
+  .activity-details {
+    font-size: 8pt;
+    color: #333 !important;
+  }
+
+  /* ===========================
+     HEALTH RECORDS
+     =========================== */
+  
+  .health-record {
+    margin-bottom: 12pt;
+    padding: 8pt;
+    border: 1px solid #999;
+    page-break-inside: avoid;
+    background: white !important;
+  }
+
+  .health-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6pt;
+  }
+
+  /* ===========================
+     ELIGIBILITY SECTION
+     =========================== */
+  
+  .eligibility-card {
+    margin-bottom: 12pt;
+    padding: 8pt;
+    border: 1px solid black;
+    page-break-inside: avoid;
+    background: white !important;
+  }
+
+  .eligibility-title {
+    font-size: 11pt;
+    font-weight: bold;
+    margin-bottom: 6pt;
+    color: black !important;
+  }
+
+  /* ===========================
+     CERTIFICATION SECTION
+     =========================== */
+  
+  .certification-section {
+    margin-top: 24pt;
+    page-break-inside: avoid;
+    background: white !important;
+  }
+
+  .certification-text {
+    text-align: center;
+    margin-bottom: 20pt;
+    font-size: 10pt;
+    line-height: 1.6;
+    color: black !important;
+  }
+
+  .signatures-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24pt;
+    margin-top: 20pt;
+  }
+
+  .signature-block {
+    text-align: center;
+  }
+
+  .signature-line {
+    margin-top: 40pt;
+    padding-top: 4pt;
+    border-top: 1.5pt solid black;
+    font-weight: bold;
+    color: black !important;
+  }
+
+  .signature-title {
+    font-size: 9pt;
+    color: #333 !important;
+    margin-top: 2pt;
+  }
+
+  .signature-date {
+    font-size: 8pt;
+    color: #666 !important;
+    margin-top: 4pt;
+  }
+
+  /* Signature image */}
+  .signature-image {
+    height: 48pt;
+    margin-bottom: 8pt;
+  }
+
+  /* School seal */
+  .school-seal {
+    height: 72pt;
+    margin: 16pt auto;
+    display: block;
+    opacity: 0.6;
+  }
+
+  /* ===========================
+     DOCUMENT VERIFICATION
+     =========================== */
+  
+  .document-verification {
+    margin-top: 16pt;
+    padding: 8pt;
+    border: 1px solid #999;
+    text-align: center;
+    background: white !important;
+  }
+
+  .reference-number {
+    font-family: 'Courier New', monospace;
+    font-size: 10pt;
+    font-weight: bold;
+    color: black !important;
+  }
+
+  .qr-code {
+    width: 60pt;
+    height: 60pt;
+    margin: 8pt auto;
+  }
+
+  /* ===========================
+     AMENDMENT HISTORY
+     =========================== */
+  
+  .amendment-record {
+    margin-bottom: 8pt;
+    padding: 6pt;
+    border: 1px solid #999;
+    font-size: 8pt;
+    page-break-inside: avoid;
+    background: white !important;
+  }
+
+  .amendment-field {
+    font-weight: bold;
+    color: black !important;
+  }
+
+  .amendment-old {
+    text-decoration: line-through;
+    color: #666 !important;
+  }
+
+  .amendment-new {
+    font-weight: bold;
+    color: black !important;
+  }
+
+  /* ===========================
+     BADGES & LABELS
+     =========================== */
+  
+  .badge {
+    display: inline-block;
+    padding: 2pt 6pt;
+    font-size: 8pt;
+    font-weight: 600;
+    border: 1px solid black;
+    border-radius: 2pt;
+    background: white !important;
+    color: black !important;
+  }
+
+  /* ===========================
+     PAGE BREAKS
+     =========================== */
+  
+  .page-break-before {
+    page-break-before: always;
+  }
+
+  .page-break-after {
+    page-break-after: always;
+  }
+
+  .page-break-avoid {
+    page-break-inside: avoid;
+  }
+
+  /* ===========================
+     MULTI-YEAR RECORDS
+     =========================== */
+  
+  /* If multiple years, each year starts on new page */
+  .school-year-record {
+    page-break-before: auto;
+  }
+
+  .school-year-record:not(:first-child) {
+    page-break-before: always;
+  }
+
+  /* ===========================
+     WATERMARK (SECURITY)
+     =========================== */
+  
+  .watermark {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    font-size: 72pt;
+    font-weight: bold;
+    color: rgba(0, 0, 0, 0.05) !important;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  /* ===========================
+     PAGE NUMBERS (Footer)
+     =========================== */
+  
+  @page {
+    @bottom-center {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #666;
+    }
+  }
+
+  /* ===========================
+     UTILITY CLASSES
+     =========================== */
+  
+  .text-center-print {
+    text-align: center !important;
+  }
+
+  .font-bold-print {
+    font-weight: bold !important;
+  }
+
+  .uppercase-print {
+    text-transform: uppercase !important;
+  }
+
+  .no-margin-print {
+    margin: 0 !important;
+  }
+
+  .no-padding-print {
+    padding: 0 !important;
+  }
+
+  /* ===========================
+     FORCE BLACK TEXT
+     =========================== */
+  
+  * {
+    color: black !important;
+  }
+
+  /* Override any gradient or color text */
+  .bg-clip-text,
+  .text-transparent {
+    -webkit-background-clip: initial !important;
+    background-clip: initial !important;
+    color: black !important;
+  }
+
+  /* ===========================
+     SIMPLIFY BORDERS
+     =========================== */
+  
+  .border,
+  .border-2,
+  .border-t,
+  .border-b {
+    border-color: black !important;
+  }
+
+  /* Remove fancy gradients and shadows */
+  .shadow,
+  .shadow-lg,
+  .shadow-xl {
+    box-shadow: none !important;
+  }
+
+  .backdrop-blur,
+  .backdrop-blur-xl {
+    backdrop-filter: none !important;
+  }
+
+  .bg-gradient-to-br,
+  .bg-gradient-to-r {
+    background: white !important;
+  }
+
+  /* ===========================
+     DEPED OFFICIAL HEADER
+     =========================== */
+  
+  .deped-header {
+    text-align: center;
+    margin-bottom: 16pt;
+    page-break-after: avoid;
+  }
+
+  .deped-header img {
+    width: 60pt;
+    height: 60pt;
+    margin: 0 auto 8pt;
+  }
+
+  .deped-title {
+    font-size: 11pt;
+    font-weight: bold;
+    margin-bottom: 2pt;
+    color: black !important;
+  }
+
+  .deped-subtitle {
+    font-size: 9pt;
+    color: #333 !important;
+  }
+
+  /* ===========================
+     FORM SPECIFIC PRINT RULES
+     =========================== */
+  
+  /* Hide year selector when printing */
+  .year-selector {
+    display: none !important;
+  }
+
+  /* Hide back button */
+  .back-button {
+    display: none !important;
+  }
+
+  /* Hide edit/action buttons */
+  .form-actions {
+    display: none !important;
+  }
+
+  /* Hide metadata section (created/updated info) */
+  .record-metadata {
+    display: none !important;
+  }
+
+  /* Show only print-relevant sections */
+  .print-only {
+    display: block !important;
+  }
+
+  /* ===========================
+     RESPONSIVE GRID TO TABLE
+     =========================== */
+  
+  /* Convert grid layouts to table-like structure for better printing */
+  .grid {
+    display: block !important;
+  }
+
+  .grid > * {
+    display: block !important;
+    margin-bottom: 6pt;
+  }
+}
+
+/* ===========================
+   PRINT BUTTON STYLES (SCREEN)
+   =========================== */
+
+@media screen {
+  .print-button {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 12px 24px;
+    background: #4f46e5;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s;
+    z-index: 1000;
+  }
+
+  .print-button:hover {
+    background: #4338ca;
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+  }
+
+  .print-button:active {
+    transform: translateY(0);
+  }
+}
