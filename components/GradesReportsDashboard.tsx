@@ -1,7 +1,6 @@
 ﻿import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  ChevronRightIcon, 
   BookOpenIcon, 
   ClipboardDocumentListIcon, 
   ChartBarIcon,
@@ -106,13 +105,6 @@ const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-violet-600/10 via-purple-600/5 to-blue-600/10"></div>
         <div className="relative px-6 pt-8 pb-6">
-          {/* Breadcrumb Navigation */}
-          <nav className="flex items-center space-x-2 text-sm mb-6">
-            <span className="text-slate-500 hover:text-slate-700 cursor-pointer transition-colors">Dashboard</span>
-            <ChevronRightIcon />
-            <span className="text-slate-900 font-medium">Grades & Reports</span>
-          </nav>
-
           {/* Hero Section */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
             <div className="mb-6 lg:mb-0">
