@@ -72,8 +72,14 @@ const DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG: Record<string, number> = {
  * CRITICAL: Pass collectionsToFetch=[] to prevent any subscriptions (e.g., login screen)
  * This saves resources and prevents unnecessary fetching before authentication
  */
+// Control logging level for performance - DISABLE ALL to stop infinite logging
+const ENABLE_CACHE_LOGS = false;        // Cache/Server logs (📦/📡)
+const ENABLE_SUCCESS_LOGS = false;      // Collection success logs (✅)
+const ENABLE_SUBSCRIPTION_LOGS = false; // Subscription setup logs (📡 Setting up)
+const ENABLE_DEBUG_LOGS = false;        // Debug and progress logs (📊)
+
 export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
-    console.log('[useSchoolData] 🚀 Hook initializing (Firestore subscriptions)...', { collectionsToFetch });
+    // console.log('[useSchoolData] 🚀 Hook initializing (Firestore subscriptions)...', { collectionsToFetch });
 
     // ===== STATE MANAGEMENT =====
     // Collections state
@@ -123,12 +129,16 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         const shouldInitialize = collectionsToFetch === undefined || collectionsToFetch.length > 0;
         
         if (!shouldInitialize) {
-            console.log('[useSchoolData] ⏸️ Subscriptions skipped - empty collectionsToFetch array (likely login screen)');
+            if (ENABLE_DEBUG_LOGS) {
+                console.log('[useSchoolData] ⏸️ Subscriptions skipped - empty collectionsToFetch array (likely login screen)');
+            }
             setLoading(false); // Ensure loading is false when not initializing
             return; // Early exit from useEffect (this is allowed!)
         }
         
-        console.log('[useSchoolData] 📡 Setting up subscriptions...');
+        if (ENABLE_SUBSCRIPTION_LOGS) {
+            console.log('[useSchoolData] 📡 Setting up subscriptions...');
+        }
         
         const unsubscribers: (() => void)[] = [];
         let isInitialLoad = true;
@@ -137,11 +147,15 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
         const checkAllLoaded = () => {
             loadedCollections++;
-            console.log(`[useSchoolData] 📊 Loaded ${loadedCollections}/${totalCollections} collections`);
+            if (ENABLE_DEBUG_LOGS) {
+                console.log(`[useSchoolData] 📊 Loaded ${loadedCollections}/${totalCollections} collections`);
+            }
             if (loadedCollections >= totalCollections && isInitialLoad) {
                 setLoading(false);
                 isInitialLoad = false;
-                console.log('[useSchoolData] ✅ Initial load complete');
+                if (ENABLE_DEBUG_LOGS) {
+                    console.log('[useSchoolData] ✅ Initial load complete');
+                }
             }
         };
 
@@ -164,7 +178,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
             // ===== STUDENTS SUBSCRIPTION =====
             if (shouldFetch('students')) {
-                console.log('[useSchoolData] 👥 Subscribing to students...');
+                if (ENABLE_SUBSCRIPTION_LOGS) {
+                    console.log('[useSchoolData] 👥 Subscribing to students...');
+                }
                 
                 const studentsQuery = query(
                     collection(db, 'students'),
@@ -176,11 +192,13 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                     { includeMetadataChanges: true }, // CRITICAL: Detect cache vs server
                     (snapshot) => {
                         const fromCache = snapshot.metadata.fromCache;
-                        console.log(
-                            fromCache 
-                                ? '📦 [students] Data from CACHE' 
-                                : '📡 [students] Data from SERVER'
-                        );
+                        if (ENABLE_CACHE_LOGS) {
+                            console.log(
+                                fromCache 
+                                    ? '📦 [students] Data from CACHE' 
+                                    : '📡 [students] Data from SERVER'
+                            );
+                        }
 
                         const studentsData = snapshot.docs.map(doc => ({
                             id: doc.id,
@@ -197,7 +215,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                             setHasMoreStudents(false);
                         }
 
-                        console.log(`[useSchoolData] ✅ Students updated: ${studentsData.length} documents`);
+                        if (ENABLE_SUCCESS_LOGS) {
+                            console.log(`[useSchoolData] ✅ Students updated: ${studentsData.length} documents`);
+                        }
                         checkAllLoaded();
                     },
                     (err) => {
@@ -208,25 +228,29 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 );
 
                 unsubscribers.push(unsubStudents);
-            } else {
-                console.log('[useSchoolData] ⏭️ Skipping students (not in collectionsToFetch)');
+                } else {
+                if (ENABLE_SUBSCRIPTION_LOGS) {
+                    console.log('[useSchoolData] ⏭️ Skipping students (not in collectionsToFetch)');
+                }
                 checkAllLoaded();
             }
 
             // ===== TEACHERS SUBSCRIPTION =====
             if (shouldFetch('teachers')) {
-                console.log('[useSchoolData] 👨‍🏫 Subscribing to teachers...');
-                
-                const unsubTeachers = onSnapshot(
+                if (ENABLE_SUBSCRIPTION_LOGS) {
+                    console.log('[useSchoolData] 👨‍🏫 Subscribing to teachers...');
+                }                const unsubTeachers = onSnapshot(
                     collection(db, 'teachers'),
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         const fromCache = snapshot.metadata.fromCache;
-                        console.log(
-                            fromCache 
-                                ? '📦 [teachers] Data from CACHE' 
-                                : '📡 [teachers] Data from SERVER'
-                        );
+                        if (ENABLE_CACHE_LOGS) {
+                            console.log(
+                                fromCache 
+                                    ? '📦 [teachers] Data from CACHE' 
+                                    : '📡 [teachers] Data from SERVER'
+                            );
+                        }
 
                         const teachersData = snapshot.docs.map(doc => ({
                             id: doc.id,
@@ -234,7 +258,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         })) as Teacher[];
 
                         setTeachers(teachersData);
-                        console.log(`[useSchoolData] ✅ Teachers updated: ${teachersData.length} documents`);
+                        if (ENABLE_SUCCESS_LOGS) {
+                            console.log(`[useSchoolData] ✅ Teachers updated: ${teachersData.length} documents`);
+                        }
                         checkAllLoaded();
                     },
                     (err) => {
@@ -246,20 +272,28 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
                 unsubscribers.push(unsubTeachers);
             } else {
-                console.log('[useSchoolData] ⏭️ Skipping teachers (not in collectionsToFetch)');
+                if (ENABLE_SUBSCRIPTION_LOGS) {
+                    console.log('[useSchoolData] ⏭️ Skipping teachers (not in collectionsToFetch)');
+                }
                 checkAllLoaded();
             }
 
             // ===== PARENTS SUBSCRIPTION =====
             if (shouldFetch('parents')) {
-                console.log('[useSchoolData] 👪 Subscribing to parents...');
+                if (ENABLE_SUBSCRIPTION_LOGS) {
+                    console.log('[useSchoolData] 👪 Subscribing to parents...');
+                }
                 const unsubParents = onSnapshot(
                     collection(db, 'parents'),
                     { includeMetadataChanges: true },
                     (snapshot) => {
-                        console.log(snapshot.metadata.fromCache ? '📦 [parents] CACHE' : '📡 [parents] SERVER');
+                        if (ENABLE_CACHE_LOGS) {
+                            console.log(snapshot.metadata.fromCache ? '📦 [parents] CACHE' : '📡 [parents] SERVER');
+                        }
                         setParents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Parent[]);
-                        console.log(`[useSchoolData] ✅ Parents: ${snapshot.docs.length} docs`);
+                        if (ENABLE_SUCCESS_LOGS) {
+                            console.log(`[useSchoolData] ✅ Parents: ${snapshot.docs.length} docs`);
+                        }
                         checkAllLoaded();
                     },
                     (err) => {
@@ -275,14 +309,20 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
             // ===== SECTIONS SUBSCRIPTION =====
             if (shouldFetch('sections')) {
-                console.log('[useSchoolData] 📚 Subscribing to sections...');
+                if (ENABLE_SUBSCRIPTION_LOGS) {
+                    console.log('[useSchoolData] 📚 Subscribing to sections...');
+                }
                 const unsubSections = onSnapshot(
                     collection(db, 'sections'),
                     { includeMetadataChanges: true },
                     (snapshot) => {
-                        console.log(snapshot.metadata.fromCache ? '📦 [sections] CACHE' : '📡 [sections] SERVER');
+                        if (ENABLE_CACHE_LOGS) {
+                            console.log(snapshot.metadata.fromCache ? '📦 [sections] CACHE' : '📡 [sections] SERVER');
+                        }
                         setSections(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Section[]);
-                        console.log(`[useSchoolData] ✅ Sections: ${snapshot.docs.length} docs`);
+                        if (ENABLE_SUCCESS_LOGS) {
+                            console.log(`[useSchoolData] ✅ Sections: ${snapshot.docs.length} docs`);
+                        }
                         checkAllLoaded();
                     },
                     (err) => {
@@ -298,12 +338,16 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
             // ===== LEARNING AREAS SUBSCRIPTION =====
             if (shouldFetch('learningAreas')) {
-                console.log('[useSchoolData] 📖 Subscribing to learningAreas...');
+                if (ENABLE_SUBSCRIPTION_LOGS) {
+                    console.log('[useSchoolData] 📖 Subscribing to learningAreas...');
+                }
                 const unsubLearningAreas = onSnapshot(
                     collection(db, 'learningAreas'),
                     { includeMetadataChanges: true },
                     (snapshot) => {
-                        console.log(snapshot.metadata.fromCache ? '📦 [learningAreas] CACHE' : '📡 [learningAreas] SERVER');
+                        if (ENABLE_CACHE_LOGS) {
+                            console.log(snapshot.metadata.fromCache ? '📦 [learningAreas] CACHE' : '📡 [learningAreas] SERVER');
+                        }
                         setLearningAreas(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LearningArea[]);
                         console.log(`[useSchoolData] ✅ Learning Areas: ${snapshot.docs.length} docs`);
                         checkAllLoaded();
@@ -326,7 +370,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                     collection(db, 'grades'),
                     { includeMetadataChanges: true },
                     (snapshot) => {
-                        console.log(snapshot.metadata.fromCache ? '📦 [grades] CACHE' : '📡 [grades] SERVER');
+                        if (ENABLE_CACHE_LOGS) {
+                            console.log(snapshot.metadata.fromCache ? '📦 [grades] CACHE' : '📡 [grades] SERVER');
+                        }
                         setGrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Grade[]);
                         console.log(`[useSchoolData] ✅ Grades: ${snapshot.docs.length} docs`);
                         checkAllLoaded();
@@ -349,7 +395,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                     collection(db, 'coreValues'),
                     { includeMetadataChanges: true },
                     (snapshot) => {
-                        console.log(snapshot.metadata.fromCache ? '📦 [coreValues] CACHE' : '📡 [coreValues] SERVER');
+                        if (ENABLE_CACHE_LOGS) {
+                            console.log(snapshot.metadata.fromCache ? '📦 [coreValues] CACHE' : '📡 [coreValues] SERVER');
+                        }
                         setCoreValues(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CoreValue[]);
                         console.log(`[useSchoolData] ✅ Core Values: ${snapshot.docs.length} docs`);
                         checkAllLoaded();
@@ -612,7 +660,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             clearTimeout(loadingTimeout);
             unsubscribers.forEach(unsub => unsub());
         };
-    }, [shouldFetch]); // Re-subscribe if collectionsToFetch changes
+    }, [collectionsToFetch]); // Re-subscribe if collectionsToFetch changes
 
     // ===== PAGINATION: Fetch More Students =====
     const fetchMoreStudents = useCallback(async () => {
@@ -663,16 +711,22 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     // ===== SEARCH: Students =====
     const searchStudents = useCallback(async (searchQuery: string): Promise<Student[]> => {
         const trimmedQuery = searchQuery.trim().toLowerCase();
-        if (!trimmedQuery) return students;
+        console.log('[useSchoolData] 🔍 searchStudents called with:', searchQuery, '→ trimmed:', trimmedQuery);
+        
+        if (!trimmedQuery) {
+            console.log('[useSchoolData] Empty query, returning all students:', students.length);
+            return students;
+        }
 
-        // Check cache
-        if (searchCache.has(`students:${trimmedQuery}`)) {
-            console.log('[useSchoolData] 📦 Returning cached student search results');
-            return searchCache.get(`students:${trimmedQuery}`);
+        // Check cache (v2: includes email field)
+        const cacheKey = `students:v2:${trimmedQuery}`;
+        if (searchCache.has(cacheKey)) {
+            const cached = searchCache.get(cacheKey)!;
+            console.log('[useSchoolData] 📦 Returning cached student search results:', cached.length, 'students');
+            return cached;
         }
 
         setIsSearching(true);
-        console.log('[useSchoolData] 🔍 Searching students for:', trimmedQuery);
 
         try {
             await waitForAuthReady();
@@ -684,32 +738,22 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 id: doc.id,
                 ...doc.data()
             })) as Student[];
-
-            // Client-side filtering - search by name and LRN
-            console.log('[useSchoolData] Searching through', allStudents.length, 'students for:', trimmedQuery);
+            
             const results = allStudents.filter(student => {
-                // Check both name formats: full name field OR firstName/lastName combo
+                // Check all possible name formats
                 const fullName = student.name?.toLowerCase() || '';
                 const separateName = `${student.firstName || ''} ${student.lastName || ''}`.toLowerCase().trim();
+                const email = student.email?.toLowerCase() || '';
                 const lrn = student.lrn?.toLowerCase() || '';
                 
-                const matches = fullName.includes(trimmedQuery) || 
+                return fullName.includes(trimmedQuery) || 
                        separateName.includes(trimmedQuery) || 
+                       email.includes(trimmedQuery) ||
                        lrn.includes(trimmedQuery);
-                
-                if (matches && allStudents.indexOf(student) < 5) {
-                    console.log('[useSchoolData] Match found:', { name: student.name, fullName, separateName, lrn, query: trimmedQuery });
-                }
-                
-                return matches;
             });
 
-            // Cache results
-            setSearchCache(prev => new Map(prev).set(`students:${trimmedQuery}`, results));
-            console.log(`[useSchoolData] ✅ Found ${results.length} matching students (will be filtered by authorized sections in component)`);
-            if (results.length > 0) {
-                console.log('[useSchoolData] Sample result:', { name: results[0].name, sectionId: results[0].sectionId });
-            }
+            // Cache results (v2: includes email field)
+            setSearchCache(prev => new Map(prev).set(`students:v2:${trimmedQuery}`, results));
             return results;
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Search error:', err);
@@ -749,7 +793,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             });
 
             setSearchCache(prev => new Map(prev).set(`teachers:${trimmedQuery}`, results));
-            console.log(`[useSchoolData] ✅ Found ${results.length} matching teachers`);
+            if (ENABLE_SUCCESS_LOGS) {
+                console.log(`[useSchoolData] ✅ Found ${results.length} matching teachers`);
+            }
             return results;
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Search error:', err);
@@ -789,7 +835,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             });
 
             setSearchCache(prev => new Map(prev).set(`parents:${trimmedQuery}`, results));
-            console.log(`[useSchoolData] ✅ Found ${results.length} matching parents`);
+            if (ENABLE_SUCCESS_LOGS) {
+                console.log(`[useSchoolData] ✅ Found ${results.length} matching parents`);
+            }
             return results;
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Search error:', err);
@@ -801,7 +849,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
     // ===== REFRESH (Manual) =====
     const refresh = useCallback(() => {
-        console.log('[useSchoolData] 🔄 Manual refresh requested (subscriptions auto-update)');
+        if (ENABLE_DEBUG_LOGS) {
+            console.log('[useSchoolData] 🔄 Manual refresh requested (subscriptions auto-update)');
+        }
         // Subscriptions auto-update, but we can clear cache
         setSearchCache(new Map());
     }, []);
@@ -1719,3 +1769,4 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         deleteAnnouncement,
     };
 }
+
