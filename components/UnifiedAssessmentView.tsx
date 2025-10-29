@@ -19,7 +19,7 @@ interface UnifiedAssessmentViewProps {
   forceStudentId?: string;
 }
 
-type TabType = 'overview' | 'academic-gradebook' | 'core-values-gradebook' | 'report-cards' | 'deep-analytics';
+type TabType = 'overview' | 'academic-gradebook' | 'core-values-gradebook' | 'deep-analytics';
 type FilterType = 'all' | 'honor' | 'needs-improvement' | 'incomplete';
 
 const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolData, session, forceStudentId }) => {
@@ -1065,12 +1065,29 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
     { id: 'overview' as TabType, label: 'Overview & Analytics', icon: '📊' },
     { id: 'academic-gradebook' as TabType, label: 'Academic Gradebook', icon: '📚' },
     { id: 'core-values-gradebook' as TabType, label: 'Core Values Gradebook', icon: '🌟' },
-    { id: 'report-cards' as TabType, label: 'Report Cards', icon: '📄' },
+    // Report Cards tab hidden - use dedicated Form 138 dashboard instead
+    // { id: 'report-cards' as TabType, label: 'Report Cards', icon: '📄' },
     { id: 'deep-analytics' as TabType, label: 'Deep Analytics', icon: '🔬' }
   ];
 
   return (
     <div className="space-y-6">
+      {/* Report Cards Notice Banner */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+        <div className="flex-shrink-0">
+          <svg className="w-6 h-6 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-blue-900">📄 Looking for Report Cards (Form 138)?</h3>
+          <p className="text-sm text-blue-800 mt-1">
+            Report card generation has been moved to a dedicated dashboard for better organization. 
+            Please visit <strong>Grades & Reports → Form 138 Dashboard</strong> to generate and print official DepEd Form 138 report cards.
+          </p>
+        </div>
+      </div>
+
       {/* Tab Navigation */}
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-2">
         <div className="flex flex-wrap gap-2">
