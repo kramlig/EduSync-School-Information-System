@@ -37,6 +37,10 @@ const Form137Manager = lazy(() => import('./components/forms/Form137/Form137Mana
 const Form138Dashboard = lazy(() => import('./components/forms/Form138/Form138Dashboard'));
 const Form138View = lazy(() => import('./components/forms/Form138/Form138View'));
 const Form138Print = lazy(() => import('./components/forms/Form138/Form138Print'));
+const SchoolFormsDashboard = lazy(() => import('./components/forms/SchoolForms/SchoolFormsDashboard'));
+const SF1Dashboard = lazy(() => import('./components/forms/SchoolForms/SF1Dashboard'));
+const SF2Dashboard = lazy(() => import('./components/forms/SchoolForms/SF2Dashboard'));
+const SF9Dashboard = lazy(() => import('./components/forms/SchoolForms/SF9Dashboard'));
 const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDashboard'));
 const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard'));
 const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
@@ -347,6 +351,10 @@ const App: React.FC = () => {
                         <Route path="/grades/form138" element={<Form138Dashboard />} />
                         <Route path="/grades/form138/view/:studentId" element={<Form138View />} />
                         <Route path="/grades/form138/print" element={<Form138Print />} />
+                        <Route path="/grades/schoolforms" element={<SchoolFormsDashboard session={staffSession} />} />
+                        <Route path="/grades/schoolforms/sf1" element={<SF1Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/grades/schoolforms/sf2" element={<SF2Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/grades/schoolforms/sf9" element={<SF9Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
                         <Route path="/gradebook" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values-gradebook" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
