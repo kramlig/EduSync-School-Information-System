@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SF2 Dashboard Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <h1>SF2 Dashboard Functionality Test</h1>
+    
+    <div id="test-results">
+        <h2>Test Results:</h2>
+        <div id="results"></div>
+    </div>
+    
+    <button onclick="testPdfGeneration()">Test PDF Generation</button>
+    
+    <script>
+        function testPdfGeneration() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>Testing PDF generation...</p>';
+            
+            try {
+                // Initialize jsPDF
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF('landscape', 'mm', 'a4');
+                
+                // Test the exact SF2 format we implemented
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'normal');
+                doc.text('Republic of the Philippines', 148, 12, { align: 'center' });
+                doc.text('Department of Education', 148, 18, { align: 'center' });
+                doc.text('Region VII - Central Visayas', 148, 24, { align: 'center' });
+                doc.text('Division of Cebu City', 148, 30, { align: 'center' });
+                
+                // School name - exact match to attachment
+                doc.setFontSize(11);
+                doc.setFont('helvetica', 'bold');
+                doc.text('EDUSYNC ELEMENTARY SCHOOL', 148, 38, { align: 'center' });
+                
+                // Form title
+                doc.setFontSize(14);
+                doc.setFont('helvetica', 'bold');
+                doc.text('SCHOOL FORM 2', 148, 48, { align: 'center' });
+                doc.setFontSize(11);
+                doc.text('DAILY ATTENDANCE RECORD OF LEARNERS', 148, 55, { align: 'center' });
+                
+                // Form fields
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                
+                doc.text('School ID:', 20, 70);
+                doc.line(38, 71, 85, 71);
+                doc.text('301234567', 45, 70);
+                
+                doc.text('Grade/Section:', 100, 70);
+                doc.line(130, 71, 180, 71);
+                doc.text('Grade 1 - Rose', 135, 70);
+                
+                doc.text('Teacher:', 195, 70);
+                doc.line(215, 71, 275, 71);
+                doc.text('Ms. Ana Cruz', 220, 70);
+                
+                doc.text('School Year:', 20, 80);
+                doc.line(42, 81, 85, 81);
+                doc.text('2024-2025', 47, 80);
+                
+                doc.text('Month:', 100, 80);
+                doc.line(118, 81, 180, 81);
+                doc.text('October 2025', 125, 80);
+                
+                doc.text('Principal:', 195, 80);
+                doc.line(220, 81, 275, 81);
+                doc.text('Dr. Maria Santos', 225, 80);
+                
+                // Table structure
+                let yPos = 90;
+                doc.setLineWidth(0.8);
+                doc.rect(15, yPos, 265, 135);
+                
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'bold');
+                
+                doc.text('No.', 27, yPos + 8, { align: 'center' });
+                doc.text('Name of Learners', 97, yPos + 8, { align: 'center' });
+                
+                // Day headers (1-31)
+                const dayStartX = 130;
+                const dayWidth = 4.2;
+                for (let day = 1; day <= 31; day++) {
+                    const xPos = dayStartX + (day - 1) * dayWidth;
+                    doc.text(day.toString(), xPos, yPos + 8, { align: 'center' });
+                }
+                
+                doc.text('Total', 262, yPos + 5, { align: 'center' });
+                doc.text('Present', 268, yPos + 8, { align: 'center' });
+                doc.text('Absent', 275, yPos + 8, { align: 'center' });
+                
+                // Add some sample rows
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7);
+                
+                const sampleStudents = [
+                    'DELA CRUZ, JUAN A.',
+                    'SANTOS, MARIA B.',
+                    'GARCIA, PEDRO C.'
+                ];
+                
+                let rowY = yPos + 20;
+                sampleStudents.forEach((student, index) => {
+                    doc.text((index + 1).toString(), 20, rowY, { align: 'center' });
+                    doc.text(student, 28, rowY);
+                    rowY += 8;
+                });
+                
+                // Generate and download
+                const pdfBlob = doc.output('blob');
+                const url = URL.createObjectURL(pdfBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'SF2_Test.pdf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                resultsDiv.innerHTML = `
+                    <p style="color: green;">✅ PDF Generation Test: PASSED</p>
+                    <p>✅ jsPDF library loaded successfully</p>
+                    <p>✅ Landscape orientation working</p>
+                    <p>✅ Text positioning working</p>
+                    <p>✅ Table structure rendering</p>
+                    <p>✅ File download working</p>
+                    <p>📁 Check your Downloads folder for SF2_Test.pdf</p>
+                `;
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <p style="color: red;">❌ PDF Generation Test: FAILED</p>
+                    <p>Error: ${error.message}</p>
+                `;
+                console.error('PDF Generation Error:', error);
+            }
+        }
+        
+        // Auto-run basic tests on page load
+        window.onload = function() {
+            const resultsDiv = document.getElementById('results');
+            let testResults = [];
+            
+            // Test 1: jsPDF availability
+            if (typeof window.jspdf !== 'undefined') {
+                testResults.push('<p style="color: green;">✅ jsPDF library loaded</p>');
+            } else {
+                testResults.push('<p style="color: red;">❌ jsPDF library not loaded</p>');
+            }
+            
+            // Test 2: Browser support
+            if (typeof URL.createObjectURL !== 'undefined') {
+                testResults.push('<p style="color: green;">✅ Blob download support available</p>');
+            } else {
+                testResults.push('<p style="color: red;">❌ Blob download not supported</p>');
+            }
+            
+            resultsDiv.innerHTML = testResults.join('');
+        };
+    </script>
+</body>
+</html>

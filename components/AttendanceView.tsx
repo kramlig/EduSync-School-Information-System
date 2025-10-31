@@ -503,9 +503,9 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
 
       <div ref={tableScrollRef} className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-x-auto">
         <table className="min-w-full leading-normal text-sm border-collapse">
-          <thead className="sticky top-0 z-30">
-            <tr className="bg-slate-100 dark:bg-slate-900">
-              <th className="sticky left-0 z-30 bg-slate-100 dark:bg-slate-900 px-3 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider w-1/4">Student Name</th>
+          <thead className="sticky top-0 z-30 backdrop-blur-sm">
+            <tr className="bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-900 dark:to-slate-800 shadow-md">
+              <th className="sticky left-0 z-30 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-900 dark:to-slate-800 backdrop-blur-sm px-3 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider w-1/4 shadow-md">Student Name</th>
               {daysInMonth.map(day => {
                 const key = day.toISOString().split('T')[0];
                 return (
@@ -536,8 +536,29 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
               const studentRecord = attendanceRecords.find(r => r.studentId === student.id);
               const totals = calculateTotals(student.id);
               return (
-              <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                <td className="sticky left-0 z-10 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 px-3 py-3 border-b border-slate-200 dark:border-slate-700 font-medium text-slate-900 dark:text-white whitespace-nowrap">{student.name}</td>
+              <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors duration-150">
+                <td className="sticky left-0 z-10 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 backdrop-blur-sm px-3 py-3 border-b border-slate-200 dark:border-slate-700 font-medium text-slate-900 dark:text-white whitespace-nowrap shadow-sm">
+                  <div className="flex items-center gap-3">
+                    {/* Student Avatar */}
+                    <div className="relative flex-shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                        {student.firstName?.[0]?.toUpperCase() || ''}{student.lastName?.[0]?.toUpperCase() || ''}
+                      </div>
+                    </div>
+                    {/* Student Name */}
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-slate-900 dark:text-white">{student.name}</span>
+                      {student.sectionId && (() => {
+                        const section = sections.find((sec: any) => sec.id === student.sectionId);
+                        return section?.name ? (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            {section.name}
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
+                  </div>
+                </td>
                 {daysInMonth.map(day => {
                     const dateStr = day.toISOString().split('T')[0];
                     const key = `${student.id}-${dateStr}`;
@@ -545,16 +566,26 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
                     const status = localAttendance.get(key) || studentRecord?.dailyStatus[dateStr];
                     const isUpdating = updatingCells.has(key);
                     
+                    const statusLabel = status ? STATUS_MAP[status as AttendanceStatus]?.label : '';
                     return (
                         <td 
                             key={dateStr} 
                             onClick={() => handleAttendanceChange(student.id, day, status)}
-                            className={`relative border-b border-l border-slate-200 dark:border-slate-700 text-center font-bold text-xs ${!isReadOnly && 'cursor-pointer'} ${getStatusColor(status)} ${isUpdating ? 'opacity-60' : ''}`}
+                            title={statusLabel ? `${statusLabel} - Click to change` : 'Not marked - Click to mark'}
+                            className={`group relative border-b border-l border-slate-200 dark:border-slate-700 text-center font-bold text-base ${!isReadOnly && 'cursor-pointer hover:ring-2 hover:ring-inset hover:ring-indigo-500 hover:shadow-lg hover:scale-105'} ${getStatusColor(status)} ${isUpdating ? 'opacity-60' : ''} transition-all duration-150 py-3 px-2`}
                         >
-                            {status}
+                            <div className={`flex items-center justify-center h-full ${status ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-600'}`}>
+                              {status || '-'}
+                            </div>
                             {isUpdating && (
-                              <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/50 flex items-center justify-center">
-                                <div className="w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                              <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/50 flex items-center justify-center backdrop-blur-sm">
+                                <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                              </div>
+                            )}
+                            {/* Hover tooltip */}
+                            {!isReadOnly && !isUpdating && (
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity duration-200 z-50">
+                                {statusLabel ? `${statusLabel} - Click to change` : 'Click to mark'}
                               </div>
                             )}
                         </td>
