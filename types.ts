@@ -184,6 +184,7 @@ export type AttendanceStatus = 'P' | 'A' | 'L' | 'E'; // Present, Absent, Late, 
 export interface AttendanceRecord {
     studentId: string;
     dailyStatus: Record<string, AttendanceStatus>; // "YYYY-MM-DD": "P"
+    remarks?: Record<string, string>; // "YYYY-MM-DD": "Remark text"
 }
 
 export interface SchoolSettings {

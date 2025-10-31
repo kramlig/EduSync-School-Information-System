@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SF2 Format Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <h1>SF2 Format Test - Click to Generate PDF</h1>
+    <button onclick="generateTestPDF()">Generate Test SF2 PDF</button>
+    
+    <div style="margin-top: 20px;">
+        <h3>Expected Format (from your PDF):</h3>
+        <ul>
+            <li>Header: DepEd logos, "School Form 2 (SF2) Daily Attendance Report of Learners"</li>
+            <li>Form fields: School ID, School Year, Report Month (top row), Name of School, Grade Level, Section (bottom row)</li>
+            <li>Table: No. column, LEARNER'S NAME column, Day columns 1-31, Total/ABSENT/TARDY columns</li>
+            <li>24 numbered student rows with grid boxes for each day</li>
+        </ul>
+    </div>
+
+    <script>
+        function generateTestPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('landscape', 'mm', 'a4');
+            
+            // EXACT FORMAT FROM YOUR PDF ATTACHMENTS
+            
+            // === HEADER SECTION ===
+            // Left DepEd Logo placeholder
+            doc.setDrawColor(0);
+            doc.circle(40, 30, 15);
+            doc.setFontSize(8);
+            doc.text('DepEd', 35, 31);
+            doc.text('Logo', 35, 35);
+            
+            // Main Title
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text('School Form 2 (SF2) Daily Attendance Report of Learners', 148, 25, { align: 'center' });
+            
+            // Subtitle
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'italic');
+            doc.text('(This replaced Form 1, Form 2 & SF3 Form 4 - Absenteeism and Dropout Profile)', 148, 32, { align: 'center' });
+            
+            // Right DepEd Logo placeholder
+            doc.rect(250, 15, 35, 25);
+            doc.setFontSize(10);
+            doc.text('DepEd', 260, 26);
+            doc.text('Logo', 260, 31);
+            
+            // === FORM FIELDS SECTION ===
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            
+            // TOP ROW - School ID, School Year, Report Month
+            doc.text('School ID', 20, 55);
+            doc.rect(20, 57, 65, 8);
+            doc.text('301234567', 25, 62);
+            
+            doc.text('School Year', 95, 55);
+            doc.rect(95, 57, 65, 8);
+            doc.text('2024-2025', 100, 62);
+            
+            doc.text('Report for the Month of', 170, 55);
+            doc.rect(170, 57, 75, 8);
+            doc.text('October 2025', 175, 62);
+            
+            // BOTTOM ROW - Name of School, Grade Level, Section
+            doc.text('Name of School', 20, 75);
+            doc.rect(20, 77, 160, 8);
+            doc.text('EDUSYNC ELEMENTARY SCHOOL', 25, 82);
+            
+            doc.text('Grade Level', 190, 75);
+            doc.rect(190, 77, 50, 8);
+            doc.text('Grade 1', 195, 82);
+            
+            doc.text('Section', 250, 75);
+            doc.rect(250, 77, 40, 8);
+            doc.text('Rose', 255, 82);
+            
+            // === ATTENDANCE TABLE ===
+            let tableY = 95;
+            
+            // Main table border
+            doc.setLineWidth(1);
+            doc.rect(20, tableY, 270, 130);
+            
+            // TABLE HEADERS
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'bold');
+            
+            // No. column header
+            doc.text('No.', 35, tableY + 15, { align: 'center' });
+            
+            // LEARNER'S NAME header
+            doc.text('LEARNER\'S NAME', 90, tableY + 15, { align: 'center' });
+            doc.text('(Last Name, First Name, Middle Name)', 90, tableY + 20, { align: 'center' });
+            
+            // Day headers (1st row for date, 2nd row for Day: M,T,W,TH,F)
+            doc.setFontSize(7);
+            doc.text('(1st row for date, 2nd row for Day: M,T,W,TH,F)', 180, tableY + 10);
+            
+            // Day numbers 1-31 in proper grid
+            let dayStartX = 150;
+            let dayWidth = 4;
+            for (let day = 1; day <= 31; day++) {
+                let dayX = dayStartX + ((day - 1) * dayWidth);
+                doc.setFontSize(6);
+                doc.text(day.toString(), dayX + 2, tableY + 15, { align: 'center' });
+                
+                // Vertical lines for day columns
+                doc.setLineWidth(0.2);
+                doc.line(dayX, tableY, dayX, tableY + 130);
+            }
+            
+            // Summary columns
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Total for the', 275, tableY + 8);
+            doc.text('Month', 275, tableY + 12);
+            doc.text('ABSENT', 275, tableY + 18);
+            doc.text('TARDY', 275, tableY + 22);
+            
+            // REMARKS section
+            doc.text('REMARKS (If DROPPED OUT,', 290, tableY + 8);
+            doc.text('please refer to legend number 2.', 290, tableY + 12);
+            doc.text('If TRANSFERRED IN/OUT, write the name of', 290, tableY + 16);
+            doc.text('School.)', 290, tableY + 20);
+            
+            // Header separator line
+            doc.setLineWidth(0.5);
+            doc.line(20, tableY + 25, 350, tableY + 25);
+            
+            // Major column separators
+            doc.setLineWidth(1);
+            doc.line(50, tableY, 50, tableY + 130); // After No.
+            doc.line(145, tableY, 145, tableY + 130); // After Name
+            doc.line(274, tableY, 274, tableY + 130); // Before Total
+            doc.line(320, tableY, 320, tableY + 130); // Before Remarks
+            
+            // === STUDENT ROWS ===
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            
+            // Sample student names for testing
+            const sampleStudents = [
+                'DELA CRUZ, JUAN CARLOS',
+                'SANTOS, MARIA ELENA',
+                'GARCIA, PEDRO MIGUEL',
+                'REYES, ANA SOFIA',
+                'MENDOZA, CARLOS ANTONIO'
+            ];
+            
+            let rowY = tableY + 35;
+            for (let i = 1; i <= 24; i++) {
+                // Row number
+                doc.setFontSize(9);
+                doc.text(i.toString(), 35, rowY, { align: 'center' });
+                
+                // Student name (sample data for first 5 rows)
+                if (sampleStudents[i - 1]) {
+                    doc.setFontSize(8);
+                    doc.text(sampleStudents[i - 1], 55, rowY);
+                }
+                
+                // Day attendance grid boxes
+                for (let day = 1; day <= 31; day++) {
+                    let dayX = dayStartX + ((day - 1) * dayWidth);
+                    doc.setLineWidth(0.1);
+                    doc.rect(dayX, rowY - 2, dayWidth, 4);
+                }
+                
+                // Horizontal row separator
+                doc.setLineWidth(0.2);
+                doc.line(20, rowY + 2.5, 350, rowY + 2.5);
+                
+                rowY += 5;
+            }
+            
+            // Bottom section - MALE/FEMALE totals
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.text('MALE | TOTAL Per Day', 25, tableY + 135);
+            doc.text('FEMALE | TOTAL Per Day', 25, tableY + 142);
+            
+            // Prepared by and Noted by sections
+            doc.setFontSize(9);
+            doc.text('Prepared by:', 25, tableY + 155);
+            doc.line(25, tableY + 165, 100, tableY + 165);
+            doc.text('(Signature of Teacher and Printed Name)', 25, tableY + 170);
+            
+            doc.text('Noted by:', 150, tableY + 155);
+            doc.line(150, tableY + 165, 225, tableY + 165);
+            doc.text('(Signature of School Head and Printed Name)', 150, tableY + 170);
+            
+            // Save the PDF
+            doc.save('SF2_Format_Test.pdf');
+            
+            // Show confirmation
+            alert('Test PDF generated! Check your downloads folder for "SF2_Format_Test.pdf" and compare with your official format.');
+        }
+    </script>
+</body>
+</html>
