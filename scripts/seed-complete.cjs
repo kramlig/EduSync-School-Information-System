@@ -87,23 +87,29 @@ async function seedCompleteData() {
 
     // Step 2: Create admin user in Auth and Teachers collection
     console.log('\n👤 Creating admin user...');
+    
+    // Try to create in Firebase Auth (optional, may fail in emulator)
     try {
-      // Try to delete existing user first
       try {
         await auth.deleteUser('admin123');
       } catch (e) {
         // User doesn't exist, that's fine
       }
       
-      // Create in Firebase Auth
       await auth.createUser({
         uid: 'admin123',
         email: 'admin@edusync.local',
         password: 'admin123',
         displayName: 'System Admin'
       });
-      
-      // IMPORTANT: Create in teachers collection for login to work!
+      console.log('✅ Created admin in Firebase Auth');
+    } catch (err) {
+      console.log('⚠️  Auth emulator not available (this is OK):', err.message);
+    }
+    
+    // CRITICAL: Create in Firestore collections (MUST succeed)
+    try {
+      // Create in teachers collection
       await db.collection('teachers').doc('admin123').set({
         id: 'admin123',
         email: 'admin@edusync.local',
@@ -117,7 +123,7 @@ async function seedCompleteData() {
         updatedAt: new Date()
       });
       
-      // CRITICAL: Also create in users collection (required for authentication)
+      // Create in users collection (required for authentication)
       await db.collection('users').doc('admin123').set({
         id: 'admin123',
         email: 'admin@edusync.local',
@@ -127,11 +133,12 @@ async function seedCompleteData() {
         mock: false
       });
       
-      console.log('✅ Admin user created in Auth, teachers, and users collections');
+      console.log('✅ Admin user created in Firestore');
       console.log('   📧 Email: admin@edusync.local');
       console.log('   🔑 Password: admin123');
     } catch (err) {
-      console.error('❌ Failed to create admin user:', err.message);
+      console.error('❌ CRITICAL: Failed to create admin in Firestore:', err.message);
+      throw err; // This is critical, must fail if Firestore creation fails
     }
 
     // Step 3: Create school year
