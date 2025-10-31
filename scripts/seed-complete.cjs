@@ -47,6 +47,7 @@ async function clearAllData() {
   console.log('🧹 Clearing existing data...');
   
   const collections = [
+    'users',
     'students',
     'teachers', 
     'parents',
@@ -102,7 +103,7 @@ async function seedCompleteData() {
         displayName: 'System Admin'
       });
       
-      // IMPORTANT: Also create in teachers collection for login to work!
+      // IMPORTANT: Create in teachers collection for login to work!
       await db.collection('teachers').doc('admin123').set({
         id: 'admin123',
         email: 'admin@edusync.local',
@@ -116,7 +117,19 @@ async function seedCompleteData() {
         updatedAt: new Date()
       });
       
-      console.log('✅ Admin user created: admin@edusync.local / admin123');
+      // CRITICAL: Also create in users collection (required for authentication)
+      await db.collection('users').doc('admin123').set({
+        id: 'admin123',
+        email: 'admin@edusync.local',
+        name: 'System Admin',
+        role: 'admin',
+        createdAt: new Date(),
+        mock: false
+      });
+      
+      console.log('✅ Admin user created in Auth, teachers, and users collections');
+      console.log('   📧 Email: admin@edusync.local');
+      console.log('   🔑 Password: admin123');
     } catch (err) {
       console.error('❌ Failed to create admin user:', err.message);
     }
