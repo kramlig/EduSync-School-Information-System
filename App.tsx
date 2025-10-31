@@ -41,6 +41,11 @@ const SchoolFormsDashboard = lazy(() => import('./components/forms/SchoolForms/S
 const SF1Dashboard = lazy(() => import('./components/forms/SchoolForms/SF1Dashboard'));
 const SF2Dashboard = lazy(() => import('./components/forms/SchoolForms/SF2Dashboard'));
 const SF9Dashboard = lazy(() => import('./components/forms/SchoolForms/SF9Dashboard'));
+const ELLNDashboard = lazy(() => import('./components/forms/ELLN/ELLNDashboard'));
+const ELLNAssessment = lazy(() => import('./components/forms/ELLN/ELLNAssessment'));
+const ELLNResults = lazy(() => import('./components/forms/ELLN/ELLNResults'));
+const ELLNReports = lazy(() => import('./components/forms/ELLN/ELLNReports'));
+const ILMPTemplate = lazy(() => import('./components/forms/ELLN/ILMPTemplate'));
 const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDashboard'));
 const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard'));
 const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
@@ -343,6 +348,11 @@ const App: React.FC = () => {
                         <Route path="/forms/137/:studentId" element={<Form137ManagerWrapper schoolYear={settings.schoolYear} />} />
                         <Route path="/forms/137/new" element={<Form137CreateWrapper schoolYear={settings.schoolYear} />} />
                         <Route path="/forms/138" element={<Form138Dashboard />} />
+                        <Route path="/forms/elln" element={<ELLNDashboard />} />
+                        <Route path="/forms/elln/assessment" element={<ELLNAssessment />} />
+                        <Route path="/forms/elln/results" element={<ELLNResults />} />
+                        <Route path="/forms/elln/reports" element={<ELLNReports />} />
+                        <Route path="/forms/elln/ilmp" element={<ILMPTemplate />} />
                         <Route path="/grades" element={<GradesReportsDashboard session={staffSession} />} />
                         <Route path="/grades/entry" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/grades/form137" element={<Form137Dashboard />} />

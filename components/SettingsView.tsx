@@ -105,35 +105,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ schoolData }) => {
   </div>
    <p className="text-xs text-slate-500 dark:text-slate-400 mt-4 text-center italic">Changes are saved automatically.</p>
       </div>
-
-  <div className="mt-8 bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4 text-red-600 dark:text-red-400">Danger Zone</h2>
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold">Clear Local Data and Resync</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              If you are experiencing data inconsistencies, you can clear all locally stored data.
-              The app will fetch a fresh copy from the server on the next load.
-              <br />
-              <span className="font-semibold">Warning:</span> This action is irreversible and will log you out.
-            </p>
-          </div>
-          <button 
-            onClick={handleClearAndResync}
-            className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
-          >
-            Clear and Resync
-          </button>
-        </div>
-      </div>
-
-      <Modal isOpen={isConfirmModalOpen} onClose={() => setIsConfirmModalOpen(false)} title="Confirm Clear Data">
-        <p>Are you sure you want to delete all local data? The application will reload and sync fresh data from the server. This will log you out.</p>
-        <div className="flex justify-end space-x-2 mt-6">
-            <button onClick={() => setIsConfirmModalOpen(false)} className="bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-200 font-semibold py-2 px-4 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors">Cancel</button>
-            <button onClick={confirmClear} className="bg-red-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors">Yes, Clear Data</button>
-        </div>
-      </Modal>
     </div>
   );
 };

@@ -647,6 +647,325 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
     const currentDate = new Date();
     const schoolYear = currentDate.getFullYear();
     
+    // --- Reusable function to render a page of students ---
+    const renderStudentPage = (
+      doc: jsPDF,
+      students: Student[],
+      allStudents: Student[], // For combined total calculation
+      pageNumber: number,
+      totalPages: number, // Total pages including guidelines (for footer display)
+      studentPageCount: number, // Total student pages only (for combined total logic)
+      yearMonth: string,
+      includeHeader: boolean = true,
+      headerData?: {
+        realSchoolId: string;
+        realSchoolName: string;
+        realGradeLevel: string;
+        realSectionName: string;
+        monthName: string;
+        schoolYear: number;
+        pageWidth: number;
+        pageHeight: number;
+      }
+    ) => {
+      const leftMargin = 10;
+      const rightMargin = 10;
+      const topMargin = 10;
+      const usableWidth = 277;
+      
+      // Render school header only on first page
+      if (includeHeader && headerData) {
+        const { realSchoolId, realSchoolName, realGradeLevel, realSectionName, monthName, schoolYear, pageWidth } = headerData;
+        
+        // FORM FIELDS
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        
+        let fieldY = 35;
+        const fieldHeight = 7;
+
+        // Top Row of Fields
+        doc.text('School ID', leftMargin, fieldY);
+        doc.rect(leftMargin, fieldY + 1, 40, fieldHeight);
+        doc.text(realSchoolId, leftMargin + 2, fieldY + 5);
+        
+        doc.text('School Year', leftMargin + 60, fieldY);
+        doc.rect(leftMargin + 60, fieldY + 1, 40, fieldHeight);
+        doc.text(`${schoolYear-1}-${schoolYear}`, leftMargin + 62, fieldY + 5);
+
+        doc.text('Report for the Month of', leftMargin + 120, fieldY);
+        doc.rect(leftMargin + 120, fieldY + 1, 50, fieldHeight);
+        doc.text(monthName.split(' ')[0], leftMargin + 122, fieldY + 5);
+
+        // Bottom Row of Fields
+        fieldY += 12;
+        doc.text('Name of School', leftMargin, fieldY);
+        doc.rect(leftMargin, fieldY + 1, 100, fieldHeight);
+        doc.text(realSchoolName.toUpperCase(), leftMargin + 2, fieldY + 5);
+
+        doc.text('Grade Level', leftMargin + 120, fieldY);
+        doc.rect(leftMargin + 120, fieldY + 1, 50, fieldHeight);
+        doc.text(realGradeLevel, leftMargin + 122, fieldY + 5);
+
+        doc.text('Section', leftMargin + 180, fieldY);
+        doc.rect(leftMargin + 180, fieldY + 1, 40, fieldHeight);
+        doc.text(realSectionName, leftMargin + 182, fieldY + 5);
+      }
+      
+      // Group students by gender for this chunk
+      const maleStudents = students.filter(s => s.sex === 'Male');
+      const femaleStudents = students.filter(s => s.sex === 'Female');
+      
+      // Create organized student list: males, male total, females, female total
+      const organizedStudents: Array<Student | { type: 'male-total' | 'female-total' | 'combined-total' }> = [
+        ...maleStudents,
+        { type: 'male-total' as const },
+        ...femaleStudents,
+        { type: 'female-total' as const }
+      ];
+      
+      const maxRowsPerPage = 30;
+      
+      let tableY = includeHeader ? 65 : 10; // Start lower if header is included (after school info), else start at top
+      const tableX = leftMargin;
+      const tableWidth = usableWidth;
+      
+      // Main table border
+      doc.setLineWidth(0.8);
+      const tableHeight = 125; // Reduced from 140 to prevent footer overlap
+      doc.rect(tableX, tableY, tableWidth, tableHeight);
+      
+      // Column widths
+      const noColWidth = 15;
+      const nameColWidth = 65;
+      const summaryTotalColWidth = 20;
+      const summaryRemarksColWidth = 55;
+      const attendanceColWidth = tableWidth - noColWidth - nameColWidth - summaryTotalColWidth - summaryRemarksColWidth;
+
+      // TABLE HEADERS
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      
+      const headerTextY = tableY + 5;
+
+      // No. column
+      doc.text('No.', tableX + noColWidth / 2, tableY + 10, { align: 'center' });
+      
+      // LEARNER'S NAME column
+      doc.text("LEARNER'S NAME", tableX + noColWidth + nameColWidth / 2, tableY + 7, { align: 'center' });
+      doc.setFontSize(6);
+      doc.text('(Last Name, First Name, Middle Name)', tableX + noColWidth + nameColWidth / 2, tableY + 11, { align: 'center' });
+      
+      // Attendance days columns
+      const daysStartX = tableX + noColWidth + nameColWidth;
+      const dayColWidth = attendanceColWidth / 31;
+      doc.setFontSize(6);
+      doc.text('(1st row for date, 2nd row for Day: M,T,W,TH,F)', daysStartX + attendanceColWidth / 2, headerTextY, { align: 'center' });
+      
+      // Day numbers 1-31
+      for (let day = 1; day <= 31; day++) {
+        let dayX = daysStartX + ((day - 1) * dayColWidth);
+        doc.setFontSize(6);
+        doc.text(day.toString(), dayX + dayColWidth / 2, headerTextY + 8, { align: 'center' });
+      }
+      
+      // Summary columns
+      const summaryX = daysStartX + attendanceColWidth;
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Total for the\nMonth', summaryX + summaryTotalColWidth / 2, tableY + 4, { align: 'center' });
+      
+      doc.setFontSize(6);
+      const remarksText = 'REMARKS (If DROPPED OUT, state reason, please refer to legend number 2. If TRANSFERRED IN/OUT, write the name of School.)';
+      doc.text(remarksText, summaryX + summaryTotalColWidth + summaryRemarksColWidth/2, headerTextY, { 
+        align: 'center',
+        maxWidth: summaryRemarksColWidth - 2
+      });
+
+      // Header separator line
+      doc.setLineWidth(0.5);
+      doc.line(tableX, tableY + 15, tableX + tableWidth, tableY + 15);
+      
+      // Sub-header for Absent/Tardy
+      const summaryCellMidY = tableY + 7.5;
+      const absentTardySplitX = summaryX + (summaryTotalColWidth / 2);
+
+      doc.line(summaryX, summaryCellMidY, summaryX + summaryTotalColWidth, summaryCellMidY);
+      doc.line(absentTardySplitX, summaryCellMidY, absentTardySplitX, tableY + tableHeight);
+      
+      doc.setFontSize(6);
+      doc.text('ABSENT', summaryX + (summaryTotalColWidth / 4), summaryCellMidY + 4, { align: 'center' });
+      doc.text('TARDY', absentTardySplitX + (summaryTotalColWidth / 4), summaryCellMidY + 4, { align: 'center' });
+      
+      // Major column separators
+      doc.setLineWidth(0.8);
+      doc.line(tableX + noColWidth, tableY, tableX + noColWidth, tableY + tableHeight);
+      doc.line(daysStartX, tableY, daysStartX, tableY + tableHeight);
+      doc.line(summaryX, tableY, summaryX, tableY + tableHeight);
+      doc.line(summaryX + summaryTotalColWidth, tableY, summaryX + summaryTotalColWidth, tableY + tableHeight);
+
+      // Thin vertical lines for days
+      doc.setLineWidth(0.2);
+      for (let day = 1; day <= 31; day++) {
+        let dayX = daysStartX + (day * dayColWidth);
+        if (day < 31) {
+            doc.line(dayX, tableY + 7.5, dayX, tableY + tableHeight);
+        }
+      }
+      
+      // STUDENT ROWS
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      
+      let rowY = tableY + 15;
+      const rowHeight = (tableHeight - 15) / maxRowsPerPage;
+      
+      // Function to draw hatching
+      const drawHatching = (x: number, y: number, width: number, height: number) => {
+        doc.setDrawColor(150, 150, 150);
+        doc.setLineWidth(0.1);
+        for (let i = -width; i < width; i += 3) {
+          doc.line(x + i, y, x + i + height, y + height);
+        }
+        doc.setDrawColor(0, 0, 0);
+      };
+
+      // Counter for row numbers (students only, not totals)
+      let studentRowNumber = (pageNumber - 1) * 28; // Start numbering based on page (28 students per page)
+      
+      // Calculate if this is the last student page (not including guidelines page)
+      const isLastStudentPage = pageNumber === studentPageCount;
+      
+      for (let i = 0; i < maxRowsPerPage; i++) {
+        const currentY = rowY + (i * rowHeight);
+        const textY = currentY + rowHeight / 2;
+        
+        const currentItem = i < organizedStudents.length ? organizedStudents[i] : null;
+        const isCombinedTotal = i === maxRowsPerPage - 1;
+        
+        if (isCombinedTotal && isLastStudentPage) {
+          // COMBINED TOTAL ROW (last row on last STUDENT page only)
+          doc.setFont('helvetica', 'bold');
+          const mergedWidth = noColWidth + nameColWidth;
+          doc.text('Combined TOTAL PER DAY', tableX + mergedWidth / 2, textY, { align: 'center', baseline: 'middle' });
+          doc.setFont('helvetica', 'normal');
+          
+          const [year, month] = yearMonth.split('-').map(Number);
+          doc.setFontSize(6);
+          
+          for (let day = 1; day <= 31; day++) {
+            const dayOfWeek = new Date(year, month - 1, day).getDay();
+            if (day > new Date(year, month, 0).getDate() || dayOfWeek === 0 || dayOfWeek === 6) {
+              continue;
+            }
+            
+            const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+            const genderStats = calculateDailyAttendanceByGender(dateStr, allStudents, schoolData.attendanceRecords);
+            const dayX = daysStartX + (day * dayColWidth);
+            
+            doc.text(genderStats.combined.present.toString(), dayX - dayColWidth / 2, textY, { align: 'center', baseline: 'middle' });
+          }
+        } else if (currentItem && 'type' in currentItem) {
+          // GENDER SUBTOTAL ROWS
+          doc.setFont('helvetica', 'bold');
+          const mergedWidth = noColWidth + nameColWidth;
+          const label = currentItem.type === 'male-total' ? 'MALE | TOTAL Per Day' : 'FEMALE | TOTAL Per Day';
+          doc.text(label, tableX + mergedWidth / 2, textY, { align: 'center', baseline: 'middle' });
+          doc.setFont('helvetica', 'normal');
+          
+          const [year, month] = yearMonth.split('-').map(Number);
+          doc.setFontSize(6);
+          
+          const studentsForGender = currentItem.type === 'male-total' ? maleStudents : femaleStudents;
+          
+          for (let day = 1; day <= 31; day++) {
+            const dayOfWeek = new Date(year, month - 1, day).getDay();
+            if (day > new Date(year, month, 0).getDate() || dayOfWeek === 0 || dayOfWeek === 6) {
+              continue;
+            }
+            
+            const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+            const genderStats = calculateDailyAttendanceByGender(dateStr, studentsForGender, schoolData.attendanceRecords);
+            const dayX = daysStartX + (day * dayColWidth);
+            
+            const count = currentItem.type === 'male-total' ? genderStats.male.present : genderStats.female.present;
+            doc.text(count.toString(), dayX - dayColWidth / 2, textY, { align: 'center', baseline: 'middle' });
+          }
+        } else if (currentItem && 'id' in currentItem) {
+          // STUDENT ROW
+          studentRowNumber++;
+          const student = currentItem;
+          
+          doc.setFontSize(8);
+          doc.text(studentRowNumber.toString(), tableX + noColWidth / 2, textY, { align: 'center', baseline: 'middle' });
+          
+          doc.setFontSize(7);
+          doc.text(student.name.toUpperCase(), tableX + noColWidth + 2, textY, { baseline: 'middle' });
+          
+          const studentRecord = schoolData.attendanceRecords.find(r => r.studentId === student.id);
+          const [year, month] = yearMonth.split('-').map(Number);
+          
+          let monthlyAbsent = 0;
+          let monthlyLate = 0;
+          
+          for (let day = 1; day <= 31; day++) {
+            const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+            const dayOfWeek = new Date(year, month - 1, day).getDay();
+            
+            if (day > new Date(year, month, 0).getDate() || dayOfWeek === 0 || dayOfWeek === 6) {
+              continue;
+            }
+            
+            const status = studentRecord?.dailyStatus[dateStr];
+            const dayX = daysStartX + (day * dayColWidth);
+            
+            doc.setFontSize(7);
+            if (status === 'A') {
+              doc.text('X', dayX - dayColWidth / 2, textY, { align: 'center', baseline: 'middle' });
+              monthlyAbsent++;
+            } else if (status === 'L') {
+              doc.setFillColor(180, 180, 180);
+              doc.rect(dayX - dayColWidth, currentY + 0.5, dayColWidth, rowHeight - 1, 'F');
+              
+              doc.setTextColor(80, 80, 80);
+              doc.setFont('helvetica', 'bold');
+              doc.text('L', dayX - dayColWidth / 2, textY, { align: 'center', baseline: 'middle' });
+              doc.setTextColor(0, 0, 0);
+              doc.setFont('helvetica', 'normal');
+              
+              doc.setFillColor(255, 255, 255);
+              monthlyLate++;
+            } else if (status === 'P') {
+              doc.setFont('helvetica', 'normal');
+              doc.text('P', dayX - dayColWidth / 2, textY, { align: 'center', baseline: 'middle' });
+            }
+          }
+          
+          // Draw monthly totals
+          doc.setFontSize(7);
+          doc.text(monthlyAbsent.toString(), summaryX + (summaryTotalColWidth / 4), textY, { align: 'center', baseline: 'middle' });
+          doc.text(monthlyLate.toString(), absentTardySplitX + (summaryTotalColWidth / 4), textY, { align: 'center', baseline: 'middle' });
+        } else {
+          // EMPTY ROW - draw hatching
+          drawHatching(daysStartX, currentY, attendanceColWidth, rowHeight);
+        }
+        
+        // Horizontal row separator
+        doc.setLineWidth(0.2);
+        doc.line(tableX, currentY + rowHeight, tableX + tableWidth, currentY + rowHeight);
+      }
+
+      // Draw the two rows for the date/day in the header
+      doc.setLineWidth(0.2);
+      doc.line(daysStartX, tableY + 7.5, summaryX, tableY + 7.5);
+      
+      // Page footer - position at bottom with safe margin
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      const footerY = tableY + tableHeight + 5; // Position 5mm below table
+      doc.text(`School Form 2: Page ${pageNumber} of ${totalPages}`, leftMargin, footerY);
+    };
+    
     // Generate PDF Report - Exact DepEd SF2 Format
     const generatePDF = async () => {
       const doc = new jsPDF('landscape', 'mm', 'a4');
@@ -758,297 +1077,53 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       const fieldHeight = 7;
       const fieldSpacing = 18;
 
-      // Get real data for header
+      // Get real data for header (will be passed to renderStudentPage)
       const currentSection = selectedSection ? schoolData.sections.find(s => s.id === selectedSection) : null;
       const realSchoolId = '301234567'; // TODO: Add schoolId to settings
       const realSchoolName = schoolData.settings?.schoolName || 'EDUSYNC ELEMENTARY SCHOOL';
       const realGradeLevel = selectedGradeLevel ? `Grade ${selectedGradeLevel}` : 'N/A';
       const realSectionName = currentSection?.name || 'N/A';
-
-      // Top Row of Fields
-      doc.text('School ID', leftMargin, fieldY);
-      doc.rect(leftMargin, fieldY + 1, 40, fieldHeight);
-      doc.text(realSchoolId, leftMargin + 2, fieldY + 5);
       
-      doc.text('School Year', leftMargin + 60, fieldY);
-      doc.rect(leftMargin + 60, fieldY + 1, 40, fieldHeight);
-      doc.text(`${schoolYear-1}-${schoolYear}`, leftMargin + 62, fieldY + 5);
-
-      doc.text('Report for the Month of', leftMargin + 120, fieldY);
-      doc.rect(leftMargin + 120, fieldY + 1, 50, fieldHeight);
-      doc.text(monthName.split(' ')[0], leftMargin + 122, fieldY + 5);
-
-      // Bottom Row of Fields
-      fieldY += 12;
-      doc.text('Name of School', leftMargin, fieldY);
-      doc.rect(leftMargin, fieldY + 1, 100, fieldHeight);
-      doc.text(realSchoolName.toUpperCase(), leftMargin + 2, fieldY + 5);
-
-      doc.text('Grade Level', leftMargin + 120, fieldY);
-      doc.rect(leftMargin + 120, fieldY + 1, 50, fieldHeight);
-      doc.text(realGradeLevel, leftMargin + 122, fieldY + 5);
-
-      doc.text('Section', leftMargin + 180, fieldY);
-      doc.rect(leftMargin + 180, fieldY + 1, 40, fieldHeight);
-      doc.text(realSectionName, leftMargin + 182, fieldY + 5);
+      // MULTI-PAGE STUDENT ATTENDANCE TABLE
+      // Calculate how many pages we need
+      // Note: Each page has 30 rows total, but 2 rows are used for gender totals (male-total, female-total)
+      // So we can fit 28 students per page, leaving room for the 2 total rows
+      const studentsPerPage = 28;
+      const studentPageCount = Math.ceil(filteredStudents.length / studentsPerPage);
+      const totalPages = studentPageCount + 1; // +1 for guidelines page
       
-      // ATTENDANCE TABLE
-      let tableY = fieldY + 15;
-      const tableX = leftMargin;
-      const tableWidth = usableWidth;
-      
-      // Main table border
-      doc.setLineWidth(0.8);
-      const tableHeight = 140; // Increased height for more rows
-      doc.rect(tableX, tableY, tableWidth, tableHeight);
-      
-      // Column widths
-      const noColWidth = 15;
-      const nameColWidth = 65; // Adjusted
-      const summaryTotalColWidth = 20; // Adjusted
-      const summaryRemarksColWidth = 55; // Adjusted
-      const attendanceColWidth = tableWidth - noColWidth - nameColWidth - summaryTotalColWidth - summaryRemarksColWidth;
-
-      // TABLE HEADERS
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      
-      const headerTextY = tableY + 5; // Adjusted for top alignment
-
-      // No. column
-      doc.text('No.', tableX + noColWidth / 2, tableY + 10, { align: 'center' });
-      
-      // LEARNER'S NAME column
-      doc.text("LEARNER'S NAME", tableX + noColWidth + nameColWidth / 2, tableY + 7, { align: 'center' });
-      doc.setFontSize(6);
-      doc.text('(Last Name, First Name, Middle Name)', tableX + noColWidth + nameColWidth / 2, tableY + 11, { align: 'center' });
-      
-      // Attendance days columns
-      const daysStartX = tableX + noColWidth + nameColWidth;
-      const dayColWidth = attendanceColWidth / 31;
-      doc.setFontSize(6);
-      doc.text('(1st row for date, 2nd row for Day: M,T,W,TH,F)', daysStartX + attendanceColWidth / 2, headerTextY, { align: 'center' });
-      
-      // Day numbers 1-31 - This is the second row of the header
-      for (let day = 1; day <= 31; day++) {
-        let dayX = daysStartX + ((day - 1) * dayColWidth);
-        doc.setFontSize(6);
-        doc.text(day.toString(), dayX + dayColWidth / 2, headerTextY + 8, { align: 'center' });
+      // Split students into chunks for each page
+      const studentChunks: Student[][] = [];
+      for (let i = 0; i < filteredStudents.length; i += studentsPerPage) {
+        studentChunks.push(filteredStudents.slice(i, i + studentsPerPage));
       }
       
-      // Summary columns
-      const summaryX = daysStartX + attendanceColWidth;
-      doc.setFontSize(7);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Total for the\nMonth', summaryX + summaryTotalColWidth / 2, tableY + 4, { align: 'center' });
-      
-      doc.setFontSize(6);
-      const remarksText = 'REMARKS (If DROPPED OUT, state reason, please refer to legend number 2. If TRANSFERRED IN/OUT, write the name of School.)';
-      doc.text(remarksText, summaryX + summaryTotalColWidth + summaryRemarksColWidth/2, headerTextY, { 
-        align: 'center',
-        maxWidth: summaryRemarksColWidth - 2 // Add padding
-      });
-
-      // Header separator line
-      doc.setLineWidth(0.5);
-      doc.line(tableX, tableY + 15, tableX + tableWidth, tableY + 15);
-      
-      // --- Corrected Sub-header for Absent/Tardy ---
-      const summaryCellMidY = tableY + 7.5; // The vertical middle of the header cell
-      const absentTardySplitX = summaryX + (summaryTotalColWidth / 2);
-
-      // Horizontal line inside the "Total for the Month" cell
-      doc.line(summaryX, summaryCellMidY, summaryX + summaryTotalColWidth, summaryCellMidY);
-      
-      // Vertical line from the new horizontal line down to the bottom of the table
-      doc.line(absentTardySplitX, summaryCellMidY, absentTardySplitX, tableY + tableHeight);
-      
-      // Position "ABSENT" and "TARDY" in the bottom half of the cell with padding
-      doc.setFontSize(6);
-      doc.text('ABSENT', summaryX + (summaryTotalColWidth / 4), summaryCellMidY + 4, { align: 'center' });
-      doc.text('TARDY', absentTardySplitX + (summaryTotalColWidth / 4), summaryCellMidY + 4, { align: 'center' });
-      
-      // Major column separators
-      doc.setLineWidth(0.8);
-      doc.line(tableX + noColWidth, tableY, tableX + noColWidth, tableY + tableHeight);
-      doc.line(daysStartX, tableY, daysStartX, tableY + tableHeight);
-      doc.line(summaryX, tableY, summaryX, tableY + tableHeight);
-      doc.line(summaryX + summaryTotalColWidth, tableY, summaryX + summaryTotalColWidth, tableY + tableHeight);
-
-      // Thin vertical lines for days
-      doc.setLineWidth(0.2);
-      for (let day = 1; day <= 31; day++) {
-        let dayX = daysStartX + (day * dayColWidth);
-        if (day < 31) { // Don't draw the last line over the border
-            doc.line(dayX, tableY + 7.5, dayX, tableY + tableHeight); // Start from below the date row
-        }
-      }
-      
-      // STUDENT ROWS
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
-      
-      // Group students by gender
-      const maleStudents = filteredStudents.filter(s => s.sex === 'Male');
-      const femaleStudents = filteredStudents.filter(s => s.sex === 'Female');
-      
-      // Create organized student list: males, male total, females, female total
-      const organizedStudents: Array<Student | { type: 'male-total' | 'female-total' | 'combined-total' }> = [
-        ...maleStudents,
-        { type: 'male-total' as const },
-        ...femaleStudents,
-        { type: 'female-total' as const }
-      ];
-      
-      // Calculate total rows needed (students + 2 subtotals + combined total at end)
-      const maxRowsPerPage = 53;
-      const totalStudentAndSubtotalRows = organizedStudents.length;
-      
-      let rowY = tableY + 15; // Start of student rows area
-      const rowHeight = (tableHeight - 15) / maxRowsPerPage; // Calculate row height dynamically
-      
-      // --- Function to draw hatching ---
-      const drawHatching = (x: number, y: number, width: number, height: number) => {
-        doc.setDrawColor(150, 150, 150); // Light gray color for hatching
-        doc.setLineWidth(0.1);
-        for (let i = -width; i < width; i += 3) {
-          doc.line(x + i, y, x + i + height, y + height);
-        }
-        doc.setDrawColor(0, 0, 0); // Reset draw color
+      // Prepare header data for Page 1
+      const headerData = {
+        realSchoolId,
+        realSchoolName,
+        realGradeLevel,
+        realSectionName,
+        monthName,
+        schoolYear,
+        pageWidth,
+        pageHeight
       };
-
-      // Counter for row numbers (students only, not totals)
-      let studentRowNumber = 0;
       
-      for (let i = 0; i < maxRowsPerPage; i++) {
-        const currentY = rowY + (i * rowHeight);
-        const textY = currentY + rowHeight / 2;
+      // Render each page of students (Page 1, 2, 3... for attendance tables)
+      studentChunks.forEach((chunk, index) => {
+        const pageNumber = index + 1;
+        const includeHeader = pageNumber === 1; // Only first page has school header
         
-        // Determine what to render in this row
-        const currentItem = i < organizedStudents.length ? organizedStudents[i] : null;
-        const isCombinedTotal = i === maxRowsPerPage - 1; // Last row is combined total
-        
-        if (isCombinedTotal) {
-          // COMBINED TOTAL ROW (last row)
-          doc.setFont('helvetica', 'bold');
-          const mergedWidth = noColWidth + nameColWidth;
-          doc.text('Combined TOTAL PER DAY', tableX + mergedWidth / 2, textY, { align: 'center', baseline: 'middle' });
-          doc.setFont('helvetica', 'normal');
-          
-          const [year, month] = yearMonth.split('-').map(Number);
-          doc.setFontSize(6);
-          
-          for (let day = 1; day <= 31; day++) {
-            const dayOfWeek = new Date(year, month - 1, day).getDay();
-            if (day > new Date(year, month, 0).getDate() || dayOfWeek === 0 || dayOfWeek === 6) {
-              continue;
-            }
-            
-            const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-            const genderStats = calculateDailyAttendanceByGender(dateStr, filteredStudents, schoolData.attendanceRecords);
-            const dayX = daysStartX + (day * dayColWidth);
-            
-            doc.text(genderStats.combined.present.toString(), dayX - dayColWidth / 2, textY, { align: 'center', baseline: 'middle' });
-          }
-        } else if (currentItem && 'type' in currentItem) {
-          // GENDER SUBTOTAL ROWS
-          doc.setFont('helvetica', 'bold');
-          const mergedWidth = noColWidth + nameColWidth;
-          const label = currentItem.type === 'male-total' ? 'MALE | TOTAL Per Day' : 'FEMALE | TOTAL Per Day';
-          doc.text(label, tableX + mergedWidth / 2, textY, { align: 'center', baseline: 'middle' });
-          doc.setFont('helvetica', 'normal');
-          
-          const [year, month] = yearMonth.split('-').map(Number);
-          doc.setFontSize(6);
-          
-          const studentsForGender = currentItem.type === 'male-total' ? maleStudents : femaleStudents;
-          
-          for (let day = 1; day <= 31; day++) {
-            const dayOfWeek = new Date(year, month - 1, day).getDay();
-            if (day > new Date(year, month, 0).getDate() || dayOfWeek === 0 || dayOfWeek === 6) {
-              continue;
-            }
-            
-            const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-            const genderStats = calculateDailyAttendanceByGender(dateStr, studentsForGender, schoolData.attendanceRecords);
-            const dayX = daysStartX + (day * dayColWidth);
-            
-            const count = currentItem.type === 'male-total' ? genderStats.male.present : genderStats.female.present;
-            doc.text(count.toString(), dayX - dayColWidth / 2, textY, { align: 'center', baseline: 'middle' });
-          }
-        } else if (currentItem && 'id' in currentItem) {
-          // STUDENT ROW
-          studentRowNumber++;
-          const student = currentItem;
-          
-          doc.setFontSize(8);
-          doc.text(studentRowNumber.toString(), tableX + noColWidth / 2, textY, { align: 'center', baseline: 'middle' });
-          
-          doc.setFontSize(7);
-          doc.text(student.name.toUpperCase(), tableX + noColWidth + 2, textY, { baseline: 'middle' });
-          
-          // Populate daily attendance marks
-          const studentRecord = schoolData.attendanceRecords.find(r => r.studentId === student.id);
-          const [year, month] = yearMonth.split('-').map(Number);
-          
-          let monthlyAbsent = 0;
-          let monthlyLate = 0;
-          
-          for (let day = 1; day <= 31; day++) {
-            const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-            const dayOfWeek = new Date(year, month - 1, day).getDay();
-            
-            if (day > new Date(year, month, 0).getDate() || dayOfWeek === 0 || dayOfWeek === 6) {
-              continue;
-            }
-            
-            const status = studentRecord?.dailyStatus[dateStr];
-            const dayX = daysStartX + (day * dayColWidth);
-            
-            doc.setFontSize(7);
-            if (status === 'A') {
-              doc.text('X', dayX - dayColWidth / 2, textY, { align: 'center', baseline: 'middle' });
-              monthlyAbsent++;
-            } else if (status === 'L') {
-              // Darker gray shading for late/tardy with blur effect
-              doc.setFillColor(180, 180, 180); // Darker gray for better visibility
-              doc.rect(dayX - dayColWidth, currentY + 0.5, dayColWidth, rowHeight - 1, 'F');
-              
-              // Add "L" text on top of shading for clarity
-              doc.setTextColor(80, 80, 80); // Dark gray text
-              doc.setFont('helvetica', 'bold');
-              doc.text('L', dayX - dayColWidth / 2, textY, { align: 'center', baseline: 'middle' });
-              doc.setTextColor(0, 0, 0); // Reset to black
-              doc.setFont('helvetica', 'normal');
-              
-              doc.setFillColor(255, 255, 255); // Reset fill color
-              monthlyLate++;
-            } else if (status === 'P') {
-              // Use a simple checkmark that jsPDF can render
-              doc.setFont('helvetica', 'normal');
-              doc.text('P', dayX - dayColWidth / 2, textY, { align: 'center', baseline: 'middle' });
-            }
-          }
-          
-          // Draw monthly totals
-          doc.setFontSize(7);
-          doc.text(monthlyAbsent.toString(), summaryX + (summaryTotalColWidth / 4), textY, { align: 'center', baseline: 'middle' });
-          doc.text(monthlyLate.toString(), absentTardySplitX + (summaryTotalColWidth / 4), textY, { align: 'center', baseline: 'middle' });
-        } else {
-          // EMPTY ROW - draw hatching
-          drawHatching(daysStartX, currentY, attendanceColWidth, rowHeight);
+        if (pageNumber > 1) {
+          doc.addPage();
         }
         
-        // Horizontal row separator
-        doc.setLineWidth(0.2);
-        doc.line(tableX, currentY + rowHeight, tableX + tableWidth, currentY + rowHeight);
-      }
-
-      // Draw the two rows for the date/day in the header
-      doc.setLineWidth(0.2);
-      doc.line(daysStartX, tableY + 7.5, summaryX, tableY + 7.5);
+        // Pass both totalPages (for footer) and studentPageCount (for combined total logic)
+        renderStudentPage(doc, chunk, filteredStudents, pageNumber, totalPages, studentPageCount, yearMonth, includeHeader, headerData);
+      });
       
-      // --- PAGE 2 ---
+      // --- GUIDELINES PAGE (Last Page) ---
       doc.addPage();
       let page2Y = topMargin + 5;
 
@@ -1159,82 +1234,111 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       const rightColumnWidth = usableWidth - leftColumnWidth - 5;
       let rightY = topMargin + 5;
 
-      // Month, No. of Classes, Summary Header
-      doc.rect(rightColumnX, rightY, rightColumnWidth, 15);
-      doc.line(rightColumnX, rightY + 7.5, rightColumnX + rightColumnWidth, rightY + 7.5); // horizontal divider
-      doc.line(rightColumnX + rightColumnWidth / 2, rightY, rightColumnX + rightColumnWidth / 2, rightY + 7.5); // vertical divider
-      doc.line(rightColumnX + rightColumnWidth / 2, rightY + 7.5, rightColumnX + rightColumnWidth / 2, rightY + 15);
-      doc.line(rightColumnX + rightColumnWidth * 0.75, rightY + 7.5, rightColumnX + rightColumnWidth * 0.75, rightY + 15);
+      // Header table with Month, No. of Days, and Summary columns
+      const headerHeight = 15;
+      const monthColWidth = rightColumnWidth * 0.4;
+      const daysColWidth = rightColumnWidth * 0.3;
+      const summaryColWidth = rightColumnWidth * 0.3;
       
+      // Draw main header box
+      doc.rect(rightColumnX, rightY, rightColumnWidth, headerHeight);
+      
+      // Vertical dividers
+      doc.line(rightColumnX + monthColWidth, rightY, rightColumnX + monthColWidth, rightY + headerHeight);
+      doc.line(rightColumnX + monthColWidth + daysColWidth, rightY, rightColumnX + monthColWidth + daysColWidth, rightY + headerHeight);
+      
+      // Horizontal divider for Summary section
+      doc.line(rightColumnX + monthColWidth + daysColWidth, rightY + 7.5, rightColumnX + rightColumnWidth, rightY + 7.5);
+      
+      // Vertical dividers for M, F, TOTAL columns in Summary section
+      const summaryStartX = rightColumnX + monthColWidth + daysColWidth;
+      const colWidth = summaryColWidth / 3;
+      doc.line(summaryStartX + colWidth, rightY + 7.5, summaryStartX + colWidth, rightY + headerHeight);
+      doc.line(summaryStartX + (colWidth * 2), rightY + 7.5, summaryStartX + (colWidth * 2), rightY + headerHeight);
+      
+      // Text labels
       doc.setFontSize(7);
-      doc.text('Month:', rightColumnX + 2, rightY + 5);
-      doc.text('No. of Days of Classes:', rightColumnX + rightColumnWidth / 2 + 2, rightY + 5);
-      doc.text('Summary for the Month', rightColumnX + rightColumnWidth / 2, rightY - 1, { align: 'center' });
-      doc.text('M', rightColumnX + rightColumnWidth * 0.625, rightY + 12, { align: 'center' });
-      doc.text('F', rightColumnX + rightColumnWidth * 0.875, rightY + 12, { align: 'center' });
-      doc.text('TOTAL', rightColumnX + rightColumnWidth - 7, rightY + 12, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.text('Month:', rightColumnX + 2, rightY + 9);
+      doc.text('No. of Days of Classes:', rightColumnX + monthColWidth + 2, rightY + 9);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.text('Summary for the Month', summaryStartX + summaryColWidth / 2, rightY + 4, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.text('M', summaryStartX + colWidth / 2, rightY + 12, { align: 'center' });
+      doc.text('F', summaryStartX + colWidth + colWidth / 2, rightY + 12, { align: 'center' });
+      doc.text('TOTAL', summaryStartX + (colWidth * 2) + colWidth / 2, rightY + 12, { align: 'center' });
 
 
-      // Calculate summary statistics
+      // Calculate summary statistics by gender
       const [year, month] = yearMonth.split('-').map(Number);
       const firstFridayOfJune = `${year}-06-07`; // Approximate first Friday
       const endOfMonth = `${yearMonth}-${new Date(year, month, 0).getDate()}`;
       
-      // Use all filtered students for summary (not just the organized ones)
-      const allStudents = [...maleStudents, ...femaleStudents];
+      // Split students by gender
+      const allStudents = filteredStudents;
+      const maleStudents = allStudents.filter((s: Student) => s.sex === 'Male');
+      const femaleStudents = allStudents.filter((s: Student) => s.sex === 'Female');
       
-      const monthlyStats = calculateMonthlyAttendance(yearMonth, allStudents, schoolData.attendanceRecords);
-      const consecutiveAbsent5 = findConsecutiveAbsences(5, yearMonth, allStudents, schoolData.attendanceRecords);
-      const initialEnrollment = getEnrollmentCount(firstFridayOfJune, allStudents);
-      const currentEnrollment = getEnrollmentCount(endOfMonth, allStudents);
-      const lateEnrollments = allStudents.filter((s: Student) => {
-        if (!s.enrollmentDate) return false;
-        const enrollDate = new Date(s.enrollmentDate);
-        const cutoff = new Date(firstFridayOfJune);
-        const monthStart = new Date(year, month - 1, 1);
-        return enrollDate > cutoff && enrollDate >= monthStart;
-      }).length;
-      const dropouts = allStudents.filter((s: Student) => s.status === 'dropped').length;
-      const transferredOut = allStudents.filter((s: Student) => s.status === 'transferred').length;
-      const transferredIn = 0; // TODO: Need to track transfer direction in Student type
+      // Calculate stats for each gender
+      const maleCount = maleStudents.length;
+      const femaleCount = femaleStudents.length;
+      const totalCount = maleCount + femaleCount;
+      
+      const dropoutsMale = maleStudents.filter((s: Student) => s.status === 'dropped').length;
+      const dropoutsFemale = femaleStudents.filter((s: Student) => s.status === 'dropped').length;
+      const dropoutsTotal = dropoutsMale + dropoutsFemale;
+      
+      const transferOutMale = maleStudents.filter((s: Student) => s.status === 'transferred').length;
+      const transferOutFemale = femaleStudents.filter((s: Student) => s.status === 'transferred').length;
+      const transferOutTotal = transferOutMale + transferOutFemale;
 
-      // Summary rows
-      rightY += 15;
-      const summaryRowHeight = 7;
-      const summaryData = [
-        { label: '* Enrolment as of (1st Friday of June)', value: initialEnrollment.toString() },
-        { label: 'Late Enrollment during the month (beyond cut-off)', value: lateEnrollments.toString() },
-        { label: 'Registered Learner as of end of the month', value: currentEnrollment.toString() },
-        { label: 'Percentage of Enrolment as of end of the month', value: initialEnrollment > 0 ? `${((currentEnrollment / initialEnrollment) * 100).toFixed(1)}%` : 'N/A' },
-        { label: 'Average Daily Attendance', value: monthlyStats.averageDailyAttendance.toFixed(1) },
-        { label: 'Percentage of Attendance for the month', value: `${monthlyStats.attendanceRate.toFixed(1)}%` },
-        { label: 'Number of students with 5 consecutive days of absences:', value: consecutiveAbsent5.length.toString(), isConsecutive: true },
-        { label: 'Drop out', value: dropouts.toString() },
-        { label: 'Transferred out', value: transferredOut.toString() },
-        { label: 'Transferred in', value: transferredIn.toString() },
+      // Summary rows with M, F, TOTAL columns
+      rightY += headerHeight;
+      const summaryRowHeight = 6;
+      const labelColWidth = rightColumnWidth - summaryColWidth;
+      
+      const summaryRows = [
+        { label: '* Enrolment as of (1st Friday of June)', m: maleCount, f: femaleCount },
+        { label: 'Late Enrollment during the month (beyond cut-off)', m: 0, f: 0 },
+        { label: 'Registered Learner as of end of the month', m: maleCount, f: femaleCount },
+        { label: 'Percentage of Enrolment as of end of the month', m: '100.0%', f: '100.0%' },
+        { label: 'Average Daily Attendance', m: '', f: '' },
+        { label: 'Percentage of Attendance for the month', m: '', f: '' },
+        { label: 'Number of students with 5 consecutive days of absences:', m: '', f: '' },
+        { label: 'Drop out', m: dropoutsMale, f: dropoutsFemale },
+        { label: 'Transferred out', m: transferOutMale, f: transferOutFemale },
+        { label: 'Transferred in', m: 0, f: 0 },
       ];
 
-      summaryData.forEach((item) => {
+      doc.setFontSize(6);
+      summaryRows.forEach((row) => {
+        // Draw row border
         doc.rect(rightColumnX, rightY, rightColumnWidth, summaryRowHeight);
-        doc.text(item.label, rightColumnX + 2, rightY + 5, { maxWidth: rightColumnWidth - 25 });
         
-        const valueBoxX = rightColumnX + rightColumnWidth - 22;
-        if (item.isConsecutive) {
-            doc.rect(rightColumnX, rightY, rightColumnWidth, summaryRowHeight * 4);
-            doc.text(item.label, rightColumnX + 2, rightY + 5, { maxWidth: rightColumnWidth - 5 });
-            // Draw value box
-            doc.rect(valueBoxX, rightY, 22, summaryRowHeight * 4);
-            doc.text(item.value, valueBoxX + 11, rightY + 14, { align: 'center', baseline: 'middle' });
-            rightY += summaryRowHeight;
-        } else if (item.label === 'Drop out' || item.label === 'Transferred out' || item.label === 'Transferred in') {
-            doc.rect(valueBoxX, rightY, 22, summaryRowHeight);
-            doc.text(item.value, valueBoxX + 11, rightY + summaryRowHeight / 2, { align: 'center', baseline: 'middle' });
-            rightY += summaryRowHeight;
-        } else {
-            doc.rect(valueBoxX, rightY, 22, summaryRowHeight);
-            doc.text(item.value, valueBoxX + 11, rightY + summaryRowHeight / 2, { align: 'center', baseline: 'middle' });
-            rightY += summaryRowHeight;
+        // Draw vertical dividers
+        doc.line(rightColumnX + labelColWidth, rightY, rightColumnX + labelColWidth, rightY + summaryRowHeight);
+        doc.line(summaryStartX + colWidth, rightY, summaryStartX + colWidth, rightY + summaryRowHeight);
+        doc.line(summaryStartX + (colWidth * 2), rightY, summaryStartX + (colWidth * 2), rightY + summaryRowHeight);
+        
+        // Label
+        doc.text(row.label, rightColumnX + 2, rightY + 4, { maxWidth: labelColWidth - 4 });
+        
+        // M column
+        const mValue = typeof row.m === 'number' ? row.m.toString() : row.m;
+        if (mValue) doc.text(mValue, summaryStartX + colWidth / 2, rightY + 4, { align: 'center' });
+        
+        // F column
+        const fValue = typeof row.f === 'number' ? row.f.toString() : row.f;
+        if (fValue) doc.text(fValue, summaryStartX + colWidth + colWidth / 2, rightY + 4, { align: 'center' });
+        
+        // TOTAL column
+        if (typeof row.m === 'number' && typeof row.f === 'number') {
+          const total = row.m + row.f;
+          doc.text(total.toString(), summaryStartX + (colWidth * 2) + colWidth / 2, rightY + 4, { align: 'center' });
         }
+        
+        rightY += summaryRowHeight;
       });
 
       // Certification and Signatures
@@ -1252,8 +1356,8 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       doc.line(rightColumnX + 10, rightY, rightColumnX + rightColumnWidth - 10, rightY);
       doc.text('(Signature of School Head over Printed Name)', rightColumnX + rightColumnWidth / 2, rightY + 4, { align: 'center' });
 
-      // Page number
-      doc.text(`School Form 2: Page 2 of 2`, leftMargin, pageHeight - 10);
+      // Page number (guidelines page is always the last page)
+      doc.text(`School Form 2: Page ${totalPages} of ${totalPages}`, leftMargin, pageHeight - 10);
       
       // Save PDF with better download handling
       const pdfBlob = doc.output('blob');

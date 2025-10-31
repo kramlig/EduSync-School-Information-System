@@ -355,45 +355,32 @@ async function seedCompleteData() {
     // Step 10: Create grades for Q1 and Q2
     console.log('\n📊 Creating grades for Q1 and Q2...');
     
-    const quarters = ['Q1', 'Q2'];
     let gradesCreated = 0;
 
     for (const student of students) {
       const gradesBatch = db.batch();
       
       for (const la of learningAreas) {
-        for (const quarter of quarters) {
-          const gradeId = `${student.id}-${la.id}-${quarter}`;
-          
-          // Generate realistic grades (75-100)
-          const writtenWork = Math.floor(Math.random() * 26) + 75;
-          const performanceTask = Math.floor(Math.random() * 26) + 75;
-          const quarterlyAssessment = Math.floor(Math.random() * 26) + 75;
-          
-          // Calculate quarterly grade (weighted average)
-          const quarterlyGrade = Math.round(
-            (writtenWork * 0.3) + (performanceTask * 0.5) + (quarterlyAssessment * 0.2)
-          );
-          
-          gradesBatch.set(db.collection('grades').doc(gradeId), {
-            id: gradeId,
-            studentId: student.id,
-            learningAreaId: la.id,
-            learningAreaName: la.name,
-            quarter: quarter,
-            schoolYear: schoolYear,
-            writtenWork: writtenWork,
-            performanceTask: performanceTask,
-            quarterlyAssessment: quarterlyAssessment,
-            quarterlyGrade: quarterlyGrade,
-            transmuted: quarterlyGrade, // For simplicity
-            remarks: quarterlyGrade >= 75 ? 'Passed' : 'Failed',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
-          
-          gradesCreated++;
-        }
+        const gradeId = `${student.id}-${la.id}`;
+        
+        // Generate realistic grades for Q1 and Q2
+        const q1Grade = Math.floor(Math.random() * 26) + 75;
+        const q2Grade = Math.floor(Math.random() * 26) + 75;
+        
+        // Calculate final grade (average of available quarters)
+        const finalGrade = Math.round((q1Grade + q2Grade) / 2);
+        
+        gradesBatch.set(db.collection('grades').doc(gradeId), {
+          id: gradeId,
+          studentId: student.id,
+          learningAreaId: la.id,
+          q1: q1Grade,
+          q2: q2Grade,
+          finalGrade: finalGrade,
+          remarks: finalGrade >= 75 ? 'Passed' : 'Failed'
+        });
+        
+        gradesCreated++;
       }
       
       await gradesBatch.commit();

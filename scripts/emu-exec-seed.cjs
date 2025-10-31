@@ -15,7 +15,7 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv);
 const projectId = args.projectId || 'edusync-local';
 const host = args.emuHost || '127.0.0.1';
-const port = args.emuPort || '8085';
+const port = args.emuPort || '8086';
 const noExport = String(args.noExport || '').toLowerCase() === 'true';
 
 // Unique export dir to avoid EPERM rename on Windows

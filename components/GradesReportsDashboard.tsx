@@ -69,7 +69,7 @@ const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session
       id: 'elln-assessment',
       title: 'ELLN Assessment (K-3)',
       description: 'Early Literacy and Numeracy assessments for Kindergarten to Grade 3',
-      route: '/grades/elln',
+      route: '/forms/elln',
       icon: BookOpenIcon,
       gradient: 'from-indigo-600 via-blue-600 to-cyan-600',
       shadowColor: 'shadow-indigo-500/25',
