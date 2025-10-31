@@ -18,7 +18,9 @@ function getWeekdaysInMonth(year, month) {
   while (date.getMonth() === month) {
     const dayOfWeek = date.getDay();
     if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday-Friday
-      weekdays.push(date.toISOString().split('T')[0]);
+      // Use local date string to avoid timezone issues
+      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      weekdays.push(dateStr);
     }
     date.setDate(date.getDate() + 1);
   }
@@ -322,6 +324,7 @@ async function seedCompleteData() {
     console.log('\n📋 Creating attendance records for October 2025...');
     const octWeekdays = getWeekdaysInMonth(2025, 9); // October 2025
     console.log(`   Found ${octWeekdays.length} school days in October 2025`);
+    console.log(`   First day: ${octWeekdays[0]}, Last day: ${octWeekdays[octWeekdays.length - 1]}`);
 
     const attendanceBatch = db.batch();
     
