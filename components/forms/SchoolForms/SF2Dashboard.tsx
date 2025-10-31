@@ -411,8 +411,10 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
     const date = new Date(year, month - 1, 1);
     const days: Date[] = [];
     while (date.getMonth() === month - 1) {
-      if (date.getDay() >= 1 && date.getDay() <= 5) { // Only include weekdays (Mon-Fri)
-        days.push(new Date(date));
+      const dayOfWeek = date.getDay();
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Only include weekdays (Mon-Fri)
+        // Create date at noon to avoid timezone issues
+        days.push(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0));
       }
       date.setDate(date.getDate() + 1);
     }
