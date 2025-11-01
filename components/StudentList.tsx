@@ -274,7 +274,9 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     try {
       // Convert blob to file
       const file = new File([croppedBlob], 'profile.jpg', { type: 'image/jpeg' }); // Ensure consistent filename
+      console.log('[StudentList] 📤 Uploading photo for student:', studentToEdit.id);
       const { url, path } = await uploadStudentPhoto(studentToEdit.id, file);
+      console.log('[StudentList] ✅ Photo uploaded. URL:', url);
       
       // Update student with new photo
       const updatedStudent = {
@@ -283,11 +285,17 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
         photoPath: path,
         photoUploadedAt: new Date().toISOString(),
       };
+      
+      console.log('[StudentList] 💾 Saving student with photo to Firestore...');
+      // IMPORTANT: Persist the photoURL and photoPath to Firestore
+      await updateStudent(updatedStudent);
+      console.log('[StudentList] ✅ Photo saved to Firestore successfully');
+      
+      // Update local state AFTER successful Firestore save
       setStudentToEdit(updatedStudent);
       
-      // IMPORTANT: Persist the photoURL and photoPath to Firestore
-      // This assumes updateStudent handles partial updates correctly
-      await updateStudent(updatedStudent);
+      // Force refresh school data to get updated student from Firestore
+      await schoolData.refresh();
       
       // Update search results if we're currently showing search results
       if (searchResults) {
@@ -298,9 +306,12 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
 
       // Clear captured blob
       setCapturedBlob(null);
+      
+      alert('✅ Photo uploaded successfully!');
     } catch (error: any) {
-      console.error('Error uploading student photo:', error); // Log error for debugging
+      console.error('[StudentList] ❌ Error uploading student photo:', error); // Log error for debugging
       setPhotoError(error.message || 'Failed to upload photo. Please try again.');
+      alert(`❌ Failed to upload photo: ${error.message}`);
     } finally {
       setPhotoUploading(false);
     }
