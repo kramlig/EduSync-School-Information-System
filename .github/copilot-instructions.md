@@ -67,3 +67,81 @@ These scripts embed the correct Firebase project configurations and API keys int
 - **Environment Variables**: All Firebase configuration is managed through Vite environment variables (e.g., `VITE_FIREBASE_PROJECT_ID`). The `scripts/switch-env.cjs` script and different `.env.*` files manage which configuration is active.
 - **State Management**: The application prefers using custom hooks that subscribe directly to Firestore queries for real-time state management, rather than a global state library like Redux.
 - **Testing**: End-to-end tests are written with Playwright and are located in the `tests/` directory.
+
+## 5. Critical Bug Prevention: Infinite Render Loops
+
+**⚠️ CRITICAL: This is a RECURRING issue that MUST be addressed in EVERY new component/module!**
+
+### The Problem:
+Components using `useSchoolData(['settings'])` can cause **infinite render loops** because the `settings` object reference changes on every render. This has occurred multiple times in:
+- DepEd Forms module
+- Enrollment Portal module
+- Other components using feature flags
+
+### The Solution (MANDATORY):
+**ALWAYS use `useMemo` when passing `settings` to functions or hooks:**
+
+```typescript
+import React, { useMemo } from 'react';
+import { useSchoolData } from '../hooks/useSchoolData';
+import { useEnrollmentFeatures, useFinancialFeatures } from '../services/featureFlags';
+
+const MyComponent: React.FC = () => {
+  const { settings, loading } = useSchoolData(['settings']);
+  
+  // ✅ CORRECT: Memoize feature flag hooks
+  const enrollmentFeatures = useMemo(
+    () => useEnrollmentFeatures(settings), 
+    [settings]
+  );
+  
+  const financialFeatures = useMemo(
+    () => useFinancialFeatures(settings), 
+    [settings]
+  );
+  
+  // ✅ CORRECT: Memoize computed values
+  const isFinancialEnabled = useMemo(
+    () => FeatureFlags.isFinancialEnabled(settings),
+    [settings]
+  );
+  
+  if (loading) return <LoadingSpinner />;
+  
+  return <div>...</div>;
+};
+```
+
+### ❌ NEVER DO THIS (Causes Infinite Loop):
+```typescript
+const MyComponent: React.FC = () => {
+  const { settings } = useSchoolData(['settings']);
+  
+  // ❌ WRONG: Direct function call without memoization
+  const enrollmentFeatures = useEnrollmentFeatures(settings);
+  const isFinancial = FeatureFlags.isFinancialEnabled(settings);
+  
+  // This WILL cause an infinite loop!
+};
+```
+
+### Checklist for New Components:
+- [ ] Import `useMemo` from React
+- [ ] Wrap ALL feature flag hooks in `useMemo`
+- [ ] Wrap ALL FeatureFlags method calls in `useMemo`
+- [ ] Add comment: `// Memoize to prevent infinite loops`
+- [ ] Test in browser console for infinite loop warnings
+- [ ] Verify component doesn't re-render continuously
+
+### Standard Comment Template:
+```typescript
+/**
+ * ComponentName - Brief description
+ * 
+ * IMPORTANT: Feature flag hooks are memoized to prevent infinite render loops
+ * caused by settings object reference changes from useSchoolData
+ */
+```
+
+### Reference Documentation:
+See `INFINITE_LOOP_PREVENTION.md` for detailed explanation, examples, and debugging guide.

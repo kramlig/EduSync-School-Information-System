@@ -184,7 +184,6 @@ export type AttendanceStatus = 'P' | 'A' | 'L' | 'E'; // Present, Absent, Late, 
 export interface AttendanceRecord {
     studentId: string;
     dailyStatus: Record<string, AttendanceStatus>; // "YYYY-MM-DD": "P"
-    remarks?: Record<string, string>; // "YYYY-MM-DD": "Remark text"
 }
 
 export interface SchoolSettings {
@@ -193,6 +192,29 @@ export interface SchoolSettings {
     division: string;
     district: string;
     schoolYear: string;
+    
+    // School Type Configuration
+    schoolType?: 'public' | 'private' | 'hybrid';
+    
+    // Financial Configuration (for private/hybrid schools)
+    financialConfig?: {
+        enabled: boolean;
+        currency: 'PHP' | 'USD' | 'EUR';
+        requiresPayment: boolean;
+        allowPartialPayment: boolean;
+        gracePeriodDays: number;
+        penaltyRate?: number; // Percentage per month for late payments
+    };
+    
+    // Enrollment Configuration
+    enrollmentConfig?: {
+        requiresApplication: boolean;
+        requiresDocuments: boolean;
+        autoApprove: boolean;
+        allowSelfRegistration: boolean;
+        academicYearStart?: string; // "YYYY-MM-DD"
+        academicYearEnd?: string;
+    };
 }
 
 export interface SubstituteAssignment {
@@ -270,4 +292,301 @@ export interface Announcement {
     authorId: string;
     date: string; // YYYY-MM-DD
     target: AnnouncementTarget;
+}
+
+// ============================================================================
+// ENROLLMENT APPLICATION SYSTEM
+// ============================================================================
+
+export interface GuardianDetails {
+    fullName: string;
+    relationship: string;
+    contactNumber: string;
+    email?: string;
+    occupation?: string;
+    employer?: string;
+    monthlyIncome?: number;
+}
+
+export interface AddressDetails {
+    houseNumber?: string;
+    street?: string;
+    barangay: string;
+    city: string;
+    province: string;
+    zipCode?: string;
+}
+
+export interface DocumentUpload {
+    fileName: string;
+    fileURL: string;
+    uploadedAt: string;
+    fileSize: number;
+    mimeType: string;
+}
+
+export interface EnrollmentApplication {
+    id: string;
+    applicationNumber: string; // Auto-generated: "APP-2025-001"
+    
+    // Student Information
+    studentInfo: {
+        firstName: string;
+        middleName?: string;
+        lastName: string;
+        dateOfBirth: string;
+        sex: 'Male' | 'Female';
+        lrn?: string;
+        nationality: string;
+        religion?: string;
+        motherTongue?: string;
+        placeOfBirth?: string;
+    };
+    
+    // Guardian Information
+    guardian1: GuardianDetails;
+    guardian2?: GuardianDetails;
+    
+    // Address Information
+    currentAddress: AddressDetails;
+    permanentAddress?: AddressDetails; // If different from current
+    sameAsCurrent: boolean;
+    
+    // Academic Information
+    academicInfo: {
+        gradeLevel: number;
+        track?: string; // For SHS: STEM, ABM, HUMSS, GAS, TVL
+        strand?: string; // For TVL: specific strand
+        previousSchool?: string;
+        previousSchoolAddress?: string;
+        yearLastAttended?: string;
+        lastGradeCompleted?: number;
+    };
+    
+    // Health Information
+    healthInfo?: {
+        bloodType?: string;
+        allergies?: string;
+        medicalConditions?: string;
+        medications?: string;
+        specialNeeds?: string;
+    };
+    
+    // Required Documents
+    documents: {
+        birthCertificate?: DocumentUpload;
+        form137?: DocumentUpload;
+        goodMoral?: DocumentUpload;
+        reportCard?: DocumentUpload;
+        photoId?: DocumentUpload;
+        other?: DocumentUpload[];
+    };
+    
+    // Application Status
+    status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'enrolled';
+    submittedAt?: string;
+    submittedBy?: string; // Parent/Guardian email
+    
+    // Review Information
+    reviewedBy?: string; // Admin/Registrar ID
+    reviewedAt?: string;
+    reviewNotes?: string;
+    rejectionReason?: string;
+    
+    // Enrollment Information (filled after approval)
+    enrolledStudentId?: string;
+    sectionId?: string;
+    enrollmentDate?: string;
+    
+    // Metadata
+    createdAt: string;
+    updatedAt: string;
+}
+
+// ============================================================================
+// FINANCIAL SYSTEM (for Private/Hybrid Schools)
+// ============================================================================
+
+export interface FeeStructure {
+    id: string;
+    schoolYear: string;
+    gradeLevel: number;
+    track?: string; // For SHS
+    strand?: string;
+    
+    fees: {
+        // Tuition
+        tuitionFee: number;
+        
+        // Miscellaneous Fees
+        miscFees: {
+            id: string;
+            name: string;
+            amount: number;
+            required: boolean;
+            description?: string;
+        }[];
+        
+        // Laboratory Fees (per subject)
+        labFees?: {
+            subject: string;
+            amount: number;
+        }[];
+        
+        // Other Fees
+        registrationFee?: number;
+        idFee?: number;
+        insuranceFee?: number;
+    };
+    
+    // Computed
+    totalRequired: number;
+    totalOptional: number;
+    
+    // Payment Options
+    paymentOptions: {
+        fullPayment: {
+            enabled: boolean;
+            discount?: number; // Percentage
+        };
+        quarterly: {
+            enabled: boolean;
+            numberOfPayments: number;
+        };
+        monthly: {
+            enabled: boolean;
+            numberOfPayments: number;
+        };
+    };
+    
+    // Metadata
+    createdAt: string;
+    updatedAt: string;
+    createdBy: string;
+}
+
+export interface Charge {
+    id: string;
+    date: string;
+    description: string;
+    amount: number;
+    type: 'tuition' | 'misc' | 'lab' | 'penalty' | 'other';
+    referenceId?: string; // Link to fee structure or specific item
+}
+
+export interface Payment {
+    id: string;
+    date: string;
+    amount: number;
+    method: 'cash' | 'check' | 'bank_transfer' | 'gcash' | 'maya' | 'card' | 'online';
+    referenceNumber?: string;
+    checkNumber?: string;
+    bankName?: string;
+    receiptNumber: string;
+    receivedBy: string;
+    receivedByName: string;
+    notes?: string;
+}
+
+export interface StudentLedger {
+    id: string; // Composite: `${studentId}_${schoolYear}`
+    studentId: string;
+    schoolYear: string;
+    gradeLevel: number;
+    
+    // Fee Structure Applied
+    feeStructureId: string;
+    
+    // Payment Plan
+    paymentPlan: 'full' | 'quarterly' | 'monthly';
+    
+    // Charges
+    charges: Charge[];
+    
+    // Payments
+    payments: Payment[];
+    
+    // Discounts/Scholarships
+    discounts: {
+        id: string;
+        type: 'scholarship' | 'sibling' | 'staff' | 'early_bird' | 'other';
+        name: string;
+        amount: number;
+        percentage?: number;
+        appliedAt: string;
+        appliedBy: string;
+    }[];
+    
+    // Computed Totals
+    totalCharges: number;
+    totalDiscounts: number;
+    totalPayments: number;
+    balance: number;
+    
+    // Status
+    status: 'paid' | 'partial' | 'overdue' | 'cancelled';
+    dueDate?: string;
+    lastPaymentDate?: string;
+    
+    // Metadata
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface Scholarship {
+    id: string;
+    name: string;
+    type: 'academic' | 'sports' | 'talent' | 'financial_need' | 'sibling' | 'other';
+    description: string;
+    
+    // Discount Details
+    discountType: 'percentage' | 'fixed';
+    discountValue: number; // Percentage (50) or fixed amount (5000)
+    
+    // Eligibility
+    eligibility: {
+        minGPA?: number;
+        maxFamilyIncome?: number;
+        requiredDocuments?: string[];
+        otherRequirements?: string[];
+    };
+    
+    // Application Period
+    applicationStart: string;
+    applicationEnd: string;
+    
+    // Status
+    isActive: boolean;
+    slotsAvailable?: number;
+    slotsUsed?: number;
+    
+    // Metadata
+    createdAt: string;
+    updatedAt: string;
+    createdBy: string;
+}
+
+export interface ScholarshipApplication {
+    id: string;
+    scholarshipId: string;
+    studentId: string;
+    schoolYear: string;
+    
+    // Application Details
+    reason: string;
+    documents: DocumentUpload[];
+    
+    // Status
+    status: 'pending' | 'approved' | 'rejected';
+    submittedAt: string;
+    reviewedBy?: string;
+    reviewedAt?: string;
+    reviewNotes?: string;
+    
+    // If Approved
+    appliedToLedgerId?: string;
+    
+    // Metadata
+    createdAt: string;
+    updatedAt: string;
 }

@@ -890,11 +890,21 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // Filter out undefined values to prevent Firestore errors
+            const studentData: Record<string, any> = {};
+            Object.keys(student).forEach(key => {
+                const value = (student as any)[key];
+                if (value !== undefined) {
+                    studentData[key] = value;
+                }
+            });
+            
             await updateDoc(doc(db, 'students', student.id), {
-                ...student,
+                ...studentData,
                 updatedAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Student updated:', student.id);
+            console.log('[useSchoolData] ✅ Student updated:', student.id, 'photoURL:', student.photoURL);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating student:', err);
             throw err;

@@ -54,6 +54,55 @@ service cloud.firestore {
     // End DepEd Forms Collections
     // ========================================
     
+    // ========================================
+    // Enrollment System - Added Nov 1, 2025
+    // ========================================
+    
+    // Enrollment Applications
+    // Security model:
+    // 1. Public can CREATE applications (no auth required for enrollment portal)
+    // 2. Authenticated users can READ all applications (needed for admin dashboard)
+    // 3. Only authenticated users can UPDATE/DELETE (admin actions)
+    match /enrollmentApplications/{applicationId} {
+      // ✅ Allow public creation - Parents don't need account to apply
+      allow create: if true 
+        && request.resource.data.keys().hasAll(['applicationNumber', 'studentInfo', 'guardian1', 'currentAddress', 'academicInfo', 'status', 'submittedAt'])
+        && request.resource.data.status == 'submitted';
+      
+      // ✅ Allow authenticated users to read (admins need to see all applications)
+      allow read: if request.auth != null;
+      
+      // ✅ Allow authenticated users to update (admin approve/reject actions)
+      // Validate that only specific fields can be updated
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt', 'reviewNotes', 'rejectionReason', 'enrolledStudentId', 'updatedAt']);
+      
+      // ✅ Only authenticated users can delete (rare admin action)
+      allow delete: if request.auth != null;
+      
+      // TODO: Add role-based validation when custom claims are implemented
+      // allow update: if request.auth != null && request.auth.token.role == 'admin';
+      // allow delete: if request.auth != null && request.auth.token.role == 'admin';
+    }
+    
+    // Settings Collection
+    // - Public read access (enrollment portal needs to check if enrollment is enabled)
+    // - Only authenticated users can write (admin configuration)
+    match /settings/{settingId} {
+      // ✅ Allow public read - Enrollment portal needs to check enrollmentConfig
+      allow read: if true;
+      
+      // ✅ Only authenticated users can update settings
+      allow write: if request.auth != null;
+      
+      // TODO: Add admin-only restriction when custom claims are implemented
+      // allow write: if request.auth != null && request.auth.token.role == 'admin';
+    }
+    
+    // ========================================
+    // End Enrollment System
+    // ========================================
+    
     // Allow public read access for all collections to enable initial data load.
     // WARNING: This is permissive. Data should be secured further post-login.
     // For now, this unblocks the login screen.

@@ -18,6 +18,19 @@ service firebase.storage {
         request.resource.contentType.matches('image/(jpeg|jpg|png)');
     }
     
+    // Enrollment documents - allow authenticated users to upload
+    match /enrollment-documents/{applicationId}/{documentType} {
+      // Allow any authenticated user to read enrollment documents
+      // (Parents can view their own, admins can view all - enforced at app level)
+      allow read: if request.auth != null;
+      
+      // Allow any authenticated user to upload/update/delete documents
+      // WITH file validation (10MB max, PDF/JPG/PNG only)
+      allow write: if request.auth != null && 
+        request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('(application/pdf|image/(jpeg|jpg|png|webp))');
+    }
+    
     // Deny all other access by default
     match /{allPaths=**} {
       allow read, write: if false;

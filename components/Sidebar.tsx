@@ -24,6 +24,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
       title: 'School Management',
       items: [
         { path: '/announcements', label: 'Announcements', icon: <MegaphoneIcon />, roles: ['admin', 'principal'], badge: null },
+        { path: '/admin/enrollment', label: 'Enrollment', icon: <ClipboardDocumentListIcon />, roles: ['admin'], badge: null },
         { path: '/students', label: 'Students', icon: <AcademicCapIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
         { path: '/teachers', label: 'Teachers', icon: <BriefcaseIcon />, roles: ['admin', 'registrar'], badge: null },
         { path: '/parents', label: 'Parents', icon: <IdentificationIcon />, roles: ['admin', 'registrar'], badge: null },

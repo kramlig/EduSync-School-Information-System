@@ -50,6 +50,13 @@ const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDash
 const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard'));
 const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
 
+// Enrollment components
+const EnrollmentPortal = lazy(() => import('./src/components/enrollment/portal/EnrollmentPortal'));
+const ApplicationForm = lazy(() => import('./src/components/enrollment/forms/ApplicationForm'));
+const ApplicationStatus = lazy(() => import('./src/components/enrollment/status/ApplicationStatus'));
+const AdminEnrollmentDashboard = lazy(() => import('./src/components/enrollment/admin/AdminEnrollmentDashboard'));
+const ApplicationReview = lazy(() => import('./src/components/enrollment/admin/ApplicationReview'));
+
 // Wrapper components to extract URL params
 const Form137ManagerWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear }) => {
   const { studentId } = useParams<{ studentId: string }>();
@@ -283,7 +290,13 @@ const App: React.FC = () => {
     );
   }
 
-  if (!session) {
+  // Allow public access to enrollment routes
+  const publicEnrollmentRoutes = ['/enrollment', '/enrollment/apply', '/enrollment/status'];
+  const isPublicEnrollmentRoute = publicEnrollmentRoutes.some(route => 
+    window.location.pathname.startsWith(route)
+  );
+
+  if (!session && !isPublicEnrollmentRoute) {
     console.log('[App] 🔓 No session - rendering LoginScreen (NO pre-loaded data)');
     return (
       <LoginScreen 
@@ -294,9 +307,33 @@ const App: React.FC = () => {
     );
   }
   
+  // Render public enrollment routes without authentication
+  if (!session && isPublicEnrollmentRoute) {
+    console.log('[App] 🌐 Public enrollment route - rendering without auth');
+    return (
+      <Router>
+        <div className="min-h-screen bg-slate-100 dark:bg-slate-900">
+          <Suspense fallback={<FullScreenLoader message="Loading enrollment..." />}>
+            <Routes>
+              <Route path="/enrollment" element={<EnrollmentPortal />} />
+              <Route path="/enrollment/apply" element={<ApplicationForm />} />
+              <Route path="/enrollment/status" element={<ApplicationStatus />} />
+              <Route path="*" element={<Navigate to="/enrollment" replace />} />
+            </Routes>
+          </Suspense>
+        </div>
+      </Router>
+    );
+  }
+  
+  // At this point, session must exist (either logged in or handled by public routes above)
+  if (!session) {
+    return <FullScreenLoader message="Initializing..." />;
+  }
+  
   // TIER 1 OPTIMIZATION: Show loading state while data loads after login
   // This prevents confusion when transitioning from login to dashboard
-  if (session && loading) {
+  if (loading) {
     return <FullScreenLoader message="Loading your data..." />;
   }
   
@@ -376,6 +413,19 @@ const App: React.FC = () => {
                         <Route path="/announcements" element={<AnnouncementsView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/learning-areas" element={<CourseList schoolData={schoolData} session={staffSession} />} />
                         <Route path="/settings" element={<SettingsView schoolData={schoolData} />} />
+                        
+                        {/* Enrollment Routes */}
+                        <Route path="/enrollment" element={<EnrollmentPortal />} />
+                        <Route path="/enrollment/apply" element={<ApplicationForm />} />
+                        
+                        {/* Admin Enrollment Routes */}
+                        {staffSession.user.role === 'admin' && (
+                          <>
+                            <Route path="/admin/enrollment" element={<AdminEnrollmentDashboard />} />
+                            <Route path="/admin/enrollment/:applicationId" element={<ApplicationReview />} />
+                          </>
+                        )}
+                        
                         {staffSession.user.role === 'teacher' && (
                           <Route path="/teacher-validation" element={<TeacherValidationWizard session={staffSession} />} />
                         )}
