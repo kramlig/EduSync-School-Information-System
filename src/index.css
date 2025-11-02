@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import landing page animations */
+@import './components/marketing/landing-animations.css';
+
 /* Custom base layer adjustments */
 @layer base {
   body { @apply bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100; }

@@ -57,6 +57,9 @@ const ApplicationStatus = lazy(() => import('./src/components/enrollment/status/
 const AdminEnrollmentDashboard = lazy(() => import('./src/components/enrollment/admin/AdminEnrollmentDashboard'));
 const ApplicationReview = lazy(() => import('./src/components/enrollment/admin/ApplicationReview'));
 
+// Marketing components
+const LandingPage = lazy(() => import('./src/components/marketing/LandingPage'));
+
 // Wrapper components to extract URL params
 const Form137ManagerWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear }) => {
   const { studentId } = useParams<{ studentId: string }>();
@@ -290,13 +293,13 @@ const App: React.FC = () => {
     );
   }
 
-  // Allow public access to enrollment routes
-  const publicEnrollmentRoutes = ['/enrollment', '/enrollment/apply', '/enrollment/status'];
-  const isPublicEnrollmentRoute = publicEnrollmentRoutes.some(route => 
-    window.location.pathname.startsWith(route)
+  // Allow public access to enrollment routes and landing page
+  const publicRoutes = ['/', '/home', '/landing', '/enrollment', '/enrollment/apply', '/enrollment/status'];
+  const isPublicRoute = publicRoutes.some(route => 
+    window.location.pathname === route || window.location.pathname.startsWith('/enrollment')
   );
 
-  if (!session && !isPublicEnrollmentRoute) {
+  if (!session && !isPublicRoute) {
     console.log('[App] 🔓 No session - rendering LoginScreen (NO pre-loaded data)');
     return (
       <LoginScreen 
@@ -307,18 +310,21 @@ const App: React.FC = () => {
     );
   }
   
-  // Render public enrollment routes without authentication
-  if (!session && isPublicEnrollmentRoute) {
-    console.log('[App] 🌐 Public enrollment route - rendering without auth');
+  // Render public routes without authentication (landing page + enrollment)
+  if (!session && isPublicRoute) {
+    console.log('[App] 🌐 Public route - rendering without auth');
     return (
       <Router>
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900">
-          <Suspense fallback={<FullScreenLoader message="Loading enrollment..." />}>
+          <Suspense fallback={<FullScreenLoader message="Loading..." />}>
             <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/home" element={<LandingPage />} />
+              <Route path="/landing" element={<LandingPage />} />
               <Route path="/enrollment" element={<EnrollmentPortal />} />
               <Route path="/enrollment/apply" element={<ApplicationForm />} />
               <Route path="/enrollment/status" element={<ApplicationStatus />} />
-              <Route path="*" element={<Navigate to="/enrollment" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
         </div>
