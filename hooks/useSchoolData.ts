@@ -50,6 +50,9 @@ import type {
 // Import interface from backup (will match exactly)
 import type { SchoolDataHook } from './useSchoolData.REACT_QUERY_BACKUP';
 
+// Re-export for external use
+export type { SchoolDataHook };
+
 // Mock settings (same as React Query version)
 const MOCK_SETTINGS: SchoolSettings = {
     schoolName: 'ENRIQUE URENCIA ELEMENTARY SCHOOL',

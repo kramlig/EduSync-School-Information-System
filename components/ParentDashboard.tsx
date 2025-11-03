@@ -6,6 +6,7 @@ import type { AuthUser, StudentUser, ParentUser } from '../types';
 import UpcomingEvents, { UpcomingEvent } from './UpcomingEvents';
 import ProgressRing from './ProgressRing';
 import LineChart from './LineChart';
+import Form138DownloadButtonV2 from './Form138DownloadButtonV2';
 
 interface ParentDashboardProps {
   schoolData: SchoolDataHook;
@@ -158,41 +159,55 @@ const ParentDashboard: React.FC<ParentDashboardProps> = ({ schoolData, session }
 
       {/* Individual Child Cards */}
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {childrenStats.map(child => (
-          <div key={child.id} className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4">
-              {child.name}
-            </h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600 dark:text-slate-400">Average</span>
-                <span className={`text-lg font-bold ${
-                  parseFloat(child.average) >= 85 
-                    ? 'text-green-600 dark:text-green-400'
-                    : parseFloat(child.average) >= 75
-                    ? 'text-yellow-600 dark:text-yellow-400'
-                    : 'text-red-600 dark:text-red-400'
-                }`}>
-                  {child.average}%
-                </span>
+        {childrenStats.map(child => {
+          const student = children.find(s => s.id === child.id);
+          if (!student) return null;
+
+          return (
+            <div key={child.id} className="space-y-4">
+              {/* Performance Card */}
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
+                <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4">
+                  {child.name}
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">Average</span>
+                    <span className={`text-lg font-bold ${
+                      parseFloat(child.average) >= 85 
+                        ? 'text-green-600 dark:text-green-400'
+                        : parseFloat(child.average) >= 75
+                        ? 'text-yellow-600 dark:text-yellow-400'
+                        : 'text-red-600 dark:text-red-400'
+                    }`}>
+                      {child.average}%
+                    </span>
+                  </div>
+                  <div className="flex justify-center pt-2">
+                    <ProgressRing 
+                      value={child.attendance.present}
+                      max={child.attendance.present + child.attendance.absent}
+                      size={100}
+                      strokeWidth={6}
+                      color={parseFloat(child.attendanceRate) >= 95 ? 'green' : 'blue'}
+                      label="Attendance"
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                    <span>Present: {child.attendance.present}</span>
+                    <span>Absent: {child.attendance.absent}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-center pt-2">
-                <ProgressRing 
-                  value={child.attendance.present}
-                  max={child.attendance.present + child.attendance.absent}
-                  size={100}
-                  strokeWidth={6}
-                  color={parseFloat(child.attendanceRate) >= 95 ? 'green' : 'blue'}
-                  label="Attendance"
-                />
-              </div>
-              <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
-                <span>Present: {child.attendance.present}</span>
-                <span>Absent: {child.attendance.absent}</span>
-              </div>
+
+              {/* Form 138 Download Button - Official Format */}
+              <Form138DownloadButtonV2
+                student={student}
+                schoolData={schoolData}
+              />
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Announcements and Events */}

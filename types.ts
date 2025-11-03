@@ -88,6 +88,16 @@ export interface Parent {
     email: string;
     password?: string;
     studentIds: string[];
+    phone?: string;                 // Phone number for SMS notifications
+    emailVerified?: boolean;        // Email verification status
+    registrationDate?: string;      // ISO date of registration
+    notificationPreferences?: {     // Notification settings
+      emailEnabled?: boolean;
+      smsEnabled?: boolean;
+      absenceAlerts?: boolean;
+      gradeAlerts?: boolean;
+      announcementAlerts?: boolean;
+    };
 }
 
 export type ParentUser = Omit<Parent, 'password'>;

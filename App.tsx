@@ -31,6 +31,8 @@ const SettingsView = lazy(() => import('./components/SettingsView'));
 const CourseList = lazy(() => import('./components/CourseList'));
 const StudentDashboard = lazy(() => import('./components/StudentDashboard'));
 const ParentDashboard = lazy(() => import('./components/ParentDashboard'));
+const ParentProfile = lazy(() => import('./components/ParentProfile'));
+const ParentRegistration = lazy(() => import('./src/components/parent/ParentRegistration'));
 const FormsLibrary = lazy(() => import('./components/forms/FormsLibrary'));
 const Form137Dashboard = lazy(() => import('./components/forms/Form137/Form137Dashboard'));
 const Form137Manager = lazy(() => import('./components/forms/Form137/Form137Manager'));
@@ -295,10 +297,10 @@ const App: React.FC = () => {
     );
   }
 
-  // Allow public access to enrollment routes and landing page
-  const publicRoutes = ['/', '/home', '/landing', '/enrollment', '/enrollment/apply', '/enrollment/status'];
+  // Allow public access to enrollment routes, landing page, and parent registration
+  const publicRoutes = ['/', '/home', '/landing', '/enrollment', '/enrollment/apply', '/enrollment/status', '/register/parent'];
   const isPublicRoute = publicRoutes.some(route => 
-    window.location.pathname === route || window.location.pathname.startsWith('/enrollment')
+    window.location.pathname === route || window.location.pathname.startsWith('/enrollment') || window.location.pathname.startsWith('/register')
   );
 
   if (!session && !isPublicRoute) {
@@ -326,6 +328,7 @@ const App: React.FC = () => {
               <Route path="/enrollment" element={<EnrollmentPortal />} />
               <Route path="/enrollment/apply" element={<ApplicationForm />} />
               <Route path="/enrollment/status" element={<ApplicationStatus />} />
+              <Route path="/register/parent" element={<ParentRegistration />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
@@ -367,6 +370,7 @@ const App: React.FC = () => {
           session={session} 
           schoolName={settings.schoolName}
           schoolYear={settings.schoolYear}
+          announcements={announcements}
         />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header
@@ -455,6 +459,7 @@ const App: React.FC = () => {
         {session.type === 'parent' && (
            <>
             <Route path="/" element={<ParentDashboard schoolData={schoolData} session={parentSession} />} />
+            <Route path="/profile" element={<ParentProfile schoolData={schoolData} session={parentSession} onSessionUpdate={(updatedUser) => setSession({ user: updatedUser, type: 'parent' })} />} />
             <Route path="/announcements" element={<AnnouncementsView schoolData={schoolData} session={parentSession} />} />
             <Route path="/assignments" element={<AssignmentsView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/grades" element={<UnifiedAssessmentView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
