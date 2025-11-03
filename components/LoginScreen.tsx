@@ -179,7 +179,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
             </div>
         </div>
         
-        <form className="space-y-6" onSubmit={handleSubmit}>
+        {loginType === 'staff' && (
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
                 <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email address</label>
                 <input
@@ -215,7 +216,103 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
                   >Quick Login as Admin (debug)</button>
                 )}
             </div>
-        </form>
+          </form>
+        )}
+
+        {loginType === 'student' && (
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            <div>
+                <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email address</label>
+                <input
+                    id="email" name="email" type="email" autoComplete="email" required
+                    value={email} onChange={(e) => setEmail(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-slate-700 dark:text-white"
+                />
+            </div>
+            <div>
+                <label htmlFor="password"  className="block text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
+                <input
+                    id="password" name="password" type="password" autoComplete="current-password" required
+                    value={password} onChange={(e) => setPassword(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-slate-700 dark:text-white"
+                />
+            </div>
+
+            {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+            
+            <div className="space-y-2">
+                <button
+                    type="submit" 
+                    disabled={isLoading}
+                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                >
+                    {isLoading ? 'Signing in...' : 'Sign in'}
+                </button>
+                {enableQuickLogin && (
+                  <button
+                    type="button"
+                    onClick={handleQuickLogin}
+                    className="w-full flex justify-center py-1.5 px-4 border border-slate-300 dark:border-slate-600 rounded-md text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600"
+                  >Quick Login as Admin (debug)</button>
+                )}
+            </div>
+          </form>
+        )}
+
+        {loginType === 'parent' && (
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            <div>
+                <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Email address</label>
+                <input
+                    id="email" name="email" type="email" autoComplete="email" required
+                    value={email} onChange={(e) => setEmail(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-slate-700 dark:text-white"
+                />
+            </div>
+            <div>
+                <label htmlFor="password"  className="block text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
+                <input
+                    id="password" name="password" type="password" autoComplete="current-password" required
+                    value={password} onChange={(e) => setPassword(e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-slate-700 dark:text-white"
+                />
+            </div>
+
+            {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+            
+            <div className="space-y-2">
+                <button
+                    type="submit" 
+                    disabled={isLoading}
+                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                >
+                    {isLoading ? 'Signing in...' : 'Sign in'}
+                </button>
+                {enableQuickLogin && (
+                  <button
+                    type="button"
+                    onClick={handleQuickLogin}
+                    className="w-full flex justify-center py-1.5 px-4 border border-slate-300 dark:border-slate-600 rounded-md text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600"
+                  >Quick Login as Admin (debug)</button>
+                )}
+            </div>
+          </form>
+        )}
+        
+        {/* Parent Registration Link */}
+        {loginType === 'parent' && (
+          <div className="text-center mt-4">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Don't have an account?{' '}
+              <a 
+                href="/register/parent" 
+                className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                Register here
+              </a>
+            </p>
+          </div>
+        )}
         {!isProduction && (
           <div className="text-center text-xs text-slate-500 dark:text-slate-400">
             <p className="font-semibold">Demo Credentials:</p>

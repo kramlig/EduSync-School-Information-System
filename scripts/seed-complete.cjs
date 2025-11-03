@@ -320,6 +320,40 @@ async function seedCompleteData() {
     }
     console.log(`✅ Total students created: ${students.length}`);
 
+    // Step 8.5: Create parent account for testing
+    console.log('\n👨‍👩‍👧‍👦 Creating test parent account...');
+    
+    // Find Juan Garcia student (first student from first section)
+    const juanGarciaStudent = students.find(s => 
+      s.firstName === 'Juan' && s.lastName === 'Garcia'
+    ) || students[0]; // Fallback to first student if Juan Garcia not found
+    
+    const parentRef = db.collection('parents').doc();
+    await parentRef.set({
+      name: `${juanGarciaStudent.firstName} ${juanGarciaStudent.lastName}`,
+      email: 'juan.garcia@test.com',
+      password: 'parent123',
+      studentIds: [juanGarciaStudent.id],
+      phone: '09171234567',
+      emailVerified: false,
+      registrationDate: new Date().toISOString(),
+      notificationPreferences: {
+        emailEnabled: true,
+        smsEnabled: false,
+        absenceAlerts: true,
+        gradeAlerts: true,
+        announcementAlerts: true
+      }
+    });
+    
+    // Link parent to student
+    await db.collection('students').doc(juanGarciaStudent.id).update({
+      parentId: parentRef.id
+    });
+    
+    console.log(`✅ Created parent account: juan.garcia@test.com`);
+    console.log(`   Linked to student: ${juanGarciaStudent.firstName} ${juanGarciaStudent.lastName} (${juanGarciaStudent.id})`);
+
     // Step 9: Create attendance records for October 2025
     console.log('\n📋 Creating attendance records for October 2025...');
     const octWeekdays = getWeekdaysInMonth(2025, 9); // October 2025
@@ -394,25 +428,25 @@ async function seedCompleteData() {
       {
         title: 'School Opening Announcement',
         content: 'Welcome back to school year 2023-2024! Classes will begin on August 29, 2023.',
-        targetAudience: 'all',
+        target: 'all',
+        date: '2023-08-15',
         priority: 'high',
-        expiryDate: new Date('2023-09-15'),
         isActive: true
       },
       {
         title: 'Parent-Teacher Conference',
         content: 'Parent-Teacher Conference for Q2 will be held on November 15, 2023. Please mark your calendars.',
-        targetAudience: 'parents',
+        target: 'parents',
+        date: '2023-11-01',
         priority: 'medium',
-        expiryDate: new Date('2023-11-20'),
         isActive: true
       },
       {
         title: 'Sports Fest 2024',
         content: 'The annual Sports Fest will be held on February 14-16, 2024. All students are encouraged to participate!',
-        targetAudience: 'students',
+        target: 'students',
+        date: '2024-01-15',
         priority: 'medium',
-        expiryDate: new Date('2024-02-20'),
         isActive: true
       }
     ];
@@ -438,6 +472,7 @@ async function seedCompleteData() {
     console.log('\n📊 Summary:');
     console.log(`   • School Years: 1`);
     console.log(`   • Teachers: ${teachers.length + 1} (including admin)`);
+    console.log(`   • Parents: 1 (test account)`);
     console.log(`   • Sections: ${sections.length}`);
     console.log(`   • Students: ${students.length}`);
     console.log(`   • Learning Areas: ${learningAreas.length}`);
@@ -446,9 +481,13 @@ async function seedCompleteData() {
     console.log(`   • Grade Entries: ${gradesCreated}`);
     console.log(`   • Announcements: ${announcements.length}`);
     
-    console.log('\n🔐 Login Credentials:');
+    console.log('\n🔐 Admin Login:');
     console.log('   Email: admin@edusync.local');
     console.log('   Password: admin123');
+    
+    console.log('\n👨‍👩‍👧 Parent Portal Login:');
+    console.log('   Email: juan.garcia@test.com');
+    console.log('   Password: parent123');
     
     console.log('\n🌐 Access the application:');
     console.log('   URL: http://localhost:5173 or http://localhost:5174');

@@ -27,7 +27,9 @@ const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({ schoolData, sessi
     const relevantAnnouncements = useMemo(() => {
         let filtered = announcements;
         if (session.type !== 'staff') {
-             filtered = announcements.filter(a => a.target === 'all' || a.target === session.type);
+             // Convert session.type to plural form for matching (parent → parents, student → students)
+             const targetAudience = session.type === 'parent' ? 'parents' : session.type === 'student' ? 'students' : session.type;
+             filtered = announcements.filter(a => a.target === 'all' || a.target === targetAudience);
         }
 
         if (debouncedSearchQuery) {

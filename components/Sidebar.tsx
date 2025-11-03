@@ -1,17 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
-import type { AuthUser, StudentUser, ParentUser } from '../types';
-import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronRightIcon, BuildingOfficeIcon, CheckBadgeIcon } from './icons';
+import type { AuthUser, StudentUser, ParentUser, Announcement } from '../types';
+import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronRightIcon, BuildingOfficeIcon, CheckBadgeIcon, UserCircleIcon } from './icons';
 import DepEdLogo from './DepEdLogo';
 
 interface SidebarProps {
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
   schoolName?: string;
   schoolYear?: string;
+  announcements?: Announcement[];
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoolYear }) => {
+const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoolYear, announcements = [] }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  
+  // Calculate announcement count for parents
+  const parentAnnouncementCount = useMemo(() => {
+    if (session.type !== 'parent') return null;
+    const count = announcements.filter(a => ['all', 'parents'].includes(a.target)).length;
+    return count > 0 ? String(count) : null;
+  }, [announcements, session.type]);
   
   const staffNavGroups = [
     {
@@ -63,7 +71,8 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
 
   const parentNavItems = [
     { path: '/', label: 'Dashboard', icon: <HomeIcon />, badge: null },
-    { path: '/announcements', label: 'Announcements', icon: <MegaphoneIcon />, badge: '2' },
+    { path: '/profile', label: 'My Profile', icon: <UserCircleIcon />, badge: null },
+    { path: '/announcements', label: 'Announcements', icon: <MegaphoneIcon />, badge: parentAnnouncementCount },
     { path: '/assignments', label: 'Assignments', icon: <ClipboardDocumentCheckIcon />, badge: null },
     { path: '/grades', label: 'Grades & Reports', icon: <ClipboardDocumentListIcon />, badge: null },
     { path: '/attendance', label: 'Attendance', icon: <CalendarDaysIcon />, badge: null },
