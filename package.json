@@ -16,6 +16,7 @@
     "test:realtime": "playwright test scripts/tests/playwright/realtime-cross-tab.spec.ts --project=chromium",
     "validate": "node scripts/validate-setup.cjs",
     "seed": "node scripts/seed-complete.cjs",
+    "seed:presentation": "node scripts/run-presentation-seed.cjs",
     "emu:seed:small": "node scripts/emu-exec-seed.cjs --projectId=edusync-local --teachers=8 --parents=20 --sections=4 --students=40 --noExport=true",
     "emu:seed:big": "node scripts/emu-exec-seed.cjs --projectId=edusync-local --teachers=300 --parents=2000 --sections=50 --students=3000 --noExport=true",
     "emu:seed:export": "node scripts/emu-exec-seed.cjs --projectId=edusync-local --teachers=8 --parents=20 --sections=4 --students=40",
