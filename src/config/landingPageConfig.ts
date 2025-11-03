@@ -8,8 +8,8 @@
 export const CONTACT_INFO = {
   // TODO: Replace with your actual contact information
   email: 'hello@edusync.ph',
-  phone: '+63 917 123 4567',
-  phoneDisplay: '+63 917 123 4567',
+  phone: '+63 998 843 8815',
+  phoneDisplay: '+63 998 843 8815',
   
   // Social media links (optional)
   facebook: 'https://facebook.com/edusync',

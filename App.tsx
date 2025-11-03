@@ -205,6 +205,8 @@ const App: React.FC = () => {
   
   const handleLogout = useCallback(() => {
     setSession(null);
+    // Redirect to /admin page after logout
+    window.location.href = '/admin';
   }, []);
 
   console.log('[App] Loading check:', { authReady, loading, studentsCount: students.length, teachersCount: teachers.length, loadTimeout });

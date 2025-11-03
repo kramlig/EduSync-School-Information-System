@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduSync Demo Video Teleprompter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 1.1em;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .start-btn {
+            background: #10b981;
+            color: white;
+        }
+
+        .start-btn:hover {
+            background: #059669;
+            transform: translateY(-2px);
+        }
+
+        .pause-btn {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .pause-btn:hover {
+            background: #d97706;
+        }
+
+        .reset-btn {
+            background: #ef4444;
+            color: white;
+        }
+
+        .reset-btn:hover {
+            background: #dc2626;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px 20px;
+            border-radius: 10px;
+        }
+
+        .speed-control input {
+            width: 150px;
+        }
+
+        .script-container {
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 20px;
+            padding: 40px;
+            overflow: hidden;
+            position: relative;
+            min-height: 500px;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .script {
+            font-size: 2em;
+            line-height: 1.8;
+            transition: transform 0.1s linear;
+            will-change: transform;
+        }
+
+        .script p {
+            margin-bottom: 40px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .script .current {
+            background: rgba(59, 130, 246, 0.3);
+            border-left-color: #fbbf24;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+
+        .timestamp {
+            color: #fbbf24;
+            font-weight: bold;
+            margin-right: 15px;
+            font-size: 0.8em;
+        }
+
+        .shot-marker {
+            background: rgba(16, 185, 129, 0.2);
+            border: 2px dashed #10b981;
+            padding: 15px;
+            margin: 30px 0;
+            border-radius: 10px;
+            font-weight: bold;
+            color: #10b981;
+        }
+
+        .timer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            font-size: 2em;
+            font-weight: bold;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            z-index: 1000;
+        }
+
+        .instructions {
+            background: rgba(251, 191, 36, 0.2);
+            border: 2px solid #fbbf24;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .script {
+                font-size: 1.5em;
+            }
+            
+            h1 {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 EduSync Demo Video Teleprompter</h1>
+            <p>Read naturally. Pause at shot markers. You've got this! 🎤</p>
+        </div>
+
+        <div class="instructions">
+            <strong>💡 Pro Tip:</strong> Position this on a second monitor or tablet below your camera. 
+            Adjust speed to match your natural speaking pace.
+        </div>
+
+        <div class="controls">
+            <button class="start-btn" onclick="startScroll()">▶ Start Scrolling</button>
+            <button class="pause-btn" onclick="pauseScroll()">⏸ Pause</button>
+            <button class="reset-btn" onclick="resetScroll()">⏮ Reset</button>
+            
+            <div class="speed-control">
+                <label>Speed:</label>
+                <input type="range" min="1" max="10" value="3" id="speedSlider" oninput="updateSpeed(this.value)">
+                <span id="speedValue">3</span>
+            </div>
+        </div>
+
+        <div class="timer" id="timer">0:00</div>
+
+        <div class="script-container">
+            <div class="script" id="script">
+                
+                <div class="shot-marker">📍 SHOT 1: OPENING (0:00-0:15)</div>
+                <p>
+                    <span class="timestamp">[0:00]</span>
+                    Meet EduSync—the all-in-one school information system designed for Philippine K-12 schools.
+                </p>
+
+                <div class="shot-marker">📍 SHOT 2: DASHBOARD (0:15-0:35)</div>
+                <p>
+                    <span class="timestamp">[0:15]</span>
+                    Get a complete view of your school at a glance. Track students, monitor attendance, 
+                    and generate reports—all in one place.
+                </p>
+
+                <div class="shot-marker">📍 SHOT 3: ENROLLMENT PORTAL (0:35-0:55)</div>
+                <p>
+                    <span class="timestamp">[0:35]</span>
+                    Parents apply online from home. Upload documents, submit photos, and track application 
+                    status in real-time.
+                </p>
+
+                <div class="shot-marker">📍 SHOT 4: DEPED FORMS (0:55-1:15)</div>
+                <p>
+                    <span class="timestamp">[0:55]</span>
+                    Generate official DepEd forms in seconds, not days. Form 137, Form 138, SF1, SF2—all 
+                    100% compliant and pixel-perfect.
+                </p>
+
+                <div class="shot-marker">📍 SHOT 5: AI ANALYTICS (1:15-1:35)</div>
+                <p>
+                    <span class="timestamp">[1:15]</span>
+                    AI-powered insights help you act fast. Identify at-risk students early, predict 
+                    performance trends, and get personalized intervention recommendations.
+                </p>
+
+                <div class="shot-marker">📍 SHOT 6: MOBILE & OFFLINE (1:35-1:50)</div>
+                <p>
+                    <span class="timestamp">[1:35]</span>
+                    Works on any device. Online or offline. Your data syncs automatically when connection 
+                    is restored.
+                </p>
+
+                <div class="shot-marker">📍 SHOT 7: SECURITY (1:50-2:05)</div>
+                <p>
+                    <span class="timestamp">[1:50]</span>
+                    Bank-level security. Data Privacy Act compliant. Role-based access controls. Your 
+                    school data is safe with us.
+                </p>
+
+                <div class="shot-marker">📍 SHOT 8: CLOSING CTA (2:05-2:30)</div>
+                <p>
+                    <span class="timestamp">[2:05]</span>
+                    Join hundreds of schools already using EduSync. Start your free 30-day trial today—no 
+                    credit card required.
+                </p>
+                <p>
+                    <span class="timestamp">[2:20]</span>
+                    Visit EduSync SIS dot web dot app.
+                </p>
+
+                <div style="height: 500px;"></div>
+                <div style="text-align: center; font-size: 3em; padding: 40px;">
+                    🎉 THE END 🎉<br>
+                    <small style="font-size: 0.5em;">Great job! 🎬</small>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scrolling = false;
+        let scrollSpeed = 1;
+        let scrollPosition = 0;
+        let startTime = null;
+        let timerInterval = null;
+
+        function startScroll() {
+            if (!scrolling) {
+                scrolling = true;
+                if (!startTime) startTime = Date.now();
+                scroll();
+                startTimer();
+            }
+        }
+
+        function pauseScroll() {
+            scrolling = false;
+            pauseTimer();
+        }
+
+        function resetScroll() {
+            scrolling = false;
+            scrollPosition = 0;
+            startTime = null;
+            document.getElementById('script').style.transform = 'translateY(0px)';
+            document.getElementById('timer').textContent = '0:00';
+            pauseTimer();
+        }
+
+        function scroll() {
+            if (!scrolling) return;
+            
+            scrollPosition += scrollSpeed;
+            document.getElementById('script').style.transform = `translateY(-${scrollPosition}px)`;
+            
+            requestAnimationFrame(scroll);
+        }
+
+        function updateSpeed(value) {
+            scrollSpeed = value / 3;
+            document.getElementById('speedValue').textContent = value;
+        }
+
+        function startTimer() {
+            if (timerInterval) return;
+            
+            timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                document.getElementById('timer').textContent = 
+                    `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }, 100);
+        }
+
+        function pauseTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (scrolling) {
+                    pauseScroll();
+                } else {
+                    startScroll();
+                }
+            } else if (e.code === 'KeyR') {
+                resetScroll();
+            } else if (e.code === 'ArrowUp') {
+                e.preventDefault();
+                const slider = document.getElementById('speedSlider');
+                slider.value = Math.min(10, parseInt(slider.value) + 1);
+                updateSpeed(slider.value);
+            } else if (e.code === 'ArrowDown') {
+                e.preventDefault();
+                const slider = document.getElementById('speedSlider');
+                slider.value = Math.max(1, parseInt(slider.value) - 1);
+                updateSpeed(slider.value);
+            }
+        });
+    </script>
+</body>
+</html>
