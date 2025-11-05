@@ -32,7 +32,12 @@ const CourseList = lazy(() => import('./components/CourseList'));
 const StudentDashboard = lazy(() => import('./components/StudentDashboard'));
 const ParentDashboard = lazy(() => import('./components/ParentDashboard'));
 const ParentProfile = lazy(() => import('./components/ParentProfile'));
+const ParentBilling = lazy(() => import('./components/ParentBilling'));
 const ParentRegistration = lazy(() => import('./src/components/parent/ParentRegistration'));
+// const EmailVerification = lazy(() => import('./components/EmailVerification')); // Temporarily disabled
+const FeeStructureManager = lazy(() => import('./components/FeeStructureManager'));
+const PaymentRecording = lazy(() => import('./components/PaymentRecording'));
+const FinancialReports = lazy(() => import('./components/FinancialReports'));
 const FormsLibrary = lazy(() => import('./components/forms/FormsLibrary'));
 const Form137Dashboard = lazy(() => import('./components/forms/Form137/Form137Dashboard'));
 const Form137Manager = lazy(() => import('./components/forms/Form137/Form137Manager'));
@@ -426,6 +431,15 @@ const App: React.FC = () => {
                         <Route path="/learning-areas" element={<CourseList schoolData={schoolData} session={staffSession} />} />
                         <Route path="/settings" element={<SettingsView schoolData={schoolData} />} />
                         
+                        {/* Financial Management Routes */}
+                        {(staffSession.user.role === 'admin' || staffSession.user.role === 'registrar') && (
+                          <>
+                            <Route path="/fee-structures" element={<FeeStructureManager schoolData={schoolData} />} />
+                            <Route path="/record-payment" element={<PaymentRecording schoolData={schoolData} session={staffSession} />} />
+                            <Route path="/financial-reports" element={<FinancialReports schoolData={schoolData} session={staffSession} />} />
+                          </>
+                        )}
+                        
                         {/* Enrollment Routes */}
                         <Route path="/enrollment" element={<EnrollmentPortal />} />
                         <Route path="/enrollment/apply" element={<ApplicationForm />} />
@@ -460,6 +474,9 @@ const App: React.FC = () => {
            <>
             <Route path="/" element={<ParentDashboard schoolData={schoolData} session={parentSession} />} />
             <Route path="/profile" element={<ParentProfile schoolData={schoolData} session={parentSession} onSessionUpdate={(updatedUser) => setSession({ user: updatedUser, type: 'parent' })} />} />
+            <Route path="/billing" element={<ParentBilling schoolData={schoolData} session={parentSession} selectedChildId={parentSelectedChildId} />} />
+            {/* <Route path="/verify-email" element={<EmailVerification />} /> */}
+            {/* <Route path="/email-verification" element={<EmailVerification />} /> */}
             <Route path="/announcements" element={<AnnouncementsView schoolData={schoolData} session={parentSession} />} />
             <Route path="/assignments" element={<AssignmentsView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/grades" element={<UnifiedAssessmentView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
