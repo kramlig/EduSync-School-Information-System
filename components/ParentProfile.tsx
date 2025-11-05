@@ -14,6 +14,7 @@ import type { ParentUser } from '../types';
 import { getFirestoreInstance } from '../src/services/firestoreService';
 import { doc, updateDoc } from 'firebase/firestore';
 import { UserCircleIcon, BellIcon, AcademicCapIcon } from './icons';
+import NotificationHistory from './NotificationHistory';
 
 interface ParentProfileProps {
   schoolData: SchoolDataHook;
@@ -464,20 +465,23 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
                 </label>
               </div>
               
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between opacity-50">
                 <div>
                   <p className="font-medium text-slate-800 dark:text-white">SMS Notifications</p>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Receive updates via text message</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    Receive updates via text message
+                    <span className="ml-2 text-xs bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded">Coming Soon</span>
+                  </p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
+                <label className="relative inline-flex items-center cursor-not-allowed">
                   <input
                     type="checkbox"
-                    checked={notificationPrefs.smsEnabled}
-                    onChange={() => handleNotificationChange('smsEnabled')}
+                    checked={false}
+                    disabled
                     className="sr-only peer"
-                    aria-label="Enable SMS notifications"
+                    aria-label="Enable SMS notifications (Coming Soon)"
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 rounded-full peer dark:bg-slate-700 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 dark:border-slate-600"></div>
                 </label>
               </div>
               
@@ -584,6 +588,11 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
             </div>
           </div>
         </div>
+      </div>
+      
+      {/* Notification History Section (Full Width) */}
+      <div className="mt-6">
+        <NotificationHistory parent={parent} />
       </div>
     </div>
   );

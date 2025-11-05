@@ -516,3 +516,46 @@ exports.seedAnnouncements = functions.https.onRequest((req, res) => {
     }
   });
 });
+
+// ========================================
+// Phase 2: Notification System (Hybrid Approach)
+// ========================================
+// - SMS: Custom functions using Semaphore API (cheaper for PH)
+// - Email: Firebase Extension (firestore-send-email) for simplicity
+// ========================================
+
+// Absence Alert Notifications V2 (Email via Extension)
+const absenceNotificationsV2 = require('./src/notifications/onAbsenceCreatedV2');
+exports.onAbsenceCreated = absenceNotificationsV2.onAbsenceCreated;
+
+// Legacy SMS-only version (disabled - no credits)
+// const absenceNotifications = require('./src/notifications/onAbsenceCreated');
+// exports.onAbsenceCreatedSMS = absenceNotifications.onAbsenceCreated;
+
+// Grade Alert Notifications (Email via Extension)
+const gradeNotificationsV2 = require('./src/notifications/onGradePostedV2');
+exports.onGradePosted = gradeNotificationsV2.onGradePosted;
+exports.sendGradeNotificationManual = gradeNotificationsV2.sendGradeNotificationManual;
+
+// Announcement Notifications (Multi-channel: SMS Custom + Email via Extension)
+const announcementNotificationsV2 = require('./src/notifications/onAnnouncementCreatedV2');
+exports.onAnnouncementCreated = announcementNotificationsV2.onAnnouncementCreated;
+exports.testAnnouncementNotification = announcementNotificationsV2.testAnnouncementNotification;
+
+// ========================================
+// Test Functions
+// ========================================
+const emailTest = require('./src/test/testEmailExtension');
+exports.testEmailExtension = emailTest.testEmailExtension;
+
+const gradeTest = require('./src/test/testGradeNotification');
+exports.testGradeNotification = gradeTest.testGradeNotification;
+
+const smsTest = require('./src/test/testSMSNotification');
+exports.testSMSNotification = smsTest.testSMSNotification;
+
+const announcementTest = require('./src/test/testAnnouncementNotification');
+exports.testAnnouncementNotification = announcementTest.testAnnouncementNotification;
+
+const absenceTest = require('./src/test/testAbsenceNotification');
+exports.testAbsenceNotification = absenceTest.testAbsenceNotification;
