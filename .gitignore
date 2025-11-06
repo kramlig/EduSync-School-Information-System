@@ -4,6 +4,7 @@ dist/
 
 # Local env
 .env.local
+functions/.env
 
 # Vite cache
 .vite/
