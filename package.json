@@ -14,6 +14,7 @@
     "test:inspector": "playwright test scripts/tests/playwright --project=chromium",
     "test:e2e": "playwright test scripts/tests/playwright/crud.spec.js --project=chromium",
     "test:realtime": "playwright test scripts/tests/playwright/realtime-cross-tab.spec.ts --project=chromium",
+    "test:firestore-rules": "jest tests/firestore-rules.test.js --testEnvironment=node",
     "validate": "node scripts/validate-setup.cjs",
     "seed": "node scripts/seed-complete.cjs",
     "seed:presentation": "node scripts/run-presentation-seed.cjs",
