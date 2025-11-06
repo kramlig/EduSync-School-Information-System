@@ -104,7 +104,18 @@ async function seedCompleteData() {
         password: 'admin123',
         displayName: 'System Admin'
       });
-      console.log('✅ Created admin in Firebase Auth');
+      
+      // Set custom claims for admin
+      try {
+        await auth.setCustomUserClaims('admin123', {
+          role: 'admin',
+          schoolId: 'default'
+        });
+        console.log('✅ Created admin in Firebase Auth with role claims');
+      } catch (claimsErr) {
+        console.log('✅ Created admin in Firebase Auth');
+        console.log('⚠️  Could not set custom claims:', claimsErr.message);
+      }
     } catch (err) {
       console.log('⚠️  Auth emulator not available (this is OK):', err.message);
     }
