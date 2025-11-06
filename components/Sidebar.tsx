@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { AuthUser, StudentUser, ParentUser, Announcement } from '../types';
-import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronRightIcon, BuildingOfficeIcon, CheckBadgeIcon, UserCircleIcon } from './icons';
+import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronRightIcon, BuildingOfficeIcon, CheckBadgeIcon, UserCircleIcon, CreditCardIcon, CurrencyDollarIcon, ChartPieIcon } from './icons';
 import DepEdLogo from './DepEdLogo';
 
 interface SidebarProps {
@@ -52,6 +52,14 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
       ]
     },
     {
+      title: 'Financial',
+      items: [
+        { path: '/fee-structures', label: 'Fee Structures', icon: <CurrencyDollarIcon />, roles: ['admin', 'registrar'], badge: null },
+        { path: '/record-payment', label: 'Record Payment', icon: <CreditCardIcon />, roles: ['admin', 'registrar'], badge: null },
+        { path: '/financial-reports', label: 'Financial Reports', icon: <ChartPieIcon />, roles: ['admin', 'registrar'], badge: null },
+      ]
+    },
+    {
       title: 'System',
       items: [
         { path: '/settings', label: 'Settings', icon: <CogIcon />, roles: ['admin'], badge: null },
@@ -72,6 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
   const parentNavItems = [
     { path: '/', label: 'Dashboard', icon: <HomeIcon />, badge: null },
     { path: '/profile', label: 'My Profile', icon: <UserCircleIcon />, badge: null },
+    { path: '/billing', label: 'Billing & Payments', icon: <CreditCardIcon />, badge: null },
     { path: '/announcements', label: 'Announcements', icon: <MegaphoneIcon />, badge: parentAnnouncementCount },
     { path: '/assignments', label: 'Assignments', icon: <ClipboardDocumentCheckIcon />, badge: null },
     { path: '/grades', label: 'Grades & Reports', icon: <ClipboardDocumentListIcon />, badge: null },
