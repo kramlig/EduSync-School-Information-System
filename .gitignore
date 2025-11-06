@@ -56,3 +56,14 @@ dist-ssr
 *.sln
 *.sw?
 firebase-deployer-key.json
+
+# Build artifacts
+.firebase/hosting.*.cache
+dev-dist/
+
+# Backup files
+*.bak
+
+# Test artifacts
+test-results/tests-*/
+extension-config.env
