@@ -2,13 +2,15 @@
  * ParentRegistration - Public-facing parent registration form
  * 
  * Allows parents to self-register by verifying their child's LRN and birthdate.
+ * Sends email verification after successful registration.
  * No login required to access this page.
  */
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFirestoreInstance } from '../../services/firestoreService';
-import { collection, query, where, getDocs, addDoc, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import type { Student, Parent } from '../../../types';
 
 interface RegistrationForm {
@@ -191,7 +193,25 @@ const ParentRegistration: React.FC = () => {
         return;
       }
       
-      // Create parent account
+      // Create Firebase Auth user
+      const auth = getAuth();
+      const userCredential = await createUserWithEmailAndPassword(
+        auth, 
+        formData.parentEmail, 
+        formData.password
+      );
+      
+      console.log('[ParentRegistration] Firebase Auth user created:', userCredential.user.uid);
+      
+      // Send verification email
+      await sendEmailVerification(userCredential.user, {
+        url: window.location.origin + '/verify-email',
+        handleCodeInApp: true
+      });
+      
+      console.log('[ParentRegistration] Verification email sent to', formData.parentEmail);
+      
+      // Create parent document in Firestore (use Firebase Auth UID as document ID)
       const newParent: Omit<Parent, 'id'> = {
         name: formData.parentName,
         email: formData.parentEmail,
@@ -202,19 +222,18 @@ const ParentRegistration: React.FC = () => {
         registrationDate: new Date().toISOString(),
       };
       
-      const parentDocRef = await addDoc(parentsRef, newParent);
-      console.log('[ParentRegistration] Parent account created:', parentDocRef.id);
+      const parentRef = doc(db, 'parents', userCredential.user.uid);
+      await setDoc(parentRef, newParent);
+      
+      console.log('[ParentRegistration] Parent account created:', userCredential.user.uid);
       
       // Update student with parent link
       const studentRef = doc(db, 'students', verifiedStudent!.id);
       await updateDoc(studentRef, {
-        parentIds: arrayUnion(parentDocRef.id)
+        parentIds: arrayUnion(userCredential.user.uid)
       });
       
       console.log('[ParentRegistration] Student linked to parent');
-      
-      // TODO: Send verification email
-      console.log('[ParentRegistration] TODO: Send verification email to', formData.parentEmail);
       
       // Success
       setRegistrationSuccess(true);
