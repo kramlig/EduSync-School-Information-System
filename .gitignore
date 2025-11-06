@@ -59,7 +59,7 @@ firebase-deployer-key.json
 
 # Build artifacts
 .firebase/hosting.*.cache
-dev-dist/
+dev-dist/sw.js
 
 # Backup files
 *.bak
