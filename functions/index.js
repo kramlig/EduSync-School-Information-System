@@ -559,3 +559,11 @@ exports.testAnnouncementNotification = announcementTest.testAnnouncementNotifica
 
 const absenceTest = require('./src/test/testAbsenceNotification');
 exports.testAbsenceNotification = absenceTest.testAbsenceNotification;
+
+// ========================================
+// Auto-Onboarding System
+// ========================================
+const autoOnboarding = require('./src/autoOnboarding');
+exports.onUserCreated = autoOnboarding.onUserCreated;
+exports.assignUserRole = autoOnboarding.assignUserRole;
+exports.getUserRoleHistory = autoOnboarding.getUserRoleHistory;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense, useCallback } from 'react';
+import React, { useState, useEffect, lazy, Suspense, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
@@ -173,7 +173,9 @@ const App: React.FC = () => {
   // NEW: Firestore subscriptions hook - loads all data automatically with real-time updates
   // IMPORTANT: Only fetch data when user is logged in (session exists)
   // Pass empty array when no session to prevent unnecessary subscriptions
-  const schoolData = useSchoolData(session ? undefined : []);
+  // CRITICAL: Memoize the empty array to prevent infinite render loops
+  const emptyCollections = useMemo(() => [], []);
+  const schoolData = useSchoolData(session ? undefined : emptyCollections);
   
   const { 
     loading, error, settings, students, teachers, parents,
