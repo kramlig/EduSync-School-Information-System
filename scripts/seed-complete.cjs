@@ -10,6 +10,11 @@ const app = initializeApp({ projectId: 'edusync-local' });
 const db = getFirestore();
 const auth = getAuth();
 
+// Helper function to pick random item from array
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 // Helper function to generate weekdays for a date range
 function getWeekdaysInMonth(year, month) {
   const date = new Date(year, month, 1);
@@ -49,6 +54,7 @@ async function clearAllData() {
   console.log('🧹 Clearing existing data...');
   
   const collections = [
+    // Core collections
     'users',
     'students',
     'teachers', 
@@ -58,7 +64,7 @@ async function clearAllData() {
     'grades',
     'coreValues',
     'coreValueGrades',
-    'attendance',
+    'attendance', // Legacy - will be removed
     'attendanceRecords',
     'substituteAssignments',
     'classSchedules',
@@ -66,7 +72,18 @@ async function clearAllData() {
     'studentAssignmentGrades',
     'lessonPlans',
     'announcements',
-    'schoolYears'
+    'schoolYears',
+    // Financial module collections (match production)
+    'feeStructures',
+    'receipts',
+    'billingStatements',
+    'studentLedgers',
+    'paymentProofs',
+    // Enrollment portal collections
+    'enrollmentApplications',
+    // System collections
+    'notifications',
+    'validationResults'
   ];
   
   for (const collectionName of collections) {
@@ -168,26 +185,6 @@ async function seedCompleteData() {
     });
     console.log('✅ School year created');
 
-    // Step 4: Create teachers
-    console.log('\n👨‍🏫 Creating teachers...');
-    const teachers = [
-      { id: 'teacher-001', firstName: 'Roberto', lastName: 'Santos', email: 'roberto.santos@edusync.local', specialization: 'Mathematics' },
-      { id: 'teacher-002', firstName: 'Ana', lastName: 'Cruz', email: 'ana.cruz@edusync.local', specialization: 'English' },
-      { id: 'teacher-003', firstName: 'Pedro', lastName: 'Garcia', email: 'pedro.garcia@edusync.local', specialization: 'Science' },
-      { id: 'teacher-004', firstName: 'Maria', lastName: 'Lopez', email: 'maria.lopez@edusync.local', specialization: 'Filipino' }
-    ];
-
-    for (const teacher of teachers) {
-      await db.collection('teachers').doc(teacher.id).set({
-        ...teacher,
-        name: `${teacher.firstName} ${teacher.lastName}`,
-        status: 'active',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-    }
-    console.log(`✅ Created ${teachers.length} teachers`);
-
     // Step 5: Create learning areas (Elementary, Junior High, Senior High)
     console.log('\n📚 Creating learning areas...');
     const learningAreas = [
@@ -264,60 +261,194 @@ async function seedCompleteData() {
     }
     console.log(`✅ Created ${coreValues.length} core values`);
 
-    // Step 7: Create sections
-    console.log('\n🏫 Creating sections...');
-    const sections = [
-      { id: 'section-7-diamond', name: 'Diamond', gradeLevel: 7 },
-      { id: 'section-7-ruby', name: 'Ruby', gradeLevel: 7 },
-      { id: 'section-8-emerald', name: 'Emerald', gradeLevel: 8 },
-      { id: 'section-8-sapphire', name: 'Sapphire', gradeLevel: 8 }
+    // Step 6.5: Create realistic teacher accounts
+    console.log('\n👨‍🏫 Creating teacher accounts...');
+    const teacherData = [
+      { id: 'teacher-001', firstName: 'Roberto', lastName: 'Santos', email: 'roberto.santos@edusync.local', specialization: 'Mathematics', gradeLevel: 6, gradeLevels: [5, 6, 7] },
+      { id: 'teacher-002', firstName: 'Maria', lastName: 'Garcia', email: 'maria.garcia@edusync.local', specialization: 'Science', gradeLevel: 7, gradeLevels: [6, 7, 8] },
+      { id: 'teacher-003', firstName: 'Juan', lastName: 'Cruz', email: 'juan.cruz@edusync.local', specialization: 'English', gradeLevel: 8, gradeLevels: [7, 8, 9] },
+      { id: 'teacher-004', firstName: 'Ana', lastName: 'Reyes', email: 'ana.reyes@edusync.local', specialization: 'Filipino', gradeLevel: 1, gradeLevels: ['K', 1, 2, 3] },
+      { id: 'teacher-005', firstName: 'Carlos', lastName: 'Lopez', email: 'carlos.lopez@edusync.local', specialization: 'Araling Panlipunan', gradeLevel: 10, gradeLevels: [9, 10, 11] },
+      { id: 'teacher-006', firstName: 'Sofia', lastName: 'Mendoza', email: 'sofia.mendoza@edusync.local', specialization: 'MAPEH', gradeLevel: 11, gradeLevels: [10, 11, 12] },
+      { id: 'teacher-007', firstName: 'Miguel', lastName: 'Torres', email: 'miguel.torres@edusync.local', specialization: 'TLE', gradeLevel: 12, gradeLevels: [11, 12] },
+      { id: 'teacher-008', firstName: 'Isabella', lastName: 'Flores', email: 'isabella.flores@edusync.local', specialization: 'Values Education', gradeLevel: 2, gradeLevels: [1, 2, 3, 4] }
     ];
 
-    for (const section of sections) {
-      await db.collection('sections').doc(section.id).set({
-        id: section.id,
-        name: section.name,
-        gradeLevel: section.gradeLevel,
-        adviserId: 'admin123',
-        schoolYear: schoolYear,
+    for (const teacher of teacherData) {
+      // Create in Auth
+      try {
+        await auth.createUser({
+          uid: teacher.id,
+          email: teacher.email,
+          password: 'teacher123',
+          displayName: `${teacher.firstName} ${teacher.lastName}`
+        });
+        await auth.setCustomUserClaims(teacher.id, { role: 'teacher', schoolId: 'default' });
+      } catch (err) {
+        console.log(`   ⚠️  Could not create Auth user for ${teacher.email}: ${err.message}`);
+      }
+
+      // Map specialization to learning area ID (matches actual IDs in database)
+      // Elementary teachers teach grades K-6, so use elementary learning areas
+      const specializationToLearningArea = {
+        'Mathematics': 'la-elem-math',
+        'Science': 'la-elem-science',
+        'English': 'la-elem-english',
+        'Filipino': 'la-elem-filipino',
+        'Araling Panlipunan': 'la-elem-ap',
+        'MAPEH': 'la-elem-mapeh',
+        'TLE': 'la-jhs-tle',  // TLE is Junior High
+        'Values Education': 'la-elem-edp'  // Edukasyon sa Pagpapakatao
+      };
+
+      const learningAreaId = specializationToLearningArea[teacher.specialization];
+
+      // Create teaching assignments (teach their specialization across all assigned grade levels)
+      // Use explicitly defined gradeLevels from teacher data (includes K for kindergarten teachers)
+      const teachingAssignments = [];
+      const assignedGrades = teacher.gradeLevels || [teacher.gradeLevel]; // Fallback to single grade
+      
+      // Add teaching assignments for each grade level
+      for (const gradeLevel of assignedGrades) {
+        if (learningAreaId) {
+          teachingAssignments.push({
+            gradeLevel: gradeLevel,
+            learningAreaId: learningAreaId,
+            learningAreaName: teacher.specialization,
+            sectionIds: [] // Will be populated when sections are assigned
+          });
+        }
+      }
+
+      // Create in Firestore
+      await db.collection('teachers').doc(teacher.id).set({
+        id: teacher.id,
+        email: teacher.email,
+        firstName: teacher.firstName,
+        lastName: teacher.lastName,
+        name: `${teacher.firstName} ${teacher.lastName}`,
+        role: 'teacher',
+        status: 'active',
+        specialization: teacher.specialization,
+        employeeNumber: `T-2024-${teacher.id.split('-')[1]}`,
+        contactNumber: `+639${Math.floor(Math.random() * 900000000 + 100000000)}`,
+        assignments: teachingAssignments, // ADDED: Teaching assignments
         createdAt: new Date(),
         updatedAt: new Date()
       });
-    }
-    console.log(`✅ Created ${sections.length} sections`);
 
-    // Step 8: Create students
+      // Mirror to users collection
+      await db.collection('users').doc(teacher.id).set({
+        id: teacher.id,
+        email: teacher.email,
+        name: `${teacher.firstName} ${teacher.lastName}`,
+        role: 'teacher',
+        createdAt: new Date()
+      });
+    }
+    console.log(`✅ Created ${teacherData.length} teacher accounts with role='teacher'`);
+
+    // Step 7: Create sections (K-12 full coverage)
+    console.log('\n🏫 Creating sections (K-12)...');
+    const sectionNames = ['Diamond', 'Ruby', 'Emerald', 'Sapphire', 'Pearl', 'Jade', 'Topaz', 'Opal', 'Amber', 'Garnet'];
+    const sections = [];
+    
+    // K-12 grade levels
+    const gradeLevels = [
+      { value: 'K', label: 'Kindergarten' },
+      { value: 1, label: 'Grade 1' },
+      { value: 2, label: 'Grade 2' },
+      { value: 3, label: 'Grade 3' },
+      { value: 4, label: 'Grade 4' },
+      { value: 5, label: 'Grade 5' },
+      { value: 6, label: 'Grade 6' },
+      { value: 7, label: 'Grade 7' },
+      { value: 8, label: 'Grade 8' },
+      { value: 9, label: 'Grade 9' },
+      { value: 10, label: 'Grade 10' },
+      { value: 11, label: 'Grade 11' },
+      { value: 12, label: 'Grade 12' }
+    ];
+
+    let sectionCount = 0;
+    for (const gradeLevel of gradeLevels) {
+      // Create 2 sections per grade level
+      for (let i = 0; i < 2; i++) {
+        sectionCount++;
+        const sectionName = sectionNames[i % sectionNames.length];
+        const sectionId = `section-${gradeLevel.value}-${sectionName.toLowerCase()}`;
+        
+        // Assign a teacher as adviser (round-robin through teachers)
+        const teacherIndex = sectionCount % teacherData.length;
+        const adviserId = teacherData[teacherIndex].id;
+        
+        const section = {
+          id: sectionId,
+          name: sectionName,
+          gradeLevel: gradeLevel.value,
+          adviserId: adviserId,
+          schoolYear: schoolYear,
+          capacity: 40,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        
+        sections.push(section);
+        await db.collection('sections').doc(sectionId).set(section);
+      }
+      console.log(`   ✓ Created 2 sections for ${gradeLevel.label}`);
+    }
+    console.log(`✅ Created ${sections.length} sections across K-12`);
+
+    // Step 8: Create students (diverse, realistic data)
     console.log('\n👨‍🎓 Creating students...');
-    const firstNames = ['Juan', 'Maria', 'Jose', 'Ana', 'Pedro', 'Rosa', 'Carlos', 'Sofia', 'Miguel', 'Isabella'];
-    const lastNames = ['Santos', 'Garcia', 'Lopez', 'Rodriguez', 'Flores', 'Martinez', 'Hernandez', 'Torres', 'Reyes', 'Cruz'];
+    const maleFirstNames = ['Juan', 'Jose', 'Pedro', 'Carlos', 'Miguel', 'Luis', 'Antonio', 'Rafael', 'Gabriel', 'Diego', 'Andres', 'Marco', 'Paulo', 'Javier', 'Ricardo'];
+    const femaleFirstNames = ['Maria', 'Ana', 'Rosa', 'Sofia', 'Isabella', 'Carmen', 'Elena', 'Luisa', 'Patricia', 'Angela', 'Teresa', 'Gabriela', 'Valentina', 'Beatriz', 'Monica'];
+    const lastNames = ['Santos', 'Garcia', 'Lopez', 'Rodriguez', 'Flores', 'Martinez', 'Hernandez', 'Torres', 'Reyes', 'Cruz', 'Ramos', 'Gonzales', 'Fernandez', 'Villanueva', 'Bautista', 'Mendoza', 'Aquino', 'Del Rosario', 'Santiago', 'Mercado'];
     
     const students = [];
     let studentCount = 0;
 
     for (const section of sections) {
       const batch = db.batch();
+      const studentsPerSection = section.gradeLevel === 'K' ? 20 : 25; // Smaller class for Kinder
       
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < studentsPerSection; i++) {
         studentCount++;
         const studentId = `student-${studentCount.toString().padStart(4, '0')}`;
-        const firstName = firstNames[i % firstNames.length];
+        const isMale = i % 2 === 0;
+        const firstName = isMale 
+          ? maleFirstNames[i % maleFirstNames.length] 
+          : femaleFirstNames[i % femaleFirstNames.length];
         const lastName = lastNames[(i + studentCount) % lastNames.length];
-        const fullName = `${firstName} ${lastName}`;
+        const middleName = lastNames[(i + studentCount + 5) % lastNames.length].charAt(0) + '.';
+        const fullName = `${firstName} ${middleName} ${lastName}`;
+        
+        // Age-appropriate birth year based on grade level
+        let birthYear = 2010;
+        if (section.gradeLevel === 'K') birthYear = 2019;
+        else if (typeof section.gradeLevel === 'number') {
+          birthYear = 2024 - section.gradeLevel - 5; // Approximate age
+        }
         
         const studentData = {
           id: studentId,
           name: fullName,
           firstName: firstName,
           lastName: lastName,
-          middleName: 'M.',
-          email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}${studentCount}@student.local`,
-          lrn: `1234567890${studentCount.toString().padStart(2, '0')}`,
+          middleName: middleName,
+          email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}${studentCount}@student.edusync.local`,
+          lrn: `${120000000000 + studentCount}`, // Realistic LRN format (12 digits)
           sectionId: section.id,
           gradeLevel: section.gradeLevel,
-          enrollmentDate: new Date('2023-08-01').toISOString(),
-          dateOfBirth: '2010-01-15',
-          sex: i % 2 === 0 ? 'Male' : 'Female',
+          enrollmentDate: new Date('2023-08-15').toISOString(),
+          dateOfBirth: `${birthYear}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`,
+          sex: isMale ? 'Male' : 'Female',
           status: 'active',
+          address: `${Math.floor(Math.random() * 999) + 1} ${pick(['Rizal', 'Bonifacio', 'Mabini', 'Luna', 'Aguinaldo'])} St., ${pick(['Manila', 'Quezon City', 'Makati', 'Pasig', 'Taguig'])}`,
+          contactNumber: `+639${Math.floor(Math.random() * 900000000 + 100000000)}`,
+          guardianName: `${pick([...maleFirstNames, ...femaleFirstNames])} ${lastName}`,
+          guardianContact: `+639${Math.floor(Math.random() * 900000000 + 100000000)}`,
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -327,7 +458,7 @@ async function seedCompleteData() {
       }
       
       await batch.commit();
-      console.log(`   ✓ Created 10 students for ${section.name}`);
+      console.log(`   ✓ Created ${studentsPerSection} students for ${section.name} (Grade ${section.gradeLevel})`);
     }
     console.log(`✅ Total students created: ${students.length}`);
 
@@ -338,6 +469,26 @@ async function seedCompleteData() {
     const juanGarciaStudent = students.find(s => 
       s.firstName === 'Juan' && s.lastName === 'Garcia'
     ) || students[0]; // Fallback to first student if Juan Garcia not found
+    
+    // Create parent user in Firebase Auth with custom claims
+    try {
+      await auth.createUser({
+        uid: 'parent-0001',
+        email: 'juan.garcia@test.com',
+        password: 'parent123',
+        displayName: `${juanGarciaStudent.firstName} ${juanGarciaStudent.lastName}`,
+      });
+      
+      // Set custom claims for parent
+      await auth.setCustomUserClaims('parent-0001', {
+        role: 'parent',
+        schoolId: 'default'
+      });
+      
+      console.log('✅ Created parent in Firebase Auth with role claims');
+    } catch (error) {
+      console.error('⚠️ Failed to create parent Auth user:', error.message);
+    }
     
     const parentRef = db.collection('parents').doc();
     await parentRef.set({
@@ -401,10 +552,11 @@ async function seedCompleteData() {
     console.log('\n📊 Creating grades for Q1 and Q2...');
     
     let gradesCreated = 0;
+    let gradesBatch = db.batch();
+    let batchSize = 0;
+    const MAX_BATCH_SIZE = 500; // Firestore batch limit
 
     for (const student of students) {
-      const gradesBatch = db.batch();
-      
       for (const la of learningAreas) {
         const gradeId = `${student.id}-${la.id}`;
         
@@ -426,8 +578,19 @@ async function seedCompleteData() {
         });
         
         gradesCreated++;
+        batchSize++;
+        
+        // Commit batch when it reaches limit
+        if (batchSize >= MAX_BATCH_SIZE) {
+          await gradesBatch.commit();
+          gradesBatch = db.batch();
+          batchSize = 0;
+        }
       }
-      
+    }
+    
+    // Commit remaining grades
+    if (batchSize > 0) {
       await gradesBatch.commit();
     }
     
@@ -476,21 +639,78 @@ async function seedCompleteData() {
     await announcementsBatch.commit();
     console.log(`✅ Created ${announcements.length} announcements`);
 
+    // ==========================================
+    // FINANCIAL MODULE COLLECTIONS
+    // ==========================================
+    console.log('\n💰 Creating financial module structure...');
+
+    // Fee Structures (empty for now, admin will configure)
+    console.log('   📋 Fee Structures: Ready (admin configurable)');
+
+    // Student Ledgers (initialize empty for each student)
+    const ledgersBatch = db.batch();
+    let ledgerCount = 0;
+    for (const student of students) {
+      const ledgerRef = db.collection('studentLedgers').doc(student.id);
+      ledgersBatch.set(ledgerRef, {
+        studentId: student.id,
+        studentName: `${student.firstName} ${student.lastName}`,
+        sectionId: student.sectionId,
+        balance: 0,
+        totalFees: 0,
+        totalPaid: 0,
+        transactions: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      ledgerCount++;
+    }
+    await ledgersBatch.commit();
+    console.log(`   ✅ Student Ledgers: ${ledgerCount} initialized`);
+
+    // Receipts, Billing Statements, Payment Proofs (empty - created at runtime)
+    console.log('   📋 Receipts: Ready (created on payment)');
+    console.log('   📋 Billing Statements: Ready (created on billing)');
+    console.log('   📋 Payment Proofs: Ready (created by parents)');
+
+    // ==========================================
+    // ENROLLMENT PORTAL COLLECTIONS
+    // ==========================================
+    console.log('\n📝 Creating enrollment portal structure...');
+    console.log('   📋 Enrollment Applications: Ready (created by applicants)');
+
+    // ==========================================
+    // SYSTEM COLLECTIONS
+    // ==========================================
+    console.log('\n🔔 Creating system collections...');
+    console.log('   📋 Notifications: Ready (created by system events)');
+    console.log('   📋 Validation Results: Ready (created by validation wizard)');
+
     // Final summary
     console.log('\n' + '='.repeat(60));
     console.log('✨ DATABASE SEEDING COMPLETE!');
     console.log('='.repeat(60));
-    console.log('\n📊 Summary:');
+    console.log('\n📊 Core Data Summary:');
     console.log(`   • School Years: 1`);
-    console.log(`   • Teachers: ${teachers.length + 1} (including admin)`);
+    console.log(`   • Teachers: ${teacherData.length + 1} (including admin)`);
     console.log(`   • Parents: 1 (test account)`);
-    console.log(`   • Sections: ${sections.length}`);
+    console.log(`   • Sections: ${sections.length} (K-12, 2 per grade)`);
     console.log(`   • Students: ${students.length}`);
     console.log(`   • Learning Areas: ${learningAreas.length}`);
     console.log(`   • Core Values: ${coreValues.length}`);
-    console.log(`   • Attendance Records: ${students.length} (${octWeekdays.length} days each)`);
+    console.log(`   • Attendance Records: ${students.length} students × ${octWeekdays.length} days`);
     console.log(`   • Grade Entries: ${gradesCreated}`);
     console.log(`   • Announcements: ${announcements.length}`);
+    
+    console.log('\n💰 Financial Module:');
+    console.log(`   • Student Ledgers: ${ledgerCount} initialized`);
+    console.log(`   • Fee Structures: Ready (admin configurable)`);
+    console.log(`   • Receipts, Billing, Payment Proofs: Ready (runtime)`);
+    
+    console.log('\n📝 Additional Features:');
+    console.log(`   • Enrollment Applications: Ready (runtime)`);
+    console.log(`   • Notifications: Ready (runtime)`);
+    console.log(`   • Validation Results: Ready (runtime)`);
     
     console.log('\n🔐 Admin Login:');
     console.log('   Email: admin@edusync.local');
