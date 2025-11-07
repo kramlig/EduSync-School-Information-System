@@ -2,12 +2,12 @@
  * Trial Signup Functions
  * 
  * Handles school trial signup requests from the landing page.
- * Sends notification emails and stores lead information in Firestore.
+ * Sends notification emails using SendGrid and stores lead information in Firestore.
  */
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 
 /**
  * Process trial signup request
@@ -91,30 +91,27 @@ exports.processTrialSignup = functions.https.onRequest(async (req, res) => {
 });
 
 /**
- * Send notification email to EduSync team
+ * Send notification email to EduSync team using SendGrid
  */
 async function sendNotificationEmail({ schoolName, adminName, email, phone, studentCount, message, leadId }) {
   try {
-    // Get email credentials from environment or Secret Manager
-    const emailUser = process.env.EMAIL_USER || functions.config()?.email?.user;
-    const emailPass = process.env.EMAIL_PASS || functions.config()?.email?.pass;
+    // Get SendGrid API key from environment
+    const sendGridKey = process.env.SENDGRID_API_KEY || functions.config()?.sendgrid?.api_key;
+    const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@edusync.ph';
 
-    if (!emailUser || !emailPass) {
-      console.warn('Email credentials not configured. Skipping notification email.');
+    if (!sendGridKey) {
+      console.warn('SendGrid API key not configured. Skipping notification email.');
       return;
     }
 
-    const transporter = nodemailer.createTransporter({
-      service: 'gmail',
-      auth: {
-        user: emailUser,
-        pass: emailPass
-      }
-    });
+    sgMail.setApiKey(sendGridKey);
 
     const mailOptions = {
-      from: `"EduSync Trial System" <${emailUser}>`,
-      to: 'sales@edusync.ph', // Change to your sales email
+      to: 'hello@edusync.ph', // Your sales email
+      from: {
+        email: fromEmail,
+        name: 'EduSync Trial System'
+      },
       subject: `🎉 New Trial Signup: ${schoolName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -150,38 +147,38 @@ async function sendNotificationEmail({ schoolName, adminName, email, phone, stud
       `
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log(`Notification email sent for lead ${leadId}`);
+    await sgMail.send(mailOptions);
+    console.log(`Notification email sent for lead ${leadId} to hello@edusync.ph`);
   } catch (error) {
     console.error('Error sending notification email:', error);
+    if (error.response) {
+      console.error('SendGrid error details:', error.response.body);
+    }
     // Don't throw - we don't want to fail the entire request if email fails
   }
 }
 
 /**
- * Send confirmation email to the user
+ * Send confirmation email to the user using SendGrid
  */
 async function sendConfirmationEmail({ schoolName, adminName, email }) {
   try {
-    const emailUser = process.env.EMAIL_USER || functions.config()?.email?.user;
-    const emailPass = process.env.EMAIL_PASS || functions.config()?.email?.pass;
+    const sendGridKey = process.env.SENDGRID_API_KEY || functions.config()?.sendgrid?.api_key;
+    const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@edusync.ph';
 
-    if (!emailUser || !emailPass) {
-      console.warn('Email credentials not configured. Skipping confirmation email.');
+    if (!sendGridKey) {
+      console.warn('SendGrid API key not configured. Skipping confirmation email.');
       return;
     }
 
-    const transporter = nodemailer.createTransporter({
-      service: 'gmail',
-      auth: {
-        user: emailUser,
-        pass: emailPass
-      }
-    });
+    sgMail.setApiKey(sendGridKey);
 
     const mailOptions = {
-      from: `"EduSync Team" <${emailUser}>`,
       to: email,
+      from: {
+        email: fromEmail,
+        name: 'EduSync Team'
+      },
       subject: `Welcome to EduSync! Your Trial Request is Received`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -245,10 +242,13 @@ async function sendConfirmationEmail({ schoolName, adminName, email }) {
       `
     };
 
-    await transporter.sendMail(mailOptions);
+    await sgMail.send(mailOptions);
     console.log(`Confirmation email sent to ${email}`);
   } catch (error) {
     console.error('Error sending confirmation email:', error);
+    if (error.response) {
+      console.error('SendGrid error details:', error.response.body);
+    }
     // Don't throw - we don't want to fail the entire request if email fails
   }
 }
