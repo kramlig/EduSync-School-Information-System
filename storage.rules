@@ -31,6 +31,19 @@ service firebase.storage {
         request.resource.contentType.matches('(application/pdf|image/(jpeg|jpg|png|webp))');
     }
     
+    // Payment proofs - allow parents to upload payment receipts
+    match /payment-proofs/{studentId}/{fileName} {
+      // Allow any authenticated user to read payment proofs
+      // (Parents can view their own, staff can view all - enforced at app level)
+      allow read: if request.auth != null;
+      
+      // Allow any authenticated user to upload/update/delete payment proofs
+      // WITH file validation (5MB max, JPEG/PNG/PDF only)
+      allow write: if request.auth != null && 
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('(application/pdf|image/(jpeg|jpg|png))');
+    }
+    
     // Deny all other access by default
     match /{allPaths=**} {
       allow read, write: if false;

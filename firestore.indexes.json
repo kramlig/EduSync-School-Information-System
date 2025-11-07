@@ -31,6 +31,14 @@
         { "fieldPath": "assignmentId", "order": "ASCENDING" },
         { "fieldPath": "date", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "feeStructures",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "gradeLevel", "order": "ASCENDING" },
+        { "fieldPath": "schoolYear", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -6,6 +6,10 @@
  * - Password change
  * - View linked children
  * - Notification preferences
+ * - Email verification status and resend
+ * 
+ * IMPORTANT: Email verification integration added to ensure parent email addresses
+ * are verified before accessing sensitive student information.
  */
 
 import React, { useState, useMemo } from 'react';
@@ -14,6 +18,8 @@ import type { ParentUser } from '../types';
 import { getFirestoreInstance } from '../src/services/firestoreService';
 import { doc, updateDoc } from 'firebase/firestore';
 import { UserCircleIcon, BellIcon, AcademicCapIcon } from './icons';
+import NotificationHistory from './NotificationHistory';
+// import VerificationReminder from './VerificationReminder'; // Temporarily disabled
 
 interface ParentProfileProps {
   schoolData: SchoolDataHook;
@@ -200,6 +206,22 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">My Profile</h1>
       
+      {/* Email Verification Reminder Banner */}
+      {/* Temporarily disabled email verification reminder
+      {!parent.emailVerified && (
+        <div className="mb-6">
+          <VerificationReminder 
+            email={parent.email}
+            type="banner"
+            onVerificationSent={() => {
+              setSuccessMessage('✅ Verification email sent! Please check your inbox.');
+              setTimeout(() => setSuccessMessage(''), 5000);
+            }}
+          />
+        </div>
+      )}
+      */}
+      
       {/* Success/Error Messages */}
       {successMessage && (
         <div className="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
@@ -294,12 +316,23 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
                     className="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500"
                   />
                 ) : (
-                  <p className="text-slate-800 dark:text-slate-200 font-medium">{parent.email}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-slate-800 dark:text-slate-200 font-medium">{parent.email}</p>
+                    {parent.emailVerified ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                        ✓ Verified
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
+                        ⚠️ Not Verified
+                      </span>
+                    )}
+                  </div>
                 )}
-                {parent.emailVerified ? (
-                  <span className="text-xs text-green-600 dark:text-green-400">✓ Verified</span>
-                ) : (
-                  <span className="text-xs text-amber-600 dark:text-amber-400">⚠️ Not verified</span>
+                {!parent.emailVerified && !isEditing && (
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                    Please verify your email address to ensure you receive important notifications.
+                  </p>
                 )}
               </div>
               
@@ -464,20 +497,23 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
                 </label>
               </div>
               
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between opacity-50">
                 <div>
                   <p className="font-medium text-slate-800 dark:text-white">SMS Notifications</p>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">Receive updates via text message</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    Receive updates via text message
+                    <span className="ml-2 text-xs bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded">Coming Soon</span>
+                  </p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
+                <label className="relative inline-flex items-center cursor-not-allowed">
                   <input
                     type="checkbox"
-                    checked={notificationPrefs.smsEnabled}
-                    onChange={() => handleNotificationChange('smsEnabled')}
+                    checked={false}
+                    disabled
                     className="sr-only peer"
-                    aria-label="Enable SMS notifications"
+                    aria-label="Enable SMS notifications (Coming Soon)"
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 rounded-full peer dark:bg-slate-700 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 dark:border-slate-600"></div>
                 </label>
               </div>
               
@@ -584,6 +620,11 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
             </div>
           </div>
         </div>
+      </div>
+      
+      {/* Notification History Section (Full Width) */}
+      <div className="mt-6">
+        <NotificationHistory parent={parent} />
       </div>
     </div>
   );

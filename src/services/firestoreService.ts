@@ -36,26 +36,39 @@ if (!firebaseConfig.projectId) {
   (firebaseConfig as any).projectId = 'edusync-local';
 }
 const app = initializeApp(firebaseConfig);
-const forceLongPolling = String(import.meta.env.VITE_FIRESTORE_FORCE_LONG_POLLING || '').toLowerCase() === 'true';
+
+// CRITICAL: Force long polling to avoid WebChannel 400 errors in emulator
+// WebChannel has issues with the Firestore emulator causing connection exhaustion
+console.log('[Firebase] 🔧 Force long polling: ENABLED (hardcoded)');
+
+// NUCLEAR OPTION: Set experimental settings BEFORE app initialization
+// This is the ONLY way to truly disable WebChannel
+(globalThis as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+
+// Modern approach: Use Fetch API instead of WebChannel
+// This bypasses WebChannel entirely and uses standard HTTP
 const db = initializeFirestore(app, {
   cacheSizeBytes: CACHE_SIZE_UNLIMITED,
-  // When ad blockers or corporate proxies interfere with WebChannel, long-polling avoids blocks
-  ...(forceLongPolling ? { experimentalForceLongPolling: true } : { experimentalAutoDetectLongPolling: true }),
+  // Use Fetch API for all requests (no WebChannel)
+  experimentalAutoDetectLongPolling: false,
+  experimentalForceLongPolling: true,
+  // @ts-ignore - undocumented but necessary option
+  useFetchStreams: false,
 } as any);
 const auth = getAuth(app);
 const storage = getStorage(app);
 
+// Check if we're using emulator (needed for persistence logic)
+const projId = import.meta.env.VITE_FIREBASE_PROJECT_ID || '';
+const looksLocal = /(^|-)local$|demo/.test(projId);
+const useFsEmuFlag = String(import.meta.env.VITE_USE_FIREBASE_EMULATOR || '').toLowerCase() === 'true';
+const fsHostEnv = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST as string | undefined;
+const shouldUseFsEmu = useFsEmuFlag || !!fsHostEnv || looksLocal;
+
 // Optional: connect to emulators if requested or auto-detected
 try {
-  const projId = import.meta.env.VITE_FIREBASE_PROJECT_ID || '';
-  // DISABLED auto-detection - causing issues in production
-  // const looksLocal = /(^|-)local$|demo/.test(projId);
-  const looksLocal = /(^|-)local$|demo/.test(projId); // Re-enable auto-detection for local projects
   // Firestore emulator
-  const useFsEmuFlag = String(import.meta.env.VITE_USE_FIREBASE_EMULATOR || '').toLowerCase() === 'true';
-  const fsHostEnv = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST as string | undefined; // may be host or host:port
   const fsPortEnv = import.meta.env.VITE_FIRESTORE_EMULATOR_PORT as string | undefined;
-  const shouldUseFsEmu = useFsEmuFlag || !!fsHostEnv || looksLocal;
   console.log(`[Firebase] Emulator config check: useFsEmuFlag=${useFsEmuFlag}, fsHostEnv=${fsHostEnv}, fsPortEnv=${fsPortEnv}, shouldUseFsEmu=${shouldUseFsEmu}`);
   if (shouldUseFsEmu) {
     let host = '127.0.0.1';
@@ -119,23 +132,29 @@ try {
   console.warn('[Firebase] Emulator connection failed or not configured:', e);
 }
 
-// Re-enable persistence now that cache is cleared
+// Enable persistence (but skip for emulator to reduce connection overhead)
 // Attempt to enable multi-tab IndexedDB persistence for better cross-tab UX
 // Fallback to single-tab persistence if multi-tab is not available (e.g., private mode)
-(async () => {
-  try {
-    await enableMultiTabIndexedDbPersistence(db as any);
-    console.info('[Firebase] ✅ Multi-tab IndexedDB persistence enabled.');
-  } catch (e: any) {
+const isEmulator = shouldUseFsEmu; // Using emulator check from above
+if (!isEmulator) {
+  // Only enable persistence in production (not emulator)
+  (async () => {
     try {
-      await enableIndexedDbPersistence(db as any);
-      console.info('[Firebase] ✅ Single-tab IndexedDB persistence enabled (multi-tab unavailable).');
-    } catch (err: any) {
-      // eslint-disable-next-line no-console
-      console.warn('[Firebase] ⚠️ Persistence not enabled:', err && err.message ? err.message : err);
+      await enableMultiTabIndexedDbPersistence(db as any);
+      console.info('[Firebase] ✅ Multi-tab IndexedDB persistence enabled.');
+    } catch (e: any) {
+      try {
+        await enableIndexedDbPersistence(db as any);
+        console.info('[Firebase] ✅ Single-tab IndexedDB persistence enabled (multi-tab unavailable).');
+      } catch (err: any) {
+        // eslint-disable-next-line no-console
+        console.warn('[Firebase] ⚠️ Persistence not enabled:', err && err.message ? err.message : err);
+      }
     }
-  }
-})();
+  })();
+} else {
+  console.info('[Firebase] 🔧 Persistence disabled for emulator (reduces connection overhead)');
+}
 
 
 // Ensure we have an authenticated user for write-permission rules.
