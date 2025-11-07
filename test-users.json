@@ -1,0 +1,26 @@
+[
+  {
+    "localId": "teacher-test-001",
+    "email": "teacher-test@edusync.local",
+    "emailVerified": true,
+    "displayName": "Test Teacher",
+    "disabled": false,
+    "createdAt": 1699276800000
+  },
+  {
+    "localId": "admin-test-001", 
+    "email": "admin-test@edusync.local",
+    "emailVerified": true,
+    "displayName": "Test Admin",
+    "disabled": false,
+    "createdAt": 1699276800000
+  },
+  {
+    "localId": "parent-test-001",
+    "email": "parent-test@gmail.com",
+    "emailVerified": true,
+    "displayName": "Test Parent",
+    "disabled": false,
+    "createdAt": 1699276800000
+  }
+]

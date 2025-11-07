@@ -1,0 +1,402 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e4]:
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - generic [ref=e12]:
+          - img [ref=e13]
+          - generic [ref=e15]: 100% DepEd-Compliant
+        - heading "The Future of School Management" [level=1] [ref=e16]:
+          - text: The Future of
+          - generic [ref=e17]: School Management
+        - paragraph [ref=e18]: Transform your school with AI-powered analytics, automated DepEd forms, and digital enrollment—all in one platform.
+        - generic [ref=e19]:
+          - button "Start Free Trial" [ref=e20] [cursor=pointer]:
+            - text: Start Free Trial
+            - img [ref=e21]
+          - button "Watch Demo" [ref=e23] [cursor=pointer]:
+            - img [ref=e24]
+            - text: Watch Demo
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - img [ref=e28]
+            - generic [ref=e30]: 30-day free trial
+          - generic [ref=e31]:
+            - img [ref=e32]
+            - generic [ref=e34]: No credit card required
+      - generic [ref=e37]:
+        - generic [ref=e39]:
+          - img [ref=e41]
+          - generic [ref=e43]:
+            - paragraph [ref=e44]: Form 138 Generated
+            - paragraph [ref=e45]: 40 students in 30 seconds
+        - generic [ref=e48]:
+          - generic [ref=e49]:
+            - generic [ref=e50]: At-Risk Students Detected
+            - generic [ref=e51]: "5"
+          - paragraph [ref=e52]: AI recommends early intervention
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - paragraph [ref=e56]: Time Saved This Month
+            - paragraph [ref=e57]: 127 hours
+          - img [ref=e58]
+    - generic [ref=e60]:
+      - generic [ref=e61]:
+        - paragraph [ref=e62]: 47K+
+        - paragraph [ref=e63]: Schools in PH
+      - generic [ref=e64]:
+        - paragraph [ref=e65]: 80%
+        - paragraph [ref=e66]: Time Saved
+      - generic [ref=e67]:
+        - paragraph [ref=e68]: 95%
+        - paragraph [ref=e69]: Faster Forms
+      - generic [ref=e70]:
+        - paragraph [ref=e71]: 100%
+        - paragraph [ref=e72]: DepEd Compliant
+  - generic [ref=e74]:
+    - generic [ref=e75]:
+      - heading "The Challenges Philippine Schools Face" [level=2] [ref=e76]
+      - paragraph [ref=e77]: Traditional school management is holding educators back. It's time for change.
+    - generic [ref=e78]:
+      - generic [ref=e79]:
+        - generic [ref=e80]: 📄
+        - heading "Manual Paperwork Overload" [level=3] [ref=e81]
+        - paragraph [ref=e82]: Teachers spend 40% of their time on forms instead of teaching.
+        - generic [ref=e83]:
+          - generic [ref=e84]: ⚡
+          - text: 300+ hours wasted per year
+      - generic [ref=e85]:
+        - generic [ref=e86]: 📊
+        - heading "No Real-Time Insights" [level=3] [ref=e87]
+        - paragraph [ref=e88]: At-risk students identified too late, missing intervention windows.
+        - generic [ref=e89]:
+          - generic [ref=e90]: ⚡
+          - text: 25% of students slip through
+      - generic [ref=e91]:
+        - generic [ref=e92]: 🔄
+        - heading "Duplicate Data Entry" [level=3] [ref=e93]
+        - paragraph [ref=e94]: Same information entered multiple times across different forms.
+        - generic [ref=e95]:
+          - generic [ref=e96]: ⚡
+          - text: 60% of data entry is redundant
+      - generic [ref=e97]:
+        - generic [ref=e98]: ⚠️
+        - heading "Calculation Errors" [level=3] [ref=e99]
+        - paragraph [ref=e100]: Manual grading leads to mistakes in student records.
+        - generic [ref=e101]:
+          - generic [ref=e102]: ⚡
+          - text: 15% error rate in manual forms
+      - generic [ref=e103]:
+        - generic [ref=e104]: 📑
+        - heading "Compliance Nightmares" [level=3] [ref=e105]
+        - paragraph [ref=e106]: DepEd forms require exact formatting—hard to maintain manually.
+        - generic [ref=e107]:
+          - generic [ref=e108]: ⚡
+          - text: Weeks spent on EBEIS submissions
+      - generic [ref=e109]:
+        - generic [ref=e110]: 👥
+        - heading "Limited Parent Access" [level=3] [ref=e111]
+        - paragraph [ref=e112]: Parents have no visibility into student progress or enrollment status.
+        - generic [ref=e113]:
+          - generic [ref=e114]: ⚡
+          - text: 80% prefer digital access
+  - generic [ref=e116]:
+    - generic [ref=e117]:
+      - heading "The EduSync Solution" [level=2] [ref=e118]
+      - paragraph [ref=e119]: Six powerful pillars that transform school operations from chaos to clarity.
+    - generic [ref=e120]:
+      - generic [ref=e121]:
+        - img [ref=e123]
+        - heading "Academic Management" [level=3] [ref=e125]
+        - paragraph [ref=e126]: Complete gradebook with AI-powered analytics and predictions
+        - list [ref=e127]:
+          - listitem [ref=e128]:
+            - img [ref=e129]
+            - text: Automated grading
+          - listitem [ref=e131]:
+            - img [ref=e132]
+            - text: Honor roll detection
+          - listitem [ref=e134]:
+            - img [ref=e135]
+            - text: Performance tracking
+      - generic [ref=e137]:
+        - img [ref=e139]
+        - heading "DepEd Forms" [level=3] [ref=e141]
+        - paragraph [ref=e142]: Auto-generate Form 137, 138, SF1, SF2, SF9, and ELLN assessments
+        - list [ref=e143]:
+          - listitem [ref=e144]:
+            - img [ref=e145]
+            - text: 3-click generation
+          - listitem [ref=e147]:
+            - img [ref=e148]
+            - text: Pixel-perfect formatting
+          - listitem [ref=e150]:
+            - img [ref=e151]
+            - text: Bulk export
+      - generic [ref=e153]:
+        - img [ref=e155]
+        - heading "Enrollment Portal" [level=3] [ref=e157]
+        - paragraph [ref=e158]: Digital application with document upload and auto-approval workflow
+        - list [ref=e159]:
+          - listitem [ref=e160]:
+            - img [ref=e161]
+            - text: 7-step wizard
+          - listitem [ref=e163]:
+            - img [ref=e164]
+            - text: Document upload
+          - listitem [ref=e166]:
+            - img [ref=e167]
+            - text: Status tracking
+      - generic [ref=e169]:
+        - img [ref=e171]
+        - heading "Analytics & Insights" [level=3] [ref=e173]
+        - paragraph [ref=e174]: AI-powered predictions and early warning system for at-risk students
+        - list [ref=e175]:
+          - listitem [ref=e176]:
+            - img [ref=e177]
+            - text: Risk detection
+          - listitem [ref=e179]:
+            - img [ref=e180]
+            - text: Trend analysis
+          - listitem [ref=e182]:
+            - img [ref=e183]
+            - text: Smart recommendations
+      - generic [ref=e185]:
+        - img [ref=e187]
+        - heading "ELLN Assessment" [level=3] [ref=e189]
+        - paragraph [ref=e190]: Digital K-3 literacy and numeracy tracking with ILMP generator
+        - list [ref=e191]:
+          - listitem [ref=e192]:
+            - img [ref=e193]
+            - text: 11 domains
+          - listitem [ref=e195]:
+            - img [ref=e196]
+            - text: Progress charts
+          - listitem [ref=e198]:
+            - img [ref=e199]
+            - text: Compliance reports
+      - generic [ref=e201]:
+        - img [ref=e203]
+        - heading "AI-Powered" [level=3] [ref=e205]
+        - paragraph [ref=e206]: Intelligent recommendations, automated insights, and predictive modeling
+        - list [ref=e207]:
+          - listitem [ref=e208]:
+            - img [ref=e209]
+            - text: Next quarter predictions
+          - listitem [ref=e211]:
+            - img [ref=e212]
+            - text: Intervention strategies
+          - listitem [ref=e214]:
+            - img [ref=e215]
+            - text: Subject analysis
+  - generic [ref=e218]:
+    - generic [ref=e219]:
+      - heading "Measurable Impact on Your School" [level=2] [ref=e220]
+      - paragraph [ref=e221]: Real results from schools using EduSync every day.
+    - generic [ref=e222]:
+      - generic [ref=e223]:
+        - generic [ref=e224]: ⏱️
+        - generic [ref=e225]: 80%
+        - generic [ref=e226]: Time Savings
+        - paragraph [ref=e227]: Reduce paperwork by 80%
+      - generic [ref=e228]:
+        - generic [ref=e229]: ⚡
+        - generic [ref=e230]: 95%
+        - generic [ref=e231]: Faster Forms
+        - paragraph [ref=e232]: Form 138 in 30 seconds
+      - generic [ref=e233]:
+        - generic [ref=e234]: 📈
+        - generic [ref=e235]: 25%
+        - generic [ref=e236]: Better Outcomes
+        - paragraph [ref=e237]: Early intervention success
+      - generic [ref=e238]:
+        - generic [ref=e239]: 💰
+        - generic [ref=e240]: 60%
+        - generic [ref=e241]: Cost Reduction
+        - paragraph [ref=e242]: Less paper, more efficiency
+      - generic [ref=e243]:
+        - generic [ref=e244]: ✅
+        - generic [ref=e245]: 100%
+        - generic [ref=e246]: DepEd Compliant
+        - paragraph [ref=e247]: All forms accurate
+      - generic [ref=e248]:
+        - generic [ref=e249]: 🎯
+        - generic [ref=e250]: 300+
+        - generic [ref=e251]: Hours Saved
+        - paragraph [ref=e252]: Per school year
+      - generic [ref=e253]:
+        - generic [ref=e254]: ⭐
+        - generic [ref=e255]: 95%
+        - generic [ref=e256]: Parent Satisfaction
+        - paragraph [ref=e257]: Love digital access
+      - generic [ref=e258]:
+        - generic [ref=e259]: 🎓
+        - generic [ref=e260]: "0"
+        - generic [ref=e261]: Calculation Errors
+        - paragraph [ref=e262]: Auto-calculated grades
+  - generic [ref=e264]:
+    - generic [ref=e265]:
+      - heading "Trusted by Schools Nationwide" [level=2] [ref=e266]
+      - paragraph [ref=e267]: See what educators are saying about EduSync.
+    - generic [ref=e268]:
+      - generic [ref=e269]:
+        - generic [ref=e270]:
+          - generic [ref=e271]: ⭐
+          - generic [ref=e272]: ⭐
+          - generic [ref=e273]: ⭐
+          - generic [ref=e274]: ⭐
+          - generic [ref=e275]: ⭐
+        - paragraph [ref=e276]: "\"EduSync cut our form generation time from 2 weeks to 2 hours. The AI insights helped us identify 15 at-risk students early. Game changer!\""
+        - generic [ref=e277]:
+          - paragraph [ref=e278]: Principal Maria Santos
+          - paragraph [ref=e279]: San Pedro Elementary School
+      - generic [ref=e280]:
+        - generic [ref=e281]:
+          - generic [ref=e282]: ⭐
+          - generic [ref=e283]: ⭐
+          - generic [ref=e284]: ⭐
+          - generic [ref=e285]: ⭐
+          - generic [ref=e286]: ⭐
+        - paragraph [ref=e287]: "\"The enrollment portal reduced our registration lines by 90%. Parents love applying from home, and we processed 800 students in one week.\""
+        - generic [ref=e288]:
+          - paragraph [ref=e289]: Registrar Juan dela Cruz
+          - paragraph [ref=e290]: Nueva Ecija National High School
+      - generic [ref=e291]:
+        - generic [ref=e292]:
+          - generic [ref=e293]: ⭐
+          - generic [ref=e294]: ⭐
+          - generic [ref=e295]: ⭐
+          - generic [ref=e296]: ⭐
+          - generic [ref=e297]: ⭐
+        - paragraph [ref=e298]: "\"EduSync's EBEIS export feature saved us countless hours during submission deadlines. The data accuracy is perfect.\""
+        - generic [ref=e299]:
+          - paragraph [ref=e300]: Division Education Supervisor
+          - paragraph [ref=e301]: DepEd Division Office - Metro Manila
+  - generic [ref=e303]:
+    - generic [ref=e304]:
+      - heading "Simple, Transparent Pricing" [level=2] [ref=e305]
+      - paragraph [ref=e306]: Choose the plan that fits your school. No hidden fees.
+    - generic [ref=e307]:
+      - generic [ref=e308]:
+        - heading "Starter" [level=3] [ref=e309]
+        - paragraph [ref=e310]: Perfect for small schools
+        - generic [ref=e311]: ₱3,999/month
+        - list [ref=e312]:
+          - listitem [ref=e313]:
+            - img [ref=e314]
+            - text: Up to 500 students
+          - listitem [ref=e316]:
+            - img [ref=e317]
+            - text: 20 teachers
+          - listitem [ref=e319]:
+            - img [ref=e320]
+            - text: Core features (grades, forms)
+          - listitem [ref=e322]:
+            - img [ref=e323]
+            - text: Email support
+          - listitem [ref=e325]:
+            - img [ref=e326]
+            - text: 30-day free trial
+        - button "Start Free Trial" [ref=e328] [cursor=pointer]
+      - generic [ref=e329]:
+        - generic [ref=e330]: Most Popular
+        - heading "Professional" [level=3] [ref=e331]
+        - paragraph [ref=e332]: Most popular choice
+        - generic [ref=e333]: ₱7,999/month
+        - list [ref=e334]:
+          - listitem [ref=e335]:
+            - img [ref=e336]
+            - text: Up to 1,500 students
+          - listitem [ref=e338]:
+            - img [ref=e339]
+            - text: 50 teachers
+          - listitem [ref=e341]:
+            - img [ref=e342]
+            - text: All features + AI analytics
+          - listitem [ref=e344]:
+            - img [ref=e345]
+            - text: Parent portal
+          - listitem [ref=e347]:
+            - img [ref=e348]
+            - text: Priority support
+          - listitem [ref=e350]:
+            - img [ref=e351]
+            - text: 30-day free trial
+        - button "Start Free Trial" [ref=e353] [cursor=pointer]
+      - generic [ref=e354]:
+        - heading "Enterprise" [level=3] [ref=e355]
+        - paragraph [ref=e356]: For large schools & divisions
+        - generic [ref=e357]: Custom
+        - list [ref=e358]:
+          - listitem [ref=e359]:
+            - img [ref=e360]
+            - text: Unlimited students
+          - listitem [ref=e362]:
+            - img [ref=e363]
+            - text: Unlimited teachers
+          - listitem [ref=e365]:
+            - img [ref=e366]
+            - text: All features + customization
+          - listitem [ref=e368]:
+            - img [ref=e369]
+            - text: Dedicated account manager
+          - listitem [ref=e371]:
+            - img [ref=e372]
+            - text: On-site training
+          - listitem [ref=e374]:
+            - img [ref=e375]
+            - text: SLA guarantee
+        - button "Contact Sales" [ref=e377] [cursor=pointer]
+    - paragraph [ref=e378]: "💰 Annual discount: Save 20% with yearly payment"
+  - generic [ref=e380]:
+    - generic [ref=e381]:
+      - heading "Frequently Asked Questions" [level=2] [ref=e382]
+      - paragraph [ref=e383]: Everything you need to know about EduSync.
+    - generic [ref=e384]:
+      - button "Is EduSync really 100% DepEd-compliant?" [ref=e386] [cursor=pointer]:
+        - generic [ref=e387]: Is EduSync really 100% DepEd-compliant?
+        - img [ref=e388]
+      - button "How long does it take to set up EduSync?" [ref=e391] [cursor=pointer]:
+        - generic [ref=e392]: How long does it take to set up EduSync?
+        - img [ref=e393]
+      - button "Can I import my existing student data?" [ref=e396] [cursor=pointer]:
+        - generic [ref=e397]: Can I import my existing student data?
+        - img [ref=e398]
+      - button "What happens if internet connection is lost?" [ref=e401] [cursor=pointer]:
+        - generic [ref=e402]: What happens if internet connection is lost?
+        - img [ref=e403]
+      - button "Is my school data secure?" [ref=e406] [cursor=pointer]:
+        - generic [ref=e407]: Is my school data secure?
+        - img [ref=e408]
+      - button "Can parents access the system?" [ref=e411] [cursor=pointer]:
+        - generic [ref=e412]: Can parents access the system?
+        - img [ref=e413]
+  - generic [ref=e416]:
+    - heading "Ready to Transform Your School?" [level=2] [ref=e417]
+    - paragraph [ref=e418]: Join hundreds of schools already using EduSync. Start your free 30-day trial today—no credit card required.
+    - generic [ref=e419]:
+      - button "Start Free Trial →" [ref=e420] [cursor=pointer]
+      - button "Schedule Demo" [ref=e421] [cursor=pointer]
+    - generic [ref=e422]:
+      - generic [ref=e423]:
+        - img [ref=e424]
+        - generic [ref=e426]: Free 30-day trial
+      - generic [ref=e427]:
+        - img [ref=e428]
+        - generic [ref=e430]: No credit card required
+      - generic [ref=e431]:
+        - img [ref=e432]
+        - generic [ref=e434]: Free onboarding & training
+    - generic [ref=e435]:
+      - paragraph [ref=e436]: "Questions? Contact us:"
+      - generic [ref=e437]:
+        - link "📧 hello@edusync.ph" [ref=e438] [cursor=pointer]:
+          - /url: mailto:hello@edusync.ph
+        - generic [ref=e439]: •
+        - link "📱 +63 917 123 4567" [ref=e440] [cursor=pointer]:
+          - /url: tel:+639171234567
+        - generic [ref=e441]: •
+        - button "💬 Live Chat" [ref=e442] [cursor=pointer]
+```

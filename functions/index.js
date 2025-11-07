@@ -567,3 +567,9 @@ const autoOnboarding = require('./src/autoOnboarding');
 exports.onUserCreated = autoOnboarding.onUserCreated;
 exports.assignUserRole = autoOnboarding.assignUserRole;
 exports.getUserRoleHistory = autoOnboarding.getUserRoleHistory;
+
+// ========================================
+// Trial Signup System
+// ========================================
+const trialSignup = require('./src/trialSignup');
+exports.processTrialSignup = trialSignup.processTrialSignup;

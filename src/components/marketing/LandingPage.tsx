@@ -17,7 +17,6 @@
  */
 
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   AcademicCapIcon,
   ClipboardDocumentListIcon,
@@ -29,13 +28,17 @@ import {
   ArrowRightIcon,
   PlayIcon,
   ChevronDownIcon,
-  ChevronUpIcon
+  ChevronUpIcon,
+  CurrencyDollarIcon,
+  BellIcon,
+  UsersIcon
 } from '@heroicons/react/24/outline';
 import './landing-animations.css';
+import { TrialSignupModal } from './TrialSignupModal';
 
 const LandingPage: React.FC = () => {
-  const navigate = useNavigate();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
 
   // Hero Section
   const HeroSection = () => (
@@ -69,7 +72,7 @@ const LandingPage: React.FC = () => {
 
             <div className="flex flex-col sm:flex-row gap-4 mb-8">
               <button
-                onClick={() => navigate('/enrollment')}
+                onClick={() => setIsTrialModalOpen(true)}
                 className="group px-8 py-4 bg-white text-indigo-700 rounded-xl font-bold text-lg hover:bg-yellow-300 hover:text-indigo-900 transition-all shadow-2xl hover:scale-105 flex items-center justify-center gap-2"
               >
                 Start Free Trial
@@ -196,6 +199,12 @@ const LandingPage: React.FC = () => {
               impact: '60% of data entry is redundant'
             },
             {
+              icon: '💰',
+              title: 'Payment Tracking Chaos',
+              description: 'Cash receipts get lost, parents unclear on balances, no digital records.',
+              impact: '90% of billing errors due to manual tracking'
+            },
+            {
               icon: '⚠️',
               title: 'Calculation Errors',
               description: 'Manual grading leads to mistakes in student records.',
@@ -206,6 +215,12 @@ const LandingPage: React.FC = () => {
               title: 'Compliance Nightmares',
               description: 'DepEd forms require exact formatting—hard to maintain manually.',
               impact: 'Weeks spent on EBEIS submissions'
+            },
+            {
+              icon: '📞',
+              title: 'Parent Communication Gaps',
+              description: 'No digital portal for parents, leading to endless calls and home visits.',
+              impact: '500+ calls/month to school office'
             },
             {
               icon: '👥',
@@ -233,16 +248,16 @@ const LandingPage: React.FC = () => {
     </section>
   );
 
-  // Solution - 6 Pillars
+  // Solution - 9 Pillars (Updated to showcase Phase 2 features)
   const SolutionSection = () => (
     <section className="py-20 bg-white dark:bg-slate-800">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16">
           <h2 className="text-4xl lg:text-5xl font-bold mb-4 text-slate-900 dark:text-white">
-            The EduSync Solution
+            The Complete EduSync Solution
           </h2>
           <p className="text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto">
-            Six powerful pillars that transform school operations from chaos to clarity.
+            Nine powerful modules that transform school operations from chaos to clarity.
           </p>
         </div>
 
@@ -289,6 +304,30 @@ const LandingPage: React.FC = () => {
               description: 'Intelligent recommendations, automated insights, and predictive modeling',
               color: 'pink',
               features: ['Next quarter predictions', 'Intervention strategies', 'Subject analysis']
+            },
+            {
+              icon: <UsersIcon className="w-12 h-12" />,
+              title: 'Parent Portal',
+              description: 'Complete transparency with 24/7 digital access to student progress and billing',
+              color: 'teal',
+              features: ['Real-time grade viewing', 'Attendance monitoring', 'Digital payment tracking'],
+              isNew: true
+            },
+            {
+              icon: <CurrencyDollarIcon className="w-12 h-12" />,
+              title: 'Financial Management',
+              description: 'End-to-end billing with digital receipts and payment verification',
+              color: 'emerald',
+              features: ['Fee structure management', 'Instant receipt generation', 'Payment proof upload'],
+              isNew: true
+            },
+            {
+              icon: <BellIcon className="w-12 h-12" />,
+              title: 'Smart Notifications',
+              description: 'Automated multi-channel alerts keep parents and teachers informed',
+              color: 'rose',
+              features: ['Email & SMS alerts', 'Grade post notifications', 'Absence alerts (3+ days)'],
+              isNew: true
             }
           ].map((pillar, index) => {
             const colorClasses = {
@@ -297,11 +336,20 @@ const LandingPage: React.FC = () => {
               green: 'from-green-500 to-green-700',
               purple: 'from-purple-500 to-purple-700',
               amber: 'from-amber-500 to-amber-700',
-              pink: 'from-pink-500 to-pink-700'
+              pink: 'from-pink-500 to-pink-700',
+              teal: 'from-teal-500 to-teal-700',
+              emerald: 'from-emerald-500 to-emerald-700',
+              rose: 'from-rose-500 to-rose-700'
             };
 
             return (
-              <div key={index} className="group bg-slate-50 dark:bg-slate-900 rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all border border-slate-200 dark:border-slate-700 hover:-translate-y-2">
+              <div key={index} className="group bg-slate-50 dark:bg-slate-900 rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all border border-slate-200 dark:border-slate-700 hover:-translate-y-2 relative">
+                {pillar.isNew && (
+                  <div className="absolute -top-3 -right-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
+                    NEW ✨
+                  </div>
+                )}
+                
                 <div className={`w-16 h-16 bg-gradient-to-br ${colorClasses[pillar.color as keyof typeof colorClasses]} rounded-xl flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform`}>
                   {pillar.icon}
                 </div>
@@ -351,8 +399,8 @@ const LandingPage: React.FC = () => {
             { metric: '60%', label: 'Cost Reduction', description: 'Less paper, more efficiency', icon: '💰' },
             { metric: '100%', label: 'DepEd Compliant', description: 'All forms accurate', icon: '✅' },
             { metric: '300+', label: 'Hours Saved', description: 'Per school year', icon: '🎯' },
-            { metric: '95%', label: 'Parent Satisfaction', description: 'Love digital access', icon: '⭐' },
-            { metric: '0', label: 'Calculation Errors', description: 'Auto-calculated grades', icon: '🎓' }
+            { metric: '95%', label: 'Parent Satisfaction', description: 'Love digital portal access', icon: '⭐' },
+            { metric: '5-Min', label: 'Payment Recording', description: 'From receipt to digital', icon: '💳' }
           ].map((impact, index) => (
             <div key={index} className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 text-center hover:bg-white/20 transition-all">
               <div className="text-4xl mb-3">{impact.icon}</div>
@@ -388,9 +436,21 @@ const LandingPage: React.FC = () => {
               rating: 5
             },
             {
+              name: 'Parent - PTA President Ana Rivera',
+              school: 'Santa Rosa Elementary School',
+              quote: 'The parent portal changed everything! I can check my child\'s grades anytime, pay tuition online, and get instant SMS alerts when she\'s absent. No more going to school just to ask for updates.',
+              rating: 5
+            },
+            {
               name: 'Registrar Juan dela Cruz',
               school: 'Nueva Ecija National High School',
               quote: 'The enrollment portal reduced our registration lines by 90%. Parents love applying from home, and we processed 800 students in one week.',
+              rating: 5
+            },
+            {
+              name: 'School Bookkeeper Teresa Lopez',
+              school: 'San Miguel National High School',
+              quote: 'Our billing chaos is finally solved. Payment recording takes 5 minutes instead of 30, and parents can upload payment proofs from their phones. We eliminated 90% of payment disputes.',
               rating: 5
             },
             {
@@ -435,7 +495,7 @@ const LandingPage: React.FC = () => {
             Simple, Transparent Pricing
           </h2>
           <p className="text-xl text-slate-600 dark:text-slate-400">
-            Choose the plan that fits your school. No hidden fees.
+            Less than ₱4 per student per month. Unlimited teachers included.
           </p>
         </div>
 
@@ -443,13 +503,14 @@ const LandingPage: React.FC = () => {
           {[
             {
               name: 'Starter',
-              price: '₱3,999',
+              price: '₱1,999',
               period: '/month',
               description: 'Perfect for small schools',
               features: [
                 'Up to 500 students',
-                '20 teachers',
+                'Unlimited teachers ✨',
                 'Core features (grades, forms)',
+                'Parent portal access',
                 'Email support',
                 '30-day free trial'
               ],
@@ -458,14 +519,16 @@ const LandingPage: React.FC = () => {
             },
             {
               name: 'Professional',
-              price: '₱7,999',
+              price: '₱4,999',
               period: '/month',
               description: 'Most popular choice',
               features: [
                 'Up to 1,500 students',
-                '50 teachers',
+                'Unlimited teachers ✨',
                 'All features + AI analytics',
-                'Parent portal',
+                'Parent portal with billing access',
+                'Email & SMS notifications',
+                'Payment proof verification',
                 'Priority support',
                 '30-day free trial'
               ],
@@ -529,7 +592,11 @@ const LandingPage: React.FC = () => {
               </ul>
 
               <button
-                onClick={() => navigate('/enrollment')}
+                onClick={() => 
+                  plan.cta === 'Contact Sales' 
+                    ? window.location.href = 'mailto:sales@edusync.ph?subject=Enterprise Plan Inquiry'
+                    : setIsTrialModalOpen(true)
+                }
                 className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${
                   plan.popular
                     ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-xl hover:scale-105'
@@ -561,6 +628,14 @@ const LandingPage: React.FC = () => {
         answer: 'Most schools are fully operational within 7 days. Setup includes account creation, data import, staff training, and testing. We provide free onboarding support to ensure smooth transition.'
       },
       {
+        question: 'Do parents need to download an app?',
+        answer: 'No! EduSync is a Progressive Web App (PWA) that works in any browser. Parents can access it from their phones or computers without downloading anything. They can also \'Add to Home Screen\' for easy access like a native app.'
+      },
+      {
+        question: 'How does the billing system work?',
+        answer: 'Our integrated billing system lets you create fee structures, record payments, and generate official receipts. Parents can view their balance online and upload payment proofs (photos of bank deposit slips) for verification. Everything is digital and auditable.'
+      },
+      {
         question: 'Can I import my existing student data?',
         answer: 'Absolutely! We support Excel/CSV imports and offer free migration assistance. Our team can help transfer data from your current system to EduSync.'
       },
@@ -569,12 +644,16 @@ const LandingPage: React.FC = () => {
         answer: 'EduSync is a Progressive Web App (PWA) with offline capabilities. You can continue working offline, and changes sync automatically when connection is restored.'
       },
       {
+        question: 'Can I customize notification settings?',
+        answer: 'Yes! You control what triggers notifications (grade posts, absences, announcements) and who receives them. Parents can opt-in for SMS alerts (standard messaging rates apply). All notifications are logged for reference.'
+      },
+      {
         question: 'Is my school data secure?',
         answer: 'Yes. We use bank-level encryption (SSL/TLS, AES-256), daily automatic backups, and comply with the Data Privacy Act 2012. Your data is stored securely on Google Cloud Platform.'
       },
       {
         question: 'Can parents access the system?',
-        answer: 'Yes! Parents get their own portal to view student progress, grades, and attendance. They can also submit enrollment applications online.'
+        answer: 'Yes! Parents get their own portal to view student progress, grades, attendance, and billing statements. They can also submit enrollment applications and upload payment proofs online—all from their mobile phones.'
       }
     ];
 
@@ -636,7 +715,7 @@ const LandingPage: React.FC = () => {
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
           <button
-            onClick={() => navigate('/enrollment')}
+            onClick={() => setIsTrialModalOpen(true)}
             className="px-10 py-5 bg-white text-indigo-700 rounded-xl font-bold text-xl hover:bg-yellow-300 hover:text-indigo-900 transition-all shadow-2xl hover:scale-105"
           >
             Start Free Trial →
@@ -695,6 +774,12 @@ const LandingPage: React.FC = () => {
       <PricingSection />
       <FAQSection />
       <FinalCTASection />
+      
+      {/* Trial Signup Modal */}
+      <TrialSignupModal 
+        isOpen={isTrialModalOpen} 
+        onClose={() => setIsTrialModalOpen(false)} 
+      />
     </div>
   );
 };
