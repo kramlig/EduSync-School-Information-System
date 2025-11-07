@@ -4,6 +4,7 @@ import type { Teacher, TeacherAssignment, AuthUser, StudentUser } from '../types
 import Modal from './Modal';
 import { CloseIcon, PencilIcon, TrashIcon } from './icons';
 import { useDebounce } from '../hooks/useDebounce';
+import { GRADE_LEVELS, formatGradeLevel } from '../src/constants/gradeLevels';
 
 interface TeacherListProps {
   schoolData: SchoolDataHook;
@@ -141,7 +142,9 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
     }
   };
   
-  const gradeLevels = [1, 2, 3, 4, 5, 6];
+  // Full K-12 grade levels from constants
+  // K = Kindergarten, 1-6 = Elementary, 7-10 = Junior High School, 11-12 = Senior High School
+  const gradeLevels = GRADE_LEVELS;
 
   // No client-side filtering needed when using server-side search
   const filteredTeachers = visibleTeachers;
@@ -163,8 +166,8 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
         <div className="mt-2 space-y-2">
             {teacher?.assignments?.map((a, i) => (
                 <div key={i} className="flex items-center justify-between bg-slate-100 dark:bg-slate-700 p-2 rounded-md">
-                    <span className="font-medium">Grade {a.gradeLevel} - {learningAreas.find(la => la.id === a.learningAreaId)?.name}</span>
-                    <button type="button" onClick={() => removeAssignmentFromTeacher(i, isEditMode)} className="text-red-500 hover:text-red-700"><CloseIcon/></button>
+                    <span className="font-medium">{formatGradeLevel(a.gradeLevel)} - {learningAreas.find(la => la.id === a.learningAreaId)?.name}</span>
+                    <button type="button" onClick={() => removeAssignmentFromTeacher(i, isEditMode)} className="text-red-500 hover:text-red-700" aria-label="Remove assignment"><CloseIcon/></button>
                 </div>
             ))}
         </div>
@@ -172,14 +175,14 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
         <div className="grid grid-cols-3 gap-2 mt-4 items-end">
             <div>
                 <label htmlFor="gradeLevel" className="block text-sm font-medium">Grade Level</label>
-                <select name="gradeLevel" value={newAssignment.gradeLevel} onChange={handleAssignmentChange} className="mt-1 w-full input-style">
+                <select name="gradeLevel" id="gradeLevel" value={newAssignment.gradeLevel} onChange={handleAssignmentChange} className="mt-1 w-full input-style" aria-label="Select grade level">
                     <option value="">Select...</option>
-                    {gradeLevels.map(gl => <option key={gl} value={gl}>{gl}</option>)}
+                    {gradeLevels.map(gl => <option key={gl} value={gl}>{formatGradeLevel(gl)}</option>)}
                 </select>
             </div>
             <div>
                  <label htmlFor="learningAreaId" className="block text-sm font-medium">Learning Area</label>
-                 <select name="learningAreaId" value={newAssignment.learningAreaId} onChange={handleAssignmentChange} className="mt-1 w-full input-style">
+                 <select name="learningAreaId" id="learningAreaId" value={newAssignment.learningAreaId} onChange={handleAssignmentChange} className="mt-1 w-full input-style" aria-label="Select learning area">
                      <option value="">Select...</option>
                      {learningAreas.map(la => <option key={la.id} value={la.id}>{la.name}</option>)}
                  </select>

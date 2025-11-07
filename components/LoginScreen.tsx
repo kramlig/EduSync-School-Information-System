@@ -43,17 +43,42 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
       const collectionName = loginType === 'staff' ? 'teachers' : 
                             loginType === 'student' ? 'students' : 'parents';
       
+      console.log('[LoginScreen] 📂 Collection name:', collectionName);
+      console.log('[LoginScreen] 📧 Searching for email:', email.toLowerCase());
+      
       // Query Firestore for user
       const db = getFirestoreInstance();
+      console.log('[LoginScreen] 🗄️ Firestore instance obtained');
+      
       const usersCol = collection(db, collectionName);
       const q = query(usersCol, where('email', '==', email.toLowerCase()));
+      
+      console.log('[LoginScreen] 🔎 Executing query...');
       const snapshot = await getDocs(q);
+      console.log('[LoginScreen] 📊 Query result - docs found:', snapshot.size);
       
       if (snapshot.empty) {
+        console.error('[LoginScreen] ❌ No documents found in query result');
+        
+        // DEBUG: List ALL teachers to see what's actually in the collection
+        console.log('[LoginScreen] 🔍 DEBUG: Listing all teachers in collection...');
+        try {
+          const allTeachers = await getDocs(collection(db, collectionName));
+          console.log(`[LoginScreen] 📋 Total ${collectionName} in database: ${allTeachers.size}`);
+          allTeachers.forEach(doc => {
+            const data = doc.data();
+            console.log(`   - ${doc.id}: ${data.firstName} ${data.lastName} (${data.email})`);
+          });
+        } catch (debugErr) {
+          console.error('[LoginScreen] ❌ DEBUG: Could not list teachers:', debugErr);
+        }
+        
         setError(`No ${loginType} account found with that email`);
         setIsLoading(false);
         return;
       }
+      
+      console.log('[LoginScreen] ✅ Found user document');
       
       const userDoc = snapshot.docs[0];
       const userData = { id: userDoc.id, ...userDoc.data() } as AuthUser | StudentUser | ParentUser;

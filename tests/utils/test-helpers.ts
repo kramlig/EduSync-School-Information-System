@@ -27,7 +27,7 @@ export const TEST_CONFIG = {
   // Waits
   SHORT_WAIT: 500,
   MEDIUM_WAIT: 1000,
-  LONG_WAIT: 2000,
+  LONG_WAIT: 5000, // Increased for Firestore data loading
 } as const;
 
 /**

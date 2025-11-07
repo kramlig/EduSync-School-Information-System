@@ -3,114 +3,589 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // ========================================
-    // DepEd Forms Collections - Added Oct 22, 2025
+    // ⚠️ TRANSITION MODE ACTIVE
+    // ========================================
+    // Users without custom claims (role) are granted legacy access.
+    // This is TEMPORARY to allow smooth migration.
+    // 
+    // TODO: After all users have roles assigned:
+    // 1. Remove isLegacyUser() checks from all rules
+    // 2. Test with roles only
+    // 3. Deploy strict rules
+    // ========================================
+    
+    // ========================================
+    // HELPER FUNCTIONS - Role-Based Access Control
+    // ========================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserRole() {
+      // FIXED: Check if 'role' key exists before accessing it
+      return isAuthenticated() && 
+             request.auth.token.keys().hasAny(['role']) && 
+             request.auth.token.role != null 
+        ? request.auth.token.role 
+        : 'none';
+    }
+    
+    function hasRole() {
+      // FIXED: Check if 'role' key exists before accessing it
+      return isAuthenticated() && 
+             request.auth.token.keys().hasAny(['role']) && 
+             request.auth.token.role != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && getUserRole() == 'admin';
+    }
+    
+    function isPrincipal() {
+      return isAuthenticated() && getUserRole() == 'principal';
+    }
+    
+    function isRegistrar() {
+      return isAuthenticated() && getUserRole() == 'registrar';
+    }
+    
+    function isTeacher() {
+      return isAuthenticated() && getUserRole() == 'teacher';
+    }
+    
+    function isParent() {
+      return isAuthenticated() && getUserRole() == 'parent';
+    }
+    
+    // TEMPORARY: Allow access for users without roles (during transition)
+    // TODO: Remove this after all users have roles assigned
+    function isLegacyUser() {
+      return isAuthenticated() && !hasRole();
+    }
+    
+    function isStaff() {
+      return isAdmin() || isPrincipal() || isRegistrar() || isTeacher();
+    }
+    
+    function isAdminOrPrincipal() {
+      return isAdmin() || isPrincipal();
+    }
+    
+    function isAdminOrRegistrar() {
+      return isAdmin() || isRegistrar();
+    }
+    
+    // ========================================
+    // CORE COLLECTIONS - Students, Teachers, Sections
+    // ========================================
+    
+    // Students Collection
+    match /students/{studentId} {
+      // Staff can read all students
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can only read their own children
+      allow read: if isParent() && request.auth.uid in resource.data.parentIds;
+      
+      // Only admin and registrar can create/update students
+      allow create: if isAdminOrRegistrar() || isLegacyUser();
+      allow update: if isAdminOrRegistrar() || isLegacyUser();
+      
+      // Only admin can delete students
+      allow delete: if isAdmin() || isLegacyUser();
+    }
+    
+    // Teachers Collection
+    match /teachers/{teacherId} {
+      // All authenticated users can read teachers (including anonymous for login lookup)
+      // CRITICAL: Allow anonymous reads so login screen can query teachers collection
+      allow read: if isAuthenticated() || isLegacyUser();
+      
+      // Only admin and principal can manage teachers
+      allow write: if isAdminOrPrincipal() || isLegacyUser();
+    }
+    
+    // Sections Collection
+    match /sections/{sectionId} {
+      // All staff can read sections
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read sections their children are enrolled in
+      allow read: if isParent() && request.auth.uid in resource.data.parentIds;
+      
+      // Admin, principal, and registrar can manage sections
+      allow write: if isAdmin() || isPrincipal() || isRegistrar() || isLegacyUser();
+    }
+    
+    // Parents Collection
+    match /parents/{parentId} {
+      // Staff can read all parents
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can only read their own profile
+      allow read: if isParent() && request.auth.uid == parentId;
+      
+      // Parents can update their own profile (notification preferences, contact info)
+      allow update: if isParent() && request.auth.uid == parentId || isLegacyUser();
+      
+      // Only admin and registrar can create/delete parents
+      allow create: if isAdminOrRegistrar() || isLegacyUser();
+      allow delete: if isAdmin() || isLegacyUser();
+    }
+    
+    // ========================================
+    // ACADEMIC COLLECTIONS - Grades, Attendance, Assignments
+    // ========================================
+    
+    // Grades Collection
+    match /grades/{gradeId} {
+      // Staff can read all grades
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their children's grades
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Only teachers and admin can write grades
+      allow create, update: if isTeacher() || isAdmin() || isLegacyUser();
+      
+      // Only admin can delete grades
+      allow delete: if isAdmin() || isLegacyUser();
+    }
+    
+    // Attendance Records
+    match /attendanceRecords/{recordId} {
+      // Staff can read all attendance
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their children's attendance
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Teachers and admin can manage attendance
+      allow write: if isTeacher() || isAdmin() || isLegacyUser();
+    }
+    
+    // Assignments Collection
+    match /assignments/{assignmentId} {
+      // All authenticated users can read assignments
+      allow read: if isAuthenticated();
+      
+      // Only teachers and admin can manage assignments
+      allow write: if isTeacher() || isAdmin() || isLegacyUser();
+    }
+    
+    // Learning Areas / Subjects
+    match /learningAreas/{areaId} {
+      // All authenticated users can read
+      allow read: if isAuthenticated();
+      
+      // Only admin and principal can manage
+      allow write: if isAdminOrPrincipal() || isLegacyUser();
+    }
+    
+    // Class Schedules
+    match /schedules/{scheduleId} {
+      // All authenticated users can read schedules
+      allow read: if isAuthenticated();
+      
+      // Admin, principal, and registrar can manage schedules
+      allow write: if isAdmin() || isPrincipal() || isRegistrar() || isLegacyUser();
+    }
+    
+    // Core Values Assessment
+    match /coreValues/{valueId} {
+      // Staff can read all assessments
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their children's assessments
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Only teachers and admin can write assessments
+      allow write: if isTeacher() || isAdmin() || isLegacyUser();
+    }
+    
+    // ========================================
+    // DepEd Forms Collections
     // ========================================
     
     // Form 137 - Academic History / Permanent Record
-    // Staff with appropriate roles can read/write
     match /academicHistory/{recordId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
-      // TODO: Add role-based validation when auth includes custom claims
-      // allow write: if request.auth.token.role in ['admin', 'registrar', 'principal'];
+      // Staff can read all records
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their children's records
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Only admin, registrar, and principal can manage Form 137
+      allow write: if isAdmin() || isRegistrar() || isPrincipal() || isLegacyUser();
     }
     
     // Form 138 - Report Cards
-    // Teachers can write for their students, all staff can read
     match /reportCards/{cardId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
-      // TODO: Add role-based validation
-      // allow write: if request.auth.token.role in ['admin', 'teacher', 'principal', 'registrar'];
+      // Staff can read all report cards
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their children's report cards
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Teachers, admin, and registrar can manage report cards
+      allow write: if isTeacher() || isAdmin() || isRegistrar() || isLegacyUser();
     }
     
     // School Forms - SF1, SF2, SF9 (EBEIS)
-    // Admin and registrar can manage
     match /schoolForms/{formId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
-      // TODO: Add role-based validation
-      // allow write: if request.auth.token.role in ['admin', 'registrar', 'principal'];
+      // Staff can read school forms
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Only admin, registrar, and principal can manage
+      allow write: if isAdmin() || isRegistrar() || isPrincipal() || isLegacyUser();
     }
     
     // ELLN Assessments - K-3 Early Learning
-    // Teachers and admin can manage
     match /ellnAssessments/{assessmentId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
-      // TODO: Add role-based validation
-      // allow write: if request.auth.token.role in ['admin', 'teacher', 'principal'];
+      // Staff can read assessments
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their children's assessments
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Teachers and admin can manage assessments
+      allow write: if isTeacher() || isAdmin() || isLegacyUser();
     }
     
     // Form Generation Log - Analytics & Tracking
-    // All authenticated users can read, only system can write
     match /formGenerationLog/{logId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update, delete: if false; // Log entries are immutable
+      // Staff can read logs
+      allow read: if isStaff() || isLegacyUser();
+      
+      // All authenticated users can create logs
+      allow create: if isAuthenticated() || isLegacyUser();
+      
+      // Logs are immutable
+      allow update, delete: if false;
     }
     
     // ========================================
-    // End DepEd Forms Collections
+    // FINANCIAL COLLECTIONS - Billing & Payments
     // ========================================
     
+    // Fee Structures
+    match /feeStructures/{feeId} {
+      // Staff can read fee structures
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read fee structures (to see what they owe)
+      allow read: if isParent() || isLegacyUser();
+      
+      // Only admin and registrar can manage fee structures
+      allow write: if isAdminOrRegistrar() || isLegacyUser();
+    }
+    
+    // Payment Records
+    match /payments/{paymentId} {
+      // Staff can read all payments
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their own payments
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Only admin and registrar can create payments
+      allow create: if isAdminOrRegistrar() || isLegacyUser();
+      
+      // Only admin can update/delete payments
+      allow update, delete: if isAdmin() || isLegacyUser();
+    }
+    
+    // Billing Ledgers
+    match /billingLedgers/{ledgerId} {
+      // Staff can read all ledgers
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their own ledgers
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Only admin and registrar can write ledgers
+      allow write: if isAdminOrRegistrar() || isLegacyUser();
+    }
+    
+    // Billing Statements
+    match /billingStatements/{statementId} {
+      // Staff can read all statements
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their own statements
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Only admin and registrar can manage statements
+      allow write: if isAdminOrRegistrar() || isLegacyUser();
+    }
+    
+    // Receipts
+    match /receipts/{receiptId} {
+      // Staff can read all receipts
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their own receipts
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Only admin and registrar can create receipts
+      allow create: if isAdminOrRegistrar() || isLegacyUser();
+      
+      // Only admin can update/delete receipts
+      allow update, delete: if isAdmin() || isLegacyUser();
+    }
+    
+    // Payment Proofs (uploaded by parents)
+    match /paymentProofs/{proofId} {
+      // Staff can read all proofs
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their own proofs
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Parents can upload their own proofs
+      allow create: if isParent() && request.auth.uid == request.resource.data.parentId;
+      
+      // Admin and registrar can update (verify/reject)
+      allow update: if isAdminOrRegistrar() || isLegacyUser();
+      
+      // Only admin can delete
+      allow delete: if isAdmin() || isLegacyUser();
+    }
+    
     // ========================================
-    // Enrollment System - Added Nov 1, 2025
+    // ENROLLMENT SYSTEM
     // ========================================
     
     // Enrollment Applications
-    // Security model:
-    // 1. Public can CREATE applications (no auth required for enrollment portal)
-    // 2. Authenticated users can READ all applications (needed for admin dashboard)
-    // 3. Only authenticated users can UPDATE/DELETE (admin actions)
     match /enrollmentApplications/{applicationId} {
-      // ✅ Allow public creation - Parents don't need account to apply
-      allow create: if true 
-        && request.resource.data.keys().hasAll(['applicationNumber', 'studentInfo', 'guardian1', 'currentAddress', 'academicInfo', 'status', 'submittedAt'])
+      // Public can CREATE applications (no auth required for enrollment portal)
+      allow create: if request.resource.data.keys().hasAll(['applicationNumber', 'studentInfo', 'guardian1', 'currentAddress', 'academicInfo', 'status', 'submittedAt'])
         && request.resource.data.status == 'submitted';
       
-      // ✅ Allow authenticated users to read (admins need to see all applications)
-      allow read: if request.auth != null;
+      // Staff can read all applications
+      allow read: if isStaff() || isLegacyUser();
       
-      // ✅ Allow authenticated users to update (admin approve/reject actions)
-      // Validate that only specific fields can be updated
-      allow update: if request.auth != null
+      // Admin, registrar, and principal can update applications (approve/reject)
+      allow update: if (isAdmin() || isRegistrar() || isPrincipal() || isLegacyUser())
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt', 'reviewNotes', 'rejectionReason', 'enrolledStudentId', 'updatedAt']);
       
-      // ✅ Only authenticated users can delete (rare admin action)
-      allow delete: if request.auth != null;
-      
-      // TODO: Add role-based validation when custom claims are implemented
-      // allow update: if request.auth != null && request.auth.token.role == 'admin';
-      // allow delete: if request.auth != null && request.auth.token.role == 'admin';
+      // Only admin can delete applications
+      allow delete: if isAdmin() || isLegacyUser();
     }
+    
+    // ========================================
+    // NOTIFICATION SYSTEM
+    // ========================================
+    
+    // Notifications Collection
+    match /notifications/{notificationId} {
+      // Staff can read all notifications
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their own notifications
+      allow read: if isParent() && request.auth.uid == resource.data.recipientId;
+      
+      // System can create notifications (via Cloud Functions)
+      allow create: if isAuthenticated() || isLegacyUser();
+      
+      // Only admin can update/delete
+      allow update, delete: if isAdmin() || isLegacyUser();
+    }
+    
+    // Mail Queue (for Firebase Email Extension)
+    match /mail/{mailId} {
+      // Only system (Cloud Functions) can access
+      allow read, write: if false;
+    }
+    
+    // Notification Errors (for debugging)
+    match /notificationErrors/{errorId} {
+      // Only admin can read errors
+      allow read: if isAdmin() || isLegacyUser();
+      
+      // System can create errors
+      allow create: if isAuthenticated() || isLegacyUser();
+      
+      // Errors are immutable
+      allow update, delete: if false;
+    }
+    
+    // ========================================
+    // ANNOUNCEMENTS & COMMUNICATION
+    // ========================================
+    
+    // Announcements Collection
+    match /announcements/{announcementId} {
+      // All authenticated users can read announcements
+      allow read: if isAuthenticated();
+      
+      // Only staff can create announcements
+      allow create: if isStaff() || isLegacyUser();
+      
+      // Admin and principal can update/delete
+      allow update, delete: if isAdminOrPrincipal() || isLegacyUser();
+    }
+    
+    // Lesson Plans
+    match /lessonPlans/{planId} {
+      // Teachers can read all lesson plans
+      allow read: if isTeacher() || isAdmin() || isPrincipal() || isLegacyUser();
+      
+      // Teachers can manage their own lesson plans
+      allow create: if isTeacher() || isLegacyUser();
+      allow update, delete: if (isTeacher() && resource.data.teacherId == request.auth.uid) || isLegacyUser();
+      
+      // Admin can manage all lesson plans
+      allow write: if isAdmin() || isLegacyUser();
+    }
+    
+    // ========================================
+    // SETTINGS & CONFIGURATION
+    // ========================================
     
     // Settings Collection
-    // - Public read access (enrollment portal needs to check if enrollment is enabled)
-    // - Only authenticated users can write (admin configuration)
     match /settings/{settingId} {
-      // ✅ Allow public read - Enrollment portal needs to check enrollmentConfig
+      // Public read access (enrollment portal needs to check if enrollment is enabled)
       allow read: if true;
       
-      // ✅ Only authenticated users can update settings
-      allow write: if request.auth != null;
+      // Only admin can update settings
+      allow write: if isAdmin() || isLegacyUser();
+    }
+    
+    // School Configuration
+    match /schoolConfig/{configId} {
+      // All authenticated users can read config
+      allow read: if isAuthenticated();
       
-      // TODO: Add admin-only restriction when custom claims are implemented
-      // allow write: if request.auth != null && request.auth.token.role == 'admin';
+      // Only admin can update config
+      allow write: if isAdmin() || isLegacyUser();
+    }
+    
+    // User Roles (for role management)
+    match /userRoles/{userId} {
+      // Users can read their own role
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Admin can read all roles
+      allow read: if isAdmin() || isLegacyUser();
+      
+      // Only admin can manage roles
+      allow write: if isAdmin() || isLegacyUser();
     }
     
     // ========================================
-    // End Enrollment System
+    // SUBSTITUTE TEACHER SYSTEM
     // ========================================
     
-    // Allow public read access for all collections to enable initial data load.
-    // WARNING: This is permissive. Data should be secured further post-login.
-    // For now, this unblocks the login screen.
+    // Substitute Assignments
+    match /substituteAssignments/{assignmentId} {
+      // All staff can read substitute assignments
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Admin and principal can manage substitutes
+      allow write: if isAdminOrPrincipal() || isLegacyUser();
+    }
+    
+    // ========================================
+    // ADDITIONAL ACADEMIC COLLECTIONS
+    // ========================================
+    
+    // Student Assignment Grades (grades for specific assignments)
+    match /studentAssignmentGrades/{gradeId} {
+      // Staff can read all assignment grades
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their children's assignment grades
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Teachers and admin can write assignment grades
+      allow create, update: if isTeacher() || isAdmin() || isLegacyUser();
+      
+      // Only admin can delete
+      allow delete: if isAdmin() || isLegacyUser();
+    }
+    
+    // Core Value Grades (character development grades)
+    match /coreValueGrades/{gradeId} {
+      // Staff can read all core value grades
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Parents can read their children's core value grades
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Teachers and admin can write core value grades
+      allow create, update: if isTeacher() || isAdmin() || isLegacyUser();
+      
+      // Only admin can delete
+      allow delete: if isAdmin() || isLegacyUser();
+    }
+    
+    // Class Schedules (alternative name for schedules)
+    match /classSchedules/{scheduleId} {
+      // All authenticated users can read schedules
+      allow read: if isAuthenticated();
+      
+      // Admin, principal, and registrar can manage schedules
+      allow write: if isAdmin() || isPrincipal() || isRegistrar() || isLegacyUser();
+    }
+    
+    // School Years Configuration
+    match /schoolYears/{yearId} {
+      // All authenticated users can read school years
+      allow read: if isAuthenticated();
+      
+      // Only admin can manage school years
+      allow write: if isAdmin() || isLegacyUser();
+    }
+    
+    // User Profiles (additional user data)
+    match /users/{userId} {
+      // Users can read their own profile
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Admin can read all profiles
+      allow read: if isAdmin() || isLegacyUser();
+      
+      // Users can update their own profile
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Only admin can create/delete profiles
+      allow create, delete: if isAdmin() || isLegacyUser();
+    }
+    
+    // Teacher Validation Results
+    match /validationResults/{resultId} {
+      // Staff can read all validation results
+      allow read: if isStaff() || isLegacyUser();
+      
+      // Teachers can create validation results for themselves
+      allow create: if isTeacher() || isLegacyUser();
+      
+      // Only admin can update/delete validation results
+      allow update, delete: if isAdmin() || isLegacyUser();
+    }
+    
+    // User Roles Audit Trail (Auto-Onboarding System)
+    match /userRoles/{userId} {
+      // Users can read their own role history
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Admins can read all role histories
+      allow read: if isAdmin() || isLegacyUser();
+      
+      // Only Cloud Functions can write (immutable audit trail)
+      allow write: if false;
+    }
+    
+    // ========================================
+    // FALLBACK RULE - DENY ALL UNMATCHED
+    // ========================================
+    
+    // IMPORTANT: This denies access to any collection not explicitly defined above
+    // This is a security best practice - whitelist approach
     match /{document=**} {
-      allow read: if true;
-      // TEMP: Allow all writes during local emulator debugging to resolve 403 issues.
-      // IMPORTANT: Revert to `allow write: if request.auth != null;` before deploying to prod.
-      allow write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

@@ -31,6 +31,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon
 } from '@heroicons/react/24/outline';
+import './landing-animations.css';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();

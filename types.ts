@@ -600,3 +600,119 @@ export interface ScholarshipApplication {
     createdAt: string;
     updatedAt: string;
 }
+
+export interface BillingStatement {
+    id: string; // Composite: `${studentId}_${schoolYear}_${term}`
+    studentId: string;
+    studentName: string;
+    schoolYear: string;
+    gradeLevel: number;
+    term: 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'Annual'; // Billing period
+    
+    // Fee Breakdown
+    charges: Charge[];
+    totalCharges: number;
+    
+    // Discounts Applied
+    discounts: {
+        id: string;
+        type: 'scholarship' | 'sibling' | 'staff' | 'early_bird' | 'other';
+        name: string;
+        amount: number;
+        percentage?: number;
+    }[];
+    totalDiscounts: number;
+    
+    // Payments Received
+    payments: Payment[];
+    totalPayments: number;
+    
+    // Balance
+    subtotal: number; // totalCharges - totalDiscounts
+    balance: number;  // subtotal - totalPayments
+    
+    // Payment Schedule
+    dueDate: string;
+    paymentPlan: 'full' | 'quarterly' | 'monthly';
+    
+    // Status
+    status: 'paid' | 'partial' | 'overdue' | 'pending';
+    
+    // Metadata
+    generatedAt: string;
+    generatedBy: string;
+    lastUpdated: string;
+}
+
+export interface Receipt {
+    id: string;
+    receiptNumber: string; // Auto-generated: OR-YYYY-00001
+    
+    // Transaction Details
+    studentId: string;
+    studentName: string;
+    schoolYear: string;
+    paymentId: string; // Link to Payment in StudentLedger
+    
+    // Payment Information
+    date: string;
+    amount: number;
+    paymentMethod: 'cash' | 'check' | 'bank_transfer' | 'gcash' | 'maya' | 'card' | 'online';
+    checkNumber?: string;
+    bankName?: string;
+    referenceNumber?: string;
+    
+    // Payment For
+    description: string; // e.g., "Tuition Fee - Q1 2024-2025"
+    
+    // Issued By
+    receivedBy: string; // Staff user ID
+    receivedByName: string;
+    
+    // Balance Information
+    previousBalance: number;
+    amountPaid: number;
+    newBalance: number;
+    
+    // Status
+    status: 'issued' | 'void' | 'cancelled';
+    voidReason?: string;
+    voidedBy?: string;
+    voidedAt?: string;
+    
+    // Metadata
+    createdAt: string;
+    printedAt?: string;
+}
+
+export interface PaymentProof {
+    id: string;
+    studentId: string;
+    
+    // File Information
+    fileName: string;
+    fileURL: string;
+    fileType: 'image/jpeg' | 'image/png' | 'application/pdf';
+    fileSize: number; // in bytes
+    
+    // Payment Details
+    amount?: number;
+    paymentDate?: string;
+    paymentMethod?: string;
+    referenceNumber?: string;
+    notes?: string;
+    
+    // Verification Status
+    status: 'pending' | 'verified' | 'rejected';
+    verifiedBy?: string;
+    verifiedByName?: string;
+    verifiedAt?: string;
+    rejectionReason?: string;
+    
+    // Link to official receipt (if verified and payment recorded)
+    linkedReceiptId?: string;
+    
+    // Metadata
+    uploadedAt: string;
+    uploadedBy: string; // Parent user ID
+}

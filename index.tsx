@@ -1,3 +1,7 @@
+// CRITICAL: Patch Firebase SDK to force long polling BEFORE any imports
+// This must be the VERY FIRST thing to run
+(window as any).FIRESTORE_FORCE_LONG_POLLING = true;
+(window as any).FIRESTORE_NO_WEBCHANNEL = true;
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
