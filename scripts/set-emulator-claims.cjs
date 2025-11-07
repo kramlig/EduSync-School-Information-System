@@ -2,144 +2,84 @@
 /**
  * Set Custom Claims for Emulator Users
  * 
- * The Firebase Emulator doesn't support setCustomUserClaims from Admin SDK,
- * so we need to use the Emulator REST API to set custom claims.
+ * Uses Firebase Admin SDK to set custom claims.
+ * Works with both emulator and production when proper env vars are set.
  * 
  * Usage:
  *   node scripts/set-emulator-claims.cjs
  */
 
-const http = require('http');
-
-// Emulator configuration
-const EMULATOR_HOST = '127.0.0.1';
-const EMULATOR_AUTH_PORT = 9100; // Changed from 9099 to match firebase.json
-const PROJECT_ID = 'edusync-local';
+const admin = require('firebase-admin');
 
 // Users to set claims for
+// Only including users that actually exist in the seed data
 const USERS_WITH_ROLES = [
-  { email: 'admin@edusync.local', role: 'admin' },
-  { email: 'principal@edusync.local', role: 'principal' },
-  { email: 'registrar@edusync.local', role: 'registrar' },
-  // Teachers - add more as needed
-  { email: 'teacher1@edusync.local', role: 'teacher' },
-  { email: 'teacher2@edusync.local', role: 'teacher' },
-  { email: 'teacher3@edusync.local', role: 'teacher' },
-  { email: 'teacher4@edusync.local', role: 'teacher' },
-  { email: 'teacher5@edusync.local', role: 'teacher' },
-  // Parents - add more as needed
-  { email: 'parent1@edusync.local', role: 'parent' },
-  { email: 'parent2@edusync.local', role: 'parent' },
-  { email: 'parent3@edusync.local', role: 'parent' },
+  { email: 'admin@edusync.local', role: 'admin', uid: 'admin123' },
+  { email: 'juan.garcia@test.com', role: 'parent', uid: 'parent-0001' },
+  // Add more users here as they are created in seed-complete.cjs
 ];
 
-/**
- * Make HTTP request to emulator
- */
-function makeRequest(options, data) {
-  return new Promise((resolve, reject) => {
-    const req = http.request(options, (res) => {
-      let body = '';
-      res.on('data', (chunk) => (body += chunk));
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(JSON.parse(body || '{}'));
-        } else {
-          reject(new Error(`HTTP ${res.statusCode}: ${body}`));
-        }
-      });
+// Initialize Firebase Admin
+let app;
+try {
+  // Check if running against emulator
+  const isEmulator = process.env.FIREBASE_AUTH_EMULATOR_HOST || process.env.FIRESTORE_EMULATOR_HOST;
+  
+  if (isEmulator) {
+    console.log('🔧 Connecting to Firebase Emulator...');
+    app = admin.initializeApp({
+      projectId: 'edusync-local'
     });
-    
-    req.on('error', reject);
-    if (data) req.write(JSON.stringify(data));
-    req.end();
-  });
-}
-
-/**
- * Get all users from emulator
- */
-async function getAllUsers() {
-  const options = {
-    hostname: EMULATOR_HOST,
-    port: EMULATOR_AUTH_PORT,
-    path: `/identitytoolkit.googleapis.com/v1/projects/${PROJECT_ID}/accounts:query?key=fake-api-key`,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  };
-  
-  try {
-    const response = await makeRequest(options, {});
-    return response.users || [];
-  } catch (error) {
-    console.error('❌ Failed to get users:', error.message);
-    return [];
+  } else {
+    console.log('🔧 Connecting to Firebase Production...');
+    app = admin.initializeApp();
   }
-}
-
-/**
- * Set custom claims for a user
- */
-async function setCustomClaims(localId, email, role) {
-  const options = {
-    hostname: EMULATOR_HOST,
-    port: EMULATOR_AUTH_PORT,
-    path: `/identitytoolkit.googleapis.com/v1/projects/${PROJECT_ID}/accounts:update?key=fake-api-key`,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
-  };
-  
-  const data = {
-    localId: localId,
-    customAttributes: JSON.stringify({ role: role })
-  };
-  
-  try {
-    await makeRequest(options, data);
-    return true;
-  } catch (error) {
-    console.error(`❌ Failed to set claims for ${email}:`, error.message);
-    return false;
-  }
+} catch (error) {
+  console.error('❌ Failed to initialize Firebase Admin:', error.message);
+  process.exit(1);
 }
 
 /**
  * Main function
  */
 async function main() {
-  console.log('🔧 Setting custom claims for emulator users...\n');
-  
-  // Get all users from emulator
-  const allUsers = await getAllUsers();
-  
-  if (allUsers.length === 0) {
-    console.error('❌ No users found in emulator. Make sure emulator is running and seeded.\n');
-    process.exit(1);
-  }
-  
-  console.log(`📋 Found ${allUsers.length} users in emulator\n`);
+  console.log('� Setting custom claims for emulator users...\n');
   
   let successCount = 0;
   let failCount = 0;
   
   // Set claims for each configured user
   for (const userConfig of USERS_WITH_ROLES) {
-    const user = allUsers.find(u => u.email === userConfig.email);
+    console.log(`🔄 Processing ${userConfig.email}...`);
     
-    if (!user) {
-      console.log(`⚠️  User not found: ${userConfig.email} (skipping)`);
-      failCount++;
-      continue;
-    }
-    
-    console.log(`🔑 Setting role '${userConfig.role}' for ${userConfig.email}...`);
-    const success = await setCustomClaims(user.localId, userConfig.email, userConfig.role);
-    
-    if (success) {
-      console.log(`   ✅ Success!\n`);
+    try {
+      // Get user by email or UID
+      let user;
+      if (userConfig.uid) {
+        // If UID is provided, use it directly (faster)
+        try {
+          user = await admin.auth().getUser(userConfig.uid);
+        } catch (uidError) {
+          // Fallback to email lookup if UID doesn't exist
+          console.log(`   ⚠️  UID not found, looking up by email...`);
+          user = await admin.auth().getUserByEmail(userConfig.email);
+        }
+      } else {
+        // Otherwise, look up by email
+        user = await admin.auth().getUserByEmail(userConfig.email);
+      }
+      
+      // Set custom claims using Admin SDK
+      await admin.auth().setCustomUserClaims(user.uid, {
+        role: userConfig.role,
+        schoolId: 'default'
+      });
+      
+      console.log(`   ✅ Set role '${userConfig.role}' for ${userConfig.email} (UID: ${user.uid})\n`);
       successCount++;
-    } else {
-      console.log(`   ❌ Failed!\n`);
+      
+    } catch (error) {
+      console.error(`   ❌ Failed: ${error.message}\n`);
       failCount++;
     }
   }
