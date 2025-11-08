@@ -10,12 +10,18 @@
  * - Simpler code (no React Query abstractions)
  * - Works offline-first (no blank pages)
  * 
+ * MULTI-TENANT MIGRATION:
+ * - Phase 2: Uses SchoolContext to get current user's schoolId
+ * - All CRUD operations auto-inject schoolId from context
+ * - Queries will be filtered by schoolId in Phase 3
+ * 
  * Migration Status: COMPLETE ✅
  * - Day 1 Morning: Students + Teachers (2/16 collections) ✅
  * - Day 1 Afternoon: Add remaining 14 collections ✅
  * - Day 1 Evening: Add all CRUD methods ✅
  * - Day 2 Morning: Switch App.tsx ✅
  * - Day 2 Afternoon: Rename to useSchoolData.ts ✅
+ * - Phase 2: Add schoolId to all types and CRUD ✅ IN PROGRESS
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -32,14 +38,13 @@ import {
     query,
     where,
     getDocs,
-    getDocsFromCache,
-    getDocsFromServer,
     limit,
     startAfter,
     QueryDocumentSnapshot,
     DocumentData
 } from 'firebase/firestore';
-import { getFirestoreInstance, auth, waitForAuthReady } from '../src/services/firestoreService';
+import { getFirestoreInstance, waitForAuthReady } from '../src/services/firestoreService';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
 import type { 
     Student, LearningArea, Grade, CoreValue, CoreValueGrade, AttendanceRecord, 
     Teacher, Section, SchoolSettings, SubstituteAssignment, ClassSchedule, 
@@ -83,6 +88,9 @@ const ENABLE_DEBUG_LOGS = false;        // Debug and progress logs (📊)
 
 export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     // console.log('[useSchoolData] 🚀 Hook initializing (Firestore subscriptions)...', { collectionsToFetch });
+
+    // MULTI-TENANT: Get current user's schoolId from context
+    const { schoolId } = useSchoolContext();
 
     // ===== STATE MANAGEMENT =====
     // Collections state
@@ -185,10 +193,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                     console.log('[useSchoolData] 👥 Subscribing to students...');
                 }
                 
-                const studentsQuery = query(
-                    collection(db, 'students'),
-                    limit(100) // Initial page
-                );
+                // MULTI-TENANT: Filter by schoolId
+                const studentsQuery = schoolId
+                    ? query(
+                        collection(db, 'students'),
+                        where('schoolId', '==', schoolId),
+                        limit(100) // Initial page
+                    )
+                    : query(
+                        collection(db, 'students'),
+                        limit(100)
+                    );
 
                 const unsubStudents = onSnapshot(
                     studentsQuery,
@@ -242,8 +257,18 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             if (shouldFetch('teachers')) {
                 if (ENABLE_SUBSCRIPTION_LOGS) {
                     console.log('[useSchoolData] 👨‍🏫 Subscribing to teachers...');
-                }                const unsubTeachers = onSnapshot(
-                    collection(db, 'teachers'),
+                }
+                
+                // MULTI-TENANT: Filter by schoolId
+                const teachersQuery = schoolId
+                    ? query(
+                        collection(db, 'teachers'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'teachers');
+                    
+                const unsubTeachers = onSnapshot(
+                    teachersQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         const fromCache = snapshot.metadata.fromCache;
@@ -286,8 +311,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 if (ENABLE_SUBSCRIPTION_LOGS) {
                     console.log('[useSchoolData] 👪 Subscribing to parents...');
                 }
+                
+                // MULTI-TENANT: Filter by schoolId
+                const parentsQuery = schoolId
+                    ? query(
+                        collection(db, 'parents'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'parents');
+                    
                 const unsubParents = onSnapshot(
-                    collection(db, 'parents'),
+                    parentsQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         if (ENABLE_CACHE_LOGS) {
@@ -315,8 +349,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 if (ENABLE_SUBSCRIPTION_LOGS) {
                     console.log('[useSchoolData] 📚 Subscribing to sections...');
                 }
+                
+                // MULTI-TENANT: Filter by schoolId
+                const sectionsQuery = schoolId
+                    ? query(
+                        collection(db, 'sections'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'sections');
+                    
                 const unsubSections = onSnapshot(
-                    collection(db, 'sections'),
+                    sectionsQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         if (ENABLE_CACHE_LOGS) {
@@ -344,8 +387,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 if (ENABLE_SUBSCRIPTION_LOGS) {
                     console.log('[useSchoolData] 📖 Subscribing to learningAreas...');
                 }
+                
+                // MULTI-TENANT: Filter by schoolId
+                const learningAreasQuery = schoolId
+                    ? query(
+                        collection(db, 'learningAreas'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'learningAreas');
+                    
                 const unsubLearningAreas = onSnapshot(
-                    collection(db, 'learningAreas'),
+                    learningAreasQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         if (ENABLE_CACHE_LOGS) {
@@ -369,8 +421,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             // ===== GRADES SUBSCRIPTION =====
             if (shouldFetch('grades')) {
                 console.log('[useSchoolData] 📊 Subscribing to grades...');
+                
+                // MULTI-TENANT: Filter by schoolId
+                const gradesQuery = schoolId
+                    ? query(
+                        collection(db, 'grades'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'grades');
+                    
                 const unsubGrades = onSnapshot(
-                    collection(db, 'grades'),
+                    gradesQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         if (ENABLE_CACHE_LOGS) {
@@ -394,8 +455,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             // ===== CORE VALUES SUBSCRIPTION =====
             if (shouldFetch('coreValues')) {
                 console.log('[useSchoolData] 💎 Subscribing to coreValues...');
+                
+                // MULTI-TENANT: Filter by schoolId
+                const coreValuesQuery = schoolId
+                    ? query(
+                        collection(db, 'coreValues'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'coreValues');
+                    
                 const unsubCoreValues = onSnapshot(
-                    collection(db, 'coreValues'),
+                    coreValuesQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         if (ENABLE_CACHE_LOGS) {
@@ -419,8 +489,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             // ===== CORE VALUE GRADES SUBSCRIPTION =====
             if (shouldFetch('coreValueGrades')) {
                 console.log('[useSchoolData] 💯 Subscribing to coreValueGrades...');
+                
+                // MULTI-TENANT: Filter by schoolId
+                const coreValueGradesQuery = schoolId
+                    ? query(
+                        collection(db, 'coreValueGrades'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'coreValueGrades');
+                    
                 const unsubCoreValueGrades = onSnapshot(
-                    collection(db, 'coreValueGrades'),
+                    coreValueGradesQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         console.log(snapshot.metadata.fromCache ? '📦 [coreValueGrades] CACHE' : '📡 [coreValueGrades] SERVER');
@@ -442,8 +521,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             // ===== ATTENDANCE RECORDS SUBSCRIPTION =====
             if (shouldFetch('attendanceRecords')) {
                 console.log('[useSchoolData] 📅 Subscribing to attendanceRecords...');
+                
+                // MULTI-TENANT: Filter by schoolId
+                const attendanceQuery = schoolId
+                    ? query(
+                        collection(db, 'attendanceRecords'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'attendanceRecords');
+                    
                 const unsubAttendance = onSnapshot(
-                    collection(db, 'attendanceRecords'),
+                    attendanceQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         console.log(snapshot.metadata.fromCache ? '📦 [attendanceRecords] CACHE' : '📡 [attendanceRecords] SERVER');
@@ -466,8 +554,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             // ===== SUBSTITUTE ASSIGNMENTS SUBSCRIPTION =====
             if (shouldFetch('substituteAssignments')) {
                 console.log('[useSchoolData] 🔄 Subscribing to substituteAssignments...');
+                
+                // MULTI-TENANT: Filter by schoolId
+                const substitutesQuery = schoolId
+                    ? query(
+                        collection(db, 'substituteAssignments'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'substituteAssignments');
+                    
                 const unsubSubstitutes = onSnapshot(
-                    collection(db, 'substituteAssignments'),
+                    substitutesQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         console.log(snapshot.metadata.fromCache ? '📦 [substituteAssignments] CACHE' : '📡 [substituteAssignments] SERVER');
@@ -489,8 +586,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             // ===== CLASS SCHEDULES SUBSCRIPTION =====
             if (shouldFetch('classSchedules')) {
                 console.log('[useSchoolData] ⏰ Subscribing to classSchedules...');
+                
+                // MULTI-TENANT: Filter by schoolId
+                const schedulesQuery = schoolId
+                    ? query(
+                        collection(db, 'classSchedules'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'classSchedules');
+                    
                 const unsubSchedules = onSnapshot(
-                    collection(db, 'classSchedules'),
+                    schedulesQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         console.log(snapshot.metadata.fromCache ? '📦 [classSchedules] CACHE' : '📡 [classSchedules] SERVER');
@@ -512,8 +618,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             // ===== ASSIGNMENTS SUBSCRIPTION =====
             if (shouldFetch('assignments')) {
                 console.log('[useSchoolData] 📝 Subscribing to assignments...');
+                
+                // MULTI-TENANT: Filter by schoolId
+                const assignmentsQuery = schoolId
+                    ? query(
+                        collection(db, 'assignments'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'assignments');
+                    
                 const unsubAssignments = onSnapshot(
-                    collection(db, 'assignments'),
+                    assignmentsQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         console.log(snapshot.metadata.fromCache ? '📦 [assignments] CACHE' : '📡 [assignments] SERVER');
@@ -535,8 +650,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             // ===== STUDENT ASSIGNMENT GRADES SUBSCRIPTION =====
             if (shouldFetch('studentAssignmentGrades')) {
                 console.log('[useSchoolData] 📋 Subscribing to studentAssignmentGrades...');
+                
+                // MULTI-TENANT: Filter by schoolId
+                const studentGradesQuery = schoolId
+                    ? query(
+                        collection(db, 'studentAssignmentGrades'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'studentAssignmentGrades');
+                    
                 const unsubStudentGrades = onSnapshot(
-                    collection(db, 'studentAssignmentGrades'),
+                    studentGradesQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         console.log(snapshot.metadata.fromCache ? '📦 [studentAssignmentGrades] CACHE' : '📡 [studentAssignmentGrades] SERVER');
@@ -558,8 +682,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             // ===== LESSON PLANS SUBSCRIPTION =====
             if (shouldFetch('lessonPlans')) {
                 console.log('[useSchoolData] 📄 Subscribing to lessonPlans...');
+                
+                // MULTI-TENANT: Filter by schoolId
+                const lessonPlansQuery = schoolId
+                    ? query(
+                        collection(db, 'lessonPlans'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'lessonPlans');
+                    
                 const unsubLessonPlans = onSnapshot(
-                    collection(db, 'lessonPlans'),
+                    lessonPlansQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         console.log(snapshot.metadata.fromCache ? '📦 [lessonPlans] CACHE' : '📡 [lessonPlans] SERVER');
@@ -581,8 +714,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             // ===== ANNOUNCEMENTS SUBSCRIPTION =====
             if (shouldFetch('announcements')) {
                 console.log('[useSchoolData] 📢 Subscribing to announcements...');
+                
+                // MULTI-TENANT: Filter by schoolId
+                const announcementsQuery = schoolId
+                    ? query(
+                        collection(db, 'announcements'),
+                        where('schoolId', '==', schoolId)
+                    )
+                    : collection(db, 'announcements');
+                    
                 const unsubAnnouncements = onSnapshot(
-                    collection(db, 'announcements'),
+                    announcementsQuery,
                     { includeMetadataChanges: true },
                     (snapshot) => {
                         console.log(snapshot.metadata.fromCache ? '📦 [announcements] CACHE' : '📡 [announcements] SERVER');
@@ -874,28 +1016,36 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 return { success: false, message: 'A student with this email already exists.' };
             }
 
+            // MULTI-TENANT: Auto-inject schoolId from context (if not provided)
+            // During migration, accept schoolId from parameter OR use context
+            const finalSchoolId = student.schoolId || schoolId || 'default';
+
             const newStudent = {
                 ...student,
+                schoolId: finalSchoolId,  // MULTI-TENANT: Ensure schoolId is set
                 enrollmentDate: serverTimestamp(),
                 createdAt: serverTimestamp()
             };
 
             const docRef = await addDoc(collection(db, 'students'), newStudent);
-            console.log('[useSchoolData] ✅ Student added:', docRef.id);
+            console.log('[useSchoolData] ✅ Student added:', docRef.id, 'schoolId:', finalSchoolId);
             return { success: true };
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error adding student:', err);
             return { success: false, message: err.message };
         }
-    }, [students]);
+    }, [students, schoolId]);
 
     const updateStudent = useCallback(async (student: Student): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
             
+            // MULTI-TENANT: Preserve schoolId, ensure it matches context
+            const finalSchoolId = student.schoolId || schoolId || 'default';
+            
             // Filter out undefined values to prevent Firestore errors
-            const studentData: Record<string, any> = {};
+            const studentData: Record<string, any> = { schoolId: finalSchoolId };
             Object.keys(student).forEach(key => {
                 const value = (student as any)[key];
                 if (value !== undefined) {
@@ -907,17 +1057,31 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 ...studentData,
                 updatedAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Student updated:', student.id, 'photoURL:', student.photoURL);
+            console.log('[useSchoolData] ✅ Student updated:', student.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating student:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const deleteStudent = useCallback(async (studentId: string): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Verify schoolId before deletion
+            const studentDoc = await getDoc(doc(db, 'students', studentId));
+            if (!studentDoc.exists()) {
+                throw new Error('Student not found');
+            }
+            
+            const studentData = studentDoc.data();
+            const studentSchoolId = studentData.schoolId || 'default';
+            const currentSchoolId = schoolId || 'default';
+            
+            if (studentSchoolId !== currentSchoolId) {
+                throw new Error(`Cannot delete student from different school (student: ${studentSchoolId}, current: ${currentSchoolId})`);
+            }
             
             // Delete student and related data
             await deleteDoc(doc(db, 'students', studentId));
@@ -938,98 +1102,148 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             const attendanceDeletes = attendanceSnapshot.docs.map(d => deleteDoc(d.ref));
             
             await Promise.all([...gradeDeletes, ...cvGradeDeletes, ...attendanceDeletes]);
-            console.log('[useSchoolData] ✅ Student and related data deleted:', studentId);
+            console.log('[useSchoolData] ✅ Student and related data deleted:', studentId, 'schoolId:', studentSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error deleting student:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     // ===== TEACHER CRUD =====
     const addTeacher = useCallback(async (teacher: Omit<Teacher, 'id'>): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Auto-inject schoolId
+            const finalSchoolId = teacher.schoolId || schoolId || 'default';
+            
             const docRef = await addDoc(collection(db, 'teachers'), {
                 ...teacher,
+                schoolId: finalSchoolId,
                 createdAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Teacher added:', docRef.id);
+            console.log('[useSchoolData] ✅ Teacher added:', docRef.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error adding teacher:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const updateTeacher = useCallback(async (teacher: Teacher): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Preserve schoolId
+            const finalSchoolId = teacher.schoolId || schoolId || 'default';
+            
             await updateDoc(doc(db, 'teachers', teacher.id), {
                 ...teacher,
+                schoolId: finalSchoolId,
                 updatedAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Teacher updated:', teacher.id);
+            console.log('[useSchoolData] ✅ Teacher updated:', teacher.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating teacher:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const deleteTeacher = useCallback(async (teacherId: string): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Verify schoolId before deletion
+            const teacherDoc = await getDoc(doc(db, 'teachers', teacherId));
+            if (!teacherDoc.exists()) {
+                throw new Error('Teacher not found');
+            }
+            
+            const teacherData = teacherDoc.data();
+            const teacherSchoolId = teacherData.schoolId || 'default';
+            const currentSchoolId = schoolId || 'default';
+            
+            if (teacherSchoolId !== currentSchoolId) {
+                throw new Error(`Cannot delete teacher from different school (teacher: ${teacherSchoolId}, current: ${currentSchoolId})`);
+            }
+            
             await deleteDoc(doc(db, 'teachers', teacherId));
-            console.log('[useSchoolData] ✅ Teacher deleted:', teacherId);
+            console.log('[useSchoolData] ✅ Teacher deleted:', teacherId, 'schoolId:', teacherSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error deleting teacher:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     // ===== PARENT CRUD =====
     const addParent = useCallback(async (parent: Omit<Parent, 'id'>): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Auto-inject schoolId
+            const finalSchoolId = parent.schoolId || schoolId || 'default';
+            
             const docRef = await addDoc(collection(db, 'parents'), {
                 ...parent,
+                schoolId: finalSchoolId,
                 createdAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Parent added:', docRef.id);
+            console.log('[useSchoolData] ✅ Parent added:', docRef.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error adding parent:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const updateParent = useCallback(async (parent: Parent): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Preserve schoolId
+            const finalSchoolId = parent.schoolId || schoolId || 'default';
+            
             await updateDoc(doc(db, 'parents', parent.id), {
                 ...parent,
+                schoolId: finalSchoolId,
                 updatedAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Parent updated:', parent.id);
+            console.log('[useSchoolData] ✅ Parent updated:', parent.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating parent:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const deleteParent = useCallback(async (parentId: string): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Verify schoolId before deletion
+            const parentDoc = await getDoc(doc(db, 'parents', parentId));
+            if (!parentDoc.exists()) {
+                throw new Error('Parent not found');
+            }
+            
+            const parentData = parentDoc.data();
+            const parentSchoolId = parentData.schoolId || 'default';
+            const currentSchoolId = schoolId || 'default';
+            
+            if (parentSchoolId !== currentSchoolId) {
+                throw new Error(`Cannot delete parent from different school (parent: ${parentSchoolId}, current: ${currentSchoolId})`);
+            }
+            
             await deleteDoc(doc(db, 'parents', parentId));
-            console.log('[useSchoolData] ✅ Parent deleted:', parentId);
+            console.log('[useSchoolData] ✅ Parent deleted:', parentId, 'schoolId:', parentSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error deleting parent:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const assignStudentToParent = useCallback(async (parentId: string, studentId: string): Promise<void> => {
         try {
@@ -1086,36 +1300,61 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Auto-inject schoolId from context (if not provided)
+            const finalSchoolId = section.schoolId || schoolId || 'default';
+            
             const docRef = await addDoc(collection(db, 'sections'), {
                 ...section,
+                schoolId: finalSchoolId,  // MULTI-TENANT: Ensure schoolId is set
                 createdAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Section added:', docRef.id);
+            console.log('[useSchoolData] ✅ Section added:', docRef.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error adding section:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const updateSection = useCallback(async (section: Section): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Preserve schoolId
+            const finalSchoolId = section.schoolId || schoolId || 'default';
+            
             await updateDoc(doc(db, 'sections', section.id), {
                 ...section,
+                schoolId: finalSchoolId,
                 updatedAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Section updated:', section.id);
+            console.log('[useSchoolData] ✅ Section updated:', section.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating section:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const deleteSection = useCallback(async (sectionId: string): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Verify schoolId before deletion
+            const sectionDoc = await getDoc(doc(db, 'sections', sectionId));
+            if (!sectionDoc.exists()) {
+                throw new Error('Section not found');
+            }
+            
+            const sectionData = sectionDoc.data();
+            const sectionSchoolId = sectionData.schoolId || 'default';
+            const currentSchoolId = schoolId || 'default';
+            
+            if (sectionSchoolId !== currentSchoolId) {
+                throw new Error(`Cannot delete section from different school (section: ${sectionSchoolId}, current: ${currentSchoolId})`);
+            }
+            
             await deleteDoc(doc(db, 'sections', sectionId));
             
             // Update students to remove section reference
@@ -1128,23 +1367,28 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             );
             await Promise.all(updatePromises);
             
-            console.log('[useSchoolData] ✅ Section deleted:', sectionId);
+            console.log('[useSchoolData] ✅ Section deleted:', sectionId, 'schoolId:', sectionSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error deleting section:', err);
             throw err;
         }
-    }, [students]);
+    }, [students, schoolId]);
 
     // ===== LEARNING AREA CRUD =====
     const addLearningArea = useCallback(async (area: Omit<LearningArea, 'id'>): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Auto-inject schoolId
+            const finalSchoolId = area.schoolId || schoolId || 'default';
+            
             const docRef = await addDoc(collection(db, 'learningAreas'), {
                 ...area,
+                schoolId: finalSchoolId,
                 createdAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Learning area added:', docRef.id);
+            console.log('[useSchoolData] ✅ Learning area added:', docRef.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error adding learning area:', err);
             throw err;
@@ -1155,22 +1399,42 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Preserve schoolId
+            const finalSchoolId = area.schoolId || schoolId || 'default';
+            
             await updateDoc(doc(db, 'learningAreas', learningAreaId), {
                 ...area,
                 id: learningAreaId,
+                schoolId: finalSchoolId,
                 updatedAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Learning area updated:', learningAreaId);
+            console.log('[useSchoolData] ✅ Learning area updated:', learningAreaId, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating learning area:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const deleteLearningArea = useCallback(async (learningAreaId: string): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Verify schoolId before deletion
+            const learningAreaDoc = await getDoc(doc(db, 'learningAreas', learningAreaId));
+            if (!learningAreaDoc.exists()) {
+                throw new Error('Learning area not found');
+            }
+            
+            const learningAreaData = learningAreaDoc.data();
+            const learningAreaSchoolId = learningAreaData.schoolId || 'default';
+            const currentSchoolId = schoolId || 'default';
+            
+            if (learningAreaSchoolId !== currentSchoolId) {
+                throw new Error(`Cannot delete learning area from different school (learningArea: ${learningAreaSchoolId}, current: ${currentSchoolId})`);
+            }
+            
             await deleteDoc(doc(db, 'learningAreas', learningAreaId));
             
             // Delete related grades
@@ -1179,12 +1443,12 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             const deletePromises = gradesSnapshot.docs.map(d => deleteDoc(d.ref));
             await Promise.all(deletePromises);
             
-            console.log('[useSchoolData] ✅ Learning area and related grades deleted:', learningAreaId);
+            console.log('[useSchoolData] ✅ Learning area and related grades deleted:', learningAreaId, 'schoolId:', learningAreaSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error deleting learning area:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     // ===== GRADE CRUD =====
     const updateGrade = useCallback(async (
@@ -1210,10 +1474,11 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             let gradeData: any = {};
             
             if (gradesSnapshot.empty) {
-                // Create new grade document
+                // MULTI-TENANT: Create new grade document with schoolId
                 gradeData = {
                     studentId,
                     learningAreaId,
+                    schoolId: schoolId || 'default',
                     [quarter]: subSubject ? { [subSubject]: value } : value,
                     createdAt: serverTimestamp()
                 };
@@ -1223,6 +1488,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 const existingDoc = gradesSnapshot.docs[0];
                 gradeRef = existingDoc.ref;
                 gradeData = existingDoc.data();
+                
+                // MULTI-TENANT: Preserve schoolId
+                gradeData.schoolId = gradeData.schoolId || schoolId || 'default';
                 
                 if (subSubject) {
                     const currentQuarter = gradeData[quarter] || {};
@@ -1259,7 +1527,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error updating grade:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     // ===== CORE VALUE GRADE CRUD =====
     const updateCoreValueGrade = useCallback(async (
@@ -1284,10 +1552,11 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             let cvGradeData: any = {};
             
             if (cvGradesSnapshot.empty) {
-                // Create new core value grade
+                // MULTI-TENANT: Create new core value grade with schoolId
                 cvGradeData = {
                     studentId,
                     coreValueId,
+                    schoolId: schoolId || 'default',
                     [quarter]: { [behavior]: value },
                     createdAt: serverTimestamp()
                 };
@@ -1296,6 +1565,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 // Update existing
                 const existingDoc = cvGradesSnapshot.docs[0];
                 cvGradeData = existingDoc.data();
+                
+                // MULTI-TENANT: Preserve schoolId
+                cvGradeData.schoolId = cvGradeData.schoolId || schoolId || 'default';
                 
                 const currentQuarter = cvGradeData[quarter] || {};
                 cvGradeData[quarter] = { ...currentQuarter, [behavior]: value };
@@ -1311,7 +1583,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error updating core value grade:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     // ===== ATTENDANCE CRUD =====
     const updateAttendance = useCallback(async (
@@ -1331,20 +1603,27 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             const attendanceSnapshot = await getDocs(attendanceQuery);
             
             if (attendanceSnapshot.empty) {
-                // Create new attendance record
+                // MULTI-TENANT: Create new attendance record with schoolId
                 await addDoc(collection(db, 'attendanceRecords'), {
                     studentId,
+                    schoolId: schoolId || 'default',
                     dailyStatus: { [date]: status },
                     createdAt: serverTimestamp()
                 });
             } else {
                 // Update existing
                 const existingDoc = attendanceSnapshot.docs[0];
-                const dailyStatus = existingDoc.data().dailyStatus || {};
+                const existingData = existingDoc.data();
+                
+                // MULTI-TENANT: Preserve schoolId
+                const finalSchoolId = existingData.schoolId || schoolId || 'default';
+                
+                const dailyStatus = existingData.dailyStatus || {};
                 dailyStatus[date] = status;
                 
                 await updateDoc(existingDoc.ref, {
                     dailyStatus,
+                    schoolId: finalSchoolId,
                     updatedAt: serverTimestamp()
                 });
             }
@@ -1354,7 +1633,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error updating attendance:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     // ===== SETTINGS CRUD =====
     const updateSettings = useCallback(async (settings: SchoolSettings): Promise<void> => {
@@ -1377,43 +1656,68 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Auto-inject schoolId
+            const finalSchoolId = assignment.schoolId || schoolId || 'default';
+            
             const docRef = await addDoc(collection(db, 'substituteAssignments'), {
                 ...assignment,
+                schoolId: finalSchoolId,
                 createdAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Substitute assignment added:', docRef.id);
+            console.log('[useSchoolData] ✅ Substitute assignment added:', docRef.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error adding substitute assignment:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const updateSubstituteAssignment = useCallback(async (assignment: SubstituteAssignment): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Preserve schoolId
+            const finalSchoolId = assignment.schoolId || schoolId || 'default';
+            
             await updateDoc(doc(db, 'substituteAssignments', assignment.id), {
                 ...assignment,
+                schoolId: finalSchoolId,
                 updatedAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Substitute assignment updated:', assignment.id);
+            console.log('[useSchoolData] ✅ Substitute assignment updated:', assignment.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating substitute assignment:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const deleteSubstituteAssignment = useCallback(async (assignmentId: string): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Verify schoolId before deletion
+            const assignmentDoc = await getDoc(doc(db, 'substituteAssignments', assignmentId));
+            if (!assignmentDoc.exists()) {
+                throw new Error('Substitute assignment not found');
+            }
+            
+            const assignmentData = assignmentDoc.data();
+            const assignmentSchoolId = assignmentData.schoolId || 'default';
+            const currentSchoolId = schoolId || 'default';
+            
+            if (assignmentSchoolId !== currentSchoolId) {
+                throw new Error(`Cannot delete substitute assignment from different school (assignment: ${assignmentSchoolId}, current: ${currentSchoolId})`);
+            }
+            
             await deleteDoc(doc(db, 'substituteAssignments', assignmentId));
-            console.log('[useSchoolData] ✅ Substitute assignment deleted:', assignmentId);
+            console.log('[useSchoolData] ✅ Substitute assignment deleted:', assignmentId, 'schoolId:', assignmentSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error deleting substitute assignment:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     // ===== CLASS SCHEDULE CRUD =====
     const addSchedule = useCallback(async (sched: Omit<ClassSchedule, 'id'>): Promise<{ success: boolean; message?: string }> => {
@@ -1421,83 +1725,132 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             await waitForAuthReady();
             const db = getFirestoreInstance();
             
+            // MULTI-TENANT: Auto-inject schoolId
+            const finalSchoolId = sched.schoolId || schoolId || 'default';
+            
             // TODO: Add conflict validation if needed
             
             const docRef = await addDoc(collection(db, 'classSchedules'), {
                 ...sched,
+                schoolId: finalSchoolId,
                 createdAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Schedule added:', docRef.id);
+            console.log('[useSchoolData] ✅ Schedule added:', docRef.id, 'schoolId:', finalSchoolId);
             return { success: true };
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error adding schedule:', err);
             return { success: false, message: err.message };
         }
-    }, []);
+    }, [schoolId]);
 
     const updateSchedule = useCallback(async (sched: ClassSchedule): Promise<{ success: boolean; message?: string }> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Preserve schoolId
+            const finalSchoolId = sched.schoolId || schoolId || 'default';
+            
             await updateDoc(doc(db, 'classSchedules', sched.id), {
                 ...sched,
+                schoolId: finalSchoolId,
                 updatedAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Schedule updated:', sched.id);
+            console.log('[useSchoolData] ✅ Schedule updated:', sched.id, 'schoolId:', finalSchoolId);
             return { success: true };
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating schedule:', err);
             return { success: false, message: err.message };
         }
-    }, []);
+    }, [schoolId]);
 
     const deleteSchedule = useCallback(async (scheduleId: string): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Verify schoolId before deletion
+            const scheduleDoc = await getDoc(doc(db, 'classSchedules', scheduleId));
+            if (!scheduleDoc.exists()) {
+                throw new Error('Schedule not found');
+            }
+            
+            const scheduleData = scheduleDoc.data();
+            const scheduleSchoolId = scheduleData.schoolId || 'default';
+            const currentSchoolId = schoolId || 'default';
+            
+            if (scheduleSchoolId !== currentSchoolId) {
+                throw new Error(`Cannot delete schedule from different school (schedule: ${scheduleSchoolId}, current: ${currentSchoolId})`);
+            }
+            
             await deleteDoc(doc(db, 'classSchedules', scheduleId));
-            console.log('[useSchoolData] ✅ Schedule deleted:', scheduleId);
+            console.log('[useSchoolData] ✅ Schedule deleted:', scheduleId, 'schoolId:', scheduleSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error deleting schedule:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     // ===== ASSIGNMENT CRUD =====
     const addAssignment = useCallback(async (assignment: Omit<Assignment, 'id'>): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Auto-inject schoolId
+            const finalSchoolId = assignment.schoolId || schoolId || 'default';
+            
             const docRef = await addDoc(collection(db, 'assignments'), {
                 ...assignment,
+                schoolId: finalSchoolId,
                 createdAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Assignment added:', docRef.id);
+            console.log('[useSchoolData] ✅ Assignment added:', docRef.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error adding assignment:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const updateAssignment = useCallback(async (assignment: Assignment): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Preserve schoolId
+            const finalSchoolId = assignment.schoolId || schoolId || 'default';
+            
             await updateDoc(doc(db, 'assignments', assignment.id), {
                 ...assignment,
+                schoolId: finalSchoolId,
                 updatedAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Assignment updated:', assignment.id);
+            console.log('[useSchoolData] ✅ Assignment updated:', assignment.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating assignment:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const deleteAssignment = useCallback(async (assignmentId: string): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Verify schoolId before deletion
+            const assignmentDoc = await getDoc(doc(db, 'assignments', assignmentId));
+            if (!assignmentDoc.exists()) {
+                throw new Error('Assignment not found');
+            }
+            
+            const assignmentData = assignmentDoc.data();
+            const assignmentSchoolId = assignmentData.schoolId || 'default';
+            const currentSchoolId = schoolId || 'default';
+            
+            if (assignmentSchoolId !== currentSchoolId) {
+                throw new Error(`Cannot delete assignment from different school (assignment: ${assignmentSchoolId}, current: ${currentSchoolId})`);
+            }
+            
             await deleteDoc(doc(db, 'assignments', assignmentId));
             
             // Delete related student grades
@@ -1506,12 +1859,12 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             const deletePromises = gradesSnapshot.docs.map(d => deleteDoc(d.ref));
             await Promise.all(deletePromises);
             
-            console.log('[useSchoolData] ✅ Assignment and related grades deleted:', assignmentId);
+            console.log('[useSchoolData] ✅ Assignment and related grades deleted:', assignmentId, 'schoolId:', assignmentSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error deleting assignment:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const updateAssignmentGrade = useCallback(async (
         studentId: string,
@@ -1531,7 +1884,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             );
             const gradesSnapshot = await getDocs(gradesQuery);
             
-            const gradeData = {
+            const gradeData: any = {
                 studentId,
                 assignmentId,
                 score,
@@ -1539,13 +1892,20 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             };
             
             if (gradesSnapshot.empty) {
+                // MULTI-TENANT: Create new with schoolId
                 await addDoc(collection(db, 'studentAssignmentGrades'), {
                     ...gradeData,
+                    schoolId: schoolId || 'default',
                     createdAt: serverTimestamp()
                 });
             } else {
+                // MULTI-TENANT: Preserve schoolId
+                const existingData = gradesSnapshot.docs[0].data();
+                const finalSchoolId = existingData.schoolId || schoolId || 'default';
+                
                 await updateDoc(gradesSnapshot.docs[0].ref, {
                     ...gradeData,
+                    schoolId: finalSchoolId,
                     updatedAt: serverTimestamp()
                 });
             }
@@ -1555,7 +1915,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error updating assignment grade:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const submitAssignment = useCallback(async (studentId: string, assignmentId: string, submission: any): Promise<void> => {
         try {
@@ -1597,86 +1957,136 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Auto-inject schoolId
+            const finalSchoolId = lessonPlan.schoolId || schoolId || 'default';
+            
             const docRef = await addDoc(collection(db, 'lessonPlans'), {
                 ...lessonPlan,
+                schoolId: finalSchoolId,
                 createdAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Lesson plan added:', docRef.id);
+            console.log('[useSchoolData] ✅ Lesson plan added:', docRef.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error adding lesson plan:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const updateLessonPlan = useCallback(async (lessonPlan: LessonPlan): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Preserve schoolId
+            const finalSchoolId = lessonPlan.schoolId || schoolId || 'default';
+            
             await updateDoc(doc(db, 'lessonPlans', lessonPlan.id), {
                 ...lessonPlan,
+                schoolId: finalSchoolId,
                 updatedAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Lesson plan updated:', lessonPlan.id);
+            console.log('[useSchoolData] ✅ Lesson plan updated:', lessonPlan.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating lesson plan:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const deleteLessonPlan = useCallback(async (lessonPlanId: string): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Verify schoolId before deletion
+            const lessonPlanDoc = await getDoc(doc(db, 'lessonPlans', lessonPlanId));
+            if (!lessonPlanDoc.exists()) {
+                throw new Error('Lesson plan not found');
+            }
+            
+            const lessonPlanData = lessonPlanDoc.data();
+            const lessonPlanSchoolId = lessonPlanData.schoolId || 'default';
+            const currentSchoolId = schoolId || 'default';
+            
+            if (lessonPlanSchoolId !== currentSchoolId) {
+                throw new Error(`Cannot delete lesson plan from different school (lessonPlan: ${lessonPlanSchoolId}, current: ${currentSchoolId})`);
+            }
+            
             await deleteDoc(doc(db, 'lessonPlans', lessonPlanId));
-            console.log('[useSchoolData] ✅ Lesson plan deleted:', lessonPlanId);
+            console.log('[useSchoolData] ✅ Lesson plan deleted:', lessonPlanId, 'schoolId:', lessonPlanSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error deleting lesson plan:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     // ===== ANNOUNCEMENT CRUD =====
     const addAnnouncement = useCallback(async (announcement: Omit<Announcement, 'id'>): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Auto-inject schoolId
+            const finalSchoolId = announcement.schoolId || schoolId || 'default';
+            
             const docRef = await addDoc(collection(db, 'announcements'), {
                 ...announcement,
+                schoolId: finalSchoolId,
                 createdAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Announcement added:', docRef.id);
+            console.log('[useSchoolData] ✅ Announcement added:', docRef.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error adding announcement:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const updateAnnouncement = useCallback(async (announcement: Announcement): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Preserve schoolId
+            const finalSchoolId = announcement.schoolId || schoolId || 'default';
+            
             await updateDoc(doc(db, 'announcements', announcement.id), {
                 ...announcement,
+                schoolId: finalSchoolId,
                 updatedAt: serverTimestamp()
             });
-            console.log('[useSchoolData] ✅ Announcement updated:', announcement.id);
+            console.log('[useSchoolData] ✅ Announcement updated:', announcement.id, 'schoolId:', finalSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating announcement:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     const deleteAnnouncement = useCallback(async (announcementId: string): Promise<void> => {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
+            
+            // MULTI-TENANT: Verify schoolId before deletion
+            const announcementDoc = await getDoc(doc(db, 'announcements', announcementId));
+            if (!announcementDoc.exists()) {
+                throw new Error('Announcement not found');
+            }
+            
+            const announcementData = announcementDoc.data();
+            const announcementSchoolId = announcementData.schoolId || 'default';
+            const currentSchoolId = schoolId || 'default';
+            
+            if (announcementSchoolId !== currentSchoolId) {
+                throw new Error(`Cannot delete announcement from different school (announcement: ${announcementSchoolId}, current: ${currentSchoolId})`);
+            }
+            
             await deleteDoc(doc(db, 'announcements', announcementId));
-            console.log('[useSchoolData] ✅ Announcement deleted:', announcementId);
+            console.log('[useSchoolData] ✅ Announcement deleted:', announcementId, 'schoolId:', announcementSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error deleting announcement:', err);
             throw err;
         }
-    }, [])
+    }, [schoolId])
 
     // ===== RETURN HOOK INTERFACE =====
     return {
