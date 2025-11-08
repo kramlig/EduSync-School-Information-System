@@ -17,6 +17,7 @@
  */
 
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AcademicCapIcon,
   ClipboardDocumentListIcon,
@@ -764,6 +765,76 @@ const LandingPage: React.FC = () => {
     </section>
   );
 
+  // Footer Section
+  const FooterSection = () => (
+    <footer className="bg-gray-900 text-gray-400 py-12">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+          {/* Brand */}
+          <div className="col-span-1">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-xl">E</span>
+              </div>
+              <span className="text-white font-bold text-xl">EduSync</span>
+            </div>
+            <p className="text-sm">
+              Modern school management for the digital age. Empowering Filipino schools with DepEd-compliant technology.
+            </p>
+          </div>
+
+          {/* Product */}
+          <div>
+            <h3 className="text-white font-semibold mb-4">Product</h3>
+            <ul className="space-y-2 text-sm">
+              <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
+              <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
+              <li><button onClick={() => window.open('https://edusync-sis.web.app', '_blank')} className="hover:text-white transition-colors">Login</button></li>
+              <li><button onClick={() => setIsTrialModalOpen(true)} className="hover:text-white transition-colors">Start Free Trial</button></li>
+            </ul>
+          </div>
+
+          {/* Resources */}
+          <div>
+            <h3 className="text-white font-semibold mb-4">Resources</h3>
+            <ul className="space-y-2 text-sm">
+              <li><a href="#faq" className="hover:text-white transition-colors">FAQ</a></li>
+              <li><a href="mailto:support@edusync.ph" className="hover:text-white transition-colors">Support</a></li>
+              <li><a href="mailto:hello@edusync.ph" className="hover:text-white transition-colors">Contact Sales</a></li>
+            </ul>
+          </div>
+
+          {/* Legal */}
+          <div>
+            <h3 className="text-white font-semibold mb-4">Legal</h3>
+            <ul className="space-y-2 text-sm">
+              <li><Link to="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
+              <li><Link to="/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Bottom Bar */}
+        <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+          <p className="text-sm">
+            © 2025 EduSync. All rights reserved.
+          </p>
+          <div className="flex items-center gap-6 text-sm">
+            <a href="https://facebook.com/edusync" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+              Facebook
+            </a>
+            <a href="https://twitter.com/edusync" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+              Twitter
+            </a>
+            <a href="https://linkedin.com/company/edusync" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+              LinkedIn
+            </a>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900">
       <HeroSection />
@@ -774,6 +845,7 @@ const LandingPage: React.FC = () => {
       <PricingSection />
       <FAQSection />
       <FinalCTASection />
+      <FooterSection />
       
       {/* Trial Signup Modal */}
       <TrialSignupModal 
