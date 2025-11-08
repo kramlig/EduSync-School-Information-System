@@ -179,12 +179,39 @@ async function main() {
         // Set custom claims
         await auth.setCustomUserClaims(userRecord.uid, user.customClaims);
         
+        // Create teacher/staff document in Firestore for login lookup
+        const [firstName, ...lastNameParts] = user.displayName.split(' ');
+        const teacherDoc = {
+          id: userRecord.uid,
+          firstName: firstName,
+          lastName: lastNameParts.join(' '),
+          email: user.email,
+          role: user.customClaims.role,
+          schoolId: user.customClaims.schoolId,
+          createdAt: FieldValue.serverTimestamp()
+        };
+        await db.collection('teachers').doc(userRecord.uid).set(teacherDoc);
+        
         console.log(`   ✅ Created user: ${user.email} (${user.customClaims.role})`);
       } catch (error) {
         if (error.code === 'auth/email-already-exists') {
           // User exists, update claims
           const existingUser = await auth.getUserByEmail(user.email);
           await auth.setCustomUserClaims(existingUser.uid, user.customClaims);
+          
+          // Update teacher document
+          const [firstName, ...lastNameParts] = user.displayName.split(' ');
+          const teacherDoc = {
+            id: existingUser.uid,
+            firstName: firstName,
+            lastName: lastNameParts.join(' '),
+            email: user.email,
+            role: user.customClaims.role,
+            schoolId: user.customClaims.schoolId,
+            createdAt: FieldValue.serverTimestamp()
+          };
+          await db.collection('teachers').doc(existingUser.uid).set(teacherDoc, { merge: true });
+          
           console.log(`   ♻️  Updated claims for existing user: ${user.email}`);
         } else {
           console.error(`   ❌ Error creating user ${user.email}:`, error.message);
