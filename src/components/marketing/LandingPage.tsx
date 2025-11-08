@@ -251,7 +251,7 @@ const LandingPage: React.FC = () => {
 
   // Solution - 9 Pillars (Updated to showcase Phase 2 features)
   const SolutionSection = () => (
-    <section className="py-20 bg-white dark:bg-slate-800">
+    <section className="py-20 bg-white dark:bg-slate-800" data-section="solution">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16">
           <h2 className="text-4xl lg:text-5xl font-bold mb-4 text-slate-900 dark:text-white">
@@ -489,7 +489,7 @@ const LandingPage: React.FC = () => {
 
   // Pricing
   const PricingSection = () => (
-    <section className="py-20 bg-white dark:bg-slate-800">
+    <section className="py-20 bg-white dark:bg-slate-800" data-section="pricing">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16">
           <h2 className="text-4xl lg:text-5xl font-bold mb-4 text-slate-900 dark:text-white">
@@ -659,7 +659,7 @@ const LandingPage: React.FC = () => {
     ];
 
     return (
-      <section className="py-20 bg-slate-50 dark:bg-slate-900">
+      <section className="py-20 bg-slate-50 dark:bg-slate-900" data-section="faq">
         <div className="max-w-4xl mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-4xl lg:text-5xl font-bold mb-4 text-slate-900 dark:text-white">
@@ -787,10 +787,44 @@ const LandingPage: React.FC = () => {
           <div>
             <h3 className="text-white font-semibold mb-4">Product</h3>
             <ul className="space-y-2 text-sm">
-              <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
-              <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
-              <li><button onClick={() => window.open('https://edusync-sis.web.app', '_blank')} className="hover:text-white transition-colors">Login</button></li>
-              <li><button onClick={() => setIsTrialModalOpen(true)} className="hover:text-white transition-colors">Start Free Trial</button></li>
+              <li>
+                <button 
+                  onClick={() => {
+                    const section = document.querySelector('[data-section="solution"]');
+                    section?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="hover:text-white transition-colors text-left"
+                >
+                  Features
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => {
+                    const section = document.querySelector('[data-section="pricing"]');
+                    section?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="hover:text-white transition-colors text-left"
+                >
+                  Pricing
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => window.open('https://edusync-sis.web.app', '_blank')} 
+                  className="hover:text-white transition-colors text-left"
+                >
+                  Login
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => setIsTrialModalOpen(true)} 
+                  className="hover:text-white transition-colors text-left"
+                >
+                  Start Free Trial
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -798,7 +832,17 @@ const LandingPage: React.FC = () => {
           <div>
             <h3 className="text-white font-semibold mb-4">Resources</h3>
             <ul className="space-y-2 text-sm">
-              <li><a href="#faq" className="hover:text-white transition-colors">FAQ</a></li>
+              <li>
+                <button
+                  onClick={() => {
+                    const section = document.querySelector('[data-section="faq"]');
+                    section?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="hover:text-white transition-colors text-left"
+                >
+                  FAQ
+                </button>
+              </li>
               <li><a href="mailto:support@edusync.ph" className="hover:text-white transition-colors">Support</a></li>
               <li><a href="mailto:hello@edusync.ph" className="hover:text-white transition-colors">Contact Sales</a></li>
             </ul>
