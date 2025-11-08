@@ -66,6 +66,8 @@ const ApplicationReview = lazy(() => import('./src/components/enrollment/admin/A
 
 // Marketing components
 const LandingPage = lazy(() => import('./src/components/marketing/LandingPage'));
+const PrivacyPolicy = lazy(() => import('./src/components/marketing/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('./src/components/marketing/TermsOfService'));
 
 // Wrapper components to extract URL params
 const Form137ManagerWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear }) => {
@@ -332,6 +334,8 @@ const App: React.FC = () => {
               <Route path="/" element={<LandingPage />} />
               <Route path="/home" element={<LandingPage />} />
               <Route path="/landing" element={<LandingPage />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfService />} />
               <Route path="/enrollment" element={<EnrollmentPortal />} />
               <Route path="/enrollment/apply" element={<ApplicationForm />} />
               <Route path="/enrollment/status" element={<ApplicationStatus />} />
