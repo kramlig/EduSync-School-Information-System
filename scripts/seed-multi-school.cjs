@@ -33,24 +33,30 @@ const args = process.argv.slice(2).reduce((acc, cur) => {
 const useEmulator = String(args.useEmulator || '').toLowerCase() === 'true' || !!process.env.FIRESTORE_EMULATOR_HOST;
 const projectId = args.projectId || process.env.GCLOUD_PROJECT || 'edusync-local';
 
-console.log('🔧 Multi-School Test Data Seeder');
-console.log(`   Project ID: ${projectId}`);
-console.log(`   Use Emulator: ${useEmulator}`);
+// Set emulator environment variables BEFORE initializing Firebase
+if (useEmulator) {
+  const emuHost = args.emuHost || '127.0.0.1';
+  const emuPort = args.emuPort || '8086';
+  const authPort = args.authPort || '9100';
+  
+  process.env.FIRESTORE_EMULATOR_HOST = `${emuHost}:${emuPort}`;
+  process.env.FIREBASE_AUTH_EMULATOR_HOST = `${emuHost}:${authPort}`;
+  
+  console.log('🔧 Multi-School Test Data Seeder');
+  console.log(`   Project ID: ${projectId}`);
+  console.log(`   Use Emulator: ${useEmulator}`);
+  console.log(`   Firestore Emulator: ${emuHost}:${emuPort}`);
+  console.log(`   Auth Emulator: ${emuHost}:${authPort}`);
+} else {
+  console.log('🔧 Multi-School Test Data Seeder');
+  console.log(`   Project ID: ${projectId}`);
+  console.log(`   Use Emulator: ${useEmulator}`);
+}
 
 // Initialize Firebase Admin
 const app = initializeApp({ projectId });
 const db = getFirestore(app);
 const auth = getAuth(app);
-
-if (useEmulator) {
-  const emuHost = args.emuHost || process.env.FIRESTORE_EMULATOR_HOST?.split(':')[0] || '127.0.0.1';
-  const emuPort = args.emuPort || process.env.FIRESTORE_EMULATOR_HOST?.split(':')[1] || '8085';
-  db.settings({
-    host: `${emuHost}:${emuPort}`,
-    ssl: false
-  });
-  console.log(`   Connected to Firestore Emulator at ${emuHost}:${emuPort}`);
-}
 
 // Helper functions
 function randomId(prefix) {
