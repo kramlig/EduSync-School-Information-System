@@ -77,61 +77,124 @@ service cloud.firestore {
     }
     
     // ========================================
+    // MULTI-TENANT HELPER FUNCTIONS
+    // ========================================
+    
+    function getUserSchoolId() {
+      // Get the primary schoolId from user's custom claims
+      return isAuthenticated() && 
+             request.auth.token.keys().hasAny(['schoolId']) && 
+             request.auth.token.schoolId != null 
+        ? request.auth.token.schoolId 
+        : 'default';
+    }
+    
+    function getUserSchoolIds() {
+      // Get all schoolIds for multi-school users (e.g., teachers at multiple schools)
+      return isAuthenticated() && 
+             request.auth.token.keys().hasAny(['schoolIds']) && 
+             request.auth.token.schoolIds != null 
+        ? request.auth.token.schoolIds 
+        : [getUserSchoolId()];
+    }
+    
+    function belongsToUserSchool(resourceSchoolId) {
+      // Check if a document's schoolId matches any of the user's schools
+      return resourceSchoolId in getUserSchoolIds();
+    }
+    
+    function isCreatingForUserSchool() {
+      // Verify create operations use the user's primary schoolId
+      return request.resource.data.schoolId == getUserSchoolId();
+    }
+    
+    function isSuperAdmin() {
+      // Super admins can access all schools (for migration/support)
+      return isAuthenticated() && 
+             request.auth.token.keys().hasAny(['isSuperAdmin']) && 
+             request.auth.token.isSuperAdmin == true;
+    }
+    
+    // ========================================
     // CORE COLLECTIONS - Students, Teachers, Sections
     // ========================================
     
     // Students Collection
     match /students/{studentId} {
-      // Staff can read all students
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read students from their school(s)
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can only read their own children
+      // Parents can only read their own children (same school check implicit via parentIds)
       allow read: if isParent() && request.auth.uid in resource.data.parentIds;
       
-      // Only admin and registrar can create/update students
-      allow create: if isAdminOrRegistrar() || isLegacyUser();
-      allow update: if isAdminOrRegistrar() || isLegacyUser();
+      // Admin and registrar can create students for their school
+      allow create: if (isAdminOrRegistrar() && isCreatingForUserSchool()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
       
-      // Only admin can delete students
-      allow delete: if isAdmin() || isLegacyUser();
+      // Admin and registrar can update students in their school
+      allow update: if (isAdminOrRegistrar() && belongsToUserSchool(resource.data.schoolId)) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
+      
+      // Only admin can delete students (in their school)
+      allow delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
     }
     
     // Teachers Collection
     match /teachers/{teacherId} {
-      // All authenticated users can read teachers (including anonymous for login lookup)
-      // CRITICAL: Allow anonymous reads so login screen can query teachers collection
+      // All authenticated users can read teachers for login lookup
+      // Multi-tenant: Teachers can work at multiple schools (schoolIds array)
       allow read: if isAuthenticated() || isLegacyUser();
       
-      // Only admin and principal can manage teachers
-      allow write: if isAdminOrPrincipal() || isLegacyUser();
+      // Admin and principal can manage teachers in their school
+      // Note: Teacher documents have schoolIds array for multi-school teachers
+      allow write: if (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId)) 
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // Sections Collection
     match /sections/{sectionId} {
-      // All staff can read sections
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read sections from their school(s)
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read sections their children are enrolled in
+      // Parents can read sections their children are enrolled in (implicit school check)
       allow read: if isParent() && request.auth.uid in resource.data.parentIds;
       
-      // Admin, principal, and registrar can manage sections
-      allow write: if isAdmin() || isPrincipal() || isRegistrar() || isLegacyUser();
+      // Admin, principal, and registrar can manage sections in their school
+      allow write: if ((isAdmin() || isPrincipal() || isRegistrar()) && isCreatingForUserSchool()) 
+                   || (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // Parents Collection
     match /parents/{parentId} {
-      // Staff can read all parents
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read parents from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
       // Parents can only read their own profile
       allow read: if isParent() && request.auth.uid == parentId;
       
       // Parents can update their own profile (notification preferences, contact info)
-      allow update: if isParent() && request.auth.uid == parentId || isLegacyUser();
+      allow update: if (isParent() && request.auth.uid == parentId) || isLegacyUser();
       
-      // Only admin and registrar can create/delete parents
-      allow create: if isAdminOrRegistrar() || isLegacyUser();
-      allow delete: if isAdmin() || isLegacyUser();
+      // Admin and registrar can create/delete parents in their school
+      allow create: if (isAdminOrRegistrar() && isCreatingForUserSchool()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
+      allow delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
     }
     
     // ========================================
@@ -140,68 +203,97 @@ service cloud.firestore {
     
     // Grades Collection
     match /grades/{gradeId} {
-      // Staff can read all grades
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read grades from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their children's grades
+      // Parents can read their children's grades (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Only teachers and admin can write grades
-      allow create, update: if isTeacher() || isAdmin() || isLegacyUser();
+      // Teachers and admin can create/update grades in their school
+      allow create, update: if ((isTeacher() || isAdmin()) && isCreatingForUserSchool()) 
+                            || ((isTeacher() || isAdmin()) && belongsToUserSchool(resource.data.schoolId))
+                            || isSuperAdmin() 
+                            || isLegacyUser();
       
-      // Only admin can delete grades
-      allow delete: if isAdmin() || isLegacyUser();
+      // Only admin can delete grades in their school
+      allow delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
     }
     
     // Attendance Records
     match /attendanceRecords/{recordId} {
-      // Staff can read all attendance
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read attendance from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their children's attendance
+      // Parents can read their children's attendance (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Teachers and admin can manage attendance
-      allow write: if isTeacher() || isAdmin() || isLegacyUser();
+      // Teachers and admin can manage attendance in their school
+      allow write: if ((isTeacher() || isAdmin()) && belongsToUserSchool(resource.data.schoolId)) 
+                   || ((isTeacher() || isAdmin()) && isCreatingForUserSchool())
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // Assignments Collection
     match /assignments/{assignmentId} {
-      // All authenticated users can read assignments
-      allow read: if isAuthenticated();
+      // Staff can read assignments from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin();
       
-      // Only teachers and admin can manage assignments
-      allow write: if isTeacher() || isAdmin() || isLegacyUser();
+      // Teachers and admin can manage assignments in their school
+      allow write: if ((isTeacher() || isAdmin()) && isCreatingForUserSchool()) 
+                   || ((isTeacher() || isAdmin()) && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // Learning Areas / Subjects
     match /learningAreas/{areaId} {
-      // All authenticated users can read
-      allow read: if isAuthenticated();
+      // Staff can read learning areas from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin();
       
-      // Only admin and principal can manage
-      allow write: if isAdminOrPrincipal() || isLegacyUser();
+      // Admin and principal can manage learning areas in their school
+      allow write: if (isAdminOrPrincipal() && isCreatingForUserSchool()) 
+                   || (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // Class Schedules
     match /schedules/{scheduleId} {
-      // All authenticated users can read schedules
-      allow read: if isAuthenticated();
+      // Staff can read schedules from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin();
       
-      // Admin, principal, and registrar can manage schedules
-      allow write: if isAdmin() || isPrincipal() || isRegistrar() || isLegacyUser();
+      // Admin, principal, and registrar can manage schedules in their school
+      allow write: if ((isAdmin() || isPrincipal() || isRegistrar()) && isCreatingForUserSchool()) 
+                   || ((isAdmin() || isPrincipal() || isRegistrar()) && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // Core Values Assessment
     match /coreValues/{valueId} {
-      // Staff can read all assessments
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read assessments from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their children's assessments
+      // Parents can read their children's assessments (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Only teachers and admin can write assessments
-      allow write: if isTeacher() || isAdmin() || isLegacyUser();
+      // Teachers and admin can write assessments in their school
+      allow write: if ((isTeacher() || isAdmin()) && isCreatingForUserSchool()) 
+                   || ((isTeacher() || isAdmin()) && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // ========================================
@@ -210,56 +302,80 @@ service cloud.firestore {
     
     // Form 137 - Academic History / Permanent Record
     match /academicHistory/{recordId} {
-      // Staff can read all records
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read records from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their children's records
+      // Parents can read their children's records (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Only admin, registrar, and principal can manage Form 137
-      allow write: if isAdmin() || isRegistrar() || isPrincipal() || isLegacyUser();
+      // Admin, registrar, and principal can manage Form 137 in their school
+      allow write: if ((isAdmin() || isRegistrar() || isPrincipal()) && isCreatingForUserSchool()) 
+                   || ((isAdmin() || isRegistrar() || isPrincipal()) && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // Form 138 - Report Cards
     match /reportCards/{cardId} {
-      // Staff can read all report cards
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read report cards from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their children's report cards
+      // Parents can read their children's report cards (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Teachers, admin, and registrar can manage report cards
-      allow write: if isTeacher() || isAdmin() || isRegistrar() || isLegacyUser();
+      // Teachers, admin, and registrar can manage report cards in their school
+      allow write: if ((isTeacher() || isAdmin() || isRegistrar()) && isCreatingForUserSchool()) 
+                   || ((isTeacher() || isAdmin() || isRegistrar()) && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // School Forms - SF1, SF2, SF9 (EBEIS)
     match /schoolForms/{formId} {
-      // Staff can read school forms
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read school forms from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Only admin, registrar, and principal can manage
-      allow write: if isAdmin() || isRegistrar() || isPrincipal() || isLegacyUser();
+      // Admin, registrar, and principal can manage school forms in their school
+      allow write: if ((isAdmin() || isRegistrar() || isPrincipal()) && isCreatingForUserSchool()) 
+                   || ((isAdmin() || isRegistrar() || isPrincipal()) && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // ELLN Assessments - K-3 Early Learning
     match /ellnAssessments/{assessmentId} {
-      // Staff can read assessments
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read assessments from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their children's assessments
+      // Parents can read their children's assessments (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Teachers and admin can manage assessments
-      allow write: if isTeacher() || isAdmin() || isLegacyUser();
+      // Teachers and admin can manage assessments in their school
+      allow write: if ((isTeacher() || isAdmin()) && isCreatingForUserSchool()) 
+                   || ((isTeacher() || isAdmin()) && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // Form Generation Log - Analytics & Tracking
     match /formGenerationLog/{logId} {
-      // Staff can read logs
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read logs from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // All authenticated users can create logs
-      allow create: if isAuthenticated() || isLegacyUser();
+      // All authenticated users can create logs for their school
+      allow create: if (isAuthenticated() && isCreatingForUserSchool()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
       
       // Logs are immutable
       allow update, delete: if false;
@@ -271,86 +387,121 @@ service cloud.firestore {
     
     // Fee Structures
     match /feeStructures/{feeId} {
-      // Staff can read fee structures
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read fee structures from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read fee structures (to see what they owe)
+      // Parents can read fee structures from their school (implicit via child's school)
+      // Note: Parent schoolId inherited from student during registration
       allow read: if isParent() || isLegacyUser();
       
-      // Only admin and registrar can manage fee structures
-      allow write: if isAdminOrRegistrar() || isLegacyUser();
+      // Admin and registrar can manage fee structures in their school
+      allow write: if (isAdminOrRegistrar() && isCreatingForUserSchool()) 
+                   || (isAdminOrRegistrar() && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // Payment Records
     match /payments/{paymentId} {
-      // Staff can read all payments
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read payments from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their own payments
+      // Parents can read their own payments (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Only admin and registrar can create payments
-      allow create: if isAdminOrRegistrar() || isLegacyUser();
+      // Admin and registrar can create payments in their school
+      allow create: if (isAdminOrRegistrar() && isCreatingForUserSchool()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
       
-      // Only admin can update/delete payments
-      allow update, delete: if isAdmin() || isLegacyUser();
+      // Only admin can update/delete payments in their school
+      allow update, delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                            || isSuperAdmin() 
+                            || isLegacyUser();
     }
     
     // Billing Ledgers
     match /billingLedgers/{ledgerId} {
-      // Staff can read all ledgers
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read ledgers from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their own ledgers
+      // Parents can read their own ledgers (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Only admin and registrar can write ledgers
-      allow write: if isAdminOrRegistrar() || isLegacyUser();
+      // Admin and registrar can write ledgers in their school
+      allow write: if (isAdminOrRegistrar() && isCreatingForUserSchool()) 
+                   || (isAdminOrRegistrar() && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // Billing Statements
     match /billingStatements/{statementId} {
-      // Staff can read all statements
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read statements from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their own statements
+      // Parents can read their own statements (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Only admin and registrar can manage statements
-      allow write: if isAdminOrRegistrar() || isLegacyUser();
+      // Admin and registrar can manage statements in their school
+      allow write: if (isAdminOrRegistrar() && isCreatingForUserSchool()) 
+                   || (isAdminOrRegistrar() && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // Receipts
     match /receipts/{receiptId} {
-      // Staff can read all receipts
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read receipts from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their own receipts
+      // Parents can read their own receipts (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Only admin and registrar can create receipts
-      allow create: if isAdminOrRegistrar() || isLegacyUser();
+      // Admin and registrar can create receipts in their school
+      allow create: if (isAdminOrRegistrar() && isCreatingForUserSchool()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
       
-      // Only admin can update/delete receipts
-      allow update, delete: if isAdmin() || isLegacyUser();
+      // Only admin can update/delete receipts in their school
+      allow update, delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                            || isSuperAdmin() 
+                            || isLegacyUser();
     }
     
     // Payment Proofs (uploaded by parents)
     match /paymentProofs/{proofId} {
-      // Staff can read all proofs
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read proofs from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their own proofs
+      // Parents can read their own proofs (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Parents can upload their own proofs
-      allow create: if isParent() && request.auth.uid == request.resource.data.parentId;
+      // Parents can upload their own proofs (inherit schoolId from parent profile)
+      allow create: if (isParent() && request.auth.uid == request.resource.data.parentId && isCreatingForUserSchool())
+                    || isSuperAdmin();
       
-      // Admin and registrar can update (verify/reject)
-      allow update: if isAdminOrRegistrar() || isLegacyUser();
+      // Admin and registrar can update proofs in their school (verify/reject)
+      allow update: if (isAdminOrRegistrar() && belongsToUserSchool(resource.data.schoolId)) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
       
-      // Only admin can delete
-      allow delete: if isAdmin() || isLegacyUser();
+      // Only admin can delete proofs in their school
+      allow delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
     }
     
     // ========================================
@@ -360,18 +511,26 @@ service cloud.firestore {
     // Enrollment Applications
     match /enrollmentApplications/{applicationId} {
       // Public can CREATE applications (no auth required for enrollment portal)
-      allow create: if request.resource.data.keys().hasAll(['applicationNumber', 'studentInfo', 'guardian1', 'currentAddress', 'academicInfo', 'status', 'submittedAt'])
+      // Application inherits schoolId from verified student or uses 'default'
+      allow create: if request.resource.data.keys().hasAll(['applicationNumber', 'studentInfo', 'guardian1', 'currentAddress', 'academicInfo', 'status', 'submittedAt', 'schoolId'])
         && request.resource.data.status == 'submitted';
       
-      // Staff can read all applications
-      allow read: if isStaff() || isLegacyUser();
+      // Public can READ their own application by applicationNumber (for status checking)
+      allow read: if true;
       
-      // Admin, registrar, and principal can update applications (approve/reject)
-      allow update: if (isAdmin() || isRegistrar() || isPrincipal() || isLegacyUser())
+      // Staff can read applications from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
+      
+      // Admin, registrar, and principal can update applications in their school (approve/reject)
+      allow update: if ((isAdmin() || isRegistrar() || isPrincipal()) && belongsToUserSchool(resource.data.schoolId) || isLegacyUser())
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedBy', 'reviewedAt', 'reviewNotes', 'rejectionReason', 'enrolledStudentId', 'updatedAt']);
       
-      // Only admin can delete applications
-      allow delete: if isAdmin() || isLegacyUser();
+      // Only admin can delete applications in their school
+      allow delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
     }
     
     // ========================================
@@ -380,17 +539,23 @@ service cloud.firestore {
     
     // Notifications Collection
     match /notifications/{notificationId} {
-      // Staff can read all notifications
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read notifications from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their own notifications
+      // Parents can read their own notifications (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.recipientId;
       
       // System can create notifications (via Cloud Functions)
-      allow create: if isAuthenticated() || isLegacyUser();
+      allow create: if (isAuthenticated() && isCreatingForUserSchool()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
       
-      // Only admin can update/delete
-      allow update, delete: if isAdmin() || isLegacyUser();
+      // Only admin can update/delete notifications in their school
+      allow update, delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                            || isSuperAdmin() 
+                            || isLegacyUser();
     }
     
     // Mail Queue (for Firebase Email Extension)
@@ -401,11 +566,15 @@ service cloud.firestore {
     
     // Notification Errors (for debugging)
     match /notificationErrors/{errorId} {
-      // Only admin can read errors
-      allow read: if isAdmin() || isLegacyUser();
+      // Only admin can read errors from their school
+      allow read: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // System can create errors
-      allow create: if isAuthenticated() || isLegacyUser();
+      // System can create errors (with schoolId)
+      allow create: if (isAuthenticated() && isCreatingForUserSchool()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
       
       // Errors are immutable
       allow update, delete: if false;
@@ -417,27 +586,40 @@ service cloud.firestore {
     
     // Announcements Collection
     match /announcements/{announcementId} {
-      // All authenticated users can read announcements
-      allow read: if isAuthenticated();
+      // Staff can read announcements from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin();
       
-      // Only staff can create announcements
-      allow create: if isStaff() || isLegacyUser();
+      // Staff can create announcements for their school
+      allow create: if (isStaff() && isCreatingForUserSchool()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
       
-      // Admin and principal can update/delete
-      allow update, delete: if isAdminOrPrincipal() || isLegacyUser();
+      // Admin and principal can update/delete announcements in their school
+      allow update, delete: if (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId)) 
+                            || isSuperAdmin() 
+                            || isLegacyUser();
     }
     
     // Lesson Plans
     match /lessonPlans/{planId} {
-      // Teachers can read all lesson plans
-      allow read: if isTeacher() || isAdmin() || isPrincipal() || isLegacyUser();
+      // Teachers can read lesson plans from their school(s)
+      allow read: if ((isTeacher() || isAdmin() || isPrincipal()) && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Teachers can manage their own lesson plans
-      allow create: if isTeacher() || isLegacyUser();
-      allow update, delete: if (isTeacher() && resource.data.teacherId == request.auth.uid) || isLegacyUser();
+      // Teachers can create lesson plans for their school
+      allow create: if (isTeacher() && isCreatingForUserSchool()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
       
-      // Admin can manage all lesson plans
-      allow write: if isAdmin() || isLegacyUser();
+      // Teachers can manage their own lesson plans (in their school)
+      allow update, delete: if ((isTeacher() && resource.data.teacherId == request.auth.uid && belongsToUserSchool(resource.data.schoolId)) || isLegacyUser());
+      
+      // Admin can manage all lesson plans in their school
+      allow write: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // ========================================
@@ -446,20 +628,27 @@ service cloud.firestore {
     
     // Settings Collection
     match /settings/{settingId} {
-      // Public read access (enrollment portal needs to check if enrollment is enabled)
+      // Public read access (enrollment portal needs to check settings by schoolId)
+      // Note: settingId is typically the schoolId (e.g., 'default', 'school-001')
       allow read: if true;
       
-      // Only admin can update settings
-      allow write: if isAdmin() || isLegacyUser();
+      // Only admin can update settings for their school
+      allow write: if (isAdmin() && settingId == getUserSchoolId()) 
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // School Configuration
     match /schoolConfig/{configId} {
-      // All authenticated users can read config
-      allow read: if isAuthenticated();
+      // Staff can read config from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin();
       
-      // Only admin can update config
-      allow write: if isAdmin() || isLegacyUser();
+      // Only admin can update config for their school
+      allow write: if (isAdmin() && isCreatingForUserSchool()) 
+                   || (isAdmin() && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // User Roles (for role management)
@@ -467,11 +656,26 @@ service cloud.firestore {
       // Users can read their own role
       allow read: if isAuthenticated() && request.auth.uid == userId;
       
-      // Admin can read all roles
+      // Admin can read all roles from their school
+      // Note: Admin cannot see roles from other schools
       allow read: if isAdmin() || isLegacyUser();
       
-      // Only admin can manage roles
-      allow write: if isAdmin() || isLegacyUser();
+      // Only admin can manage roles for users in their school
+      allow write: if isAdmin() || isSuperAdmin() || isLegacyUser();
+    }
+    
+    // ========================================
+    // MULTI-TENANT: SCHOOLS COLLECTION
+    // ========================================
+    
+    // Schools Collection (metadata for each school)
+    match /schools/{schoolId} {
+      // All authenticated users can read school metadata
+      // This allows SchoolSwitcher to display school names
+      allow read: if isAuthenticated();
+      
+      // Only super admin can create/update/delete schools
+      allow write: if isSuperAdmin();
     }
     
     // ========================================
@@ -480,11 +684,16 @@ service cloud.firestore {
     
     // Substitute Assignments
     match /substituteAssignments/{assignmentId} {
-      // All staff can read substitute assignments
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read substitute assignments from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Admin and principal can manage substitutes
-      allow write: if isAdminOrPrincipal() || isLegacyUser();
+      // Admin and principal can manage substitutes in their school
+      allow write: if (isAdminOrPrincipal() && isCreatingForUserSchool()) 
+                   || (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // ========================================
@@ -493,50 +702,72 @@ service cloud.firestore {
     
     // Student Assignment Grades (grades for specific assignments)
     match /studentAssignmentGrades/{gradeId} {
-      // Staff can read all assignment grades
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read assignment grades from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their children's assignment grades
+      // Parents can read their children's assignment grades (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Teachers and admin can write assignment grades
-      allow create, update: if isTeacher() || isAdmin() || isLegacyUser();
+      // Teachers and admin can write assignment grades in their school
+      allow create, update: if ((isTeacher() || isAdmin()) && isCreatingForUserSchool()) 
+                            || ((isTeacher() || isAdmin()) && belongsToUserSchool(resource.data.schoolId))
+                            || isSuperAdmin() 
+                            || isLegacyUser();
       
-      // Only admin can delete
-      allow delete: if isAdmin() || isLegacyUser();
+      // Only admin can delete in their school
+      allow delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
     }
     
     // Core Value Grades (character development grades)
     match /coreValueGrades/{gradeId} {
-      // Staff can read all core value grades
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read core value grades from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Parents can read their children's core value grades
+      // Parents can read their children's core value grades (implicit school check)
       allow read: if isParent() && request.auth.uid == resource.data.parentId;
       
-      // Teachers and admin can write core value grades
-      allow create, update: if isTeacher() || isAdmin() || isLegacyUser();
+      // Teachers and admin can write core value grades in their school
+      allow create, update: if ((isTeacher() || isAdmin()) && isCreatingForUserSchool()) 
+                            || ((isTeacher() || isAdmin()) && belongsToUserSchool(resource.data.schoolId))
+                            || isSuperAdmin() 
+                            || isLegacyUser();
       
-      // Only admin can delete
-      allow delete: if isAdmin() || isLegacyUser();
+      // Only admin can delete in their school
+      allow delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
     }
     
     // Class Schedules (alternative name for schedules)
     match /classSchedules/{scheduleId} {
-      // All authenticated users can read schedules
-      allow read: if isAuthenticated();
+      // Staff can read schedules from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin();
       
-      // Admin, principal, and registrar can manage schedules
-      allow write: if isAdmin() || isPrincipal() || isRegistrar() || isLegacyUser();
+      // Admin, principal, and registrar can manage schedules in their school
+      allow write: if ((isAdmin() || isPrincipal() || isRegistrar()) && isCreatingForUserSchool()) 
+                   || ((isAdmin() || isPrincipal() || isRegistrar()) && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // School Years Configuration
     match /schoolYears/{yearId} {
-      // All authenticated users can read school years
-      allow read: if isAuthenticated();
+      // Staff can read school years from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin();
       
-      // Only admin can manage school years
-      allow write: if isAdmin() || isLegacyUser();
+      // Only admin can manage school years for their school
+      allow write: if (isAdmin() && isCreatingForUserSchool()) 
+                   || (isAdmin() && belongsToUserSchool(resource.data.schoolId))
+                   || isSuperAdmin() 
+                   || isLegacyUser();
     }
     
     // User Profiles (additional user data)
@@ -556,14 +787,20 @@ service cloud.firestore {
     
     // Teacher Validation Results
     match /validationResults/{resultId} {
-      // Staff can read all validation results
-      allow read: if isStaff() || isLegacyUser();
+      // Staff can read validation results from their school
+      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                  || isSuperAdmin() 
+                  || isLegacyUser();
       
-      // Teachers can create validation results for themselves
-      allow create: if isTeacher() || isLegacyUser();
+      // Teachers can create validation results for their school
+      allow create: if (isTeacher() && isCreatingForUserSchool()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
       
-      // Only admin can update/delete validation results
-      allow update, delete: if isAdmin() || isLegacyUser();
+      // Only admin can update/delete validation results in their school
+      allow update, delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                            || isSuperAdmin() 
+                            || isLegacyUser();
     }
     
     // User Roles Audit Trail (Auto-Onboarding System)
