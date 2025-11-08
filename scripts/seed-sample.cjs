@@ -32,6 +32,9 @@ const NUM_PARENTS = parseInt(args.parents || '6', 10);
 const NUM_SECTIONS = parseInt(args.sections || '2', 10);
 const NUM_STUDENTS = parseInt(args.students || '0', 10);
 
+// MULTI-TENANT: Default schoolId for seeded data
+const SCHOOL_ID = args.schoolId || 'default';
+
 function pick(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
 function id(prefix) { return `${prefix}_${Date.now()}_${Math.floor(Math.random()*1e6)}`; }
 
@@ -92,7 +95,7 @@ async function run() {
     const name = `${pick(firstNames)} ${pick(lastNames)}`;
     const email = `${name.toLowerCase().replace(/\s+/g,'')}@school.edu`;
     const role = pick(roles);
-    const t = { id: id('t'), name, email, role, assignments: [] };
+    const t = { id: id('t'), name, email, role, assignments: [], schoolId: SCHOOL_ID };
     teacherDocs.push(t);
   }
   // Batch teachers + users mirror (chunked)
@@ -110,7 +113,7 @@ async function run() {
   for (let i=0;i<NUM_PARENTS;i++) {
     const name = `${pick(firstNames)} ${pick(lastNames)}`;
     const email = `${name.toLowerCase().replace(/\s+/g,'')}@mail.com`;
-    parentDocs.push({ id: id('p'), name, email, studentIds: [] });
+    parentDocs.push({ id: id('p'), name, email, studentIds: [], schoolId: SCHOOL_ID });
   }
   for (const group of chunk(parentDocs, 300)) {
     const batch = db.batch();
@@ -125,7 +128,7 @@ async function run() {
     const gradeLevel = pick(grades);
     const name = pick(sectionNames);
     const adviser = pick(teacherDocs.filter(t => t.role === 'teacher')).id;
-    sectionDocs.push({ id: id('sec'), gradeLevel, name, adviserId: adviser });
+    sectionDocs.push({ id: id('sec'), gradeLevel, name, adviserId: adviser, schoolId: SCHOOL_ID });
   }
   for (const group of chunk(sectionDocs, 200)) {
     const batch = db.batch();
@@ -146,6 +149,7 @@ async function run() {
         dateOfBirth: dob, sex: (Math.random() < 0.5 ? 'Male' : 'Female'),
         lrn: String(100000000000 + Math.floor(Math.random()*9_000_000_000)),
         sectionId: section.id,
+        schoolId: SCHOOL_ID,
       });
     }
     console.log(`[Seeder] Attempting to commit ${studentDocs.length} student documents...`);
@@ -203,6 +207,7 @@ async function run() {
         learningAreaId: la.toLowerCase(),
         teacherId: t.id,
         gradeLevel: sec.gradeLevel,
+        schoolId: SCHOOL_ID,
       });
     }
   }
@@ -216,18 +221,18 @@ async function run() {
 
   // --- Seed Core Values (deterministic IDs to prevent duplicates) ---
   const defaultCoreValues = [
-    { id: 'cv_makadiyos', name: 'MAKADIYOS', behaviors: [
+    { id: 'cv_makadiyos', name: 'MAKADIYOS', schoolId: SCHOOL_ID, behaviors: [
       "Expresses one's spiritual beliefs while respecting the spiritual beliefs of others",
       'Shows adherence to ethical principles by upholding truth',
     ]},
-    { id: 'cv_makatao', name: 'MAKATAO', behaviors: [
+    { id: 'cv_makatao', name: 'MAKATAO', schoolId: SCHOOL_ID, behaviors: [
       'Is sensitive to individual, social, and cultural differences',
       'Demonstrates contributions toward solidarity',
     ]},
-    { id: 'cv_makakalikasan', name: 'MAKAKALIKASAN', behaviors: [
+    { id: 'cv_makakalikasan', name: 'MAKAKALIKASAN', schoolId: SCHOOL_ID, behaviors: [
       'Cares for the environment and utilizes resources wisely, judiciously, and economically',
     ]},
-    { id: 'cv_makabansa', name: 'MAKABANSA', behaviors: [
+    { id: 'cv_makabansa', name: 'MAKABANSA', schoolId: SCHOOL_ID, behaviors: [
       'Demonstrates pride in being a Filipino; exercises the rights and responsibilities of a Filipino citizen',
       'Demonstrates appropriate behavior in carrying out activities in the school, community, and country',
     ]},
@@ -252,6 +257,7 @@ async function run() {
           id: `cvg_${s.id}_${cv.id}`,
           studentId: s.id,
           coreValueId: cv.id,
+          schoolId: SCHOOL_ID,
           q1: {}, q2: {}, q3: {}, q4: {},
         };
         for (const b of cv.behaviors) {

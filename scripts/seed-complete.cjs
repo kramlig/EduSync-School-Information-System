@@ -2,6 +2,9 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 
+// MULTI-TENANT: Default schoolId for seeded data
+const SCHOOL_ID = 'default';
+
 // Connect to emulators on port 8086
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8086';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9100';
@@ -126,7 +129,7 @@ async function seedCompleteData() {
       try {
         await auth.setCustomUserClaims('admin123', {
           role: 'admin',
-          schoolId: 'default'
+          schoolId: SCHOOL_ID
         });
         console.log('✅ Created admin in Firebase Auth with role claims');
       } catch (claimsErr) {
@@ -149,6 +152,7 @@ async function seedCompleteData() {
         role: 'admin',
         status: 'active',
         specialization: 'Administration',
+        schoolId: SCHOOL_ID,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -237,6 +241,7 @@ async function seedCompleteData() {
     for (const la of learningAreas) {
       await db.collection('learningAreas').doc(la.id).set({
         ...la,
+        schoolId: SCHOOL_ID,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -255,6 +260,7 @@ async function seedCompleteData() {
     for (const cv of coreValues) {
       await db.collection('coreValues').doc(cv.id).set({
         ...cv,
+        schoolId: SCHOOL_ID,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -283,7 +289,7 @@ async function seedCompleteData() {
           password: 'teacher123',
           displayName: `${teacher.firstName} ${teacher.lastName}`
         });
-        await auth.setCustomUserClaims(teacher.id, { role: 'teacher', schoolId: 'default' });
+        await auth.setCustomUserClaims(teacher.id, { role: 'teacher', schoolId: SCHOOL_ID });
       } catch (err) {
         console.log(`   ⚠️  Could not create Auth user for ${teacher.email}: ${err.message}`);
       }
@@ -333,6 +339,7 @@ async function seedCompleteData() {
         employeeNumber: `T-2024-${teacher.id.split('-')[1]}`,
         contactNumber: `+639${Math.floor(Math.random() * 900000000 + 100000000)}`,
         assignments: teachingAssignments, // ADDED: Teaching assignments
+        schoolId: SCHOOL_ID,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -389,6 +396,7 @@ async function seedCompleteData() {
           adviserId: adviserId,
           schoolYear: schoolYear,
           capacity: 40,
+          schoolId: SCHOOL_ID,
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -449,6 +457,7 @@ async function seedCompleteData() {
           contactNumber: `+639${Math.floor(Math.random() * 900000000 + 100000000)}`,
           guardianName: `${pick([...maleFirstNames, ...femaleFirstNames])} ${lastName}`,
           guardianContact: `+639${Math.floor(Math.random() * 900000000 + 100000000)}`,
+          schoolId: SCHOOL_ID,
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -482,7 +491,7 @@ async function seedCompleteData() {
       // Set custom claims for parent
       await auth.setCustomUserClaims('parent-0001', {
         role: 'parent',
-        schoolId: 'default'
+        schoolId: SCHOOL_ID
       });
       
       console.log('✅ Created parent in Firebase Auth with role claims');
@@ -499,6 +508,7 @@ async function seedCompleteData() {
       phone: '09171234567',
       emailVerified: false,
       registrationDate: new Date().toISOString(),
+      schoolId: SCHOOL_ID,
       notificationPreferences: {
         emailEnabled: true,
         smsEnabled: false,
@@ -540,6 +550,7 @@ async function seedCompleteData() {
         studentId: student.id,
         schoolYear: schoolYear,
         dailyStatus: dailyStatus,
+        schoolId: SCHOOL_ID,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -574,7 +585,8 @@ async function seedCompleteData() {
           q1: q1Grade,
           q2: q2Grade,
           finalGrade: finalGrade,
-          remarks: finalGrade >= 75 ? 'Passed' : 'Failed'
+          remarks: finalGrade >= 75 ? 'Passed' : 'Failed',
+          schoolId: SCHOOL_ID
         });
         
         gradesCreated++;
@@ -632,6 +644,7 @@ async function seedCompleteData() {
         ...announcement,
         authorId: 'admin123',
         authorName: 'System Admin',
+        schoolId: SCHOOL_ID,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -660,6 +673,7 @@ async function seedCompleteData() {
         totalFees: 0,
         totalPaid: 0,
         transactions: [],
+        schoolId: SCHOOL_ID,
         createdAt: new Date(),
         updatedAt: new Date()
       });

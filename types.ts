@@ -1,7 +1,54 @@
 export type ViewType = 'dashboard' | 'students' | 'learningAreas' | 'grades' | 'coreValues' | 'attendance' | 'teachers' | 'sections' | 'settings' | 'substitutes' | 'scheduler' | 'gradebook' | 'coreValuesGradebook' | 'assignments' | 'lessonPlans' | 'announcements' | 'parents';
 
+// ============================================================================
+// MULTI-TENANT ARCHITECTURE - SCHOOL ENTITY
+// ============================================================================
+
+/**
+ * School Interface - Multi-Tenant Core Entity
+ * 
+ * Represents a single school in the multi-tenant system.
+ * Each school's data is isolated by schoolId across all collections.
+ */
+export interface School {
+  id: string;  // Firestore document ID (e.g., "school-001", "school-002")
+  name: string;  // School name (e.g., "Enrique Urencia Elementary School")
+  
+  // Administrative Details
+  region: string;  // DepEd Region (e.g., "Region XI")
+  division: string;  // DepEd Division (e.g., "Division of the City of Mati")
+  district: string;  // School District (e.g., "Governor Generoso North District")
+  
+  // School Type
+  schoolType: 'public' | 'private' | 'hybrid';
+  schoolLevel: 'elementary' | 'secondary' | 'shs' | 'kto12';  // K-12 levels
+  
+  // Contact Information
+  address?: string;
+  city?: string;
+  province?: string;
+  zipCode?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  
+  // Current Academic Year
+  currentSchoolYear: string;  // e.g., "2024-2025"
+  
+  // Status
+  status: 'active' | 'inactive' | 'archived';
+  
+  // Metadata
+  createdAt: string;  // ISO timestamp
+  updatedAt?: string;  // ISO timestamp
+  
+  // Optional: School-specific settings override
+  settings?: Partial<SchoolSettings>;
+}
+
 export interface Student {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   name: string;
   email: string;
   enrollmentDate: string;
@@ -72,6 +119,7 @@ export interface TeacherAssignment {
 
 export interface Teacher {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   name: string;
   email: string;
   contactNumber?: string;
@@ -84,6 +132,7 @@ export type AuthUser = Omit<Teacher, 'password'>;
 
 export interface Parent {
     id: string;
+    schoolId: string;  // MULTI-TENANT: Required for school isolation
     name: string;
     email: string;
     password?: string;
@@ -104,6 +153,7 @@ export type ParentUser = Omit<Parent, 'password'>;
 
 export interface Section {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   gradeLevel: number;
   name: string;
   adviserId?: string;
@@ -111,6 +161,7 @@ export interface Section {
 
 export interface LearningArea {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   name: string;
   credits: number;
   isComposite?: boolean;
@@ -147,6 +198,7 @@ export interface SemesterGrade {
 // Base grade interface for quarterly grading (Elementary & JHS)
 export interface Grade {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   studentId: string;
   learningAreaId: string;
   q1?: number | SubGradeRecord;
@@ -160,6 +212,7 @@ export interface Grade {
 // Senior High School grade interface (semester-based)
 export interface GradeSHS {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   studentId: string;
   learningAreaId: string;
   semester1?: SemesterGrade;
@@ -173,6 +226,7 @@ export type GradeInput = Grade | GradeSHS;
 
 export interface CoreValue {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   name: string;
   behaviors: string[];
 }
@@ -181,6 +235,7 @@ export type CoreValueMarking = 'AO' | 'SO' | 'RO' | 'NO';
 
 export interface CoreValueGrade {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   studentId: string;
   coreValueId: string;
   q1?: Record<string, CoreValueMarking>;
@@ -192,6 +247,7 @@ export interface CoreValueGrade {
 export type AttendanceStatus = 'P' | 'A' | 'L' | 'E'; // Present, Absent, Late, Excused
 
 export interface AttendanceRecord {
+    schoolId: string;  // MULTI-TENANT: Required for school isolation
     studentId: string;
     dailyStatus: Record<string, AttendanceStatus>; // "YYYY-MM-DD": "P"
 }
@@ -229,6 +285,7 @@ export interface SchoolSettings {
 
 export interface SubstituteAssignment {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   teacherId: string; // The substitute teacher
   originalTeacherId: string; // The teacher being replaced
   startDate: string; 
@@ -237,6 +294,7 @@ export interface SubstituteAssignment {
 
 export interface ClassSchedule {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   title: string;
   type: 'academic' | 'extracurricular';
   dayOfWeek: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday'; // This is the start day
@@ -255,6 +313,7 @@ export interface ClassSchedule {
 
 export interface Assignment {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   sectionId: string;
   learningAreaId: string;
   title: string;
@@ -265,6 +324,7 @@ export interface Assignment {
 
 export interface StudentAssignmentGrade {
   id?: string; // Firestore document id (composite: sag_{assignmentId}_{studentId})
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   assignmentId: string;
   studentId: string;
   score: number | null;
@@ -281,6 +341,7 @@ export interface LessonResource {
 
 export interface LessonPlan {
   id: string;
+  schoolId: string;  // MULTI-TENANT: Required for school isolation
   sectionId: string;
   learningAreaId: string;
   date: string; // YYYY-MM-DD
@@ -297,6 +358,7 @@ export type AnnouncementTarget = 'all' | 'staff' | 'parents' | 'students';
 
 export interface Announcement {
     id: string;
+    schoolId: string;  // MULTI-TENANT: Required for school isolation
     title: string;
     content: string;
     authorId: string;
@@ -337,6 +399,7 @@ export interface DocumentUpload {
 
 export interface EnrollmentApplication {
     id: string;
+    schoolId: string;  // MULTI-TENANT: Required for school isolation
     applicationNumber: string; // Auto-generated: "APP-2025-001"
     
     // Student Information
@@ -419,6 +482,7 @@ export interface EnrollmentApplication {
 
 export interface FeeStructure {
     id: string;
+    schoolId: string;  // MULTI-TENANT: Required for school isolation
     schoolYear: string;
     gradeLevel: number;
     track?: string; // For SHS
@@ -486,6 +550,7 @@ export interface Charge {
 
 export interface Payment {
     id: string;
+    schoolId: string;  // MULTI-TENANT: Required for school isolation
     date: string;
     amount: number;
     method: 'cash' | 'check' | 'bank_transfer' | 'gcash' | 'maya' | 'card' | 'online';
@@ -500,6 +565,7 @@ export interface Payment {
 
 export interface StudentLedger {
     id: string; // Composite: `${studentId}_${schoolYear}`
+    schoolId: string;  // MULTI-TENANT: Required for school isolation
     studentId: string;
     schoolYear: string;
     gradeLevel: number;
