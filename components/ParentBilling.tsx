@@ -24,6 +24,7 @@ import { downloadReceipt } from '../src/services/receiptPDFGenerator';
 import { collection, addDoc, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { getFirestoreInstance } from '../src/services/firestoreService';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
 import { storage } from '../src/services/firestoreService';
 import { useOnlineStatus } from '../src/services/connectionService';
 import { DocumentArrowUpIcon, TrashIcon } from './icons';
@@ -43,6 +44,7 @@ const ParentBilling: React.FC<ParentBillingProps> = ({
 }) => {
   const { students, sections } = schoolData;
   const parent = session.user;
+  const { schoolId } = useSchoolContext();
 
   // Online status
   const isOnline = useOnlineStatus();
@@ -158,16 +160,20 @@ const ParentBilling: React.FC<ParentBillingProps> = ({
   useEffect(() => {
     if (!selectedStudent) return;
     loadPaymentProofs();
-  }, [selectedStudent]);
+  }, [selectedStudent, schoolId]);
 
   const loadPaymentProofs = async () => {
-    if (!selectedStudent) return;
+    if (!selectedStudent || !schoolId) {
+      console.warn('[ParentBilling] No selectedStudent or schoolId - skipping payment proofs query');
+      return;
+    }
     
     setLoadingProofs(true);
     try {
       const db = getFirestoreInstance();
       const proofsQuery = query(
         collection(db, 'paymentProofs'),
+        where('schoolId', '==', schoolId),
         where('studentId', '==', selectedStudent.id)
       );
       const proofsSnapshot = await getDocs(proofsQuery);
@@ -256,7 +262,10 @@ const ParentBilling: React.FC<ParentBillingProps> = ({
         paymentProofData.notes = uploadNotes;
       }
 
-      await addDoc(collection(db, 'paymentProofs'), paymentProofData);
+      await addDoc(collection(db, 'paymentProofs'), {
+        ...paymentProofData,
+        schoolId: schoolId || 'default'
+      });
 
       setUploadSuccess('Payment proof uploaded successfully! Staff will verify it soon.');
       

@@ -13,6 +13,12 @@ import type { EnrollmentApplication } from '../../../../types';
  * - Show student info and submission date
  * - Visual status indicators
  * 
+ * NOTE: This is a PUBLIC page (no authentication required).
+ * SchoolId filtering is NOT needed here because:
+ * 1. Application numbers are globally unique across all schools
+ * 2. The query already filters by applicationNumber which is unique
+ * 3. Each application document already contains schoolId from submission
+ * 
  * IMPORTANT: Uses useMemo pattern to prevent infinite loops (see INFINITE_LOOP_PREVENTION.md)
  */
 const ApplicationStatus: React.FC = () => {

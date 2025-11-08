@@ -19,6 +19,7 @@ import {
 import { printReceipt } from '../src/services/receiptPDFGenerator';
 import { PrinterIcon } from './icons';
 import { getFirestoreInstance } from '../src/services/firestoreService';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { useOnlineStatus, getOfflineMessage } from '../src/services/connectionService';
 
@@ -31,6 +32,7 @@ type PaymentMethod = 'cash' | 'check' | 'bank_transfer' | 'gcash' | 'maya' | 'ca
 
 const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session }) => {
   const { students, settings, loading } = schoolData;
+  const { schoolId } = useSchoolContext(); // Get current school for filtering
   
   // Online status
   const isOnline = useOnlineStatus();
@@ -116,12 +118,19 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
   
   // Load payment proofs for student
   const loadPaymentProofs = async (studentId: string) => {
+    if (!schoolId) {
+      console.warn('[PaymentRecording] No schoolId - skipping payment proofs query');
+      setLoadingProofs(false);
+      return;
+    }
+
     try {
       setLoadingProofs(true);
       const db = getFirestoreInstance();
       
       const proofsQuery = query(
         collection(db, 'paymentProofs'),
+        where('schoolId', '==', schoolId),
         where('studentId', '==', studentId)
       );
       

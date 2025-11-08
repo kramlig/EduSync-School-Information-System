@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'rea
 import { useSchoolData } from './hooks/useSchoolData';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useFirestoreSyncStatus } from './hooks/useFirestoreSyncStatus';
+import { SchoolContextProvider } from './src/contexts/SchoolContext';
 import type { AuthUser, StudentUser, ParentUser } from './types';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -366,17 +367,18 @@ const App: React.FC = () => {
   const parentSession = session as { user: ParentUser, type: 'parent' };
 
   return (
-    <Router key={session?.user.id || 'no-session'}>
-      {/* PWA Update Notification */}
-      <UpdateNotification />
-      
-      {/* TIER 1B: Offline status indicator */}
-      <OfflineBanner 
-        isOnline={isOnline} 
-        wasOffline={wasOffline}
-        pendingWrites={pendingCount}
-      />
-      <div className="flex h-screen bg-slate-100 dark:bg-slate-900">
+    <SchoolContextProvider>
+      <Router key={session?.user.id || 'no-session'}>
+        {/* PWA Update Notification */}
+        <UpdateNotification />
+        
+        {/* TIER 1B: Offline status indicator */}
+        <OfflineBanner 
+          isOnline={isOnline} 
+          wasOffline={wasOffline}
+          pendingWrites={pendingCount}
+        />
+        <div className="flex h-screen bg-slate-100 dark:bg-slate-900">
         <Sidebar 
           session={session} 
           schoolName={settings.schoolName}
@@ -498,6 +500,7 @@ const App: React.FC = () => {
         </div>
       </div>
     </Router>
+    </SchoolContextProvider>
   );
 };
 

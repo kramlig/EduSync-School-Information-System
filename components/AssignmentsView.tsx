@@ -5,6 +5,7 @@ import Modal from './Modal';
 import { PencilIcon, TrashIcon, DocumentArrowDownIcon, DocumentArrowUpIcon } from './icons';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { getFirestoreInstance } from '../src/services/firestoreService';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
 
 // Icon components for better UX
 const SearchIcon = () => (
@@ -71,6 +72,7 @@ const AssignmentsView: React.FC<{
 
 
     // Teacher-specific state
+    const { schoolId } = useSchoolContext();
     const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
     const [selectedLearningAreaId, setSelectedLearningAreaId] = useState<string | null>(null);
     const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
@@ -223,11 +225,20 @@ const AssignmentsView: React.FC<{
         }
         
         const fetchSectionStudents = async () => {
+            if (!schoolId) {
+                console.warn('[AssignmentsView] No schoolId - skipping fetchSectionStudents');
+                return;
+            }
+            
             setLoadingStudents(true);
             try {
                 const db = getFirestoreInstance();
                 const studentsCol = collection(db, 'students');
-                const q = query(studentsCol, where('sectionId', '==', selectedAssignment.sectionId));
+                const q = query(
+                    studentsCol, 
+                    where('schoolId', '==', schoolId),
+                    where('sectionId', '==', selectedAssignment.sectionId)
+                );
                 const snapshot = await getDocs(q);
                 const studentsData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Student[];
                 console.log(`[AssignmentsView] Fetched ${studentsData.length} students for section ${selectedAssignment.sectionId}`);
@@ -241,7 +252,7 @@ const AssignmentsView: React.FC<{
         };
         
         fetchSectionStudents();
-    }, [selectedAssignment, isStaff]);
+    }, [selectedAssignment, isStaff, schoolId]);
 
     // Portal (Student/Parent) Logic
     const studentAssignmentsByLA = useMemo(() => {

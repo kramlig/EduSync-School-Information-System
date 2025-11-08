@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, where, Timestamp } from 'firebase/firestore';
 import { getFirestoreInstance } from '../src/services/firestoreService';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
 
 const db = getFirestoreInstance();
 
@@ -25,6 +26,7 @@ interface ValidationResult {
 }
 
 const ValidationResultsDashboard: React.FC = () => {
+  const { schoolId } = useSchoolContext();
   const [results, setResults] = useState<ValidationResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,14 +35,20 @@ const ValidationResultsDashboard: React.FC = () => {
 
   useEffect(() => {
     loadResults();
-  }, []);
+  }, [schoolId]);
 
   const loadResults = async () => {
+    if (!schoolId) {
+      console.warn('[ValidationResultsDashboard] No schoolId - skipping loadResults');
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     try {
       const q = query(
         collection(db, 'validationResults'),
+        where('schoolId', '==', schoolId),
         orderBy('timestamp', 'desc')
       );
       const snapshot = await getDocs(q);

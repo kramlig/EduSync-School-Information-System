@@ -88,6 +88,20 @@ async function run() {
   const db = getFirestore();
   console.log(`[Seeder] Initialized Firestore with projectId: ${projectId} and emulator host: ${process.env.FIRESTORE_EMULATOR_HOST}`);
 
+  // --- Seed Schools Collection (FIRST - before any other data) ---
+  console.log(`[Seeder] Creating school document: ${SCHOOL_ID}`);
+  const schoolData = {
+    id: SCHOOL_ID,
+    name: SCHOOL_ID === 'default' ? 'Default School' : `School ${SCHOOL_ID}`,
+    shortName: SCHOOL_ID === 'default' ? 'Default' : SCHOOL_ID.toUpperCase(),
+    address: '123 Education Street, City, Province',
+    principalName: 'Principal Administrator',
+    schoolYear: '2024-2025',
+    createdAt: new Date().toISOString(),
+  };
+  await db.collection('schools').doc(SCHOOL_ID).set(schoolData, { merge: true });
+  console.log(`[Seeder] School document created: ${SCHOOL_ID}`);
+
   // Seed teachers
   const roles = ['teacher','teacher','teacher','teacher','registrar','principal'];
   const teacherDocs = [];
@@ -284,7 +298,7 @@ async function run() {
     }
   }
 
-  console.log(`[Seeder] Seeded: ${teacherDocs.length} teachers, ${parentDocs.length} parents, ${sectionDocs.length} sections, ${studentDocs.length} students, ${classSchedules.length} schedules, ${defaultCoreValues.length} core values, ${coreValueGrades.length} core value grade records.`);
+  console.log(`[Seeder] Seeded: 1 school, ${teacherDocs.length} teachers, ${parentDocs.length} parents, ${sectionDocs.length} sections, ${studentDocs.length} students, ${classSchedules.length} schedules, ${defaultCoreValues.length} core values, ${coreValueGrades.length} core value grade records.`);
 }
 
 run().catch(e => {

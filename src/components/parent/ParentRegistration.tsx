@@ -4,6 +4,11 @@
  * Allows parents to self-register by verifying their child's LRN and birthdate.
  * Sends email verification after successful registration.
  * No login required to access this page.
+ * 
+ * MULTI-TENANT NOTE:
+ * This is a PUBLIC page. Parents don't know their schoolId when registering.
+ * Solution: After verifying student by LRN, use the student's schoolId for the parent.
+ * The student document already has schoolId, so we inherit it.
  */
 
 import React, { useState } from 'react';
@@ -213,6 +218,7 @@ const ParentRegistration: React.FC = () => {
       
       // Create parent document in Firestore (use Firebase Auth UID as document ID)
       const newParent: Omit<Parent, 'id'> = {
+        schoolId: verifiedStudent!.schoolId || 'default', // Inherit schoolId from student
         name: formData.parentName,
         email: formData.parentEmail,
         password: formData.password, // In production, hash this password!

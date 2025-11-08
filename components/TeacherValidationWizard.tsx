@@ -3,6 +3,7 @@ import { useSchoolData } from '../hooks/useSchoolData';
 import type { AuthUser } from '../types';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getFirestoreInstance } from '../src/services/firestoreService';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
 
 const db = getFirestoreInstance();
 
@@ -56,6 +57,7 @@ interface ValidationStep {
 const TeacherValidationWizard: React.FC<TeacherValidationWizardProps> = ({ session }) => {
   const schoolData = useSchoolData();
   const { students = [], sections = [], learningAreas = [] } = schoolData;
+  const { schoolId } = useSchoolContext();
   
   const [currentStep, setCurrentStep] = useState(-1); // Start at -1 for tester info screen
   const [answers, setAnswers] = useState<Record<number, { answer: string; passed: boolean; autoChecked: boolean }>>({});
@@ -567,6 +569,7 @@ const TeacherValidationWizard: React.FC<TeacherValidationWizardProps> = ({ sessi
           sectionCount: teacherSections.length,
           learningAreaCount: teacherLearningAreas.length,
         },
+        schoolId: schoolId || 'default'
       });
       
       setSubmitted(true);
