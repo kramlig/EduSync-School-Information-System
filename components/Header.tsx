@@ -4,6 +4,7 @@ import type { AuthUser, StudentUser, ParentUser } from '../types';
 import { SchoolDataState } from '../hooks/useSchoolData';
 import { useFirestoreSyncStatus } from '../hooks/useFirestoreSyncStatus';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import SchoolSwitcher from './SchoolSwitcher';
 
 interface HeaderProps {
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
@@ -91,6 +92,9 @@ const Header: React.FC<HeaderProps> = ({
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2 md:gap-3">
+          {/* School Switcher (for multi-school users) */}
+          <SchoolSwitcher />
+          
           {/* Online/Offline Status with Pending Writes */}
           <div 
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${

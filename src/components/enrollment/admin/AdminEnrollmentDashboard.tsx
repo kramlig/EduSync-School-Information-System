@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { getFirestoreInstance } from '../../../services/firestoreService';
+import { useSchoolContext } from '../../../contexts/SchoolContext';
 import type { EnrollmentApplication } from '../../../../types';
 
 type FilterStatus = 'all' | 'submitted' | 'under_review' | 'approved' | 'rejected';
@@ -18,6 +19,7 @@ type FilterStatus = 'all' | 'submitted' | 'under_review' | 'approved' | 'rejecte
  */
 const AdminEnrollmentDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { schoolId } = useSchoolContext(); // Get current school for filtering
   const [applications, setApplications] = useState<EnrollmentApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
@@ -25,9 +27,16 @@ const AdminEnrollmentDashboard: React.FC = () => {
 
   // Subscribe to applications in real-time
   useEffect(() => {
+    if (!schoolId) {
+      console.warn('[AdminEnrollmentDashboard] No schoolId - skipping query');
+      setLoading(false);
+      return;
+    }
+
     const db = getFirestoreInstance();
     let q = query(
       collection(db, 'enrollmentApplications'),
+      where('schoolId', '==', schoolId), // Filter by school
       orderBy('submittedAt', 'desc')
     );
 
@@ -35,6 +44,7 @@ const AdminEnrollmentDashboard: React.FC = () => {
     if (filterStatus !== 'all') {
       q = query(
         collection(db, 'enrollmentApplications'),
+        where('schoolId', '==', schoolId), // Filter by school
         where('status', '==', filterStatus),
         orderBy('submittedAt', 'desc')
       );
@@ -48,14 +58,14 @@ const AdminEnrollmentDashboard: React.FC = () => {
       
       setApplications(apps);
       setLoading(false);
-      console.log('[AdminEnrollmentDashboard] Loaded', apps.length, 'applications');
+      console.log('[AdminEnrollmentDashboard] Loaded', apps.length, 'applications for school:', schoolId);
     }, (error) => {
       console.error('[AdminEnrollmentDashboard] Error loading applications:', error);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [filterStatus]);
+  }, [filterStatus, schoolId]); // Add schoolId to dependencies
 
   // Filter applications by search query
   const filteredApplications = applications.filter(app => {

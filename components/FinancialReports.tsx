@@ -16,6 +16,7 @@ import type { SchoolDataHook } from '../hooks/useSchoolData';
 import type { AuthUser, StudentLedger, Receipt } from '../types';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { getFirestoreInstance } from '../src/services/firestoreService';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
 import { useOnlineStatus } from '../src/services/connectionService';
 import BarChart from './BarChart';
 import LineChart from './LineChart';
@@ -62,6 +63,7 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
   session 
 }) => {
   const { students, sections, settings } = schoolData;
+  const { schoolId } = useSchoolContext(); // Get current school for filtering
   const currentSchoolYear = settings?.schoolYear || '2024-2025';
 
   // Online status
@@ -96,16 +98,23 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
   useEffect(() => {
     if (!startDate || !endDate) return;
     loadReportData();
-  }, [startDate, endDate, currentSchoolYear]);
+  }, [startDate, endDate, currentSchoolYear, schoolId]); // Add schoolId to dependencies
 
   const loadReportData = async () => {
+    if (!schoolId) {
+      console.warn('[FinancialReports] No schoolId - skipping query');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const db = getFirestoreInstance();
       
-      // Load all receipts for the school year
+      // Load all receipts for the school year and school
       const receiptsQuery = query(
         collection(db, 'receipts'),
+        where('schoolId', '==', schoolId),
         where('schoolYear', '==', currentSchoolYear)
       );
       const receiptsSnapshot = await getDocs(receiptsQuery);
@@ -115,9 +124,10 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
       })) as Receipt[];
       setReceipts(receiptsData);
 
-      // Load all student ledgers
+      // Load all student ledgers for the school
       const ledgersQuery = query(
         collection(db, 'studentLedgers'),
+        where('schoolId', '==', schoolId),
         where('schoolYear', '==', currentSchoolYear)
       );
       const ledgersSnapshot = await getDocs(ledgersQuery);

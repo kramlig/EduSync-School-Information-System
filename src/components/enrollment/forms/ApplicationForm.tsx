@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from '../../../services/firestoreService';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { getFirestoreInstance } from '../../../services/firestoreService';
+import { useSchoolContext } from '../../../contexts/SchoolContext';
 import type { EnrollmentApplication } from '../../../../types';
 
 // Import step components (we'll create these)
@@ -85,6 +86,7 @@ const STEPS: StepConfig[] = [
 const ApplicationForm: React.FC = () => {
   const navigate = useNavigate();
   const currentUser = auth.currentUser;
+  const { schoolId } = useSchoolContext(); // Get current school
   const [currentStep, setCurrentStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -261,6 +263,7 @@ const ApplicationForm: React.FC = () => {
       // Prepare final application data
       const finalApplication: Partial<EnrollmentApplication> = {
         ...applicationData,
+        schoolId: schoolId || 'default', // Add schoolId for multi-tenant isolation
         applicationNumber,
         submittedBy: currentUser.email || '',
         status: 'submitted',

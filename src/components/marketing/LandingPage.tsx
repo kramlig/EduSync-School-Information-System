@@ -752,11 +752,11 @@ const LandingPage: React.FC = () => {
               📧 hello@edusync.ph
             </a>
             <span className="hidden sm:inline">•</span>
-            <a href="tel:+639171234567" className="hover:text-yellow-300 transition-colors">
-              📱 +63 917 123 4567
+            <a href="tel:+639988438814" className="hover:text-yellow-300 transition-colors">
+              📱 +63 998 843 8814
             </a>
             <span className="hidden sm:inline">•</span>
-            <button onClick={() => window.open('https://edusync-sis.web.app', '_blank')} className="hover:text-yellow-300 transition-colors">
+            <button onClick={() => window.open('https://edusync.ph', '_blank')} className="hover:text-yellow-300 transition-colors">
               💬 Live Chat
             </button>
           </div>
@@ -811,7 +811,7 @@ const LandingPage: React.FC = () => {
               </li>
               <li>
                 <button 
-                  onClick={() => window.open('https://edusync-sis.web.app', '_blank')} 
+                  onClick={() => window.open('https://edusync.ph/admin', '_blank')} 
                   className="hover:text-white transition-colors text-left"
                 >
                   Login

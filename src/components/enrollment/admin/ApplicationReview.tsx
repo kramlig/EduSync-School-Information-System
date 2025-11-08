@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { getFirestoreInstance } from '../../../services/firestoreService';
 import { auth } from '../../../services/firestoreService';
+import { useSchoolContext } from '../../../contexts/SchoolContext';
 import type { EnrollmentApplication, Student } from '../../../../types';
 
 /**
@@ -18,6 +19,7 @@ import type { EnrollmentApplication, Student } from '../../../../types';
 const ApplicationReview: React.FC = () => {
   const { applicationId } = useParams<{ applicationId: string }>();
   const navigate = useNavigate();
+  const { schoolId } = useSchoolContext(); // Get current school
   const [application, setApplication] = useState<EnrollmentApplication | null>(null);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -83,6 +85,7 @@ const ApplicationReview: React.FC = () => {
       
       // Build student object with only defined values (Firestore doesn't accept undefined)
       const newStudent: Partial<Student> = {
+        schoolId: application.schoolId || schoolId || 'default', // Inherit from application or use current school
         name: fullName,
         firstName: studentInfo.firstName,
         middleName: studentInfo.middleName || '',

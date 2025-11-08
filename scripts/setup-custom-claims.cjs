@@ -7,9 +7,10 @@
  * Usage:
  *   node scripts/setup-custom-claims.cjs --email=admin@school.com --role=admin
  *   node scripts/setup-custom-claims.cjs --uid=abc123 --role=teacher
+ *   node scripts/setup-custom-claims.cjs --email=student@school.com --role=student
  *   node scripts/setup-custom-claims.cjs --batch=users.json
  * 
- * Roles: admin, principal, registrar, teacher, parent
+ * Roles: admin, principal, registrar, teacher, parent, student
  */
 
 const admin = require('firebase-admin');
@@ -46,7 +47,7 @@ admin.initializeApp({
   projectId: serviceAccount.project_id
 });
 
-const validRoles = ['admin', 'principal', 'registrar', 'teacher', 'parent'];
+const validRoles = ['admin', 'principal', 'registrar', 'teacher', 'parent', 'student'];
 
 /**
  * Set custom claims for a single user

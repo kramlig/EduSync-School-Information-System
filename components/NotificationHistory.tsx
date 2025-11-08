@@ -12,6 +12,7 @@
 import React, { useState, useEffect } from 'react';
 import { getFirestoreInstance } from '../src/services/firestoreService';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
 import type { ParentUser } from '../types';
 import { BellIcon, CheckCircleIcon, XCircleIcon, ClockIcon } from './icons';
 
@@ -38,6 +39,7 @@ interface NotificationHistoryProps {
 }
 
 const NotificationHistory: React.FC<NotificationHistoryProps> = ({ parent }) => {
+  const { schoolId } = useSchoolContext();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -46,9 +48,14 @@ const NotificationHistory: React.FC<NotificationHistoryProps> = ({ parent }) => 
 
   useEffect(() => {
     loadNotifications();
-  }, [parent.email]);
+  }, [parent.email, schoolId]);
 
   const loadNotifications = async () => {
+    if (!schoolId) {
+      console.warn('[NotificationHistory] No schoolId - skipping loadNotifications');
+      return;
+    }
+    
     setIsLoading(true);
     setError('');
 
@@ -56,9 +63,10 @@ const NotificationHistory: React.FC<NotificationHistoryProps> = ({ parent }) => 
       const db = getFirestoreInstance();
       const notificationsRef = collection(db, 'notifications');
       
-      // Query notifications for this parent
+      // Query notifications for this parent and school
       const q = query(
         notificationsRef,
+        where('schoolId', '==', schoolId),
         where('parentEmail', '==', parent.email),
         orderBy('timestamp', 'desc'),
         limit(50)

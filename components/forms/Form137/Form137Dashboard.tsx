@@ -14,8 +14,9 @@ import { useNavigate } from 'react-router-dom';
 import { Form137Service } from '../../../services/formsService';
 import { getCurrentSchoolYear, getSchoolYearOptions } from '../../../services/dateHelpers';
 import { generateForm137FromSystemData } from '../../../services/form137Generator';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { getFirestoreInstance } from '../../../src/services/firestoreService';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
 import type { Student } from '../../../types';
 import {
   SectionHeader,
@@ -69,6 +70,7 @@ interface StudentRecord {
 
 export const Form137Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { schoolId } = useSchoolContext();
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [allStudents, setAllStudents] = useState<Student[]>([]); // All students from database
   const [loading, setLoading] = useState(true);
@@ -90,22 +92,33 @@ export const Form137Dashboard: React.FC = () => {
   useEffect(() => {
     loadStudentRecords();
     loadAllStudents();
-  }, [selectedSchoolYear, selectedGradeLevel]);
+  }, [selectedSchoolYear, selectedGradeLevel, schoolId]);
 
   const loadAllStudents = async () => {
+    if (!schoolId) {
+      console.warn('[Form137Dashboard] No schoolId - skipping loadAllStudents');
+      return;
+    }
+    
     try {
       const db = getFirestoreInstance();
       
       // Load sections first to get grade levels
-      const sectionsRef = collection(db, 'sections');
-      const sectionsSnapshot = await getDocs(sectionsRef);
+      const sectionsQuery = query(
+        collection(db, 'sections'),
+        where('schoolId', '==', schoolId)
+      );
+      const sectionsSnapshot = await getDocs(sectionsQuery);
       const sectionsMap = new Map(
         sectionsSnapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() } as any])
       );
       
       // Load students
-      const studentsRef = collection(db, 'students');
-      const snapshot = await getDocs(studentsRef);
+      const studentsQuery = query(
+        collection(db, 'students'),
+        where('schoolId', '==', schoolId)
+      );
+      const snapshot = await getDocs(studentsQuery);
       const studentsList = snapshot.docs.map(doc => {
         const studentData = { id: doc.id, ...doc.data() } as Student;
         const section = studentData.sectionId ? sectionsMap.get(studentData.sectionId) : null;
