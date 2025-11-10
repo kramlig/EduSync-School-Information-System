@@ -1,11 +1,10 @@
 import React, { useState, useEffect, lazy, Suspense, useCallback, useMemo } from 'react';
-import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { onAuthStateChanged, signInAnonymously, signOut } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
-import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import { useSchoolData } from './hooks/useSchoolData';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useFirestoreSyncStatus } from './hooks/useFirestoreSyncStatus';
-import { SchoolContextProvider } from './src/contexts/SchoolContext';
 import type { AuthUser, StudentUser, ParentUser } from './types';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -14,6 +13,7 @@ import LoginScreen from './components/LoginScreen';
 import FullScreenLoader from './components/FullScreenLoader';
 import OfflineBanner from './components/OfflineBanner';
 import UpdateNotification from './components/UpdateNotification';
+import './src/diagnostics'; // Run Firestore diagnostics in development
 
 // Lazy load heavy components for better code splitting
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -58,6 +58,9 @@ const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDash
 const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard'));
 const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
 
+// School Management for Super Admins
+const SchoolManagementView = lazy(() => import('./components/SchoolManagementView'));
+
 // Enrollment components
 const EnrollmentPortal = lazy(() => import('./src/components/enrollment/portal/EnrollmentPortal'));
 const ApplicationForm = lazy(() => import('./src/components/enrollment/forms/ApplicationForm'));
@@ -81,25 +84,70 @@ const Form137CreateWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear }) 
 };
 
 const App: React.FC = () => {
-  console.log('[App] Rendering');
+  const isDev = import.meta.env.MODE === 'development';
+  const devLog = (...args: any[]) => isDev && console.log(...args);
+  const devError = (...args: any[]) => isDev && console.error(...args);
+  const devWarn = (...args: any[]) => isDev && console.warn(...args);
   
-  // TIER 1B: Monitor online/offline status and pending writes
+  // Check if we're on a public route FIRST (before any expensive operations)
+  // NOTE: /admin is NOT in public routes - it's handled specially below
+  // NOTE: / IS public for non-logged-in users (landing page), but becomes dashboard when logged in
+  const publicRoutes = ['/', '/home', '/landing', '/enrollment', '/enrollment/apply', '/enrollment/status', '/register/parent'];
+  const isPublicRoute = publicRoutes.some(route => 
+    window.location.pathname === route || window.location.pathname.startsWith('/enrollment') || window.location.pathname.startsWith('/register')
+  );
+  
+  // Special handling for /admin route
+  const isAdminLoginRoute = window.location.pathname === '/admin';
+  
+  // Initialize session from localStorage BEFORE checking if we should skip Firebase operations
+  const [session, setSession] = useState<{ user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' } | null>(() => {
+    try {
+      const raw = localStorage.getItem('edusync_session');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.user && parsed.type) {
+          devLog('[App] 🔄 Restored session from localStorage:', parsed.user.email);
+          return parsed;
+        }
+      }
+    } catch (e) {
+      devError('[App] ❌ Failed to restore session:', e);
+    }
+    return null;
+  });
+  
+  // Determine if we should skip expensive Firebase operations
+  // Skip ONLY if: (1) no session AND (2) on a public route
+  // This allows logged-in users on / to load data, while anonymous users skip Firebase
+  const shouldSkipFirebase = !session && isPublicRoute;
+  
+  // TIER 1B: Monitor online/offline status and pending writes (only for authenticated routes)
   const { isOnline, wasOffline } = useOnlineStatus();
-  const { pendingCount } = useFirestoreSyncStatus();
+  // CRITICAL: Always call useFirestoreSyncStatus (can't conditionally call hooks!)
+  // Pass skip=true to disable monitoring for public routes without session
+  const { pendingCount } = useFirestoreSyncStatus(shouldSkipFirebase || isAdminLoginRoute);
   
   // Ensure we have a Firebase Auth user for Firestore writes (rules require request.auth != null)
-  const [authReady, setAuthReady] = useState(false);
+  // SKIP for public routes without session AND /admin login page to avoid 30+ second delay
+  const [authReady, setAuthReady] = useState(shouldSkipFirebase || isAdminLoginRoute);
   const [authError, setAuthError] = useState<string | null>(null);
   
   useEffect(() => {
+    // Skip auth for public routes without session and login page - no Firebase needed
+    if (shouldSkipFirebase || isAdminLoginRoute) {
+      setAuthReady(true);
+      return;
+    }
+    
     const unsub = onAuthStateChanged(auth, (user) => {
       if (!user) {
         // Trigger anonymous sign-in; wait for next auth state change before proceeding
         signInAnonymously(auth).catch((e) => {
-          console.error('[Auth] Anonymous sign-in failed:', e);
+          devError('[Auth] Anonymous sign-in failed:', e);
           // If offline, don't show error - just set ready to allow offline mode
           if (!navigator.onLine) {
-            console.log('[Auth] ⚠️ Offline mode - skipping anonymous auth');
+            devLog('[Auth] ⚠️ Offline mode - skipping anonymous auth');
             setAuthReady(true);
           } else {
             setAuthError('Failed to initialize authentication. Please check your internet connection.');
@@ -110,75 +158,57 @@ const App: React.FC = () => {
       }
       setAuthError(null); // Clear any previous errors
       setAuthReady(true);
-      console.log('[Auth] ✅ Auth ready:', user.uid);
+      devLog('[Auth] ✅ Auth ready:', user.uid);
     });
     return () => unsub();
-  }, []);
+  }, [devLog, devError, shouldSkipFirebase, isAdminLoginRoute]);
   
-  // Initialize session from localStorage BEFORE first render
-  const [session, setSession] = useState<{ user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' } | null>(() => {
-    try {
-      const raw = localStorage.getItem('edusync_session');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.user && parsed.type) {
-          console.log('[App] 🔄 Restored session from localStorage:', parsed.user.email);
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error('[App] ❌ Failed to restore session:', e);
-    }
-    return null;
-  });
-  
-  // Remove the duplicate useEffect that loads session
-  // (now handled in useState initializer above)
-
   // Persist session changes
   useEffect(() => {
-    console.log('[App] 📦 Session changed:', session ? `${session.user.email} (${session.type})` : 'null');
+    devLog('[App] 📦 Session changed:', session ? `${session.user.email} (${session.type})` : 'null');
     if (session) {
       localStorage.setItem('edusync_session', JSON.stringify(session));
-      console.log('[App] 💾 Session saved to localStorage');
+      devLog('[App] 💾 Session saved to localStorage');
     } else {
       localStorage.removeItem('edusync_session');
-      console.log('[App] 🗑️ Session removed from localStorage');
+      devLog('[App] 🗑️ Session removed from localStorage');
       // TIER 1B: Clear cached user credentials on logout
       localStorage.removeItem('edusync_cached_user');
-      console.log('[App] 🗑️ Cached user credentials cleared');
+      devLog('[App] 🗑️ Cached user credentials cleared');
     }
-  }, [session]);
+  }, [session, devLog]);
   
   // Add timeout mechanism to prevent infinite loading
   // TIER 1 FIX: Only run timeout when logged in AND loading data
-  // Not when sitting at login screen!
+  // Skip for public routes, login screen, and /admin page
   const [loadTimeout, setLoadTimeout] = useState(false);
   useEffect(() => {
     // Reset timeout when session changes
     setLoadTimeout(false);
     
-    // Only start timeout if user is logged in
-    if (!session) {
-      return; // No timeout needed at login screen
+    // Skip timeout for public routes, login page, or when not logged in
+    if (!session || isPublicRoute || isAdminLoginRoute) {
+      return; // No timeout needed for public pages or login screen
     }
     
     const timer = setTimeout(() => {
-      console.warn('[App] ⏰ Load timeout reached (30 seconds)');
+      devWarn('[App] ⏰ Load timeout reached (30 seconds)');
       setLoadTimeout(true);
     }, 30000); // 30 second timeout for mobile compatibility
     
     return () => clearTimeout(timer);
-  }, [session]); // Re-run when session changes
+  }, [session, devWarn, isPublicRoute, isAdminLoginRoute]); // Re-run when session or route changes
   
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
   // NEW: Firestore subscriptions hook - loads all data automatically with real-time updates
-  // IMPORTANT: Only fetch data when user is logged in (session exists)
-  // Pass empty array when no session to prevent unnecessary subscriptions
+  // IMPORTANT: Only fetch data when user is logged in AND NOT on public/login routes
+  // Skip data loading entirely for public routes without session AND /admin login page
+  // Pass empty array when skipping Firebase to prevent unnecessary subscriptions
   // CRITICAL: Memoize the empty array to prevent infinite render loops
   const emptyCollections = useMemo(() => [], []);
-  const schoolData = useSchoolData(session ? undefined : emptyCollections);
+  const shouldLoadData = session && !shouldSkipFirebase && !isAdminLoginRoute;
+  const schoolData = useSchoolData(shouldLoadData ? undefined : emptyCollections);
   
   const { 
     loading, error, settings, students, teachers, parents,
@@ -207,28 +237,58 @@ const App: React.FC = () => {
   }, [session, students, parentSelectedChildId]);
 
   const handleLogin = useCallback((user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => {
-    console.log('[App] 🔐 Login successful for:', user.email, 'Type:', type);
-    // Clear any old session first to prevent conflicts
-    localStorage.removeItem('edusync_session');
-    // Then set new session
-    setSession({ user, type });
-    console.log('[App] ✅ Session state updated, should redirect to dashboard');
-  }, []);
+    devLog('[App] 🔐 Login successful for:', user.email, 'Type:', type, 'SchoolID:', (user as AuthUser).schoolId);
+    
+    // CRITICAL: Save session to localStorage AND React state
+    const sessionData = { user, type };
+    localStorage.setItem('edusync_session', JSON.stringify(sessionData));
+    devLog('[App] 💾 Session saved to localStorage:', sessionData);
+    
+    // Notify SchoolContext that session was updated
+    window.dispatchEvent(new Event('edusync-session-updated'));
+    
+    // Set React state FIRST (this triggers re-render with session)
+    setSession(sessionData);
+    devLog('[App] ✅ Session state updated');
+    
+    // Navigate away from /admin login page to dashboard using pushState (no page reload!)
+    if (window.location.pathname === '/admin') {
+      devLog('[App] 🔄 Navigating from /admin to dashboard');
+      window.history.pushState({}, '', '/');
+      // Force a re-render by dispatching a popstate event
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  }, [devLog]);
   
-  const handleLogout = useCallback(() => {
-    setSession(null);
-    // Redirect to /admin page after logout
-    window.location.href = '/admin';
-  }, []);
+  const handleLogout = useCallback(async () => {
+    try {
+      // Sign out from Firebase Auth (fast - just clears token)
+      await signOut(auth);
+      
+      // Clear local state immediately (instant UI update)
+      setSession(null);
+      localStorage.removeItem('edusync_session');
+      localStorage.removeItem('edusync_cached_user');
+      
+      // Navigate to login (instant - no page reload)
+      window.history.pushState({}, '', '/admin');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    } catch (error) {
+      // Fallback to page reload if something fails
+      devError('Logout error:', error);
+      setSession(null);
+      window.location.href = '/admin';
+    }
+  }, [devError]);
 
-  console.log('[App] Loading check:', { authReady, loading, studentsCount: students.length, teachersCount: teachers.length, loadTimeout });
+  devLog('[App] Loading check:', { authReady, loading, studentsCount: students.length, teachersCount: teachers.length, loadTimeout });
   
   // TIER 1 OPTIMIZATION: Simplified initialization logic
   // Show login screen as soon as auth is ready
   // Only wait for data loading AFTER user is logged in AND only on initial mount
   // Once we've loaded at least SOME data (1+ collection), allow navigation
   const hasAnyData = students.length > 0 || teachers.length > 0 || learningAreas.length > 0 || 
-                      sections.length > 0 || settings.length > 0;
+                      sections.length > 0 || settings.schoolName !== '';
   const isInitializing = !authReady || (session && loading && !loadTimeout && !hasAnyData);
   
   if (isInitializing) {
@@ -307,26 +367,10 @@ const App: React.FC = () => {
     );
   }
 
-  // Allow public access to enrollment routes, landing page, and parent registration
-  const publicRoutes = ['/', '/home', '/landing', '/enrollment', '/enrollment/apply', '/enrollment/status', '/register/parent'];
-  const isPublicRoute = publicRoutes.some(route => 
-    window.location.pathname === route || window.location.pathname.startsWith('/enrollment') || window.location.pathname.startsWith('/register')
-  );
-
-  if (!session && !isPublicRoute) {
-    console.log('[App] 🔓 No session - rendering LoginScreen (NO pre-loaded data)');
-    return (
-      <LoginScreen 
-        onLogin={handleLogin} 
-        loginType={loginType}
-        setLoginType={setLoginType}
-      />
-    );
-  }
-  
   // Render public routes without authentication (landing page + enrollment)
+  // BUT skip if user is already logged in (session exists)
   if (!session && isPublicRoute) {
-    console.log('[App] 🌐 Public route - rendering without auth');
+    devLog('[App] 🌐 Public route - rendering without auth');
     return (
       <Router>
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900">
@@ -349,6 +393,34 @@ const App: React.FC = () => {
     );
   }
   
+  // Handle /admin login route specially (before checking session)
+  // Show login screen if not logged in
+  if (isAdminLoginRoute && !session) {
+    devLog('[App] 🔓 /admin route - rendering LoginScreen');
+    return (
+      <LoginScreen 
+        onLogin={handleLogin} 
+        loginType={loginType}
+        setLoginType={setLoginType}
+      />
+    );
+  }
+  
+  // If logged in on /admin, let it fall through to main Router
+  // which will handle routing properly (doesn't need special case)
+  
+  // Fallback for any other routes without session
+  if (!session && !isPublicRoute && !isAdminLoginRoute) {
+    devLog('[App] 🔓 No session - rendering LoginScreen (NO pre-loaded data)');
+    return (
+      <LoginScreen 
+        onLogin={handleLogin} 
+        loginType={loginType}
+        setLoginType={setLoginType}
+      />
+    );
+  }
+  
   // At this point, session must exist (either logged in or handled by public routes above)
   if (!session) {
     return <FullScreenLoader message="Initializing..." />;
@@ -360,24 +432,23 @@ const App: React.FC = () => {
     return <FullScreenLoader message="Loading your data..." />;
   }
   
-  console.log('[App] ✅ Session exists - rendering Router/Dashboard');
+  devLog('[App] ✅ Session exists - rendering Router/Dashboard');
   
   const staffSession = session as { user: AuthUser, type: 'staff' };
   const studentSession = session as { user: StudentUser, type: 'student' };
   const parentSession = session as { user: ParentUser, type: 'parent' };
 
   return (
-    <SchoolContextProvider>
-      <Router key={session?.user.id || 'no-session'}>
-        {/* PWA Update Notification */}
-        <UpdateNotification />
-        
-        {/* TIER 1B: Offline status indicator */}
-        <OfflineBanner 
-          isOnline={isOnline} 
-          wasOffline={wasOffline}
-          pendingWrites={pendingCount}
-        />
+    <Router key={session?.user.id || 'no-session'}>
+      {/* PWA Update Notification */}
+      <UpdateNotification />
+      
+      {/* TIER 1B: Offline status indicator */}
+      <OfflineBanner 
+        isOnline={isOnline} 
+        wasOffline={wasOffline}
+        pendingWrites={pendingCount}
+      />
         <div className="flex h-screen bg-slate-100 dark:bg-slate-900">
         <Sidebar 
           session={session} 
@@ -388,6 +459,7 @@ const App: React.FC = () => {
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header
             schoolYear={settings.schoolYear}
+            schoolName={settings.schoolName}
             session={session}
             onLogout={handleLogout}
             students={students}
@@ -398,6 +470,9 @@ const App: React.FC = () => {
           <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-100 dark:bg-slate-900 px-6 pb-6">
             <Suspense fallback={<FullScreenLoader message="Loading page..." />}>
               <Routes>
+                {/* Redirect logged-in users from /admin to dashboard */}
+                <Route path="/admin" element={<Navigate to="/" replace />} />
+                
                 {session.type === 'staff' && (
                     <>
                         <Route path="/" element={<Dashboard schoolData={schoolData} session={staffSession} />} />
@@ -438,6 +513,13 @@ const App: React.FC = () => {
                         <Route path="/announcements" element={<AnnouncementsView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/learning-areas" element={<CourseList schoolData={schoolData} session={staffSession} />} />
                         <Route path="/settings" element={<SettingsView schoolData={schoolData} />} />
+                        
+                        {/* Super Admin Routes - Route always rendered, component handles access control */}
+                        <Route path="/school-management" element={
+                          staffSession.user.role === 'superadmin' 
+                            ? <SchoolManagementView /> 
+                            : <Navigate to="/" replace />
+                        } />
                         
                         {/* Financial Management Routes */}
                         {(staffSession.user.role === 'admin' || staffSession.user.role === 'registrar') && (
@@ -500,7 +582,6 @@ const App: React.FC = () => {
         </div>
       </div>
     </Router>
-    </SchoolContextProvider>
   );
 };
 

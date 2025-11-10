@@ -5,6 +5,8 @@ import { getFirestoreInstance } from '../src/services/firestoreService';
 /**
  * Hook to monitor Firestore sync status and track pending writes
  * 
+ * @param skip - If true, skip monitoring (returns default values)
+ * 
  * Returns:
  * - hasPendingWrites: Whether any documents have pending writes
  * - pendingCount: Number of documents with pending writes
@@ -15,16 +17,22 @@ import { getFirestoreInstance } from '../src/services/firestoreService';
  * - Only monitors frequently-edited collections (grades, attendance, announcements)
  * 
  * Example:
- * const { hasPendingWrites, pendingCount } = useFirestoreSyncStatus();
+ * const { hasPendingWrites, pendingCount } = useFirestoreSyncStatus(shouldSkip);
  * if (hasPendingWrites) {
  *   <Badge>Syncing {pendingCount} changes...</Badge>
  * }
  */
-export const useFirestoreSyncStatus = () => {
+export const useFirestoreSyncStatus = (skip: boolean = false) => {
   const [hasPendingWrites, setHasPendingWrites] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
+    // Skip monitoring if requested (e.g., for public routes or login page)
+    if (skip) {
+      setHasPendingWrites(false);
+      setPendingCount(0);
+      return;
+    }
     const db = getFirestoreInstance();
     
     // Monitor only frequently-edited collections to avoid too many listeners
@@ -86,7 +94,7 @@ export const useFirestoreSyncStatus = () => {
       unsubscribes.forEach(unsub => unsub());
       pendingDocs.clear();
     };
-  }, []);
+  }, [skip]); // Re-run if skip changes
 
   return { hasPendingWrites, pendingCount };
 };
