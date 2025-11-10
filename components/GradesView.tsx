@@ -45,6 +45,14 @@ const getRemarksColor = (remarks: 'Passed' | 'Failed') => {
   return remarks === 'Passed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
 }
 
+// Helper: Convert gradeLevel string to numeric value (for filtering)
+const normalizeGradeLevel = (gradeLevel: string | number): number | null => {
+  if (typeof gradeLevel === 'number') return gradeLevel;
+  if (gradeLevel === 'Kindergarten') return 0;
+  const match = gradeLevel.match(/Grade (\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
 const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): number | undefined => {
   if (grade === undefined) return undefined;
   if (typeof grade === 'number') return grade;
@@ -238,13 +246,16 @@ const StudentGradeDetails: React.FC<{
       return learningAreas;
     }
 
+    // Convert section gradeLevel (string "Grade 7") to numeric (7)
+    const numericGradeLevel = normalizeGradeLevel(studentGradeLevel);
+
     return learningAreas.filter(la => {
       // If learning area has no gradeLevel array, include it (legacy subjects or all-grade subjects)
       if (!la.gradeLevel || !Array.isArray(la.gradeLevel)) {
         return true;
       }
       // Only include if student's grade level is in the learning area's applicable grades
-      return la.gradeLevel.includes(studentGradeLevel);
+      return numericGradeLevel !== null && la.gradeLevel.includes(numericGradeLevel);
     });
   }, [learningAreas, sections, student.sectionId]);
 
@@ -518,18 +529,28 @@ const GradesView: React.FC<GradesViewProps> = ({
   // Helper: Calculate student's overall average and completion rate
   const calculateStudentStats = useCallback((student: Student) => {
     const studentGrades = grades.filter(g => g.studentId === student.id);
-    if (studentGrades.length === 0) return { average: 0, completion: 0, hasIncomplete: true };
+    console.log(`[GradesView] Student ${student.name} (ID: ${student.id}): Found ${studentGrades.length} grades`);
+    if (studentGrades.length === 0) {
+      // DEBUG: Check if there are ANY grades with similar student IDs
+      const allStudentIds = new Set(grades.map(g => g.studentId));
+      console.log(`[GradesView] Total unique student IDs in grades: ${allStudentIds.size}`);
+      if (allStudentIds.size > 0 && allStudentIds.size < 10) {
+        console.log(`[GradesView] Sample student IDs from grades:`, Array.from(allStudentIds).slice(0, 5));
+      }
+      return { average: 0, completion: 0, hasIncomplete: true };
+    }
     
     // Get student's grade level to filter applicable subjects
     const studentSection = sections?.find(s => s.id === student.sectionId);
     const studentGradeLevel = studentSection?.gradeLevel;
     
     // Filter learning areas by student's grade level (same logic as display)
+    const numericGradeLevel = studentGradeLevel ? normalizeGradeLevel(studentGradeLevel) : null;
     const applicableLearningAreas = learningAreas.filter(la => {
       if (!studentGradeLevel || !la.gradeLevel || !Array.isArray(la.gradeLevel)) {
         return true; // Fallback: include all if grade level data is missing
       }
-      return la.gradeLevel.includes(studentGradeLevel);
+      return numericGradeLevel !== null && la.gradeLevel.includes(numericGradeLevel);
     });
     
     let totalGrades = 0;
@@ -559,10 +580,12 @@ const GradesView: React.FC<GradesViewProps> = ({
   const filteredStudents = useMemo(() => {
     let base = (isStudentView || isParentView)
       ? visibleStudents
-      : visibleStudents.filter(student =>
-          student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-          student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-        );
+      : visibleStudents.filter(student => {
+          const name = student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim();
+          const email = student.email || '';
+          return name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+                 email.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+        });
     
     // Filter by section
     const bySection = selectedSectionId === 'all' ? base : base.filter(s => s.sectionId === selectedSectionId);
@@ -590,7 +613,9 @@ const GradesView: React.FC<GradesViewProps> = ({
       let comparison = 0;
       
       if (sortBy === 'name') {
-        comparison = a.name.localeCompare(b.name);
+        const nameA = a.name || `${a.firstName || ''} ${a.lastName || ''}`.trim();
+        const nameB = b.name || `${b.firstName || ''} ${b.lastName || ''}`.trim();
+        comparison = nameA.localeCompare(nameB);
       } else if (sortBy === 'average') {
         const statsA = calculateStudentStats(a);
         const statsB = calculateStudentStats(b);

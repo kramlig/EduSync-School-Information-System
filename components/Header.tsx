@@ -11,6 +11,7 @@ interface HeaderProps {
   onLogout: () => void;
   students: SchoolDataState['students'];
   schoolYear?: string;
+  schoolName?: string;
   parentSelectedChildId?: string | null;
   onParentChildChange?: (id: string) => void;
   unreadCount?: number;
@@ -20,7 +21,8 @@ const Header: React.FC<HeaderProps> = ({
   session, 
   onLogout, 
   students, 
-  schoolYear, 
+  schoolYear,
+  schoolName, 
   parentSelectedChildId, 
   onParentChildChange, 
   unreadCount = 0
@@ -80,6 +82,16 @@ const Header: React.FC<HeaderProps> = ({
       <header className="sticky top-0 z-40 flex-shrink-0 flex items-center justify-between h-16 px-4 md:px-6 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm print:hidden">
         {/* Left: User Info */}
         <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+          {/* School Name (for single-school or when SchoolSwitcher hidden) */}
+          {schoolName && (
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-700/50 rounded-md border border-slate-200 dark:border-slate-600">
+              <svg className="w-4 h-4 text-slate-600 dark:text-slate-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
+              </svg>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200 max-w-xs truncate">{schoolName}</span>
+            </div>
+          )}
+          
           {/* User info */}
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{session.user.name}</span>
@@ -206,11 +218,12 @@ const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-2 pb-3 border-b border-slate-200 dark:border-slate-700">
               <div className="flex-1">
                 <div className="font-semibold text-slate-800 dark:text-white">{session.user.name}</div>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getRoleBadgeClass(userRole)}`}>
                     {userRole.charAt(0).toUpperCase() + userRole.slice(1)}
                   </span>
                   {schoolYear && <span className="text-xs text-slate-500 dark:text-slate-400">SY {schoolYear}</span>}
+                  {schoolName && <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">{schoolName}</span>}
                 </div>
               </div>
             </div>

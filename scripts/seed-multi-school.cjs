@@ -108,15 +108,63 @@ async function main() {
     // Step 1: Create schools collection
     console.log('1️⃣  Creating schools collection...');
     for (const school of schools) {
-      await db.collection('schools').doc(school.id).set({
+      const schoolDoc = {
         id: school.id,
         name: school.name,
         shortName: school.shortName,
+        
+        // Administrative Details
+        region: 'Region XI - Davao Region',
+        division: 'Division of the City of Mati',
+        district: 'Governor Generoso North District',
+        
+        // School Type
+        schoolType: 'public',
+        schoolLevel: school.id.includes('002') ? 'secondary' : 'elementary',
+        
+        // Contact Information
         address: school.address,
+        city: school.address.includes('Manila') ? 'Manila' : school.address.includes('Quezon') ? 'Quezon City' : 'Makati',
+        province: 'Metro Manila',
+        zipCode: '1000',
+        phone: '+63 2 8123 4567',
+        email: `info@${school.shortName.toLowerCase()}.edu.ph`,
+        
+        // Current Academic Year
+        currentSchoolYear: '2024-2025',
+        
+        // Principal
         principalName: school.principalName,
-        schoolYear: '2024-2025',
-        createdAt: new Date().toISOString()
-      }, { merge: true });
+        
+        // Status
+        status: 'active',
+        
+        // Metadata
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        
+        // School-specific settings (optional)
+        settings: {
+          financialConfig: {
+            enabled: school.id === 'school-002', // Only school-002 has financial features
+            currency: 'PHP',
+            requiresPayment: false,
+            allowPartialPayment: true,
+            gracePeriodDays: 30,
+            penaltyRate: 2.0
+          },
+          enrollmentConfig: {
+            requiresApplication: true,
+            requiresDocuments: true,
+            autoApprove: false,
+            allowSelfRegistration: school.id !== 'default',
+            academicYearStart: '2024-06-03',
+            academicYearEnd: '2025-03-28'
+          }
+        }
+      };
+      
+      await db.collection('schools').doc(school.id).set(schoolDoc, { merge: true });
       console.log(`   ✅ Created school: ${school.name} (${school.id})`);
     }
 
@@ -159,7 +207,7 @@ async function main() {
         password: 'TestPass123!',
         displayName: 'Super Admin',
         customClaims: {
-          role: 'admin',
+          role: 'superadmin', // Changed from 'admin' to 'superadmin' for rules
           schoolId: 'default',
           schoolIds: ['default'],
           isSuperAdmin: true
@@ -299,6 +347,7 @@ async function main() {
           id: studentId,
           firstName,
           lastName,
+          name: `${firstName} ${lastName}`, // Full name for display/sorting
           lrn,
           sectionId,
           schoolId: school.id,

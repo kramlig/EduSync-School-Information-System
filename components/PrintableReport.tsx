@@ -7,6 +7,14 @@ import type { Student, Grade, SubGradeRecord } from '../types';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
 import { PrinterIcon } from './icons';
 
+// Helper: Convert gradeLevel string to numeric value (for filtering)
+const normalizeGradeLevel = (gradeLevel: string | number): number | null => {
+  if (typeof gradeLevel === 'number') return gradeLevel;
+  if (gradeLevel === 'Kindergarten') return 0;
+  const match = gradeLevel.match(/Grade (\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
 interface PrintableReportProps {
   student: Student;
   schoolData: SchoolDataHook;
@@ -122,18 +130,19 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, 
   // Filter learning areas by student's grade level, or show only subjects where student has grades
   const studentLearningAreas = useMemo(() => {
     const gradeLevel = section?.gradeLevel;
+    const numericGradeLevel = gradeLevel ? normalizeGradeLevel(gradeLevel) : null;
     
     // Get learning area IDs where student has grades
     const studentGradeIds = new Set(Array.from(studentGrades.keys()));
     
     // Filter by grade level if available, otherwise show all learning areas where student has grades
-    const filtered = gradeLevel 
+    const filtered = numericGradeLevel !== null
       ? learningAreas.filter(la => {
           // Handle both single grade level and array of grade levels
           if (Array.isArray(la.gradeLevel)) {
-            return la.gradeLevel.includes(gradeLevel as number);
+            return la.gradeLevel.includes(numericGradeLevel);
           }
-          return la.gradeLevel === gradeLevel;
+          return la.gradeLevel === numericGradeLevel;
         })
       : learningAreas.filter(la => studentGradeIds.has(la.id));
     

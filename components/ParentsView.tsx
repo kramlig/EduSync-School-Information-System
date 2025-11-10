@@ -137,10 +137,11 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData }) => {
 
   const filteredUnassignedStudents = useMemo(() => {
     if (!debouncedChildSearchQuery || !parentToManage) return [];
-    return students.filter(s => 
-        !parentToManage.studentIds.includes(s.id) &&
-        s.name.toLowerCase().includes(debouncedChildSearchQuery.toLowerCase())
-    );
+    return students.filter(s => {
+        const name = s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim();
+        return !parentToManage.studentIds.includes(s.id) &&
+               name.toLowerCase().includes(debouncedChildSearchQuery.toLowerCase());
+    });
   }, [students, parentToManage, debouncedChildSearchQuery]);
   
   const childrenOfParent = useMemo(() => {
@@ -194,7 +195,7 @@ const ParentsView: React.FC<ParentsViewProps> = ({ schoolData }) => {
                     <p className="text-slate-500 dark:text-slate-400 text-xs">{parent.email}</p>
                 </td>
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
-                    <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{parent.studentIds.length}</p>
+                    <p className="text-slate-600 dark:text-slate-300 whitespace-nowrap">{parent.studentIds?.length || 0}</p>
                 </td>
                 <td className="px-5 py-4 border-b border-slate-200 dark:border-slate-700 text-sm">
                   <div className="flex items-center space-x-3">

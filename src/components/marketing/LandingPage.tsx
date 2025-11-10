@@ -810,12 +810,12 @@ const LandingPage: React.FC = () => {
                 </button>
               </li>
               <li>
-                <button 
-                  onClick={() => window.open('https://edusync.ph/admin', '_blank')} 
-                  className="hover:text-white transition-colors text-left"
+                <Link 
+                  to="/admin" 
+                  className="hover:text-white transition-colors text-left block"
                 >
                   Login
-                </button>
+                </Link>
               </li>
               <li>
                 <button 

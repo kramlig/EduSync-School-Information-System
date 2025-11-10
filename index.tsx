@@ -6,6 +6,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { SchoolContextProvider } from './src/contexts/SchoolContext';
 
 // Global error handler for uncaught errors
 window.addEventListener('error', (event) => {
@@ -104,7 +105,9 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <SchoolContextProvider>
+        <App />
+      </SchoolContextProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

@@ -124,7 +124,7 @@ export interface Teacher {
   email: string;
   contactNumber?: string;
   assignments?: TeacherAssignment[];
-  role: 'admin' | 'teacher' | 'principal' | 'registrar';
+  role: 'admin' | 'teacher' | 'principal' | 'registrar' | 'superadmin';
   password?: string;
 }
 

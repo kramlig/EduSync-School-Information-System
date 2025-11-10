@@ -39,14 +39,14 @@ exports.onAbsenceCreated = functions.firestore
 
       console.log(`🚨 Absence detected: ${recordId}`);
 
-      const { studentId, date, reason } = after;
+      const { studentId, date, reason, schoolId } = after;
 
-      if (!studentId || !date) {
-        console.error('Missing required fields: studentId or date');
+      if (!studentId || !date || !schoolId) {
+        console.error('Missing required fields: studentId, date, or schoolId');
         return null;
       }
 
-      // Get student information
+      // Get student information (verify belongs to same school)
       const studentDoc = await db.collection('students').doc(studentId).get();
       if (!studentDoc.exists) {
         console.error(`Student not found: ${studentId}`);
@@ -54,9 +54,15 @@ exports.onAbsenceCreated = functions.firestore
       }
 
       const student = studentDoc.data();
+      
+      if (student.schoolId !== schoolId) {
+        console.error(`Student ${studentId} belongs to different school than attendance record`);
+        return null;
+      }
+      
       const studentName = `${student.firstName} ${student.lastName}`;
 
-      // Get parent information
+      // Get parent information (within same school)
       if (!student.parentId) {
         console.log(`No parent linked to student: ${studentId}`);
         return null;
@@ -69,6 +75,11 @@ exports.onAbsenceCreated = functions.firestore
       }
 
       const parent = parentDoc.data();
+      
+      if (parent.schoolId !== schoolId) {
+        console.error(`Parent ${student.parentId} belongs to different school`);
+        return null;
+      }
 
       // Check notification preferences
       const prefs = parent.notificationPreferences || {};
@@ -77,10 +88,10 @@ exports.onAbsenceCreated = functions.firestore
         return null;
       }
 
-      // Get school settings for phone number
-      const settingsDoc = await db.collection('settings').doc('school').get();
+      // Get school settings (use schoolId-based document)
+      const settingsDoc = await db.collection('settings').doc(schoolId).get();
       const schoolSettings = settingsDoc.exists ? settingsDoc.data() : {};
-      const schoolName = schoolSettings.schoolName || 'Your School';
+      const schoolName = schoolSettings.schoolName || schoolSettings.name || 'Your School';
       const schoolPhone = schoolSettings.phone || '(XXX) XXX-XXXX';
 
       console.log(`Sending absence email to: ${parent.email}`);
@@ -109,6 +120,7 @@ exports.onAbsenceCreated = functions.firestore
       const notificationRef = await db.collection('notifications').add({
         type: 'absence_alert',
         channel: 'email',
+        schoolId: schoolId,
         studentId: studentId,
         studentName: studentName,
         parentEmail: parent.email,
@@ -138,6 +150,7 @@ exports.onAbsenceCreated = functions.firestore
         await db.collection('notifications').add({
           type: 'absence_alert',
           channel: 'email',
+          schoolId: schoolId,
           status: 'failed',
           error: error.message,
           recordId: recordId,
