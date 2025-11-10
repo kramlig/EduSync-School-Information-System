@@ -13,6 +13,14 @@ import BehaviorDistributionChart from './BehaviorDistributionChart';
 import CorrelationScatterPlot from './CorrelationScatterPlot';
 import PrintableReport from './PrintableReport';
 
+// Helper: Convert gradeLevel string to numeric value (for filtering)
+const normalizeGradeLevel = (gradeLevel: string | number): number | null => {
+  if (typeof gradeLevel === 'number') return gradeLevel;
+  if (gradeLevel === 'Kindergarten') return 0;
+  const match = gradeLevel.match(/Grade (\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
 interface UnifiedAssessmentViewProps {
   schoolData: SchoolDataHook;
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
@@ -612,11 +620,13 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
     // Apply search filter (from lifted state)
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      visibleStudents = visibleStudents.filter(student =>
-        student.name.toLowerCase().includes(query) ||
-        student.email.toLowerCase().includes(query) ||
-        student.lrn?.toLowerCase().includes(query)
-      );
+      visibleStudents = visibleStudents.filter(student => {
+        const name = student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim();
+        const email = student.email || '';
+        return name.toLowerCase().includes(query) ||
+               email.toLowerCase().includes(query) ||
+               student.lrn?.toLowerCase().includes(query);
+      });
     }
 
     // Academic Performance Metrics
@@ -648,13 +658,14 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       // Get student's grade level to calculate completion accurately
       const studentSection = sections?.find(s => s.id === student.sectionId);
       const studentGradeLevel = studentSection?.gradeLevel;
+      const numericGradeLevel = studentGradeLevel ? normalizeGradeLevel(studentGradeLevel) : null;
       
       // Filter learning areas by student's grade level (and teacher's assignments if applicable)
       const applicableLearningAreas = availableLearningAreas?.filter(la => {
         if (!studentGradeLevel || !la.gradeLevel || !Array.isArray(la.gradeLevel)) {
           return true; // Fallback: include all if grade level data is missing
         }
-        return la.gradeLevel.includes(studentGradeLevel);
+        return numericGradeLevel !== null && la.gradeLevel.includes(numericGradeLevel);
       }) || [];
       
       const totalPossibleGrades = applicableLearningAreas.length * 4;

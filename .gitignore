@@ -65,5 +65,37 @@ dev-dist/sw.js
 *.bak
 
 # Test artifacts
-test-results/tests-*/
+test-results/
+playwright-report/
+*.png
+*.webm
+auth-export.json
+users-export.json
+test-*.html
+test-*.json
+test-*.jsx
+*-export.json
+
+# Debug/temporary files
+CRITICAL_*.md
+CLEAR-CACHE*.md
+docs/COMPONENT_QUERY_AUDIT*.md
+docs/REALITY_CHECK*.md
+docs/SESSION_SUMMARY*.md
+docs/troubleshooting/
+after-*.png
+before-*.png
+final-*.png
+login-*.png
+
+# Jest config (if not using)
+jest.config.cjs
+
+# Test scripts (keep seed scripts)
+scripts/check-*.cjs
+scripts/test-*.cjs
+scripts/emergency-*.cjs
+scripts/clear-*.cjs
+scripts/comprehensive-security-test.cjs
+
 extension-config.env

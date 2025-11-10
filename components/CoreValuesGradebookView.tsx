@@ -3,6 +3,14 @@ import type { CoreValueGrade, CoreValueMarking, AuthUser, StudentUser } from '..
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { useDebounce } from '../hooks/useDebounce';
 
+// Helper: Convert gradeLevel string to numeric value
+const normalizeGradeLevel = (gradeLevel: string | number): number => {
+  if (typeof gradeLevel === 'number') return gradeLevel;
+  if (gradeLevel === 'Kindergarten') return 0;
+  const match = gradeLevel.match(/Grade (\d+)/);
+  return match ? parseInt(match[1], 10) : 0;
+};
+
 const MARKING_OPTIONS: CoreValueMarking[] = ['AO', 'SO', 'RO', 'NO'];
 
 const getMarkingColor = (marking: CoreValueMarking | undefined) => {
@@ -121,10 +129,12 @@ const CoreValuesGradebookView: React.FC<{
             ? students 
             : students.filter(s => s.sectionId === selectedSectionId);
         
-        return base.filter(student =>
-            student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-            (student.email && student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase()))
-        );
+        return base.filter(student => {
+            const name = student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim();
+            const email = student.email || '';
+            return name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+                   email.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+        });
     }, [students, selectedSectionId, debouncedSearchQuery]);
 
     // Group sections by grade level for better organization
@@ -136,9 +146,10 @@ const CoreValuesGradebookView: React.FC<{
         };
         
         visibleSections.forEach(section => {
-            if (section.gradeLevel <= 6) {
+            const numericGradeLevel = normalizeGradeLevel(section.gradeLevel);
+            if (numericGradeLevel <= 6) {
                 groups.elementary.push(section);
-            } else if (section.gradeLevel <= 10) {
+            } else if (numericGradeLevel <= 10) {
                 groups.juniorHigh.push(section);
             } else {
                 groups.seniorHigh.push(section);
@@ -146,9 +157,9 @@ const CoreValuesGradebookView: React.FC<{
         });
         
         // Sort each group by grade level
-        groups.elementary.sort((a, b) => a.gradeLevel - b.gradeLevel);
-        groups.juniorHigh.sort((a, b) => a.gradeLevel - b.gradeLevel);
-        groups.seniorHigh.sort((a, b) => a.gradeLevel - b.gradeLevel);
+        groups.elementary.sort((a, b) => normalizeGradeLevel(a.gradeLevel) - normalizeGradeLevel(b.gradeLevel));
+        groups.juniorHigh.sort((a, b) => normalizeGradeLevel(a.gradeLevel) - normalizeGradeLevel(b.gradeLevel));
+        groups.seniorHigh.sort((a, b) => normalizeGradeLevel(a.gradeLevel) - normalizeGradeLevel(b.gradeLevel));
         
         return groups;
     }, [visibleSections]);

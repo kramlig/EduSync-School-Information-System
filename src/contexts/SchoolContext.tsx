@@ -109,6 +109,7 @@ interface SchoolContextProviderProps {
  * 4. Makes this data available to all child components
  */
 export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ children }) => {
+  console.log('[SchoolContext] 🏗️ SchoolContextProvider mounting...');
   const [schoolId, setSchoolId] = useState<string | null>(null);
   const [schoolIds, setSchoolIds] = useState<string[]>([]);
   const [role, setRole] = useState<string | null>(null);
@@ -116,7 +117,96 @@ export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ ch
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    // Subscribe to Firebase Auth state changes
+    // CRITICAL FIX: Instead of using Firebase Auth custom claims (which don't exist for anonymous auth),
+    // read schoolId from the session stored in localStorage by the login flow.
+    // This ensures multi-tenant isolation works with the current authentication architecture.
+    
+    const loadSchoolIdFromSession = () => {
+      try {
+        const sessionStr = localStorage.getItem('edusync_session');
+        if (!sessionStr) {
+          console.log('[SchoolContext] No session found - clearing context');
+          setSchoolId(null);
+          setSchoolIds([]);
+          setRole(null);
+          setIsSuperAdmin(false);
+          setLoading(false);
+          return;
+        }
+        
+        const session = JSON.parse(sessionStr);
+        const user = session.user;
+        
+        if (!user) {
+          console.log('[SchoolContext] Invalid session - clearing context');
+          setSchoolId(null);
+          setSchoolIds([]);
+          setRole(null);
+          setIsSuperAdmin(false);
+          setLoading(false);
+          return;
+        }
+        
+        // Extract school data from the user object (comes from Firestore teacher/student/parent document)
+        const userSchoolId = user.schoolId || null;
+        const userSchoolIds = user.schoolIds || (userSchoolId ? [userSchoolId] : []);
+        const userRole = user.role || null;
+        const userIsSuperAdmin = user.isSuperAdmin || false;
+        
+        console.log('[SchoolContext] School context loaded from session:', {
+          role: userRole,
+          schoolId: userSchoolId,
+          schoolIds: userSchoolIds,
+          isSuperAdmin: userIsSuperAdmin,
+        });
+        
+        setRole(userRole);
+        setSchoolIds(userSchoolIds);
+        setIsSuperAdmin(userIsSuperAdmin);
+        
+        // Set active schoolId
+        // Priority: user.schoolId > first schoolIds > null
+        if (userSchoolId) {
+          setSchoolId(userSchoolId);
+        } else if (userSchoolIds.length > 0) {
+          setSchoolId(userSchoolIds[0]);
+        } else {
+          setSchoolId(null);
+          console.warn('[SchoolContext] User has no school assignment!', user.email);
+        }
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('[SchoolContext] Error loading session:', error);
+        setSchoolId(null);
+        setSchoolIds([]);
+        setRole(null);
+        setIsSuperAdmin(false);
+        setLoading(false);
+      }
+    };
+    
+    // Load immediately on mount
+    loadSchoolIdFromSession();
+    
+    // Listen for storage changes (when login saves session to localStorage)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'edusync_session' && e.newValue) {
+        console.log('[SchoolContext] Session storage changed - reloading context');
+        loadSchoolIdFromSession();
+      }
+    };
+    
+    // For same-window changes (storage event doesn't fire in same window)
+    const handleCustomStorageChange = () => {
+      console.log('[SchoolContext] Custom storage event - reloading context');
+      loadSchoolIdFromSession();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('edusync-session-updated', handleCustomStorageChange);
+    
+    // Also subscribe to Firebase Auth state changes for logout detection
     const unsubscribe = auth.onAuthStateChanged(async (user: User | null) => {
       if (!user) {
         // User logged out - clear all school context
@@ -128,54 +218,16 @@ export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ ch
         setLoading(false);
         return;
       }
-
-      try {
-        // Fetch user's custom claims (contains schoolId, role, etc.)
-        const idTokenResult = await user.getIdTokenResult(true); // Force refresh
-        const claims = idTokenResult.claims;
-
-        console.log('[SchoolContext] Custom claims loaded:', {
-          role: claims.role,
-          schoolId: claims.schoolId,
-          schoolIds: claims.schoolIds,
-          isSuperAdmin: claims.isSuperAdmin,
-        });
-
-        // Extract school data from custom claims
-        const userRole = (claims.role as string) || null;
-        const userSchoolId = (claims.schoolId as string) || null;
-        const userSchoolIds = (claims.schoolIds as string[]) || [];
-        const userIsSuperAdmin = (claims.isSuperAdmin as boolean) || false;
-
-        // Set context state
-        setRole(userRole);
-        setIsSuperAdmin(userIsSuperAdmin);
-        setSchoolIds(userSchoolIds);
-        
-        // Set active schoolId
-        // Priority: claims.schoolId > first schoolIds > null
-        if (userSchoolId) {
-          setSchoolId(userSchoolId);
-        } else if (userSchoolIds.length > 0) {
-          setSchoolId(userSchoolIds[0]);
-        } else {
-          setSchoolId(null);
-          console.warn('[SchoolContext] User has no school assignment!', user.email);
-        }
-
-        setLoading(false);
-      } catch (error) {
-        console.error('[SchoolContext] Failed to load custom claims:', error);
-        // On error, clear context but don't block app
-        setSchoolId(null);
-        setSchoolIds([]);
-        setRole(null);
-        setIsSuperAdmin(false);
-        setLoading(false);
-      }
+      
+      // User logged in - reload from session
+      setTimeout(() => loadSchoolIdFromSession(), 100); // Small delay to ensure localStorage is written
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('edusync-session-updated', handleCustomStorageChange);
+    };
   }, []);
 
   /**

@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from '../App.tsx';
 import ErrorBoundary from '../components/ErrorBoundary';
+import { SchoolContextProvider } from './contexts/SchoolContext';
 import './index.css';
 
 // Register the service worker for caching and offline support
@@ -43,7 +44,9 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <SchoolContextProvider>
+        <App />
+      </SchoolContextProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

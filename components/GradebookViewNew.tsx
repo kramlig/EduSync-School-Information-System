@@ -2,6 +2,14 @@ import React, { useState, useMemo, useCallback } from 'react';
 import type { Student, Grade, LearningArea, AuthUser, StudentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 
+// Helper: Convert gradeLevel string to numeric value (for filtering)
+const normalizeGradeLevel = (gradeLevel: string | number): number | null => {
+  if (typeof gradeLevel === 'number') return gradeLevel;
+  if (gradeLevel === 'Kindergarten') return 0;
+  const match = gradeLevel.match(/Grade (\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
 /**
  * CLEAN, SIMPLE GRADEBOOK - PRODUCTION READY
  * 
@@ -41,23 +49,31 @@ const GradebookViewNew: React.FC<GradebookViewProps> = ({ schoolData, session })
     if (!selectedSection) return [];
     return students
       .filter(s => s.sectionId === selectedSection)
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        const nameA = a.name || `${a.firstName || ''} ${a.lastName || ''}`.trim();
+        const nameB = b.name || `${b.firstName || ''} ${b.lastName || ''}`.trim();
+        return nameA.localeCompare(nameB);
+      });
   }, [students, selectedSection]);
 
   // Filter by search
   const filteredStudents = useMemo(() => {
     if (!searchTerm) return sectionStudents;
     const term = searchTerm.toLowerCase();
-    return sectionStudents.filter(s => 
-      s.name.toLowerCase().includes(term) ||
-      s.id.toLowerCase().includes(term)
-    );
+    return sectionStudents.filter(s => {
+      const name = s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim();
+      return name.toLowerCase().includes(term) ||
+             s.id.toLowerCase().includes(term);
+    });
   }, [sectionStudents, searchTerm]);
 
   // Get section's grade level for K-12 filtering
   const sectionGradeLevel = useMemo(() => {
     const section = sections.find(s => s.id === selectedSection);
-    return section?.gradeLevel || 1;
+    const rawGradeLevel = section?.gradeLevel;
+    if (!rawGradeLevel) return 1;
+    // Convert "Grade 7" to 7, or return number as-is
+    return normalizeGradeLevel(rawGradeLevel) || 1;
   }, [sections, selectedSection]);
 
   // Filter learning areas by K-12 curriculum
@@ -66,7 +82,7 @@ const GradebookViewNew: React.FC<GradebookViewProps> = ({ schoolData, session })
       .filter(la => {
         // If no gradeLevel specified, show for all grades
         if (!la.gradeLevel || la.gradeLevel.length === 0) return true;
-        // Otherwise, check if section's grade is in the allowed list
+        // Otherwise, check if section's grade is in the allowed list (both are now numeric)
         return la.gradeLevel.includes(sectionGradeLevel);
       })
       .sort((a, b) => (a.order || 0) - (b.order || 0));

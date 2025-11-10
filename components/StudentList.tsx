@@ -358,7 +358,10 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     // Apply sorting
     const sorted = [...filtered].sort((a, b) => {
       if (sortBy === 'name') {
-        return a.name.localeCompare(b.name);
+        // Handle missing name field gracefully (fallback to firstName + lastName)
+        const nameA = a.name || `${a.firstName || ''} ${a.lastName || ''}`.trim();
+        const nameB = b.name || `${b.firstName || ''} ${b.lastName || ''}`.trim();
+        return nameA.localeCompare(nameB);
       } else if (sortBy === 'lrn') {
         return (a.lrn || '').localeCompare(b.lrn || '');
       } else if (sortBy === 'grade') {

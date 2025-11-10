@@ -18,8 +18,14 @@ exports.onAnnouncementCreated = functions.firestore
   .onCreate(async (snap, context) => {
     const announcement = snap.data();
     const announcementId = context.params.announcementId;
+    const schoolId = announcement.schoolId;
     
-    console.log(`Processing announcement ${announcementId}:`, announcement.title);
+    console.log(`Processing announcement ${announcementId} for school ${schoolId}:`, announcement.title);
+    
+    if (!schoolId) {
+      console.error(`Announcement ${announcementId} missing schoolId, skipping`);
+      return null;
+    }
     
     // Filter by target audience
     if (!['parents', 'all'].includes(announcement.target)) {
@@ -28,9 +34,10 @@ exports.onAnnouncementCreated = functions.firestore
     }
     
     try {
-      // Get all parents with notification preferences enabled
+      // Get all parents with notification preferences enabled (within same school)
       const parentsSnap = await admin.firestore()
         .collection('parents')
+        .where('schoolId', '==', schoolId)
         .where('notificationPreferences.announcementAlerts', '==', true)
         .get();
       
@@ -46,10 +53,10 @@ exports.onAnnouncementCreated = functions.firestore
       
       console.log(`Found ${parents.length} parents with announcement alerts enabled`);
       
-      // Get school settings
+      // Get school settings (use schoolId-based document)
       const settingsDoc = await admin.firestore()
         .collection('settings')
-        .doc('school')
+        .doc(schoolId)
         .get();
       
       const schoolName = settingsDoc.exists ? 
@@ -120,6 +127,7 @@ exports.onAnnouncementCreated = functions.firestore
           admin.firestore().collection('notifications').add({
             type: 'announcement_alert',
             channel: 'sms',
+            schoolId: schoolId,
             recipientId: recipient.parentId,
             recipientName: recipient.parentName,
             recipientPhone: recipient.phone,
@@ -147,6 +155,7 @@ exports.onAnnouncementCreated = functions.firestore
           admin.firestore().collection('notifications').add({
             type: 'announcement_alert',
             channel: 'email',
+            schoolId: schoolId,
             recipientId: recipient.parentId,
             recipientName: recipient.parentName,
             recipientEmail: recipient.to,
@@ -197,6 +206,7 @@ exports.onAnnouncementCreated = functions.firestore
         .collection('notificationErrors')
         .add({
           type: 'announcement_alert',
+          schoolId: schoolId,
           announcementId: announcementId,
           error: error.message,
           stack: error.stack,
@@ -241,11 +251,19 @@ exports.testAnnouncementNotification = functions.https.onCall(async (data, conte
     }
     
     const announcement = announcementDoc.data();
+    const schoolId = announcement.schoolId;
     
-    // Get school settings
+    if (!schoolId) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Announcement has no schoolId'
+      );
+    }
+    
+    // Get school settings (use schoolId-based document)
     const settingsDoc = await admin.firestore()
       .collection('settings')
-      .doc('school')
+      .doc(schoolId)
       .get();
     
     const schoolName = settingsDoc.exists ? 

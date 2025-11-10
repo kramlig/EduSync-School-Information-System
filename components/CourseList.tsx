@@ -318,7 +318,7 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, session
       let comparison = 0;
       
       if (sortBy === 'name') {
-        comparison = a.name.localeCompare(b.name);
+        comparison = (a.name || '').localeCompare(b.name || '');
       } else if (sortBy === 'credits') {
         comparison = a.credits - b.credits;
       } else if (sortBy === 'gradeLevel') {
@@ -336,7 +336,7 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, session
     return learningAreas.filter(area => {
       // Search filter
       const matchesSearch = !searchQuery || 
-        area.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (area.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         area.kToTwelveCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         area.department?.toLowerCase().includes(searchQuery.toLowerCase());
       

@@ -46,17 +46,19 @@ import type {
  * Format: OR-YYYY-NNNNN (e.g., OR-2025-00001)
  * 
  * REQUIRES ONLINE: Prevents duplicate receipt numbers
+ * MULTI-TENANT: Generates school-specific receipt numbers
  */
-export async function generateReceiptNumber(year?: number): Promise<string> {
+export async function generateReceiptNumber(schoolId: string, year?: number): Promise<string> {
   requireOnlineConnection('Receipt generation');
   
   const db = getFirestoreInstance();
   const currentYear = year || new Date().getFullYear();
   
-  // Query for the last receipt of the year
+  // MULTI-TENANT: Query for the last receipt of the year for this school
   const receiptsRef = collection(db, 'receipts');
   const q = query(
     receiptsRef,
+    where('schoolId', '==', schoolId),
     where('receiptNumber', '>=', `OR-${currentYear}-00000`),
     where('receiptNumber', '<=', `OR-${currentYear}-99999`),
     orderBy('receiptNumber', 'desc'),
@@ -66,7 +68,7 @@ export async function generateReceiptNumber(year?: number): Promise<string> {
   const snapshot = await getDocs(q);
   
   if (snapshot.empty) {
-    // First receipt of the year
+    // First receipt of the year for this school
     return `OR-${currentYear}-00001`;
   }
   
@@ -379,8 +381,10 @@ export async function initializeStudentLedger(
   const ledgerId = `${student.id}_${schoolYear}`;
   const ledgerRef = doc(db, 'studentLedgers', ledgerId);
   
+  // MULTI-TENANT: Include schoolId in ledger
   const newLedger: Omit<StudentLedger, 'id'> = {
     studentId: student.id,
+    schoolId: student.schoolId,
     schoolYear,
     gradeLevel,
     feeStructureId,
@@ -408,8 +412,10 @@ export async function initializeStudentLedger(
  * Record a payment and generate receipt
  * 
  * REQUIRES ONLINE: Prevents duplicate transactions and ensures receipt sequence integrity
+ * MULTI-TENANT: Requires schoolId for school-specific receipt numbering
  */
 export async function recordPayment(
+  schoolId: string,
   studentId: string,
   schoolYear: string,
   paymentData: Omit<Payment, 'id' | 'receiptNumber'>,
@@ -427,8 +433,8 @@ export async function recordPayment(
     throw new Error('Student ledger not found. Initialize ledger first.');
   }
   
-  // Generate receipt number
-  const receiptNumber = await generateReceiptNumber();
+  // MULTI-TENANT: Generate school-specific receipt number
+  const receiptNumber = await generateReceiptNumber(schoolId);
   
   // Create payment record
   const payment: Payment = {

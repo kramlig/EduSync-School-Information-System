@@ -92,12 +92,58 @@ async function run() {
   console.log(`[Seeder] Creating school document: ${SCHOOL_ID}`);
   const schoolData = {
     id: SCHOOL_ID,
-    name: SCHOOL_ID === 'default' ? 'Default School' : `School ${SCHOOL_ID}`,
-    shortName: SCHOOL_ID === 'default' ? 'Default' : SCHOOL_ID.toUpperCase(),
+    name: SCHOOL_ID === 'default' ? 'ENRIQUE URENCIA ELEMENTARY SCHOOL' : `School ${SCHOOL_ID}`,
+    shortName: SCHOOL_ID === 'default' ? 'EUES' : SCHOOL_ID.toUpperCase(),
+    
+    // Administrative Details
+    region: 'Region XI - Davao Region',
+    division: 'Division of the City of Mati',
+    district: 'Governor Generoso North District',
+    
+    // School Type
+    schoolType: 'public',
+    schoolLevel: 'elementary',
+    
+    // Contact Information
     address: '123 Education Street, City, Province',
+    city: 'Mati City',
+    province: 'Davao Oriental',
+    zipCode: '8200',
+    phone: '+63 87 123 4567',
+    email: `info@${SCHOOL_ID}.edu.ph`,
+    
+    // Current Academic Year
+    currentSchoolYear: '2024-2025',
+    
+    // Principal
     principalName: 'Principal Administrator',
-    schoolYear: '2024-2025',
+    
+    // Status
+    status: 'active',
+    
+    // Metadata
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    
+    // School-specific settings
+    settings: {
+      financialConfig: {
+        enabled: false,
+        currency: 'PHP',
+        requiresPayment: false,
+        allowPartialPayment: true,
+        gracePeriodDays: 30,
+        penaltyRate: 2.0
+      },
+      enrollmentConfig: {
+        requiresApplication: true,
+        requiresDocuments: true,
+        autoApprove: false,
+        allowSelfRegistration: SCHOOL_ID !== 'default',
+        academicYearStart: '2024-06-03',
+        academicYearEnd: '2025-03-28'
+      }
+    }
   };
   await db.collection('schools').doc(SCHOOL_ID).set(schoolData, { merge: true });
   console.log(`[Seeder] School document created: ${SCHOOL_ID}`);

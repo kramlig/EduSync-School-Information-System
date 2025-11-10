@@ -2,7 +2,8 @@ import DepEdLogo from './DepEdLogo';
 import React, { useState } from 'react';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
 import { getFirestoreInstance } from '../src/services/firestoreService';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where } from 'firebase/firestore';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 
 interface LoginScreenProps {
   onLogin: (user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => void;
@@ -29,62 +30,37 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
   // Show quick login button (dev only, hide in UAT and production)
   const enableQuickLogin = isDevelopment;
 
-  console.log(`[LoginScreen] 🖥️ RENDERING LoginScreen component - type: "${loginType}"`);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
     try {
-      console.log('[LoginScreen] 🔍 Looking up user:', email, 'in', loginType, 'collection');
+      // Step 1: Authenticate with Firebase Auth (for security rules)
+      const auth = getAuth();
+      await signInWithEmailAndPassword(auth, email.toLowerCase(), password);
       
-      // Determine which collection to query
+      // Step 2: Query Firestore for user data
       const collectionName = loginType === 'staff' ? 'teachers' : 
                             loginType === 'student' ? 'students' : 'parents';
       
-      console.log('[LoginScreen] 📂 Collection name:', collectionName);
-      console.log('[LoginScreen] 📧 Searching for email:', email.toLowerCase());
-      
-      // Query Firestore for user
       const db = getFirestoreInstance();
-      console.log('[LoginScreen] 🗄️ Firestore instance obtained');
-      
       const usersCol = collection(db, collectionName);
       const q = query(usersCol, where('email', '==', email.toLowerCase()));
       
-      console.log('[LoginScreen] 🔎 Executing query...');
+      const { getDocs } = await import('firebase/firestore');
       const snapshot = await getDocs(q);
-      console.log('[LoginScreen] 📊 Query result - docs found:', snapshot.size);
       
       if (snapshot.empty) {
-        console.error('[LoginScreen] ❌ No documents found in query result');
-        
-        // DEBUG: List ALL teachers to see what's actually in the collection
-        console.log('[LoginScreen] 🔍 DEBUG: Listing all teachers in collection...');
-        try {
-          const allTeachers = await getDocs(collection(db, collectionName));
-          console.log(`[LoginScreen] 📋 Total ${collectionName} in database: ${allTeachers.size}`);
-          allTeachers.forEach(doc => {
-            const data = doc.data();
-            console.log(`   - ${doc.id}: ${data.firstName} ${data.lastName} (${data.email})`);
-          });
-        } catch (debugErr) {
-          console.error('[LoginScreen] ❌ DEBUG: Could not list teachers:', debugErr);
-        }
-        
         setError(`No ${loginType} account found with that email`);
         setIsLoading(false);
         return;
       }
       
-      console.log('[LoginScreen] ✅ Found user document');
-      
       const userDoc = snapshot.docs[0];
       const userData = { id: userDoc.id, ...userDoc.data() } as AuthUser | StudentUser | ParentUser;
       
-      // ✅ TIER 1B: Cache user for offline login
-      console.log('[LoginScreen] 💾 Caching user credentials for offline use');
+      // Cache user for offline login
       localStorage.setItem('edusync_cached_user', JSON.stringify({
         email: email.toLowerCase(),
         type: loginType,
@@ -92,17 +68,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
         cachedAt: Date.now()
       }));
       
-      // Note: In production, use proper Firebase Auth with password verification
-      // For now, in debug mode we accept any password
-      console.log('[LoginScreen] ✅ User found, logging in');
       onLogin(userData, loginType);
     } catch (err) {
-      console.error('[LoginScreen] ❌ Login error:', err);
+      if (isDevelopment) {
+        console.error('[LoginScreen] Login error:', err);
+      }
       
-      // ✅ TIER 1B: Offline fallback with first-login detection
+      // Offline fallback with first-login detection
       if (!navigator.onLine) {
-        console.log('[LoginScreen] 🔴 Offline detected, checking for cached credentials...');
-        
         const cachedStr = localStorage.getItem('edusync_cached_user');
         
         if (cachedStr) {
@@ -113,20 +86,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
             const cacheExpired = cacheAge > (CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
             
             if (cacheExpired) {
-              console.log('[LoginScreen] ⚠️ Cached credentials expired');
               setError('Cached credentials expired. Please connect to internet to login.');
               setIsLoading(false);
               return;
             }
             
-            // Check if cached user matches current login attempt
             if (cached.email === email.toLowerCase() && cached.type === loginType) {
-              console.log('[LoginScreen] ✅ Using cached credentials (offline mode)');
               onLogin(cached.userData, loginType);
               setIsLoading(false);
               return;
             } else {
-              console.log('[LoginScreen] ⚠️ Cached user mismatch');
               setError(
                 `No cached credentials for ${email} as ${loginType}. ` +
                 `Last login was ${cached.email} as ${cached.type}.`
@@ -135,19 +104,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
               return;
             }
           } catch (parseErr) {
-            console.error('[LoginScreen] ❌ Error parsing cached user:', parseErr);
+            if (isDevelopment) {
+              console.error('[LoginScreen] Error parsing cached user:', parseErr);
+            }
           }
         }
         
-        // No cache exists - first-time user offline
-        console.log('[LoginScreen] ⚠️ First-time login attempt while offline');
         setError(
           '⚠️ First login requires internet connection. ' +
           'Please connect to WiFi to set up your account. ' +
           'After first login, you can work offline anytime.'
         );
       } else {
-        // Online but other error
         setError('Unable to login. Please check your credentials and try again.');
       }
       

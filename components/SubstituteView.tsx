@@ -144,8 +144,8 @@ const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
   const teacherOptions = useMemo(() => 
     teachers
       .filter(t => t.role === 'teacher')
-      .map(t => ({ value: t.id, label: t.name }))
-      .sort((a, b) => a.label.localeCompare(b.label))
+      .map(t => ({ value: t.id, label: t.name || `${t.firstName || ''} ${t.lastName || ''}`.trim() || 'Unknown' }))
+      .sort((a, b) => (a.label || '').localeCompare(b.label || ''))
   , [teachers]);
   
   const sortedAssignments = useMemo(() => 

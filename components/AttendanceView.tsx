@@ -127,10 +127,12 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
   const filteredStudents = useMemo(() => {
     const base = (isStudentView || isParentView)
       ? visibleStudents
-      : visibleStudents.filter(student =>
-          student.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-          student.email.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-        );
+      : visibleStudents.filter(student => {
+          const name = student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim();
+          const email = student.email || '';
+          return name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+                 email.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+        });
     const bySection = selectedSectionId === 'all' ? base : base.filter(s => s.sectionId === selectedSectionId);
     return bySection;
   }, [visibleStudents, debouncedSearchQuery, isStudentView, isParentView, selectedSectionId]);

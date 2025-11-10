@@ -27,10 +27,11 @@ async function isQuarterComplete(studentId, quarter, sectionId) {
     }
     
     const student = studentDoc.data();
+    const schoolId = student.schoolId;
     const section = sectionId || student.sectionId;
     
-    if (!section) {
-      console.log(`Student ${studentId} has no section assigned`);
+    if (!section || !schoolId) {
+      console.log(`Student ${studentId} has no section or schoolId assigned`);
       return false;
     }
     
@@ -48,22 +49,24 @@ async function isQuarterComplete(studentId, quarter, sectionId) {
     const sectionData = sectionDoc.data();
     const gradeLevel = sectionData.gradeLevel;
     
-    // Get expected learning areas for this grade level
+    // Get expected learning areas for this grade level and school
     const learningAreasSnap = await admin.firestore()
       .collection('learningAreas')
-      .where('gradeLevel', '==', gradeLevel)
+      .where('schoolId', '==', schoolId)
+      .where('gradeLevel', 'array-contains', gradeLevel)
       .get();
     
     if (learningAreasSnap.empty) {
-      console.log(`No learning areas found for grade level ${gradeLevel}`);
+      console.log(`No learning areas found for school ${schoolId}, grade level ${gradeLevel}`);
       return false;
     }
     
     const expectedSubjects = learningAreasSnap.docs.map(doc => doc.id);
     
-    // Get grades for this student and quarter
+    // Get grades for this student and quarter (within school)
     const gradesSnap = await admin.firestore()
       .collection('grades')
+      .where('schoolId', '==', schoolId)
       .where('studentId', '==', studentId)
       .where('quarter', '==', quarter)
       .get();
@@ -97,10 +100,11 @@ async function isQuarterComplete(studentId, quarter, sectionId) {
 /**
  * Build grade summary for email
  */
-async function buildGradeSummary(studentId, quarter) {
+async function buildGradeSummary(studentId, quarter, schoolId) {
   try {
     const gradesSnap = await admin.firestore()
       .collection('grades')
+      .where('schoolId', '==', schoolId)
       .where('studentId', '==', studentId)
       .where('quarter', '==', quarter)
       .get();
@@ -166,9 +170,10 @@ function getGradeRemarks(grade) {
 /**
  * Check if notification was already sent
  */
-async function wasNotificationSent(studentId, quarter, type) {
+async function wasNotificationSent(studentId, quarter, type, schoolId) {
   const existingNotif = await admin.firestore()
     .collection('notifications')
+    .where('schoolId', '==', schoolId)
     .where('studentId', '==', studentId)
     .where('type', '==', type)
     .where('metadata.quarter', '==', quarter)
@@ -194,9 +199,14 @@ exports.onGradePosted = functions.firestore
       return null;
     }
     
-    const { studentId, quarter, learningAreaId, finalGrade } = gradeData;
+    const { studentId, quarter, learningAreaId, finalGrade, schoolId } = gradeData;
     
-    console.log(`Processing grade ${gradeId} for student ${studentId}, quarter ${quarter}`);
+    console.log(`Processing grade ${gradeId} for student ${studentId}, quarter ${quarter}, school ${schoolId}`);
+    
+    if (!schoolId) {
+      console.error(`Grade ${gradeId} missing schoolId, skipping`);
+      return null;
+    }
     
     // Check if quarter is complete
     const isComplete = await isQuarterComplete(
@@ -214,7 +224,8 @@ exports.onGradePosted = functions.firestore
     const alreadyNotified = await wasNotificationSent(
       studentId, 
       quarter, 
-      'grade_alert'
+      'grade_alert',
+      schoolId
     );
     
     if (alreadyNotified) {
@@ -223,9 +234,10 @@ exports.onGradePosted = functions.firestore
     }
     
     try {
-      // Lookup parent
+      // Lookup parent (within same school)
       const parentsSnap = await admin.firestore()
         .collection('parents')
+        .where('schoolId', '==', schoolId)
         .where('studentIds', 'array-contains', studentId)
         .get();
       
@@ -248,10 +260,10 @@ exports.onGradePosted = functions.firestore
       const student = studentDoc.data();
       const studentName = `${student.firstName} ${student.lastName}`;
       
-      // Get school settings
+      // Get school settings (use schoolId-based document if available, fallback to legacy 'school' doc)
       const settingsDoc = await admin.firestore()
         .collection('settings')
-        .doc('school')
+        .doc(schoolId)
         .get();
       
       const schoolName = settingsDoc.exists ? 
@@ -259,7 +271,7 @@ exports.onGradePosted = functions.firestore
         'Your School';
       
       // Build grade summary
-      const gradeSummary = await buildGradeSummary(studentId, quarter);
+      const gradeSummary = await buildGradeSummary(studentId, quarter, schoolId);
       
       if (!gradeSummary) {
         console.error(`Could not build grade summary for student ${studentId}, quarter ${quarter}`);
@@ -319,6 +331,7 @@ exports.onGradePosted = functions.firestore
         const notificationData = {
           type: 'grade_alert',
           channel: 'email',
+          schoolId: schoolId,
           recipientId: parentId,
           recipientName: parent.name,
           recipientEmail: parent.email,
@@ -360,6 +373,7 @@ exports.onGradePosted = functions.firestore
         .collection('notificationErrors')
         .add({
           type: 'grade_alert',
+          schoolId: schoolId,
           gradeId: gradeId,
           studentId: studentId,
           quarter: quarter,
@@ -396,6 +410,25 @@ exports.sendGradeNotificationManual = functions.https.onCall(async (data, contex
   }
   
   try {
+    // Get student to verify schoolId access
+    const studentDoc = await admin.firestore()
+      .collection('students')
+      .doc(studentId)
+      .get();
+    
+    if (!studentDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Student not found');
+    }
+    
+    const schoolId = studentDoc.data().schoolId;
+    
+    if (!schoolId) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Student has no schoolId assigned'
+      );
+    }
+    
     // Check if quarter is complete
     const isComplete = await isQuarterComplete(studentId, quarter);
     
@@ -409,6 +442,7 @@ exports.sendGradeNotificationManual = functions.https.onCall(async (data, contex
     // Trigger notification by simulating grade update
     const gradesSnap = await admin.firestore()
       .collection('grades')
+      .where('schoolId', '==', schoolId)
       .where('studentId', '==', studentId)
       .where('quarter', '==', quarter)
       .limit(1)

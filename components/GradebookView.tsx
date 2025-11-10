@@ -6,6 +6,14 @@ import Toast, { ToastType } from './Toast';
 import KeyboardShortcutsModal from './KeyboardShortcutsModal';
 import { useDebounce } from '../hooks/useDebounce';
 
+// Helper: Convert gradeLevel string to numeric value (for filtering)
+const normalizeGradeLevel = (gradeLevel: string | number): number | null => {
+  if (typeof gradeLevel === 'number') return gradeLevel;
+  if (gradeLevel === 'Kindergarten') return 0;
+  const match = gradeLevel.match(/Grade (\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
 // Shared utility and sub-component
 const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): number | undefined => {
   if (grade === undefined) return undefined;
@@ -271,6 +279,7 @@ const GradebookView: React.FC<{
     }
     
     const sectionGradeLevel = selectedSection.gradeLevel;
+    const numericGradeLevel = normalizeGradeLevel(sectionGradeLevel);
     
     // Filter learning areas that are applicable to this grade level
     const filtered = learningAreas.filter(la => {
@@ -279,8 +288,8 @@ const GradebookView: React.FC<{
         return true;
       }
       
-      // Check if this grade level is in the learning area's applicable grades
-      return la.gradeLevel.includes(sectionGradeLevel);
+      // Check if this grade level is in the learning area's applicable grades (both numeric now)
+      return numericGradeLevel !== null && la.gradeLevel.includes(numericGradeLevel);
     });
     
     // Sort by order field (DepEd-compliant subject ordering)
@@ -290,10 +299,11 @@ const GradebookView: React.FC<{
   const studentsInSection = useMemo(() => {
     if (!selectedSectionId) return [];
     
-    let filtered = students.filter(s => 
-        s.sectionId === selectedSectionId &&
-        s.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-    );
+    let filtered = students.filter(s => {
+        const name = s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim();
+        return s.sectionId === selectedSectionId &&
+               name.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+    });
     
     console.log('[GradebookView] Students in selected section:', filtered.length);
     if (filtered.length > 0) {
@@ -341,7 +351,9 @@ const GradebookView: React.FC<{
       let comparison = 0;
       
       if (sortBy === 'name') {
-        comparison = a.name.localeCompare(b.name);
+        const nameA = a.name || `${a.firstName || ''} ${a.lastName || ''}`.trim();
+        const nameB = b.name || `${b.firstName || ''} ${b.lastName || ''}`.trim();
+        comparison = nameA.localeCompare(nameB);
       } else if (sortBy === 'average') {
         const aGrades = gradeMap.get(a.id);
         const bGrades = gradeMap.get(b.id);

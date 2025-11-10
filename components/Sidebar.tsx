@@ -62,6 +62,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
     {
       title: 'System',
       items: [
+        { path: '/school-management', label: 'School Management', icon: <BuildingOfficeIcon />, roles: ['superadmin'], badge: null },
         { path: '/settings', label: 'Settings', icon: <CogIcon />, roles: ['admin'], badge: null },
         { path: '/validation-results', label: 'Validation Results', icon: <ClipboardDocumentCheckIcon />, roles: ['admin'], badge: null },
         { path: '/teacher-validation', label: 'Account Validation', icon: <CheckBadgeIcon />, roles: ['teacher'], badge: null },
