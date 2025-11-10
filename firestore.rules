@@ -58,6 +58,15 @@ service cloud.firestore {
       return isAuthenticated() && getUserRole() == 'parent';
     }
     
+    function isSuperAdmin() {
+      // Super admins can access all schools (for management/support)
+      // Check for role-based superadmin (primary) or legacy custom claim
+      return isAuthenticated() && (
+        getUserRole() == 'superadmin' ||
+        (request.auth.token.keys().hasAny(['isSuperAdmin']) && request.auth.token.isSuperAdmin == true)
+      );
+    }
+    
     // TEMPORARY: Allow access for users without roles (during transition)
     // TODO: Remove this after all users have roles assigned
     function isLegacyUser() {
@@ -105,14 +114,26 @@ service cloud.firestore {
     
     function isCreatingForUserSchool() {
       // Verify create operations use the user's primary schoolId
-      return request.resource.data.schoolId == getUserSchoolId();
+      // Super admins can create for any school
+      return isSuperAdmin() || request.resource.data.schoolId == getUserSchoolId();
     }
     
-    function isSuperAdmin() {
-      // Super admins can access all schools (for migration/support)
-      return isAuthenticated() && 
-             request.auth.token.keys().hasAny(['isSuperAdmin']) && 
-             request.auth.token.isSuperAdmin == true;
+    function hasValidSchoolId(docData) {
+      // Verify the incoming data has valid schoolId (for CREATE operations)
+      return docData.keys().hasAny(['schoolId']) &&
+             docData.schoolId is string &&
+             docData.schoolId.size() > 0 &&
+             belongsToUserSchool(docData.schoolId);
+    }
+    
+    function schoolIdUnchanged() {
+      // Verify schoolId is not being changed (for UPDATE operations)
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['schoolId']);
+    }
+    
+    function schoolExists(schoolId) {
+      // Verify the schoolId exists in schools collection (prevents orphaned documents)
+      return isSuperAdmin() || exists(/databases/$(database)/documents/schools/$(schoolId));
     }
     
     // ========================================
@@ -122,7 +143,10 @@ service cloud.firestore {
     // Students Collection
     match /students/{studentId} {
       // Staff can read students from their school(s)
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -130,12 +154,14 @@ service cloud.firestore {
       allow read: if isParent() && request.auth.uid in resource.data.parentIds;
       
       // Admin and registrar can create students for their school
-      allow create: if (isAdminOrRegistrar() && isCreatingForUserSchool()) 
+      // STRICT: Must have valid schoolId and it must exist
+      allow create: if (isAdminOrRegistrar() && hasValidSchoolId(request.resource.data) && schoolExists(request.resource.data.schoolId)) 
                     || isSuperAdmin() 
                     || isLegacyUser();
       
       // Admin and registrar can update students in their school
-      allow update: if (isAdminOrRegistrar() && belongsToUserSchool(resource.data.schoolId)) 
+      // STRICT: Cannot change schoolId
+      allow update: if (isAdminOrRegistrar() && belongsToUserSchool(resource.data.schoolId) && schoolIdUnchanged()) 
                     || isSuperAdmin() 
                     || isLegacyUser();
       
@@ -152,16 +178,27 @@ service cloud.firestore {
       allow read: if isAuthenticated() || isLegacyUser();
       
       // Admin and principal can manage teachers in their school
-      // Note: Teacher documents have schoolIds array for multi-school teachers
-      allow write: if (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId)) 
-                   || isSuperAdmin() 
-                   || isLegacyUser();
+      // STRICT: Must have valid schoolId on create, cannot change on update
+      allow create: if (isAdminOrPrincipal() && hasValidSchoolId(request.resource.data) && schoolExists(request.resource.data.schoolId))
+                    || isSuperAdmin()
+                    || isLegacyUser();
+      
+      allow update: if (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId) && schoolIdUnchanged()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
+      
+      allow delete: if (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId))
+                    || isSuperAdmin()
+                    || isLegacyUser();
     }
     
     // Sections Collection
     match /sections/{sectionId} {
       // Staff can read sections from their school(s)
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -169,16 +206,27 @@ service cloud.firestore {
       allow read: if isParent() && request.auth.uid in resource.data.parentIds;
       
       // Admin, principal, and registrar can manage sections in their school
-      allow write: if ((isAdmin() || isPrincipal() || isRegistrar()) && isCreatingForUserSchool()) 
-                   || (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId))
-                   || isSuperAdmin() 
-                   || isLegacyUser();
+      // STRICT: Must have valid schoolId on create, cannot change on update
+      allow create: if ((isAdmin() || isPrincipal() || isRegistrar()) && hasValidSchoolId(request.resource.data) && schoolExists(request.resource.data.schoolId))
+                    || isSuperAdmin() 
+                    || isLegacyUser();
+      
+      allow update: if (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId) && schoolIdUnchanged())
+                    || isSuperAdmin() 
+                    || isLegacyUser();
+      
+      allow delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId))
+                    || isSuperAdmin()
+                    || isLegacyUser();
     }
     
     // Parents Collection
     match /parents/{parentId} {
       // Staff can read parents from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -186,10 +234,15 @@ service cloud.firestore {
       allow read: if isParent() && request.auth.uid == parentId;
       
       // Parents can update their own profile (notification preferences, contact info)
-      allow update: if (isParent() && request.auth.uid == parentId) || isLegacyUser();
+      // STRICT: Parents cannot change their schoolId
+      allow update: if ((isParent() && request.auth.uid == parentId && schoolIdUnchanged()) 
+                        || (isAdminOrRegistrar() && belongsToUserSchool(resource.data.schoolId) && schoolIdUnchanged()))
+                    || isSuperAdmin()
+                    || isLegacyUser();
       
       // Admin and registrar can create/delete parents in their school
-      allow create: if (isAdminOrRegistrar() && isCreatingForUserSchool()) 
+      // STRICT: Must have valid schoolId on create
+      allow create: if (isAdminOrRegistrar() && hasValidSchoolId(request.resource.data) && schoolExists(request.resource.data.schoolId)) 
                     || isSuperAdmin() 
                     || isLegacyUser();
       allow delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
@@ -204,7 +257,10 @@ service cloud.firestore {
     // Grades Collection
     match /grades/{gradeId} {
       // Staff can read grades from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -226,7 +282,10 @@ service cloud.firestore {
     // Attendance Records
     match /attendanceRecords/{recordId} {
       // Staff can read attendance from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -243,8 +302,12 @@ service cloud.firestore {
     // Assignments Collection
     match /assignments/{assignmentId} {
       // Staff can read assignments from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
-                  || isSuperAdmin();
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
+                  || isSuperAdmin()
+                  || isLegacyUser();
       
       // Teachers and admin can manage assignments in their school
       allow write: if ((isTeacher() || isAdmin()) && isCreatingForUserSchool()) 
@@ -256,8 +319,12 @@ service cloud.firestore {
     // Learning Areas / Subjects
     match /learningAreas/{areaId} {
       // Staff can read learning areas from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
-                  || isSuperAdmin();
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
+                  || isSuperAdmin()
+                  || isLegacyUser();
       
       // Admin and principal can manage learning areas in their school
       allow write: if (isAdminOrPrincipal() && isCreatingForUserSchool()) 
@@ -269,7 +336,10 @@ service cloud.firestore {
     // Class Schedules
     match /schedules/{scheduleId} {
       // Staff can read schedules from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin();
       
       // Admin, principal, and registrar can manage schedules in their school
@@ -282,7 +352,10 @@ service cloud.firestore {
     // Core Values Assessment
     match /coreValues/{valueId} {
       // Staff can read assessments from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -303,7 +376,10 @@ service cloud.firestore {
     // Form 137 - Academic History / Permanent Record
     match /academicHistory/{recordId} {
       // Staff can read records from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -320,7 +396,10 @@ service cloud.firestore {
     // Form 138 - Report Cards
     match /reportCards/{cardId} {
       // Staff can read report cards from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -337,7 +416,10 @@ service cloud.firestore {
     // School Forms - SF1, SF2, SF9 (EBEIS)
     match /schoolForms/{formId} {
       // Staff can read school forms from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -351,7 +433,10 @@ service cloud.firestore {
     // ELLN Assessments - K-3 Early Learning
     match /ellnAssessments/{assessmentId} {
       // Staff can read assessments from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -368,7 +453,10 @@ service cloud.firestore {
     // Form Generation Log - Analytics & Tracking
     match /formGenerationLog/{logId} {
       // Staff can read logs from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -388,7 +476,10 @@ service cloud.firestore {
     // Fee Structures
     match /feeStructures/{feeId} {
       // Staff can read fee structures from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -406,7 +497,10 @@ service cloud.firestore {
     // Payment Records
     match /payments/{paymentId} {
       // Staff can read payments from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -427,7 +521,10 @@ service cloud.firestore {
     // Billing Ledgers
     match /billingLedgers/{ledgerId} {
       // Staff can read ledgers from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -444,7 +541,10 @@ service cloud.firestore {
     // Billing Statements
     match /billingStatements/{statementId} {
       // Staff can read statements from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -461,7 +561,10 @@ service cloud.firestore {
     // Receipts
     match /receipts/{receiptId} {
       // Staff can read receipts from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -482,7 +585,10 @@ service cloud.firestore {
     // Payment Proofs (uploaded by parents)
     match /paymentProofs/{proofId} {
       // Staff can read proofs from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -519,7 +625,10 @@ service cloud.firestore {
       allow read: if true;
       
       // Staff can read applications from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -540,7 +649,10 @@ service cloud.firestore {
     // Notifications Collection
     match /notifications/{notificationId} {
       // Staff can read notifications from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -567,9 +679,11 @@ service cloud.firestore {
     // Notification Errors (for debugging)
     match /notificationErrors/{errorId} {
       // Only admin can read errors from their school
-      allow read: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
-                  || isSuperAdmin() 
-                  || isLegacyUser();
+      allow list: if isAdmin() || isSuperAdmin() || isLegacyUser();
+      
+      allow get: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                 || isSuperAdmin() 
+                 || isLegacyUser();
       
       // System can create errors (with schoolId)
       allow create: if (isAuthenticated() && isCreatingForUserSchool()) 
@@ -586,9 +700,13 @@ service cloud.firestore {
     
     // Announcements Collection
     match /announcements/{announcementId} {
-      // Staff can read announcements from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
-                  || isSuperAdmin();
+      // Staff can list announcements (query filters by schoolId in application code)
+      // Staff can get individual announcements from their school
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+      
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+                 || isSuperAdmin()
+                 || isLegacyUser();
       
       // Staff can create announcements for their school
       allow create: if (isStaff() && isCreatingForUserSchool()) 
@@ -604,9 +722,11 @@ service cloud.firestore {
     // Lesson Plans
     match /lessonPlans/{planId} {
       // Teachers can read lesson plans from their school(s)
-      allow read: if ((isTeacher() || isAdmin() || isPrincipal()) && belongsToUserSchool(resource.data.schoolId)) 
-                  || isSuperAdmin() 
-                  || isLegacyUser();
+      allow list: if (isTeacher() || isAdmin() || isPrincipal()) || isSuperAdmin() || isLegacyUser();
+      
+      allow get: if ((isTeacher() || isAdmin() || isPrincipal()) && belongsToUserSchool(resource.data.schoolId)) 
+                 || isSuperAdmin() 
+                 || isLegacyUser();
       
       // Teachers can create lesson plans for their school
       allow create: if (isTeacher() && isCreatingForUserSchool()) 
@@ -632,16 +752,21 @@ service cloud.firestore {
       // Note: settingId is typically the schoolId (e.g., 'default', 'school-001')
       allow read: if true;
       
-      // Only admin can update settings for their school
+      // Super admin can manage all settings
+      allow write: if isSuperAdmin();
+      
+      // Admin can update settings for their school only
       allow write: if (isAdmin() && settingId == getUserSchoolId()) 
-                   || isSuperAdmin() 
                    || isLegacyUser();
     }
     
     // School Configuration
     match /schoolConfig/{configId} {
       // Staff can read config from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin();
       
       // Only admin can update config for their school
@@ -685,7 +810,10 @@ service cloud.firestore {
     // Substitute Assignments
     match /substituteAssignments/{assignmentId} {
       // Staff can read substitute assignments from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -703,7 +831,10 @@ service cloud.firestore {
     // Student Assignment Grades (grades for specific assignments)
     match /studentAssignmentGrades/{gradeId} {
       // Staff can read assignment grades from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -725,7 +856,10 @@ service cloud.firestore {
     // Core Value Grades (character development grades)
     match /coreValueGrades/{gradeId} {
       // Staff can read core value grades from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -747,8 +881,12 @@ service cloud.firestore {
     // Class Schedules (alternative name for schedules)
     match /classSchedules/{scheduleId} {
       // Staff can read schedules from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
-                  || isSuperAdmin();
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
+                  || isSuperAdmin()
+                  || isLegacyUser();
       
       // Admin, principal, and registrar can manage schedules in their school
       allow write: if ((isAdmin() || isPrincipal() || isRegistrar()) && isCreatingForUserSchool()) 
@@ -760,7 +898,10 @@ service cloud.firestore {
     // School Years Configuration
     match /schoolYears/{yearId} {
       // Staff can read school years from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin();
       
       // Only admin can manage school years for their school
@@ -788,7 +929,10 @@ service cloud.firestore {
     // Teacher Validation Results
     match /validationResults/{resultId} {
       // Staff can read validation results from their school
-      allow read: if (isStaff() && belongsToUserSchool(resource.data.schoolId)) 
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
                   || isSuperAdmin() 
                   || isLegacyUser();
       
@@ -808,11 +952,43 @@ service cloud.firestore {
       // Users can read their own role history
       allow read: if isAuthenticated() && request.auth.uid == userId;
       
-      // Admins can read all role histories
-      allow read: if isAdmin() || isLegacyUser();
+      // Admins can read all role histories from their school
+      allow read: if isAdmin() || isSuperAdmin() || isLegacyUser();
       
-      // Only Cloud Functions can write (immutable audit trail)
-      allow write: if false;
+      // Super admin can write (for creating admins), Cloud Functions can also write
+      allow write: if isSuperAdmin();
+    }
+    
+    // ========================================
+    // FINANCIAL: STUDENT LEDGERS
+    // ========================================
+    
+    // Student Ledgers (detailed billing records per student per school year)
+    match /studentLedgers/{ledgerId} {
+      // Staff can read ledgers from their school
+      // Staff can list (query) and get (read individual docs)
+      allow list: if isStaff() || isSuperAdmin() || isLegacyUser();
+
+      allow get: if (isStaff() && belongsToUserSchool(resource.data.schoolId))
+                  || isSuperAdmin() 
+                  || isLegacyUser();
+      
+      // Parents can read their children's ledgers (implicit school check)
+      allow read: if isParent() && request.auth.uid == resource.data.parentId;
+      
+      // Admin and registrar can create/update ledgers in their school
+      allow create: if (isAdminOrRegistrar() && isCreatingForUserSchool()) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
+      
+      allow update: if (isAdminOrRegistrar() && belongsToUserSchool(resource.data.schoolId)) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
+      
+      // Only admin can delete ledgers in their school
+      allow delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
+                    || isSuperAdmin() 
+                    || isLegacyUser();
     }
     
     // ========================================

@@ -53,10 +53,10 @@ import type {
 } from '../types';
 
 // Import interface from backup (will match exactly)
-import type { SchoolDataHook } from './useSchoolData.REACT_QUERY_BACKUP';
+import type { SchoolDataHook, SchoolDataState } from './useSchoolData.REACT_QUERY_BACKUP';
 
 // Re-export for external use
-export type { SchoolDataHook };
+export type { SchoolDataHook, SchoolDataState };
 
 // Mock settings (same as React Query version)
 const MOCK_SETTINGS: SchoolSettings = {
@@ -90,7 +90,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     // console.log('[useSchoolData] 🚀 Hook initializing (Firestore subscriptions)...', { collectionsToFetch });
 
     // MULTI-TENANT: Get current user's schoolId from context
-    const { schoolId } = useSchoolContext();
+    const { schoolId, loading: schoolContextLoading } = useSchoolContext();
+    
+    console.log('[useSchoolData] SchoolContext state - schoolId:', schoolId, 'loading:', schoolContextLoading);
 
     // ===== STATE MANAGEMENT =====
     // Collections state
@@ -135,6 +137,15 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
     // ===== FIRESTORE SUBSCRIPTIONS =====
     useEffect(() => {
+        // CRITICAL: Wait for SchoolContext to load before subscribing
+        // Otherwise schoolId will be null and we'll fetch ALL schools' data!
+        if (schoolContextLoading) {
+            console.log('[useSchoolData] ⏸️ Waiting for SchoolContext to load...');
+            return;
+        }
+        
+        console.log('[useSchoolData] ✅ SchoolContext loaded, schoolId:', schoolId);
+        
         // STRONG FOUNDATION: Don't initialize subscriptions if collectionsToFetch is explicitly []
         // This prevents ANY Firestore operations on login screen before authentication
         const shouldInitialize = collectionsToFetch === undefined || collectionsToFetch.length > 0;
@@ -189,9 +200,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
             // ===== STUDENTS SUBSCRIPTION =====
             if (shouldFetch('students')) {
-                if (ENABLE_SUBSCRIPTION_LOGS) {
-                    console.log('[useSchoolData] 👥 Subscribing to students...');
-                }
+                console.log('[useSchoolData] 👥 Subscribing to students with schoolId:', schoolId);
                 
                 // MULTI-TENANT: Filter by schoolId
                 const studentsQuery = schoolId
@@ -421,6 +430,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             // ===== GRADES SUBSCRIPTION =====
             if (shouldFetch('grades')) {
                 console.log('[useSchoolData] 📊 Subscribing to grades...');
+                console.log('[useSchoolData] 📊 SchoolId for grades query:', schoolId);
                 
                 // MULTI-TENANT: Filter by schoolId
                 const gradesQuery = schoolId
@@ -437,8 +447,12 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         if (ENABLE_CACHE_LOGS) {
                             console.log(snapshot.metadata.fromCache ? '📦 [grades] CACHE' : '📡 [grades] SERVER');
                         }
-                        setGrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Grade[]);
+                        const gradesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Grade[];
+                        setGrades(gradesData);
                         console.log(`[useSchoolData] ✅ Grades: ${snapshot.docs.length} docs`);
+                        if (snapshot.docs.length > 0) {
+                            console.log('[useSchoolData] 📊 Sample grade doc:', gradesData[0]);
+                        }
                         checkAllLoaded();
                     },
                     (err) => {
@@ -449,6 +463,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 );
                 unsubscribers.push(unsubGrades);
             } else {
+                console.log('[useSchoolData] ⏭️ SKIPPING grades subscription (not in requested collections)');
                 checkAllLoaded();
             }
 
@@ -744,26 +759,69 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             }
 
             // ===== SETTINGS SUBSCRIPTION =====
+            // MULTI-TENANT: Load settings from schools/{schoolId} document
             if (shouldFetch('settings')) {
                 console.log('[useSchoolData] ⚙️ Subscribing to settings...');
-                const unsubSettings = onSnapshot(
-                    doc(db, 'settings', 'school'),
-                    { includeMetadataChanges: true },
-                    (snapshot) => {
-                        console.log(snapshot.metadata.fromCache ? '📦 [settings] CACHE' : '📡 [settings] SERVER');
-                        if (snapshot.exists()) {
-                            setSettings({ ...MOCK_SETTINGS, ...snapshot.data() } as SchoolSettings);
-                            console.log('[useSchoolData] ✅ Settings loaded');
+                
+                if (schoolId) {
+                    // Load from schools/{schoolId} document for multi-tenant
+                    const unsubSettings = onSnapshot(
+                        doc(db, 'schools', schoolId),
+                        { includeMetadataChanges: true },
+                        (snapshot) => {
+                            console.log(snapshot.metadata.fromCache ? '📦 [settings] CACHE (from schools)' : '📡 [settings] SERVER (from schools)');
+                            if (snapshot.exists()) {
+                                const schoolData = snapshot.data();
+                                // Extract settings from school document
+                                const schoolSettings: SchoolSettings = {
+                                    schoolName: schoolData.name || MOCK_SETTINGS.schoolName,
+                                    region: schoolData.region || MOCK_SETTINGS.region,
+                                    division: schoolData.division || MOCK_SETTINGS.division,
+                                    district: schoolData.district || MOCK_SETTINGS.district,
+                                    schoolYear: schoolData.currentSchoolYear || MOCK_SETTINGS.schoolYear,
+                                    schoolType: schoolData.schoolType,
+                                    financialConfig: schoolData.settings?.financialConfig,
+                                    enrollmentConfig: schoolData.settings?.enrollmentConfig,
+                                };
+                                setSettings(schoolSettings);
+                                console.log('[useSchoolData] ✅ Settings loaded from school:', schoolId);
+                            } else {
+                                console.warn('[useSchoolData] ⚠️ School document not found:', schoolId, '- using mock settings');
+                                setSettings(MOCK_SETTINGS);
+                            }
+                            checkAllLoaded();
+                        },
+                        (err) => {
+                            console.error('[useSchoolData] ❌ Settings error:', err);
+                            setError(`Settings error: ${err.message}`);
+                            // Fallback to mock settings on error
+                            setSettings(MOCK_SETTINGS);
+                            checkAllLoaded();
                         }
-                        checkAllLoaded();
-                    },
-                    (err) => {
-                        console.error('[useSchoolData] ❌ Settings error:', err);
-                        setError(`Settings error: ${err.message}`);
-                        checkAllLoaded();
-                    }
-                );
-                unsubscribers.push(unsubSettings);
+                    );
+                    unsubscribers.push(unsubSettings);
+                } else {
+                    // Fallback: Load from legacy settings/school for backward compatibility
+                    console.warn('[useSchoolData] ⚠️ No schoolId - loading from legacy settings/school');
+                    const unsubSettings = onSnapshot(
+                        doc(db, 'settings', 'school'),
+                        { includeMetadataChanges: true },
+                        (snapshot) => {
+                            console.log(snapshot.metadata.fromCache ? '📦 [settings] CACHE (legacy)' : '📡 [settings] SERVER (legacy)');
+                            if (snapshot.exists()) {
+                                setSettings({ ...MOCK_SETTINGS, ...snapshot.data() } as SchoolSettings);
+                                console.log('[useSchoolData] ✅ Settings loaded (legacy mode)');
+                            }
+                            checkAllLoaded();
+                        },
+                        (err) => {
+                            console.error('[useSchoolData] ❌ Settings error:', err);
+                            setError(`Settings error: ${err.message}`);
+                            checkAllLoaded();
+                        }
+                    );
+                    unsubscribers.push(unsubSettings);
+                }
             } else {
                 checkAllLoaded();
             }
@@ -805,7 +863,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             clearTimeout(loadingTimeout);
             unsubscribers.forEach(unsub => unsub());
         };
-    }, [collectionsToFetch]); // Re-subscribe if collectionsToFetch changes
+    }, [collectionsToFetch, schoolId, schoolContextLoading]); // CRITICAL: Re-subscribe when schoolId changes for multi-tenant isolation
 
     // ===== PAGINATION: Fetch More Students =====
     const fetchMoreStudents = useCallback(async () => {
@@ -819,17 +877,25 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         }
 
         setIsFetchingStudents(true);
-        console.log('[useSchoolData] 📄 Fetching next page of students...');
+        console.log('[useSchoolData] 📄 Fetching next page of students with schoolId:', schoolId);
 
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
 
-            const nextQuery = query(
-                collection(db, 'students'),
-                startAfter(lastStudentDoc),
-                limit(100)
-            );
+            // MULTI-TENANT: CRITICAL - Must filter by schoolId in pagination too!
+            const nextQuery = schoolId
+                ? query(
+                    collection(db, 'students'),
+                    where('schoolId', '==', schoolId),
+                    startAfter(lastStudentDoc),
+                    limit(100)
+                )
+                : query(
+                    collection(db, 'students'),
+                    startAfter(lastStudentDoc),
+                    limit(100)
+                );
 
             const snapshot = await getDocs(nextQuery);
             const moreStudents = snapshot.docs.map(doc => ({
@@ -844,14 +910,14 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             }
             
             setHasMoreStudents(snapshot.docs.length === 100);
-            console.log(`[useSchoolData] ✅ Fetched ${moreStudents.length} more students`);
+            console.log(`[useSchoolData] ✅ Fetched ${moreStudents.length} more students (schoolId: ${schoolId})`);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error fetching more students:', err);
             setError(`Pagination error: ${err.message}`);
         } finally {
             setIsFetchingStudents(false);
         }
-    }, [hasMoreStudents, isFetchingStudents, lastStudentDoc]);
+    }, [hasMoreStudents, isFetchingStudents, lastStudentDoc, schoolId]); // Added schoolId dependency
 
     // ===== SEARCH: Students =====
     const searchStudents = useCallback(async (searchQuery: string): Promise<Student[]> => {
@@ -877,12 +943,18 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             await waitForAuthReady();
             const db = getFirestoreInstance();
 
-            // Fetch all students for search (this gives us the full database to search from)
-            const snapshot = await getDocs(collection(db, 'students'));
+            // MULTI-TENANT: CRITICAL - Only fetch students from current school!
+            const studentsQuery = schoolId
+                ? query(collection(db, 'students'), where('schoolId', '==', schoolId))
+                : collection(db, 'students');
+            
+            const snapshot = await getDocs(studentsQuery);
             const allStudents = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             })) as Student[];
+            
+            console.log(`[useSchoolData] 🔍 Fetched ${allStudents.length} students from school: ${schoolId || 'all'}`);
             
             const results = allStudents.filter(student => {
                 // Check all possible name formats
@@ -899,6 +971,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
             // Cache results (v2: includes email field)
             setSearchCache(prev => new Map(prev).set(`students:v2:${trimmedQuery}`, results));
+            console.log(`[useSchoolData] ✅ Search found ${results.length} students matching "${trimmedQuery}" in school: ${schoolId}`);
             return results;
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Search error:', err);
@@ -906,7 +979,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         } finally {
             setIsSearching(false);
         }
-    }, [students, searchCache]);
+    }, [students, searchCache, schoolId]); // Added schoolId dependency
 
     // ===== SEARCH: Teachers =====
     const searchTeachers = useCallback(async (searchQuery: string): Promise<Teacher[]> => {
@@ -925,7 +998,12 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             await waitForAuthReady();
             const db = getFirestoreInstance();
 
-            const snapshot = await getDocs(collection(db, 'teachers'));
+            // MULTI-TENANT FIX: Filter by schoolId
+            const teachersQuery = schoolId
+                ? query(collection(db, 'teachers'), where('schoolId', '==', schoolId))
+                : collection(db, 'teachers');
+
+            const snapshot = await getDocs(teachersQuery);
             const allTeachers = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -939,7 +1017,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
             setSearchCache(prev => new Map(prev).set(`teachers:${trimmedQuery}`, results));
             if (ENABLE_SUCCESS_LOGS) {
-                console.log(`[useSchoolData] ✅ Found ${results.length} matching teachers`);
+                console.log(`[useSchoolData] ✅ Found ${results.length} matching teachers in school: ${schoolId}`);
             }
             return results;
         } catch (err: any) {
@@ -948,7 +1026,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         } finally {
             setIsSearching(false);
         }
-    }, [teachers, searchCache]);
+    }, [teachers, searchCache, schoolId]); // Added schoolId dependency
 
     // ===== SEARCH: Parents =====
     const searchParents = useCallback(async (searchQuery: string): Promise<Parent[]> => {
@@ -967,7 +1045,12 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             await waitForAuthReady();
             const db = getFirestoreInstance();
 
-            const snapshot = await getDocs(collection(db, 'parents'));
+            // MULTI-TENANT FIX: Filter by schoolId
+            const parentsQuery = schoolId
+                ? query(collection(db, 'parents'), where('schoolId', '==', schoolId))
+                : collection(db, 'parents');
+
+            const snapshot = await getDocs(parentsQuery);
             const allParents = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -981,7 +1064,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
             setSearchCache(prev => new Map(prev).set(`parents:${trimmedQuery}`, results));
             if (ENABLE_SUCCESS_LOGS) {
-                console.log(`[useSchoolData] ✅ Found ${results.length} matching parents`);
+                console.log(`[useSchoolData] ✅ Found ${results.length} matching parents in school: ${schoolId}`);
             }
             return results;
         } catch (err: any) {
@@ -990,7 +1073,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         } finally {
             setIsSearching(false);
         }
-    }, [parents, searchCache]);
+    }, [parents, searchCache, schoolId]); // Added schoolId dependency
 
     // ===== REFRESH (Manual) =====
     const refresh = useCallback(() => {
@@ -1640,16 +1723,32 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         try {
             await waitForAuthReady();
             const db = getFirestoreInstance();
-            await setDoc(doc(db, 'settings', 'school'), {
-                ...settings,
+            
+            // MULTI-TENANT: Update settings in schools/{schoolId} document
+            if (!schoolId) {
+                throw new Error('Cannot update settings: schoolId is required');
+            }
+            
+            await setDoc(doc(db, 'schools', schoolId), {
+                name: settings.schoolName,
+                region: settings.region,
+                division: settings.division,
+                district: settings.district,
+                currentSchoolYear: settings.schoolYear,
+                schoolType: settings.schoolType,
+                settings: {
+                    financialConfig: settings.financialConfig,
+                    enrollmentConfig: settings.enrollmentConfig,
+                },
                 updatedAt: serverTimestamp()
-            });
-            console.log('[useSchoolData] ✅ Settings updated');
+            }, { merge: true }); // Use merge to preserve other school fields
+            
+            console.log('[useSchoolData] ✅ Settings updated for school:', schoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating settings:', err);
             throw err;
         }
-    }, []);
+    }, [schoolId]);
 
     // ===== SUBSTITUTE ASSIGNMENT CRUD =====
     const addSubstituteAssignment = useCallback(async (assignment: Omit<SubstituteAssignment, 'id'>): Promise<void> => {
