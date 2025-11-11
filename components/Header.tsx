@@ -5,6 +5,7 @@ import { SchoolDataState } from '../hooks/useSchoolData';
 import { useFirestoreSyncStatus } from '../hooks/useFirestoreSyncStatus';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import SchoolSwitcher from './SchoolSwitcher';
+import EdusyncLogo from './EdusyncLogo';
 
 interface HeaderProps {
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
@@ -80,8 +81,11 @@ const Header: React.FC<HeaderProps> = ({
   return (
     <>
       <header className="sticky top-0 z-40 flex-shrink-0 flex items-center justify-between h-16 px-4 md:px-6 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm print:hidden">
-        {/* Left: User Info */}
+        {/* Left: Logo & User Info */}
         <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+          {/* EduSync Logo */}
+          <EdusyncLogo size="sm" showText={false} className="flex-shrink-0" />
+          
           {/* School Name (for single-school or when SchoolSwitcher hidden) */}
           {schoolName && (
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-700/50 rounded-md border border-slate-200 dark:border-slate-600">

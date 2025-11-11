@@ -32,25 +32,29 @@ import {
   ChevronUpIcon,
   CurrencyDollarIcon,
   BellIcon,
-  UsersIcon
+  UsersIcon,
+  Bars3Icon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 import './landing-animations.css';
 import { TrialSignupModal } from './TrialSignupModal';
+import EdusyncLogo from '../../../components/EdusyncLogo';
 
 const LandingPage: React.FC = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Hero Section
   const HeroSection = () => (
-    <section className="relative bg-gradient-to-br from-blue-600 via-indigo-700 to-purple-800 text-white overflow-hidden">
+    <section className="relative bg-gradient-to-br from-blue-600 via-indigo-700 to-purple-800 text-white overflow-hidden min-h-screen flex items-center">
       {/* Animated background elements */}
       <div className="absolute inset-0 opacity-10">
         <div className="absolute top-20 left-10 w-72 h-72 bg-white rounded-full blur-3xl animate-pulse"></div>
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-blue-300 rounded-full blur-3xl animate-pulse delay-1000"></div>
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-6 py-20 lg:py-32">
+      <div className="relative max-w-7xl mx-auto px-6 py-24 lg:py-32 w-full" style={{ paddingTop: '2em' }}>
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           {/* Left: Text Content */}
           <div>
@@ -144,7 +148,7 @@ const LandingPage: React.FC = () => {
         </div>
 
         {/* Stats Bar */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 mt-20 pt-12 border-t border-white/20">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 mt-24 pt-12 border-t border-white/20">
           <div className="text-center">
             <p className="text-4xl lg:text-5xl font-bold mb-2">47K+</p>
             <p className="text-blue-200">Schools in PH</p>
@@ -417,7 +421,7 @@ const LandingPage: React.FC = () => {
 
   // Social Proof / Testimonials
   const TestimonialsSection = () => (
-    <section className="py-20 bg-slate-50 dark:bg-slate-900">
+    <section className="py-20 bg-slate-50 dark:bg-slate-900" data-section="testimonials">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16">
           <h2 className="text-4xl lg:text-5xl font-bold mb-4 text-slate-900 dark:text-white">
@@ -772,12 +776,7 @@ const LandingPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* Brand */}
           <div className="col-span-1">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">E</span>
-              </div>
-              <span className="text-white font-bold text-xl">EduSync</span>
-            </div>
+            <EdusyncLogo size="md" showText={true} className="mb-4 brightness-200" />
             <p className="text-sm">
               Modern school management for the digital age. Empowering Filipino schools with DepEd-compliant technology.
             </p>
@@ -881,6 +880,156 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900">
+      {/* Navigation Bar */}
+      <nav className="sticky top-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700">
+        <div className="max-w-7xl mx-auto px-6 py-5 overflow-visible">
+          <div className="flex items-center justify-between gap-4">
+            {/* Logo - Responsive: Text on desktop, icon only on mobile */}
+            <div className="flex items-center flex-shrink-0">
+              <div className="md:hidden">
+                <EdusyncLogo size="md" showText={false} />
+              </div>
+              <div className="hidden md:block">
+                <EdusyncLogo size="md" showText={true} />
+              </div>
+            </div>
+            
+            {/* Desktop Navigation Links */}
+            <div className="hidden md:flex items-center gap-8">
+              <button
+                onClick={() => {
+                  const section = document.querySelector('[data-section="solution"]');
+                  section?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              >
+                Features
+              </button>
+              <button
+                onClick={() => {
+                  const section = document.querySelector('[data-section="testimonials"]');
+                  section?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              >
+                Testimonials
+              </button>
+              <button
+                onClick={() => {
+                  const section = document.querySelector('[data-section="pricing"]');
+                  section?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              >
+                Pricing
+              </button>
+              <button
+                onClick={() => {
+                  const section = document.querySelector('[data-section="faq"]');
+                  section?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              >
+                FAQ
+              </button>
+              <button
+                onClick={() => window.location.href = '/admin'}
+                className="text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+              >
+                Login
+              </button>
+              <button
+                onClick={() => setIsTrialModalOpen(true)}
+                className="px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white rounded-lg text-base font-bold hover:shadow-lg hover:scale-105 transition-all"
+              >
+                Start Free Trial
+              </button>
+            </div>
+
+            {/* Mobile Menu Button */}
+            <div className="md:hidden">
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="p-2 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                aria-label="Toggle menu"
+              >
+                {isMobileMenuOpen ? (
+                  <XMarkIcon className="w-6 h-6" />
+                ) : (
+                  <Bars3Icon className="w-6 h-6" />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Menu */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <div className="px-6 py-4 space-y-3">
+              <button
+                onClick={() => {
+                  const section = document.querySelector('[data-section="solution"]');
+                  section?.scrollIntoView({ behavior: 'smooth' });
+                  setIsMobileMenuOpen(false);
+                }}
+                className="block w-full text-left py-2 text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              >
+                Features
+              </button>
+              <button
+                onClick={() => {
+                  const section = document.querySelector('[data-section="testimonials"]');
+                  section?.scrollIntoView({ behavior: 'smooth' });
+                  setIsMobileMenuOpen(false);
+                }}
+                className="block w-full text-left py-2 text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              >
+                Testimonials
+              </button>
+              <button
+                onClick={() => {
+                  const section = document.querySelector('[data-section="pricing"]');
+                  section?.scrollIntoView({ behavior: 'smooth' });
+                  setIsMobileMenuOpen(false);
+                }}
+                className="block w-full text-left py-2 text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              >
+                Pricing
+              </button>
+              <button
+                onClick={() => {
+                  const section = document.querySelector('[data-section="faq"]');
+                  section?.scrollIntoView({ behavior: 'smooth' });
+                  setIsMobileMenuOpen(false);
+                }}
+                className="block w-full text-left py-2 text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              >
+                FAQ
+              </button>
+              <button
+                onClick={() => {
+                  window.location.href = '/admin';
+                  setIsMobileMenuOpen(false);
+                }}
+                className="block w-full text-left py-2 text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              >
+                Login
+              </button>
+              <button
+                onClick={() => {
+                  setIsTrialModalOpen(true);
+                  setIsMobileMenuOpen(false);
+                }}
+                className="block w-full px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white rounded-lg text-base font-bold hover:shadow-lg transition-all"
+              >
+                Start Free Trial
+              </button>
+            </div>
+          </div>
+        )}
+      </nav>
+      
       <HeroSection />
       <ProblemSection />
       <SolutionSection />
