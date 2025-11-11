@@ -5,6 +5,7 @@ import { collection, addDoc, updateDoc, doc, serverTimestamp, getDoc } from 'fir
 import { getFirestoreInstance } from '../../../services/firestoreService';
 import { useSchoolContext } from '../../../contexts/SchoolContext';
 import type { EnrollmentApplication } from '../../../../types';
+import EdusyncLogo from '../../../../components/EdusyncLogo';
 
 // Import step components (we'll create these)
 import { StudentInfoStep } from './steps/StudentInfoStep';
@@ -297,8 +298,13 @@ const ApplicationForm: React.FC = () => {
   const progressPercentage = (currentStep / STEPS.length) * 100;
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
+        {/* Logo */}
+        <div className="flex justify-center mb-6">
+          <EdusyncLogo size="md" showText={true} />
+        </div>
+        
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <button

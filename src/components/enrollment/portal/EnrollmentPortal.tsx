@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from '../../../services/firestoreService';
 import { useSchoolData } from '../../../../hooks/useSchoolData';
 import { useEnrollmentFeatures, useFinancialFeatures } from '../../../../services/featureFlags';
+import EdusyncLogo from '../../../../components/EdusyncLogo';
 
 /**
  * EnrollmentPortal - Parent-facing landing page for starting enrollment
@@ -61,8 +62,13 @@ const EnrollmentPortal: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
+      {/* Logo Bar */}
+      <div className="flex justify-center mb-6">
+        <EdusyncLogo size="lg" showText={true} />
+      </div>
+      
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg p-8 mb-6">
+      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white rounded-lg p-8 mb-6 shadow-xl">
         <h1 className="text-3xl font-bold mb-3">
           🎓 Welcome to {settings?.schoolName || 'EduSync'} Enrollment
         </h1>

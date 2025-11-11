@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduSync Logo Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%);
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+      max-width: 600px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .logo-preview {
+      margin: 30px 0;
+    }
+    canvas {
+      border: 2px solid #e5e7eb;
+      border-radius: 10px;
+      background: white;
+    }
+    button {
+      background: linear-gradient(135deg, #2563eb, #4f46e5, #7c3aed);
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin: 10px;
+      transition: transform 0.2s;
+    }
+    button:hover {
+      transform: scale(1.05);
+    }
+    .instructions {
+      margin-top: 30px;
+      text-align: left;
+      background: #f9fafb;
+      padding: 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .instructions h3 {
+      margin-top: 0;
+      color: #4f46e5;
+    }
+    .instructions code {
+      background: #e5e7eb;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>EduSync Logo Generator</h1>
+    <p>Generate a placeholder logo for your EduSync system</p>
+    
+    <div class="logo-preview">
+      <canvas id="logoCanvas" width="400" height="400"></canvas>
+    </div>
+    
+    <button onclick="generateLogo()">Generate New Logo</button>
+    <button onclick="downloadLogo()">Download as PNG</button>
+    
+    <div class="instructions">
+      <h3>📋 Instructions:</h3>
+      <ol>
+        <li>Click "Generate New Logo" to create a logo</li>
+        <li>Click "Download as PNG" to save the image</li>
+        <li>Rename the downloaded file to <code>edusync-logo.png</code></li>
+        <li>Copy it to your project's <code>public/</code> folder</li>
+        <li>Refresh your application to see the logo!</li>
+      </ol>
+      <p><strong>OR</strong> - If you have your own logo image:</p>
+      <ol>
+        <li>Save your logo as <code>edusync-logo.png</code></li>
+        <li>Copy it to the <code>public/</code> folder</li>
+        <li>Make sure it's a PNG with transparent background for best results</li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    function generateLogo() {
+      const canvas = document.getElementById('logoCanvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Create circular gradient background
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      gradient.addColorStop(0, '#2563eb');    // Blue
+      gradient.addColorStop(0.5, '#4f46e5');  // Indigo
+      gradient.addColorStop(1, '#7c3aed');    // Purple
+      
+      // Draw circle
+      ctx.beginPath();
+      ctx.arc(200, 200, 180, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // Draw stylized "e" letter
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 200px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('e', 200, 220);
+      
+      // Add subtle shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.3)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetX = 5;
+      ctx.shadowOffsetY = 5;
+    }
+    
+    function downloadLogo() {
+      const canvas = document.getElementById('logoCanvas');
+      const link = document.createElement('a');
+      link.download = 'edusync-logo.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+    
+    // Generate logo on page load
+    window.onload = generateLogo;
+  </script>
+</body>
+</html>

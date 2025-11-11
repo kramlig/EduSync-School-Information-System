@@ -10,7 +10,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['system-ui', 'ui-sans-serif', 'Inter', 'Arial', 'sans-serif']
+        sans: ['system-ui', 'ui-sans-serif', 'Inter', 'Arial', 'sans-serif'],
+        cursive: ['Brush Script MT', 'Lucida Handwriting', 'cursive']
       }
     }
   },
