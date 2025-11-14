@@ -154,9 +154,20 @@ const GradebookView: React.FC<{
 
     const authorizedSectionIds = new Set<string>();
 
+    // PRIORITY 1: Check user.assignments (most reliable for teachers)
+    if (authUser.assignments && authUser.assignments.length > 0) {
+      authUser.assignments.forEach(assignment => {
+        if (assignment.sectionId) {
+          authorizedSectionIds.add(assignment.sectionId);
+        }
+      });
+    }
+
+    // PRIORITY 2: Check adviser status
     const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
     if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
 
+    // PRIORITY 3: Check substitute assignments
     const today = new Date().toISOString().split('T')[0];
     const activeSubAssignments = substituteAssignments.filter(sub => 
       sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate
@@ -176,6 +187,7 @@ const GradebookView: React.FC<{
         });
     }
 
+    // PRIORITY 4: Check class schedules (fallback)
     classSchedules.forEach(schedule => {
       if (schedule.teacherId === authUser.id && schedule.sectionId) {
         authorizedSectionIds.add(schedule.sectionId);

@@ -125,6 +125,14 @@ const CoreValuesGradebookView: React.FC<{
     }, [visibleSections, selectedSectionId]);
     
     const filteredStudents = useMemo(() => {
+        // If student is logged in, only show their own data
+        if (session.type === 'student') {
+            const studentUser = session.user as StudentUser;
+            const studentData = students.find(s => s.id === studentUser.id);
+            return studentData ? [studentData] : [];
+        }
+        
+        // Staff view - filter by section
         const base = selectedSectionId === 'all' 
             ? students 
             : students.filter(s => s.sectionId === selectedSectionId);
@@ -135,7 +143,7 @@ const CoreValuesGradebookView: React.FC<{
             return name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
                    email.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
         });
-    }, [students, selectedSectionId, debouncedSearchQuery]);
+    }, [students, selectedSectionId, debouncedSearchQuery, session]);
 
     // Group sections by grade level for better organization
     const groupedSections = useMemo(() => {

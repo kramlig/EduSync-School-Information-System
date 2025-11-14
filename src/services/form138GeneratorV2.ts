@@ -168,14 +168,13 @@ export function previewForm138Data(
     ? (finalGrades.reduce((sum: number, g: number) => sum + g, 0) / finalGrades.length).toFixed(2)
     : 'N/A';
   
-  // Get attendance data
-  const attendance = (attendanceRecords || []).find(r => r.studentId === student.id);
+  // Get attendance data - handle new individual record structure
+  const studentAttendanceRecords = (attendanceRecords || []).filter(r => r.studentId === student.id);
   let attendanceData = { present: 0, absent: 0, total: 0, percentage: 0 };
   
-  if (attendance) {
-    const statuses = Object.values(attendance.dailyStatus);
-    const present = statuses.filter(s => s === 'P' || s === 'L').length;
-    const absent = statuses.filter(s => s === 'A').length;
+  if (studentAttendanceRecords.length > 0) {
+    const present = studentAttendanceRecords.filter((r: any) => r.status === 'present' || r.status === 'late').length;
+    const absent = studentAttendanceRecords.filter((r: any) => r.status === 'absent').length;
     const total = present + absent;
     const percentage = total > 0 ? (present / total) * 100 : 0;
     

@@ -39,7 +39,7 @@ async function sendEmail(emailData) {
     
     const fromEmail = emailData.from || 
                       process.env.SENDGRID_FROM_EMAIL || 
-                      'noreply@edusync-sis.web.app';
+                      'noreply@edusync.ph';
     
     const fromName = emailData.fromName || 'EduSync School System';
     

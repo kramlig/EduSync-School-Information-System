@@ -165,14 +165,15 @@ export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ ch
         setIsSuperAdmin(userIsSuperAdmin);
         
         // Set active schoolId
-        // Priority: user.schoolId > first schoolIds > null
+        // Priority: user.schoolId > first schoolIds > 'default' (fallback for single-tenant)
         if (userSchoolId) {
           setSchoolId(userSchoolId);
         } else if (userSchoolIds.length > 0) {
           setSchoolId(userSchoolIds[0]);
         } else {
-          setSchoolId(null);
-          console.warn('[SchoolContext] User has no school assignment!', user.email);
+          // FALLBACK: Use 'default' as schoolId for single-tenant deployments
+          console.warn('[SchoolContext] User has no school assignment - using default schoolId');
+          setSchoolId('default');
         }
         
         setLoading(false);

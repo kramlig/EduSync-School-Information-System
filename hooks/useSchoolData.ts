@@ -203,15 +203,14 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 console.log('[useSchoolData] 👥 Subscribing to students with schoolId:', schoolId);
                 
                 // MULTI-TENANT: Filter by schoolId
+                // DEMO FIX: Removed limit(100) to show accurate total count on dashboard
                 const studentsQuery = schoolId
                     ? query(
                         collection(db, 'students'),
-                        where('schoolId', '==', schoolId),
-                        limit(100) // Initial page
+                        where('schoolId', '==', schoolId)
                     )
                     : query(
-                        collection(db, 'students'),
-                        limit(100)
+                        collection(db, 'students')
                     );
 
                 const unsubStudents = onSnapshot(

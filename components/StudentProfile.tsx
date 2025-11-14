@@ -49,6 +49,9 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [showPrintableReport, setShowPrintableReport] = useState(false);
 
+  // Extract learning areas from schoolData for subject name lookups
+  const { learningAreas = [] } = schoolData;
+
   // Calculate student section and adviser
   const section = sections.find(s => s.id === student.sectionId);
   const adviser = teachers.find(t => t.id === section?.adviserId);
@@ -129,12 +132,16 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
     const studentGrades = grades.filter(g => g.studentId === student.id);
     return studentGrades
       .filter(g => typeof g.finalGrade === 'number' && g.learningAreaId)
-      .map(g => ({
-        subject: g.learningAreaId!, // Would map to actual learning area name
-        grade: g.finalGrade!,
-        color: g.finalGrade! >= 90 ? 'bg-green-500' : g.finalGrade! >= 80 ? 'bg-blue-500' : g.finalGrade! >= 75 ? 'bg-yellow-500' : 'bg-red-500'
-      }));
-  }, [grades, student.id]);
+      .map(g => {
+        // Find the learning area name from the learningAreas array
+        const learningArea = schoolData.learningAreas?.find(la => la.id === g.learningAreaId);
+        return {
+          subject: learningArea?.name || g.learningAreaId!, // Use name, fallback to ID
+          grade: g.finalGrade!,
+          color: g.finalGrade! >= 90 ? 'bg-green-500' : g.finalGrade! >= 80 ? 'bg-blue-500' : g.finalGrade! >= 75 ? 'bg-yellow-500' : 'bg-red-500'
+        };
+      });
+  }, [grades, schoolData.learningAreas, student.id]);
 
   // Get status badge
   const getStatusBadge = () => {
@@ -280,6 +287,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
               grades={grades}
               subjectPerformance={subjectPerformance}
               academicMetrics={academicMetrics}
+              schoolData={schoolData}
             />
           )}
 
@@ -387,7 +395,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
             {/* Optional: Footer with Quick Info */}
             <div className="sticky bottom-0 bg-gradient-to-r from-slate-100 to-slate-200 px-4 sm:px-6 py-2 sm:py-3 border-t flex justify-between items-center text-xs sm:text-sm text-slate-600 sm:rounded-b-xl print:hidden">
               <div className="flex items-center gap-4">
-                <span className="font-medium">📊 School Year: {schoolData.settings.schoolYear}</span>
+                <span className="font-medium">📊 School Year: {schoolData?.settings?.schoolYear || schoolYear}</span>
                 <span className="hidden sm:inline">•</span>
                 <span className="hidden sm:inline">Student ID: {student.id}</span>
               </div>
@@ -462,7 +470,7 @@ const OverviewTab: React.FC<{
         <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Subject Performance</h3>
         <BarChart
           data={subjectPerformance.map(s => ({
-            label: `Subject ${s.subject.substring(0, 8)}`,
+            label: s.subject, // Use full subject name
             value: s.grade,
             color: s.color
           }))}
@@ -504,7 +512,8 @@ const AcademicTab: React.FC<{
   grades: Grade[];
   subjectPerformance: any[];
   academicMetrics: any;
-}> = ({ student, grades, subjectPerformance, academicMetrics }) => {
+  schoolData: SchoolDataHook;
+}> = ({ student, grades, subjectPerformance, academicMetrics, schoolData }) => {
   const studentGrades = grades.filter(g => g.studentId === student.id);
 
   return (
@@ -571,10 +580,14 @@ const AcademicTab: React.FC<{
                     return '-';
                   };
 
+                  // Find learning area name
+                  const learningArea = schoolData.learningAreas?.find(la => la.id === grade.learningAreaId);
+                  const subjectName = learningArea?.name || 'Unknown Subject';
+                  
                   return (
                     <tr key={index} className="border-t border-slate-200 dark:border-slate-700">
                       <td className="px-4 py-2 text-sm text-slate-800 dark:text-slate-200">
-                        Subject {grade.learningAreaId?.substring(0, 10) || 'Unknown'}
+                        {subjectName}
                       </td>
                       <td className="px-4 py-2 text-center text-sm text-slate-800 dark:text-slate-200">{displayQuarter(grade.q1)}</td>
                       <td className="px-4 py-2 text-center text-sm text-slate-800 dark:text-slate-200">{displayQuarter(grade.q2)}</td>

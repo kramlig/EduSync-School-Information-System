@@ -204,10 +204,12 @@ const App: React.FC = () => {
   // NEW: Firestore subscriptions hook - loads all data automatically with real-time updates
   // IMPORTANT: Only fetch data when user is logged in AND NOT on public/login routes
   // Skip data loading entirely for public routes without session AND /admin login page
+  // PERFORMANCE: Also skip for School Management route (it manages its own data)
   // Pass empty array when skipping Firebase to prevent unnecessary subscriptions
   // CRITICAL: Memoize the empty array to prevent infinite render loops
   const emptyCollections = useMemo(() => [], []);
-  const shouldLoadData = session && !shouldSkipFirebase && !isAdminLoginRoute;
+  const isSchoolManagementRoute = location.pathname === '/school-management';
+  const shouldLoadData = session && !shouldSkipFirebase && !isAdminLoginRoute && !isSchoolManagementRoute;
   const schoolData = useSchoolData(shouldLoadData ? undefined : emptyCollections);
   
   const { 
@@ -490,7 +492,7 @@ const App: React.FC = () => {
                         <Route path="/forms/elln/results" element={<ELLNResults />} />
                         <Route path="/forms/elln/reports" element={<ELLNReports />} />
                         <Route path="/forms/elln/ilmp" element={<ILMPTemplate />} />
-                        <Route path="/grades" element={<GradesReportsDashboard session={staffSession} />} />
+                        <Route path="/grades" element={<GradesReportsDashboard session={staffSession} schoolData={schoolData} />} />
                         <Route path="/grades/entry" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/grades/form137" element={<Form137Dashboard />} />
                         <Route path="/grades/form137/:studentId" element={<Form137ManagerWrapper schoolYear={settings.schoolYear} />} />

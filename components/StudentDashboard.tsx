@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Card from './Card';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { StarIcon, CheckBadgeIcon, XCircleIcon, CalendarDaysIcon } from './icons';
-import type { AuthUser, StudentUser, Grade, AttendanceStatus } from '../types';
+import type { AuthUser, StudentUser, Grade } from '../types';
 import LineChart from './LineChart';
 import AchievementBadges, { Badge } from './AchievementBadges';
 import UpcomingEvents, { UpcomingEvent } from './UpcomingEvents';
@@ -30,14 +30,14 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ schoolData, session
   }, [studentGrades]);
 
   const attendanceTotal = useMemo(() => {
-    const record = attendanceRecords.find(r => r.studentId === student.id);
-    if (!record) return { present: 0, absent: 0, total: 0 };
+    const studentRecords = attendanceRecords.filter(r => r.studentId === student.id);
+    if (studentRecords.length === 0) return { present: 0, absent: 0, total: 0 };
 
-    const totals = Object.values(record.dailyStatus).reduce(
-      (totals: { present: number; absent: number }, status: AttendanceStatus) => {
-        if (status === 'P' || status === 'L') {
+    const totals = studentRecords.reduce(
+      (totals: { present: number; absent: number }, record: any) => {
+        if (record.status === 'present' || record.status === 'late') {
             totals.present++;
-        } else if (status === 'A') {
+        } else if (record.status === 'absent') {
             totals.absent++;
         }
         return totals;

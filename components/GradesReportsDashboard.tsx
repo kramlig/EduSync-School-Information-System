@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   BookOpenIcon, 
@@ -10,15 +10,82 @@ import {
   TargetIcon 
 } from './icons';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
+import type { SchoolDataHook } from '../hooks/useSchoolData';
 
 interface GradesReportsDashboardProps {
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
+  schoolData: SchoolDataHook;
 }
 
-const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session }) => {
+const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session, schoolData }) => {
   const navigate = useNavigate();
   const userRole = session.type === 'staff' ? (session.user as AuthUser).role : session.type;
+  const authUser = session.user as AuthUser;
+  
+  const { students, grades = [], sections = [], classSchedules = [] } = schoolData;
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+
+  // Filter students for teachers (same logic as StudentList and Dashboard)
+  const visibleStudents = useMemo(() => {
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
+      return students;
+    }
+
+    // Teacher: filter by assigned sections
+    const authorizedSectionIds = new Set<string>();
+
+    // 1. Sections where teacher is assigned via classSchedules
+    classSchedules.forEach(schedule => {
+      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+        authorizedSectionIds.add(schedule.sectionId);
+      }
+    });
+
+    // 2. Sections where teacher is the adviser
+    sections.forEach(section => {
+      if (section.adviserId === authUser.id) {
+        authorizedSectionIds.add(section.id);
+      }
+    });
+
+    if (authorizedSectionIds.size === 0) return [];
+
+    return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
+  }, [authUser, students, classSchedules, sections]);
+
+  // Filter grades for visible students
+  const visibleGrades = useMemo(() => {
+    const studentIds = new Set(visibleStudents.map(s => s.id));
+    return grades.filter(g => studentIds.has(g.studentId));
+  }, [grades, visibleStudents]);
+
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const totalStudents = visibleStudents.length;
+    
+    // Calculate average grade
+    const gradeValues = visibleGrades
+      .map(g => g.finalGrade)
+      .filter((grade): grade is number => typeof grade === 'number' && grade > 0);
+    const avgGrade = gradeValues.length > 0 
+      ? gradeValues.reduce((sum, g) => sum + g, 0) / gradeValues.length 
+      : 0;
+
+    // Calculate completion rate (students with grades)
+    const studentsWithGrades = new Set(visibleGrades.map(g => g.studentId)).size;
+    const completionRate = totalStudents > 0 ? (studentsWithGrades / totalStudents) * 100 : 0;
+
+    // Calculate excellence rate (grades >= 90)
+    const excellentGrades = gradeValues.filter(g => g >= 90).length;
+    const excellenceRate = gradeValues.length > 0 ? (excellentGrades / gradeValues.length) * 100 : 0;
+
+    return {
+      totalStudents,
+      avgGrade: avgGrade.toFixed(1),
+      completionRate: completionRate.toFixed(1),
+      excellenceRate: excellenceRate.toFixed(1)
+    };
+  }, [visibleStudents, visibleGrades]);
 
   const dashboardCards = [
     {
@@ -81,7 +148,7 @@ const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session
   const quickStats = [
     { 
       label: 'Total Students', 
-      value: '1,234', 
+      value: stats.totalStudents.toLocaleString(), 
       change: '+12%', 
       trend: 'up',
       icon: UsersIcon,
@@ -90,7 +157,7 @@ const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session
     },
     { 
       label: 'Average Grade', 
-      value: '87.5', 
+      value: stats.avgGrade, 
       change: '+2.3%', 
       trend: 'up',
       icon: TargetIcon,
@@ -99,7 +166,7 @@ const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session
     },
     { 
       label: 'Completion Rate', 
-      value: '94.2%', 
+      value: `${stats.completionRate}%`, 
       change: '+5.1%', 
       trend: 'up',
       icon: TrendingUpIcon,
@@ -108,7 +175,7 @@ const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session
     },
     { 
       label: 'Excellence Rate', 
-      value: '78.9%', 
+      value: `${stats.excellenceRate}%`, 
       change: '+8.2%', 
       trend: 'up',
       icon: AwardIcon,
@@ -150,7 +217,7 @@ const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session
       <div className="px-6 pb-8">
         {/* Statistics Dashboard */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {quickStats.map((stat, index) => {
+          {quickStats.map((stat) => {
             const IconComponent = stat.icon;
             return (
               <div
