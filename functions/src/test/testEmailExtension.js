@@ -45,7 +45,7 @@ exports.testEmailExtension = functions.https.onRequest(async (req, res) => {
                 <li><strong>Sent via:</strong> Cloud Function testEmailExtension</li>
                 <li><strong>Extension:</strong> firebase/firestore-send-email v0.2.4</li>
                 <li><strong>SMTP Provider:</strong> SendGrid</li>
-                <li><strong>FROM:</strong> noreply@edusync-sis.web.app</li>
+                <li><strong>FROM:</strong> official@edusync.ph</li>
                 <li><strong>Test Time:</strong> ${timestamp}</li>
               </ul>
             </div>
@@ -76,7 +76,7 @@ Test Details:
 - Sent via: Cloud Function testEmailExtension
 - Extension: firebase/firestore-send-email v0.2.4
 - SMTP Provider: SendGrid
-- FROM: noreply@edusync-sis.web.app
+- FROM: official@edusync.ph
 - Test Time: ${timestamp}
 
 Next Steps:

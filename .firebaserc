@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "edusync-sis"
+  },
+  "targets": {},
+  "etags": {
+    "edusync-sis": {
+      "extensionInstances": {
+        "firestore-send-email": "767bbd40ebc31284e48bec5f963c95da820b5d616a46be82ab70be9f4e16634d"
+      }
+    }
   }
 }
