@@ -745,7 +745,7 @@ async function createSchoolAdmin(school) {
   }
   
   // Always create Firestore document (this is what matters for login)
-  await db.collection('teachers').add({
+  const teacherRef = await db.collection('teachers').add({
     schoolId: school.id,
     email,
     firstName: school.shortName,
@@ -757,6 +757,21 @@ async function createSchoolAdmin(school) {
   });
   
   console.log(`   ✓ Created admin in Firestore: ${email}`);
+  
+  // Create corresponding users collection entry (required for new login flow)
+  try {
+    const authUser = await auth.getUserByEmail(email);
+    await db.collection('users').doc(authUser.uid).set({
+      email,
+      role: 'admin',
+      schoolId: school.id,
+      name: `${school.shortName} Admin`,
+      createdAt: FieldValue.serverTimestamp()
+    });
+    console.log(`   ✓ Created admin in users collection: ${email}`);
+  } catch (err) {
+    console.log(`   ⚠️  Skipped users collection (Auth user not found)`);
+  }
   
   return { email, password, role: 'Admin', school: school.name };
 }
@@ -811,6 +826,16 @@ async function createTeachers(school, sections) {
         role: 'teacher',
         schools: [school.id]
       });
+      
+      // Create users collection entry (required for new login flow)
+      await db.collection('users').doc(userRecord.uid).set({
+        email,
+        role: 'teacher',
+        schoolId: school.id,
+        name: `${firstName} ${lastName}`,
+        createdAt: FieldValue.serverTimestamp()
+      });
+      
       authCreated++;
     } catch (err) {
       // Silent fail for auth
@@ -842,8 +867,11 @@ async function createStudents(school, sections) {
   
   const students = [];
   let totalStudents = 0;
+  let authCreated = 0;
   
   const studentsCollection = db.collection('students');
+  const password = 'TestPass123!';
+  
   let batch = db.batch();
   let batchCount = 0;
   const BATCH_SIZE = 500;
@@ -869,6 +897,35 @@ async function createStudents(school, sections) {
         createdAt: FieldValue.serverTimestamp()
       });
       
+      // Only create Auth accounts for first 5 students (demo login accounts)
+      if (authCreated < 5) {
+        try {
+          const userRecord = await auth.createUser({
+            email,
+            password,
+            displayName: `${firstName} ${lastName}`
+          });
+          
+          await auth.setCustomUserClaims(userRecord.uid, {
+            role: 'student',
+            schools: [school.id]
+          });
+          
+          // Create users collection entry (required for new login flow)
+          await db.collection('users').doc(userRecord.uid).set({
+            email,
+            role: 'student',
+            schoolId: school.id,
+            name: `${firstName} ${lastName}`,
+            createdAt: FieldValue.serverTimestamp()
+          });
+          
+          authCreated++;
+        } catch (err) {
+          // Silent fail - continue without Auth account
+        }
+      }
+      
       students.push({
         id: ref.id,
         firstName,
@@ -892,7 +949,8 @@ async function createStudents(school, sections) {
     await batch.commit();
   }
   
-  console.log(`      ✓ Created ${totalStudents} students (batched)`);
+  console.log(`      ✓ Created ${totalStudents} students in Firestore (batched)`);
+  console.log(`      ✓ Created ${authCreated} demo student login accounts (first 5 students only)`);
   return students;
 }
 
@@ -934,6 +992,16 @@ async function createParents(school, students) {
         role: 'parent',
         schools: [school.id]
       });
+      
+      // Create users collection entry (required for new login flow)
+      await db.collection('users').doc(userRecord.uid).set({
+        email,
+        role: 'parent',
+        schoolId: school.id,
+        name: `Parent ${lastName}`,
+        createdAt: FieldValue.serverTimestamp()
+      });
+      
       authCreated++;
     } catch (err) {
       // Silent fail
@@ -1229,6 +1297,15 @@ async function createSuperAdmin() {
     await auth.setCustomUserClaims(userRecord.uid, {
       role: 'superadmin',
       schools: SCHOOLS.map(s => s.id)
+    });
+    
+    // Create users collection entry (required for new login flow)
+    await db.collection('users').doc(userRecord.uid).set({
+      email,
+      role: 'superadmin',
+      schoolId: 'default',
+      name: 'Super Admin',
+      createdAt: FieldValue.serverTimestamp()
     });
     
     console.log(`   ✓ Created ${email} in Auth`);

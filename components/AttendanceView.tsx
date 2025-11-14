@@ -172,7 +172,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
     const cache = new Map<string, Record<AttendanceStatus, number> & { total: number }>();
     
     pagedStudents.forEach(student => {
-      const record = attendanceRecords.find(r => r.studentId === student.id);
+      const studentRecords = attendanceRecords.filter(r => r.studentId === student.id);
       
       const year = currentDate.getFullYear();
       const schoolYearStartMonth = 6; // June
@@ -181,12 +181,18 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
       // Build a merged map of all attendance (server + optimistic)
       const mergedStatus: Record<string, AttendanceStatus> = {};
       
-      // First, add all server data
-      if (record?.dailyStatus) {
-        Object.entries(record.dailyStatus).forEach(([date, status]) => {
-          mergedStatus[date] = status as AttendanceStatus;
-        });
-      }
+      // First, add all server data from individual attendance records
+      studentRecords.forEach(record => {
+        const recordData = record as any; // Cast to handle new attendance structure
+        if (recordData.date && recordData.status) {
+          // Map new status format to old AttendanceStatus codes
+          const statusCode = recordData.status === 'present' ? 'P' : 
+                           recordData.status === 'absent' ? 'A' : 
+                           recordData.status === 'late' ? 'L' : 
+                           recordData.status === 'excused' ? 'E' : 'P';
+          mergedStatus[recordData.date] = statusCode as AttendanceStatus;
+        }
+      });
       
       // Then, overlay optimistic updates for this student
       // Key format: "studentId-YYYY-MM-DD"
@@ -535,7 +541,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
           </thead>
           <tbody>
             {pagedStudents.map((student) => {
-              const studentRecord = attendanceRecords.find(r => r.studentId === student.id);
+              const studentRecords = attendanceRecords.filter(r => r.studentId === student.id);
               const totals = calculateTotals(student.id);
               return (
               <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors duration-150">
@@ -564,8 +570,18 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
                 {daysInMonth.map(day => {
                     const dateStr = day.toISOString().split('T')[0];
                     const key = `${student.id}-${dateStr}`;
+                    
+                    // Find attendance record for this date
+                    const dateRecord = studentRecords.find((r: any) => r.date === dateStr);
+                    const serverStatus = dateRecord ? (
+                      (dateRecord as any).status === 'present' ? 'P' :
+                      (dateRecord as any).status === 'absent' ? 'A' :
+                      (dateRecord as any).status === 'late' ? 'L' :
+                      (dateRecord as any).status === 'excused' ? 'E' : undefined
+                    ) : undefined;
+                    
                     // Use optimistic local state if available, otherwise use server state
-                    const status = localAttendance.get(key) || studentRecord?.dailyStatus[dateStr];
+                    const status = localAttendance.get(key) || serverStatus;
                     const isUpdating = updatingCells.has(key);
                     
                     const statusLabel = status ? STATUS_MAP[status as AttendanceStatus]?.label : '';

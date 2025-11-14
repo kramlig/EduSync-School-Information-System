@@ -64,6 +64,15 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     const [viewType, setViewType] = useState<'section' | 'teacher'>(getInitialViewType());
     const [selectedId, setSelectedId] = useState<string | null>(getInitialSelectedId());
     
+    // FIX: Auto-select first section when sections are loaded (for admin/principal)
+    useEffect(() => {
+        console.log('[SchedulerView] selectedId:', selectedId, 'sections.length:', sections.length, 'viewType:', viewType);
+        if (!selectedId && sections.length > 0 && viewType === 'section') {
+            console.log('[SchedulerView] Auto-selecting first section:', sections[0].id, sections[0].name);
+            setSelectedId(sections[0].id);
+        }
+    }, [sections, selectedId, viewType]);
+    
     // --- FILTER STATE ---
     type FilterType = 'all' | 'academic' | 'extracurricular';
     type FilterState = {
@@ -142,20 +151,41 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
             if (s.scope === 'gradeLevel' && typeof s.gradeLevel === 'number') push(byGradeLevel, s.gradeLevel, s);
             if (s.type === 'academic' && s.teacherId) push(byTeacher, s.teacherId, s);
         }
+        
+        console.log('[SchedulerView] Indexed schedules:', {
+            totalSchedules: classSchedules.length,
+            allSchool: all.length,
+            bySectionCount: bySection.size,
+            byGradeLevelCount: byGradeLevel.size,
+            byTeacherCount: byTeacher.size,
+            sampleSectionIds: Array.from(bySection.keys()).slice(0, 5)
+        });
+        
         return { bySection, byTeacher, byGradeLevel, all };
     }, [classSchedules]);
 
     const sectionGradeMap = useMemo(() => new Map(sections.map(s => [s.id, s.gradeLevel])), [sections]);
 
     const baseList = useMemo(() => {
-        if (!selectedId) return [] as ClassSchedule[];
+        // TEMPORARY DEBUG: Show all schedules if no section selected
+        if (!selectedId) {
+            console.warn('[SchedulerView] ⚠️ No selectedId - showing ALL schedules as fallback');
+            // Return first 50 schedules for debugging
+            return classSchedules.slice(0, 50);
+        }
         if (viewType === 'teacher') {
-            return scheduleIndexes.byTeacher.get(selectedId) ?? [];
+            const teacherSchedules = scheduleIndexes.byTeacher.get(selectedId) ?? [];
+            console.log(`[SchedulerView] Teacher view - found ${teacherSchedules.length} schedules for teacher ${selectedId}`);
+            return teacherSchedules;
         }
         const gl = sectionGradeMap.get(selectedId);
         const a = scheduleIndexes.all;
         const b = gl != null ? (scheduleIndexes.byGradeLevel.get(gl) ?? []) : [];
         const c = scheduleIndexes.bySection.get(selectedId) ?? [];
+        console.log(`[SchedulerView] Section view - selectedId: ${selectedId}, gradeLevel: ${gl}`);
+        console.log(`[SchedulerView]   - All-school schedules: ${a.length}`);
+        console.log(`[SchedulerView]   - Grade-level schedules: ${b.length}`);
+        console.log(`[SchedulerView]   - Section schedules: ${c.length}`);
         const seen = new Set<string>();
         const out: ClassSchedule[] = [];
         for (const arr of [a,b,c]) {
@@ -163,8 +193,9 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                 if (!seen.has(s.id)) { seen.add(s.id); out.push(s); }
             }
         }
+        console.log(`[SchedulerView] Total baseList: ${out.length} schedules`);
         return out;
-    }, [viewType, selectedId, scheduleIndexes, sectionGradeMap]);
+    }, [viewType, selectedId, scheduleIndexes, sectionGradeMap, classSchedules]);
 
     // no time filter
 

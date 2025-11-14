@@ -880,8 +880,14 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900">
-      {/* Navigation Bar */}
-      <nav className="sticky top-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700">
+      {/* Navigation Bar - Notebook paper style with alternating blue/red lines */}
+      <nav 
+        className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm"
+        style={{
+          backgroundImage: 'repeating-linear-gradient(0deg, transparent 0, transparent 19px, #4169e1 19px, #4169e1 20px, transparent 20px, transparent 39px, #ef4444 39px, #ef4444 40px)',
+          backgroundSize: '100% 40px'
+        } as React.CSSProperties}
+      >
         <div className="max-w-7xl mx-auto px-6 py-5 overflow-visible">
           <div className="flex items-center justify-between gap-4">
             {/* Logo - Responsive: Text on desktop, icon only on mobile */}
@@ -894,14 +900,15 @@ const LandingPage: React.FC = () => {
               </div>
             </div>
             
-            {/* Desktop Navigation Links */}
-            <div className="hidden md:flex items-center gap-8">
+            {/* Desktop Navigation Links - Handwriting style aligned to notebook lines */}
+            <div className="hidden md:flex items-baseline gap-8" style={{ paddingTop: '6px' }}>
               <button
                 onClick={() => {
                   const section = document.querySelector('[data-section="solution"]');
                   section?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                className="text-base font-semibold text-slate-700 hover:text-blue-600 transition-colors"
+                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
               >
                 Features
               </button>
@@ -910,7 +917,8 @@ const LandingPage: React.FC = () => {
                   const section = document.querySelector('[data-section="testimonials"]');
                   section?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                className="text-base font-semibold text-slate-700 hover:text-blue-600 transition-colors"
+                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
               >
                 Testimonials
               </button>
@@ -919,7 +927,8 @@ const LandingPage: React.FC = () => {
                   const section = document.querySelector('[data-section="pricing"]');
                   section?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                className="text-base font-semibold text-slate-700 hover:text-blue-600 transition-colors"
+                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
               >
                 Pricing
               </button>
@@ -928,19 +937,22 @@ const LandingPage: React.FC = () => {
                   const section = document.querySelector('[data-section="faq"]');
                   section?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                className="text-base font-semibold text-slate-700 hover:text-blue-600 transition-colors"
+                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
               >
                 FAQ
               </button>
               <button
                 onClick={() => window.location.href = '/admin'}
-                className="text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                className="text-base font-semibold text-slate-700 hover:text-blue-600 transition-colors cursor-pointer"
+                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
               >
                 Login
               </button>
               <button
                 onClick={() => setIsTrialModalOpen(true)}
                 className="px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white rounded-lg text-base font-bold hover:shadow-lg hover:scale-105 transition-all"
+                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
               >
                 Start Free Trial
               </button>

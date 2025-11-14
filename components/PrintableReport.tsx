@@ -103,7 +103,8 @@ export const generateReportCardPDF = async (student: Student, schoolData: School
     }
     
     // Save PDF
-    const fileName = `Report-Card-${student.name.replace(/\s+/g, '-')}-${schoolData.settings.schoolYear}.pdf`;
+    const schoolYear = schoolData.settings?.schoolYear || schoolData?.settings?.schoolYear || '2023-2024';
+    const fileName = `Report-Card-${student.name.replace(/\s+/g, '-')}-${schoolYear}.pdf`;
     pdf.save(fileName);
     
   } catch (error) {
@@ -113,7 +114,17 @@ export const generateReportCardPDF = async (student: Student, schoolData: School
 };
 
 const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, hideDownloadButton = false, studentIndex = 0 }) => {
-  const { grades, learningAreas, coreValues, coreValueGrades, attendanceRecords, monthlySchoolDaysConfig, teachers, sections, settings } = schoolData;
+  const { grades, learningAreas, coreValues, coreValueGrades, attendanceRecords, monthlySchoolDaysConfig, teachers, sections } = schoolData;
+  
+  // CRITICAL FIX: Provide default settings for new schools that don't have settings configured yet
+  const settings = schoolData.settings || {
+    schoolName: 'School Name',
+    region: 'Region',
+    division: 'Division',
+    district: 'District',
+    schoolYear: '2023-2024'
+  };
+  
   const slug = (s: string) => s
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -122,7 +133,6 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, 
   
   const studentGrades = useMemo(() => new Map(grades.filter(g => g.studentId === student.id).map(g => [g.learningAreaId, g])), [grades, student.id]);
   const studentCoreValues = useMemo(() => new Map(coreValueGrades.filter(g => g.studentId === student.id).map(g => [g.coreValueId, g])), [coreValueGrades, student.id]);
-  const studentAttendance = useMemo(() => attendanceRecords.find(r => r.studentId === student.id), [attendanceRecords, student.id]);
   const section = useMemo(() => sections.find(s => s.id === student.sectionId), [sections, student.sectionId]);
   const adviser = useMemo(() => teachers.find(t => t.id === section?.adviserId), [teachers, section]);
   const principal = useMemo(() => teachers.find(t => t.role === 'principal'), [teachers]);
@@ -200,29 +210,35 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, 
   const monthlyAttendanceSummary = useMemo(() => {
     // FIX: Ensure a consistently typed object is returned to avoid `unknown` type inference downstream.
     const summary: Record<string, { present: number, absent: number }> = {};
-    if (!studentAttendance) {
+    
+    // Get individual attendance records for this student
+    const studentAttendanceRecords = attendanceRecords.filter(r => r.studentId === student.id);
+    if (studentAttendanceRecords.length === 0) {
         return summary;
     }
     
   // const monthIndexMap: Record<string, number> = { 'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5, 'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11 };
 
-    for (const dateStr in studentAttendance.dailyStatus) {
-        const date = new Date(dateStr + "T00:00:00");
+    for (const record of studentAttendanceRecords) {
+        const recordData = record as any;
+        if (!recordData.date || !recordData.status) continue;
+        
+        const date = new Date(recordData.date + "T00:00:00");
         const monthAbbr = date.toLocaleString('default', { month: 'short' });
         
         if (!summary[monthAbbr]) {
             summary[monthAbbr] = { present: 0, absent: 0 };
         }
         
-        const status = studentAttendance.dailyStatus[dateStr];
-        if (status === 'P' || status === 'L') {
+        const status = recordData.status;
+        if (status === 'present' || status === 'late') {
             summary[monthAbbr].present++;
-        } else if (status === 'A') {
+        } else if (status === 'absent') {
             summary[monthAbbr].absent++;
         }
     }
     return summary;
-  }, [studentAttendance]);
+  }, [attendanceRecords, student.id]);
 
   return (
     <div className="text-black bg-white font-serif">

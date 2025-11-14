@@ -60,7 +60,7 @@ function determineRole(email) {
   }
 
   // Teacher Detection
-  // Pattern: teacher@*, teacher-*, faculty@*, *.teacher@*, staff@*
+  // Pattern: teacher@*, teacher-*, faculty@*, *.teacher@*, staff@*, *@teacher.local, *@teacher.*
   if (
     emailLower.startsWith('teacher@') ||
     emailLower.startsWith('teacher-') ||  // NEW: Matches teacher-test@*, teacher-john@*
@@ -70,10 +70,22 @@ function determineRole(email) {
     emailLower.includes('.teacher@') ||
     emailLower.includes('-teacher@') ||
     emailLower.includes('.faculty@') ||
+    emailLower.includes('@teacher.') ||   // NEW: Matches *@teacher.local, *@teacher.com
     emailLower.match(/^teacher\d+@/) ||    // Matches teacher1@, teacher123@
     emailLower.match(/^faculty\d+@/)
   ) {
     return 'teacher';
+  }
+
+  // Student Detection
+  // Pattern: student@*, *@student.local, *@student.*, student-*
+  if (
+    emailLower.startsWith('student@') ||
+    emailLower.startsWith('student-') ||
+    emailLower.includes('@student.') ||  // Matches *@student.local, *@student.com
+    emailLower.match(/^student\d+@/)     // Matches student1@, student123@
+  ) {
+    return 'student';
   }
 
   // Parent Detection (default)
@@ -89,7 +101,7 @@ function determineRole(email) {
  * @returns {boolean} - True if valid
  */
 function isValidRole(role) {
-  const validRoles = ['admin', 'principal', 'registrar', 'teacher', 'parent'];
+  const validRoles = ['admin', 'principal', 'registrar', 'teacher', 'student', 'parent'];
   return validRoles.includes(role);
 }
 

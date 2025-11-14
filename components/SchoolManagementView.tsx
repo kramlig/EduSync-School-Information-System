@@ -11,7 +11,7 @@ import {
   limit
 } from 'firebase/firestore';
 import { getFirestoreInstance } from '../src/services/firestoreService';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithRole } from '../services/userManagement';
 import Spinner from './Spinner';
 import Modal from './Modal';
 
@@ -165,16 +165,29 @@ const SchoolManagementView: React.FC = () => {
       // NOTE: Settings are now embedded in the school document
       // No separate settings collection needed
 
-      // 2. Create admin user in Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.adminEmail,
-        formData.adminPassword
-      );
+      // 2. Create admin user with proper role assignment
+      const userResult = await createUserWithRole({
+        email: formData.adminEmail,
+        password: formData.adminPassword,
+        role: 'admin',
+        schoolId: schoolRef.id,
+        displayName: `${formData.name} Admin`,
+        additionalData: {
+          firstName: 'Admin',
+          lastName: formData.name,
+          schoolName: formData.name
+        }
+      });
+
+      if (!userResult.success) {
+        throw new Error(userResult.error || 'Failed to create admin user');
+      }
+
+      const userId = userResult.userId!;
 
       // 3. Create admin teacher document
       await addDoc(collection(db, 'teachers'), {
-        uid: userCredential.user.uid,
+        uid: userId,
         schoolId: schoolRef.id,
         email: formData.adminEmail,
         firstName: 'Admin',
@@ -184,14 +197,8 @@ const SchoolManagementView: React.FC = () => {
         createdAt: serverTimestamp(),
       });
 
-      // 4. Create user role document
-      await addDoc(collection(db, 'userRoles'), {
-        userId: userCredential.user.uid,
-        role: 'admin',
-        schoolId: schoolRef.id,
-        email: formData.adminEmail,
-        createdAt: serverTimestamp(),
-      });
+      // Note: userRoles document is automatically created by createUserWithRole
+      // No need to manually create it here
 
       // Success - reset form and reload schools
       setFormData({
@@ -297,7 +304,7 @@ const SchoolManagementView: React.FC = () => {
       {/* Schools Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {schools.map((school) => (
-          <div key={school.id} className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6">;
+          <div key={school.id} className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6">
             <div className="space-y-4">
               {/* School Header */}
               <div className="flex items-start justify-between">

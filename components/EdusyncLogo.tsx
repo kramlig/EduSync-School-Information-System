@@ -47,9 +47,9 @@ const EdusyncLogo: React.FC<EdusyncLogoProps> = ({
   };
 
   return (
-    <div className={`flex items-center ${gapClasses[size]} ${className}`}>
-      {/* Logo Icon - with subtle hover effect */}
-      <div className={`${sizeClasses[size]} flex-shrink-0 transition-transform duration-200 hover:scale-105`}>
+    <div className={`flex items-center ${gapClasses[size]} ${className} relative`}>
+      {/* Logo Icon - with white background circle for contrast */}
+      <div className={`${sizeClasses[size]} flex-shrink-0 transition-transform duration-200 hover:scale-110 relative z-10 bg-white rounded-full p-1 shadow-lg ring-2 ring-white/50`}>
         <img 
           src="/edusync-logo.png" 
           alt="EduSync Logo" 
@@ -69,13 +69,16 @@ const EdusyncLogo: React.FC<EdusyncLogoProps> = ({
         />
       </div>
 
-      {/* Brand Text - with improved typography */}
+      {/* Brand Text - enhanced with pencil/graphite color for notebook aesthetic */}
       {showText && (
-        <div className={`font-cursive ${textSizeClasses[size]} leading-none whitespace-nowrap tracking-tight flex-shrink-0 pr-2`}>
-          <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent font-bold">
-            Edusync
+        <div className={`font-cursive ${textSizeClasses[size]} leading-none whitespace-nowrap tracking-wide flex-shrink-0 pr-2 relative z-10`} style={{
+          color: '#374151',
+          textShadow: '1px 1px 2px rgba(255,255,255,0.8), 0 0 4px rgba(255,255,255,0.6), -0.5px -0.5px 1px rgba(0,0,0,0.2)'
+        }}>
+          <span className="font-extrabold">
+            edusync
           </span>
-          <span className="bg-gradient-to-r from-purple-600 via-purple-500 to-pink-500 bg-clip-text text-transparent font-bold">
+          <span className="font-extrabold">
             .ph
           </span>
         </div>

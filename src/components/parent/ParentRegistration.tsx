@@ -14,9 +14,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFirestoreInstance } from '../../services/firestoreService';
-import { collection, query, where, getDocs, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import type { Student, Parent } from '../../../types';
+import { collection, query, where, getDocs, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { getAuth, sendEmailVerification } from 'firebase/auth';
+import { createParentWithRole } from '../../../services/userManagement';
+import type { Student } from '../../../types';
 
 interface RegistrationForm {
   // Parent Information
@@ -198,45 +199,45 @@ const ParentRegistration: React.FC = () => {
         return;
       }
       
-      // Create Firebase Auth user
-      const auth = getAuth();
-      const userCredential = await createUserWithEmailAndPassword(
-        auth, 
-        formData.parentEmail, 
-        formData.password
-      );
+      // Create parent user with proper role assignment
+      const [firstName, ...lastNameParts] = formData.parentName.split(' ');
+      const lastName = lastNameParts.join(' ') || firstName;
       
-      console.log('[ParentRegistration] Firebase Auth user created:', userCredential.user.uid);
+      const userResult = await createParentWithRole({
+        email: formData.parentEmail,
+        password: formData.password,
+        role: 'parent',
+        schoolId: verifiedStudent!.schoolId || 'default', // Inherit from student
+        displayName: formData.parentName,
+        studentIds: [verifiedStudent!.id],
+        contactNumber: formData.parentPhone,
+        additionalData: {
+          firstName,
+          lastName,
+          emailVerified: false,
+          registrationDate: new Date().toISOString()
+        }
+      });
+
+      if (!userResult.success || !userResult.userCredential) {
+        throw new Error(userResult.error || 'Failed to create parent account');
+      }
+      
+      console.log('[ParentRegistration] Parent account created:', userResult.userId);
       
       // Send verification email
-      await sendEmailVerification(userCredential.user, {
+      const auth = getAuth();
+      await sendEmailVerification(userResult.userCredential.user, {
         url: window.location.origin + '/verify-email',
         handleCodeInApp: true
       });
       
       console.log('[ParentRegistration] Verification email sent to', formData.parentEmail);
       
-      // Create parent document in Firestore (use Firebase Auth UID as document ID)
-      const newParent: Omit<Parent, 'id'> = {
-        schoolId: verifiedStudent!.schoolId || 'default', // Inherit schoolId from student
-        name: formData.parentName,
-        email: formData.parentEmail,
-        password: formData.password, // In production, hash this password!
-        studentIds: [verifiedStudent!.id],
-        phone: formData.parentPhone,
-        emailVerified: false, // Will be verified via email
-        registrationDate: new Date().toISOString(),
-      };
-      
-      const parentRef = doc(db, 'parents', userCredential.user.uid);
-      await setDoc(parentRef, newParent);
-      
-      console.log('[ParentRegistration] Parent account created:', userCredential.user.uid);
-      
       // Update student with parent link
       const studentRef = doc(db, 'students', verifiedStudent!.id);
       await updateDoc(studentRef, {
-        parentIds: arrayUnion(userCredential.user.uid)
+        parentIds: arrayUnion(userResult.userId)
       });
       
       console.log('[ParentRegistration] Student linked to parent');

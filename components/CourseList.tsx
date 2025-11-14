@@ -196,9 +196,17 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, session
 
   // Statistics calculation
   const stats = useMemo(() => {
-    const elementary = learningAreas.filter(a => a.gradeLevel && Math.max(...a.gradeLevel) <= 6);
-    const juniorHigh = learningAreas.filter(a => a.gradeLevel && Math.max(...a.gradeLevel) > 6 && Math.max(...a.gradeLevel) <= 10);
-    const seniorHigh = learningAreas.filter(a => a.gradeLevel && Math.max(...a.gradeLevel) > 10);
+    if (!learningAreas || !Array.isArray(learningAreas)) {
+      return {
+        total: 0, elementary: 0, juniorHigh: 0, seniorHighCore: 0,
+        seniorHighSTEM: 0, seniorHighABM: 0, seniorHighHUMSS: 0, seniorHighGAS: 0,
+        byCategory: { core: 0, specialized: 0, elective: 0, tle: 0, sports: 0 },
+        active: 0, inactive: 0
+      };
+    }
+    const elementary = learningAreas.filter(a => a.gradeLevel && Array.isArray(a.gradeLevel) && Math.max(...a.gradeLevel) <= 6);
+    const juniorHigh = learningAreas.filter(a => a.gradeLevel && Array.isArray(a.gradeLevel) && Math.max(...a.gradeLevel) > 6 && Math.max(...a.gradeLevel) <= 10);
+    const seniorHigh = learningAreas.filter(a => a.gradeLevel && Array.isArray(a.gradeLevel) && Math.max(...a.gradeLevel) > 10);
     
     return {
       total: learningAreas.length,
@@ -333,6 +341,9 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, session
 
   // Filter learning areas based on search and filters
   const filteredAreas = useMemo(() => {
+    if (!learningAreas || !Array.isArray(learningAreas)) {
+      return [];
+    }
     return learningAreas.filter(area => {
       // Search filter
       const matchesSearch = !searchQuery || 
@@ -367,7 +378,7 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ schoolData, session
     };
 
     filteredAreas.forEach(area => {
-      if (!area.gradeLevel || area.gradeLevel.length === 0) return;
+      if (!area.gradeLevel || !Array.isArray(area.gradeLevel) || area.gradeLevel.length === 0) return;
       
       const maxGrade = Math.max(...area.gradeLevel);
       

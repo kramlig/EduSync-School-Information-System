@@ -33,12 +33,13 @@ const ParentDashboard: React.FC<ParentDashboardProps> = ({ schoolData, session }
         ? finalGrades.reduce((sum, g) => sum + g, 0) / finalGrades.length
         : 0;
 
-      const attendance = attendanceRecords.find(r => r.studentId === child.id);
-      const attendanceData = attendance
-        ? Object.values(attendance.dailyStatus).reduce(
-            (acc, status) => {
-              if (status === 'P' || status === 'L') acc.present++;
-              else if (status === 'A') acc.absent++;
+      // Get attendance records for this child
+      const childAttendanceRecords = attendanceRecords.filter(r => r.studentId === child.id);
+      const attendanceData = childAttendanceRecords.length > 0
+        ? childAttendanceRecords.reduce(
+            (acc, record: any) => {
+              if (record.status === 'present' || record.status === 'late') acc.present++;
+              else if (record.status === 'absent') acc.absent++;
               return acc;
             },
             { present: 0, absent: 0 }

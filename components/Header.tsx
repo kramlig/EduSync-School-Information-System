@@ -80,29 +80,37 @@ const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-40 flex-shrink-0 flex items-center justify-between h-16 px-4 md:px-6 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm print:hidden">
+      <header 
+        className="sticky top-0 z-40 flex-shrink-0 h-16 px-4 md:px-6 bg-white border-b border-slate-200 shadow-sm print:hidden"
+        style={{
+          backgroundImage: 'repeating-linear-gradient(0deg, transparent 0, transparent 19px, #4169e1 19px, #4169e1 20px, transparent 20px, transparent 39px, #ef4444 39px, #ef4444 40px)',
+          backgroundSize: '100% 40px'
+        } as React.CSSProperties}
+      >
+        {/* Flex container for content */}
+        <div className="h-full flex items-center justify-between relative z-10">
         {/* Left: Logo & User Info */}
         <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
           {/* EduSync Logo */}
-          <EdusyncLogo size="sm" showText={false} className="flex-shrink-0" />
+          <EdusyncLogo size="sm" showText={true} className="flex-shrink-0" />
           
           {/* School Name (for single-school or when SchoolSwitcher hidden) */}
           {schoolName && (
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-700/50 rounded-md border border-slate-200 dark:border-slate-600">
-              <svg className="w-4 h-4 text-slate-600 dark:text-slate-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-md border border-slate-200">
+              <svg className="w-4 h-4 text-slate-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
               </svg>
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-200 max-w-xs truncate">{schoolName}</span>
+              <span className="text-sm font-medium text-slate-700 max-w-xs truncate">{schoolName}</span>
             </div>
           )}
           
           {/* User info */}
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{session.user.name}</span>
+            <span className="text-sm font-medium text-slate-700">{session.user.name}</span>
             <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getRoleBadgeClass(userRole)}`}>
               {userRole.charAt(0).toUpperCase() + userRole.slice(1)}
             </span>
-            {schoolYear && <span className="hidden sm:inline text-xs text-slate-500 dark:text-slate-400">SY {schoolYear}</span>}
+            {schoolYear && <span className="hidden sm:inline text-xs text-slate-600 font-medium">SY {schoolYear}</span>}
           </div>
         </div>
 
@@ -115,8 +123,8 @@ const Header: React.FC<HeaderProps> = ({
           <div 
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
               isOnline 
-                ? 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200' 
-                : 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200'
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-amber-100 text-amber-800'
             }`}
             title={isOnline ? 'Online' : 'Offline Mode - Changes will sync when connection is restored'}
             role="status"
@@ -129,7 +137,7 @@ const Header: React.FC<HeaderProps> = ({
             )}
             <span className="hidden md:inline">{isOnline ? 'Online' : 'Offline'}</span>
             {!isOnline && pendingCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 bg-amber-200 dark:bg-amber-700 rounded-full text-xs font-bold">
+              <span className="ml-1 px-1.5 py-0.5 bg-amber-200 rounded-full text-xs font-bold">
                 {pendingCount}
               </span>
             )}
@@ -148,14 +156,14 @@ const Header: React.FC<HeaderProps> = ({
                     setSelectedChildId(id);
                   }
                 }}
-                className="appearance-none w-36 md:w-44 bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md py-1.5 pl-3 pr-8 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100"
+                className="appearance-none w-36 md:w-44 bg-slate-100 border border-slate-300 rounded-md py-1.5 pl-3 pr-8 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
                 aria-label="Select child"
               >
                 {parentChildren.map(child => (
                   <option key={child.id} value={child.id}>{child.name}</option>
                 ))}
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-600 dark:text-slate-300">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-600">
                 <ChevronDownIcon />
               </div>
             </div>
@@ -164,7 +172,7 @@ const Header: React.FC<HeaderProps> = ({
           {/* Notification Bell */}
           {unreadCount > 0 && (
             <button
-              className="relative p-2 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              className="relative p-2 text-slate-600 hover:text-indigo-600 transition-colors"
               aria-label={`${unreadCount} unread notifications`}
               title={`${unreadCount} unread notifications`}
             >
@@ -178,7 +186,7 @@ const Header: React.FC<HeaderProps> = ({
           {/* Mobile Menu Toggle */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-2 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400"
+            className="lg:hidden p-2 text-slate-600 hover:text-indigo-600 transition-colors"
             aria-label="Toggle mobile menu"
             aria-expanded={mobileMenuOpen}
           >
@@ -187,7 +195,7 @@ const Header: React.FC<HeaderProps> = ({
 
           {/* Sync Status Indicator (Desktop) */}
           {hasPendingWrites && (
-            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200 rounded-full border border-orange-200 dark:border-orange-800">
+            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-orange-100 text-orange-800 rounded-full border border-orange-200">
               <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -196,7 +204,7 @@ const Header: React.FC<HeaderProps> = ({
             </div>
           )}
           {!hasPendingWrites && wasOffline && (
-            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 rounded-full border border-green-200 dark:border-green-800">
+            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-100 text-green-800 rounded-full border border-green-200">
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
@@ -207,11 +215,12 @@ const Header: React.FC<HeaderProps> = ({
           {/* Logout (Desktop) */}
           <button 
             onClick={onLogout} 
-            className="hidden lg:inline-block px-3 py-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+            className="hidden lg:inline-block px-3 py-1.5 text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-colors"
             aria-label="Logout"
           >
             Logout
           </button>
+        </div>
         </div>
       </header>
 

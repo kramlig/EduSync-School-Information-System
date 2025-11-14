@@ -2,7 +2,7 @@ import DepEdLogo from './DepEdLogo';
 import React, { useState } from 'react';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
 import { getFirestoreInstance } from '../src/services/firestoreService';
-import { collection, query, where } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 
 interface LoginScreenProps {
@@ -32,33 +32,81 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[LoginScreen] 🔵 Login attempt started:', { email, loginType });
     setError('');
     setIsLoading(true);
 
     try {
+      console.log('[LoginScreen] Step 1: Authenticating with Firebase Auth...');
       // Step 1: Authenticate with Firebase Auth (for security rules)
       const auth = getAuth();
-      await signInWithEmailAndPassword(auth, email.toLowerCase(), password);
+      const userCredential = await signInWithEmailAndPassword(auth, email.toLowerCase(), password);
+      const firebaseUser = userCredential.user;
+      console.log('[LoginScreen] ✅ Firebase Auth successful, UID:', firebaseUser.uid);
       
-      // Step 2: Query Firestore for user data
-      const collectionName = loginType === 'staff' ? 'teachers' : 
-                            loginType === 'student' ? 'students' : 'parents';
-      
+      console.log('[LoginScreen] Step 2: Fetching user document from users collection...');
+      // Step 2: Fetch from users collection (authenticated users can read their own doc)
       const db = getFirestoreInstance();
-      const usersCol = collection(db, collectionName);
-      const q = query(usersCol, where('email', '==', email.toLowerCase()));
+      const userDocRef = doc(db, 'users', firebaseUser.uid);
+      const userDocSnap = await getDoc(userDocRef);
       
-      const { getDocs } = await import('firebase/firestore');
-      const snapshot = await getDocs(q);
-      
-      if (snapshot.empty) {
-        setError(`No ${loginType} account found with that email`);
+      if (!userDocSnap.exists()) {
+        console.error('[LoginScreen] No users document found for UID:', firebaseUser.uid);
+        setError(`No ${loginType} account found. Please contact your administrator.`);
         setIsLoading(false);
         return;
       }
       
-      const userDoc = snapshot.docs[0];
-      const userData = { id: userDoc.id, ...userDoc.data() } as AuthUser | StudentUser | ParentUser;
+      const usersData = userDocSnap.data();
+      console.log('[LoginScreen] ✅ Found users document:', {
+        id: userDocSnap.id,
+        email: usersData.email,
+        role: usersData.role,
+        schoolId: usersData.schoolId
+      });
+      
+      // Verify the role matches the login type
+      const expectedRole = loginType === 'staff' ? ['admin', 'principal', 'registrar', 'teacher'] : [loginType];
+      if (!expectedRole.includes(usersData.role)) {
+        console.error('[LoginScreen] Role mismatch. Expected:', expectedRole, 'Got:', usersData.role);
+        setError(`Please use the ${usersData.role} login tab.`);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Build userData from users collection
+      let userData = {
+        id: userDocSnap.id,
+        ...usersData
+      } as AuthUser | StudentUser | ParentUser;
+      
+      console.log('[LoginScreen] Step 3: Fetching role-specific data...');
+      // Step 3: OPTIONAL - Also fetch from role-specific collection for additional data
+      const collectionName = loginType === 'staff' ? 'teachers' : 
+                            loginType === 'student' ? 'students' : 'parents';
+      
+      try {
+        const roleDocRef = doc(db, collectionName, firebaseUser.uid);
+        const roleDocSnap = await getDoc(roleDocRef);
+        
+        if (roleDocSnap.exists()) {
+          const roleData = roleDocSnap.data();
+          // Merge role-specific data (like studentIds for parents, assignments for teachers)
+          userData = {
+            ...userData,
+            ...roleData,
+            // Ensure users collection data takes precedence for auth fields
+            schoolId: usersData.schoolId || roleData.schoolId,
+            role: usersData.role || roleData.role
+          } as AuthUser | StudentUser | ParentUser;
+          console.log('[LoginScreen] ✅ Merged', collectionName, 'collection data');
+        } else {
+          console.warn('[LoginScreen] No', collectionName, 'document found for:', firebaseUser.uid);
+        }
+      } catch (roleErr) {
+        console.warn('[LoginScreen] Failed to fetch', collectionName, 'document:', roleErr);
+        // Continue with users collection data only
+      }
       
       // Cache user for offline login
       localStorage.setItem('edusync_cached_user', JSON.stringify({
@@ -68,11 +116,21 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
         cachedAt: Date.now()
       }));
       
+      console.log('[LoginScreen] ✅ Calling onLogin callback with userData:', {
+        id: (userData as any).id,
+        email: (userData as any).email,
+        schoolId: (userData as any).schoolId,
+        role: (userData as any).role
+      });
       onLogin(userData, loginType);
+      console.log('[LoginScreen] ✅ onLogin callback completed');
     } catch (err) {
-      if (isDevelopment) {
-        console.error('[LoginScreen] Login error:', err);
-      }
+      // CRITICAL: Always log errors, even in production (for debugging)
+      console.error('[LoginScreen] ❌ Login error:', err);
+      console.error('[LoginScreen] Error details:', {
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined
+      });
       
       // Offline fallback with first-login detection
       if (!navigator.onLine) {

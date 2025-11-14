@@ -115,6 +115,10 @@ export type StudentUser = Omit<Student, 'password'>;
 export interface TeacherAssignment {
   gradeLevel: number;
   learningAreaId: string;
+  learningAreaName?: string;
+  sectionId?: string;
+  sectionName?: string;
+  schoolYear?: string;
 }
 
 export interface Teacher {

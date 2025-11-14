@@ -52,15 +52,24 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
   const teacherAssignments = isTeacherView ? (session.user as AuthUser).assignments || [] : [];
   const teacherGradeLevels = teacherAssignments.map(a => a.gradeLevel);
   const teacherLearningAreaIds = teacherAssignments.map(a => a.learningAreaId);
+  const teacherSectionIds = teacherAssignments.map(a => a.sectionId).filter(Boolean); // Extract specific section IDs
 
-  // Filter sections based on teacher's grade level assignments
+  // Filter sections based on teacher's specific section assignments
   const availableSections = isTeacherView
-    ? sections.filter(s => teacherGradeLevels.includes(s.gradeLevel))
+    ? (teacherSectionIds.length > 0 
+        ? sections.filter(s => teacherSectionIds.includes(s.id)) // Use specific sections if available
+        : sections.filter(s => teacherGradeLevels.includes(s.gradeLevel))) // Fallback to grade levels
     : sections;
 
-  // Filter learning areas based on teacher's assignments
+  // Filter learning areas based on teacher's assignments or student's enrolled subjects
   const availableLearningAreas = isTeacherView
     ? learningAreas.filter(la => teacherLearningAreaIds.includes(la.id))
+    : isStudentView && grades && grades.length > 0
+    ? learningAreas.filter(la => {
+        // Only show learning areas where the student has at least one grade
+        const studentId = session.user.id;
+        return grades.some(g => g.studentId === studentId && g.learningAreaId === la.id);
+      })
     : learningAreas;
 
   // Base students based on user type
@@ -70,9 +79,14 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
     ? students.filter(s => s.id === forceStudentId)
     : isTeacherView
     ? students.filter(s => {
-        // Teachers can only see students in sections they teach (matching grade levels)
-        const studentSection = sections.find(sec => sec.id === s.sectionId);
-        return studentSection && teacherGradeLevels.includes(studentSection.gradeLevel);
+        // Teachers can only see students in their specific assigned sections
+        return teacherSectionIds.length > 0
+          ? teacherSectionIds.includes(s.sectionId) // Use specific section IDs if available
+          : (() => {
+              // Fallback to grade level matching if no section IDs
+              const studentSection = sections.find(sec => sec.id === s.sectionId);
+              return studentSection && teacherGradeLevels.includes(studentSection.gradeLevel);
+            })();
       })
     : students;
 
@@ -606,9 +620,13 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       ? students.filter(s => s.id === forceStudentId)
       : isTeacherView
       ? students.filter(s => {
-          // Teachers can only see students in sections they teach (matching grade levels)
-          const studentSection = sections.find(sec => sec.id === s.sectionId);
-          return studentSection && teacherGradeLevels.includes(studentSection.gradeLevel);
+          // Teachers can only see students in their specific assigned sections
+          return teacherSectionIds.length > 0
+            ? teacherSectionIds.includes(s.sectionId)
+            : (() => {
+                const studentSection = sections.find(sec => sec.id === s.sectionId);
+                return studentSection && teacherGradeLevels.includes(studentSection.gradeLevel);
+              })();
         })
       : students;
 
@@ -794,7 +812,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
         studentsWithBoth
       }
     };
-  }, [students, grades, availableLearningAreas, coreValues, coreValueGrades, session, forceStudentId, isStudentView, isParentView, selectedSectionId, performanceFilter, searchQuery]);
+  }, [students, grades, availableLearningAreas, coreValues, coreValueGrades, session, forceStudentId, isStudentView, isParentView, teacherSectionIds, selectedSectionId, performanceFilter, searchQuery]);
 
   // Tier 3: Deep Analytics Calculations (now uses unified filters)
   const deepAnalytics = useMemo(() => {
@@ -804,9 +822,13 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       ? students.filter(s => s.id === forceStudentId)
       : isTeacherView
       ? students.filter(s => {
-          // Teachers can only see students in sections they teach (matching grade levels)
-          const studentSection = sections.find(sec => sec.id === s.sectionId);
-          return studentSection && teacherGradeLevels.includes(studentSection.gradeLevel);
+          // Teachers can only see students in their specific assigned sections
+          return teacherSectionIds.length > 0
+            ? teacherSectionIds.includes(s.sectionId)
+            : (() => {
+                const studentSection = sections.find(sec => sec.id === s.sectionId);
+                return studentSection && teacherGradeLevels.includes(studentSection.gradeLevel);
+              })();
         })
       : students;
 
@@ -1070,7 +1092,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
       },
       recommendations
     };
-  }, [students, grades, availableLearningAreas, session, forceStudentId, isStudentView, isParentView, selectedSectionId, searchQuery]);
+  }, [students, grades, availableLearningAreas, session, forceStudentId, isStudentView, isParentView, teacherSectionIds, selectedSectionId, searchQuery]);
 
   const tabs = [
     { id: 'overview' as TabType, label: 'Overview & Analytics', icon: '📊' },
