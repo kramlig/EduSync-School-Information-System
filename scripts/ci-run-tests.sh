@@ -43,7 +43,7 @@ fi
 export FIRESTORE_EMULATOR_HOST="${EMULATOR_HOST}:${EMULATOR_PORT}"
 
 # Run tests
-if ! node ./scripts/test-firestore-rules.cjs; then
+if ! node ./scripts/tests/firestore-rules.test.cjs; then
   echo "Tests failed. Emulator log contents:" >&2
   cat "$EMULATOR_LOG" >&2 || true
   kill -TERM $EMULATOR_PID || true
