@@ -6,7 +6,7 @@
   "etags": {
     "edusync-sis": {
       "extensionInstances": {
-        "firestore-send-email": "767bbd40ebc31284e48bec5f963c95da820b5d616a46be82ab70be9f4e16634d"
+        "firestore-send-email": "ae33b50df7a6009d3f6428e0396cc1bdae2ed28f4bd44d286754943347276e38"
       }
     }
   }
