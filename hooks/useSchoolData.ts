@@ -165,91 +165,52 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         const unsubscribers: (() => void)[] = [];
         let isInitialLoad = true;
         let loadedCollections = 0;
+        const loadedCollectionNames: string[] = [];
         const totalCollections = 16; // All 16 collections (Day 1 Afternoon)
 
-        const checkAllLoaded = () => {
+        const checkAllLoaded = (collectionName?: string) => {
             loadedCollections++;
-            if (ENABLE_DEBUG_LOGS) {
-                console.log(`[useSchoolData] 📊 Loaded ${loadedCollections}/${totalCollections} collections`);
+            if (collectionName) {
+                loadedCollectionNames.push(collectionName);
             }
+            
+            // Always log progress for visibility
+            console.log(`[useSchoolData] 📊 Loaded ${loadedCollections}/${totalCollections} collections:`, loadedCollectionNames);
+            
             if (loadedCollections >= totalCollections && isInitialLoad) {
                 setLoading(false);
                 isInitialLoad = false;
-                if (ENABLE_DEBUG_LOGS) {
-                    console.log('[useSchoolData] ✅ Initial load complete');
-                }
+                console.log('[useSchoolData] ✅ All collections loaded successfully');
             }
         };
 
-        // OFFLINE-FIRST-VISIT FIX: Timeout to prevent infinite loading
-        // If subscriptions don't receive data within 5 seconds, assume offline-first-visit
+        // PERFORMANCE FIX: Increased timeout from 5s to 60s for production
+        // Production Firestore with large datasets can take 30-50s to return initial data
+        // Especially if composite indexes are missing for schoolId queries
         const loadingTimeout = setTimeout(() => {
             if (isInitialLoad && loadedCollections < totalCollections) {
+                const missingCollections = totalCollections - loadedCollections;
                 console.warn(
-                    `[useSchoolData] ⏰ Loading timeout - received ${loadedCollections}/${totalCollections} collections. ` +
-                    `Likely offline-first-visit with no cached data. Setting loading=false to show empty states.`
+                    `[useSchoolData] ⏰ Loading timeout (60s) - received ${loadedCollections}/${totalCollections} collections. ` +
+                    `Missing ${missingCollections} collections. ` +
+                    `Loaded: [${loadedCollectionNames.join(', ')}]. ` +
+                    `This may indicate slow network, missing Firestore indexes, or offline-first-visit with no cache.`
                 );
                 setLoading(false);
                 isInitialLoad = false;
             }
-        }, 5000); // 5 seconds timeout
+        }, 60000); // 60 seconds timeout for production
 
-        // Wait for auth before subscribing
-        waitForAuthReady().then(() => {
-            const db = getFirestoreInstance();
+        // PERFORMANCE FIX: Remove waitForAuthReady() - user is already authenticated after login
+        // This was causing delays as it waited for anonymous auth that's not needed
+        const db = getFirestoreInstance();
 
-            // ===== STUDENTS SUBSCRIPTION =====
-            if (shouldFetch('students')) {
-                console.log('[useSchoolData] 👥 Subscribing to students with schoolId:', schoolId);
-                
-                // MULTI-TENANT: Filter by schoolId
-                // DEMO FIX: Removed limit(100) to show accurate total count on dashboard
-                const studentsQuery = schoolId
-                    ? query(
-                        collection(db, 'students'),
-                        where('schoolId', '==', schoolId)
-                    )
-                    : query(
-                        collection(db, 'students')
-                    );
-
-                const unsubStudents = onSnapshot(
-                    studentsQuery,
-                    { includeMetadataChanges: true }, // CRITICAL: Detect cache vs server
-                    (snapshot) => {
-                        const fromCache = snapshot.metadata.fromCache;
-                        if (ENABLE_CACHE_LOGS) {
-                            console.log(
-                                fromCache 
-                                    ? '📦 [students] Data from CACHE' 
-                                    : '📡 [students] Data from SERVER'
-                            );
-                        }
-
-                        const studentsData = snapshot.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data()
-                        })) as Student[];
-
-                        setStudents(studentsData);
-                        
-                        // Update pagination state
-                        if (snapshot.docs.length > 0) {
-                            setLastStudentDoc(snapshot.docs[snapshot.docs.length - 1]);
-                            setHasMoreStudents(snapshot.docs.length === 100);
-                        } else {
-                            setHasMoreStudents(false);
-                        }
-
-                        if (ENABLE_SUCCESS_LOGS) {
-                            console.log(`[useSchoolData] ✅ Students updated: ${studentsData.length} documents`);
-                        }
-                        checkAllLoaded();
+            $matches[0] -replace 'checkAllLoaded\("unknown"\);', 'checkAllLoaded("students");'
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Students subscription error:', err);
                         setError(`Students error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("students-error");
                     }
                 );
 
@@ -258,51 +219,15 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 if (ENABLE_SUBSCRIPTION_LOGS) {
                     console.log('[useSchoolData] ⏭️ Skipping students (not in collectionsToFetch)');
                 }
-                checkAllLoaded();
+                checkAllLoaded("students-skipped");
             }
 
-            // ===== TEACHERS SUBSCRIPTION =====
-            if (shouldFetch('teachers')) {
-                if (ENABLE_SUBSCRIPTION_LOGS) {
-                    console.log('[useSchoolData] 👨‍🏫 Subscribing to teachers...');
-                }
-                
-                // MULTI-TENANT: Filter by schoolId
-                const teachersQuery = schoolId
-                    ? query(
-                        collection(db, 'teachers'),
-                        where('schoolId', '==', schoolId)
-                    )
-                    : collection(db, 'teachers');
-                    
-                const unsubTeachers = onSnapshot(
-                    teachersQuery,
-                    { includeMetadataChanges: true },
-                    (snapshot) => {
-                        const fromCache = snapshot.metadata.fromCache;
-                        if (ENABLE_CACHE_LOGS) {
-                            console.log(
-                                fromCache 
-                                    ? '📦 [teachers] Data from CACHE' 
-                                    : '📡 [teachers] Data from SERVER'
-                            );
-                        }
-
-                        const teachersData = snapshot.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data()
-                        })) as Teacher[];
-
-                        setTeachers(teachersData);
-                        if (ENABLE_SUCCESS_LOGS) {
-                            console.log(`[useSchoolData] ✅ Teachers updated: ${teachersData.length} documents`);
-                        }
-                        checkAllLoaded();
+            $matches[0] -replace 'checkAllLoaded\("unknown"\);', 'checkAllLoaded("teachers");'
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Teachers subscription error:', err);
                         setError(`Teachers error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
 
@@ -311,7 +236,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 if (ENABLE_SUBSCRIPTION_LOGS) {
                     console.log('[useSchoolData] ⏭️ Skipping teachers (not in collectionsToFetch)');
                 }
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== PARENTS SUBSCRIPTION =====
@@ -339,17 +264,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         if (ENABLE_SUCCESS_LOGS) {
                             console.log(`[useSchoolData] ✅ Parents: ${snapshot.docs.length} docs`);
                         }
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Parents error:', err);
                         setError(`Parents error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubParents);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== SECTIONS SUBSCRIPTION =====
@@ -377,17 +302,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         if (ENABLE_SUCCESS_LOGS) {
                             console.log(`[useSchoolData] ✅ Sections: ${snapshot.docs.length} docs`);
                         }
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Sections error:', err);
                         setError(`Sections error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubSections);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== LEARNING AREAS SUBSCRIPTION =====
@@ -413,17 +338,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         }
                         setLearningAreas(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LearningArea[]);
                         console.log(`[useSchoolData] ✅ Learning Areas: ${snapshot.docs.length} docs`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Learning Areas error:', err);
                         setError(`Learning Areas error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubLearningAreas);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== GRADES SUBSCRIPTION =====
@@ -452,18 +377,18 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         if (snapshot.docs.length > 0) {
                             console.log('[useSchoolData] 📊 Sample grade doc:', gradesData[0]);
                         }
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Grades error:', err);
                         setError(`Grades error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubGrades);
             } else {
                 console.log('[useSchoolData] ⏭️ SKIPPING grades subscription (not in requested collections)');
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== CORE VALUES SUBSCRIPTION =====
@@ -487,17 +412,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         }
                         setCoreValues(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CoreValue[]);
                         console.log(`[useSchoolData] ✅ Core Values: ${snapshot.docs.length} docs`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Core Values error:', err);
                         setError(`Core Values error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubCoreValues);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== CORE VALUE GRADES SUBSCRIPTION =====
@@ -519,17 +444,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         console.log(snapshot.metadata.fromCache ? '📦 [coreValueGrades] CACHE' : '📡 [coreValueGrades] SERVER');
                         setCoreValueGrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CoreValueGrade[]);
                         console.log(`[useSchoolData] ✅ Core Value Grades: ${snapshot.docs.length} docs`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Core Value Grades error:', err);
                         setError(`Core Value Grades error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubCoreValueGrades);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== ATTENDANCE RECORDS SUBSCRIPTION =====
@@ -552,17 +477,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         setAttendanceRecords(records as unknown as AttendanceRecord[]);
                         console.log(`[useSchoolData] ✅ Attendance Records: ${snapshot.docs.length} docs`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Attendance Records error:', err);
                         setError(`Attendance Records error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubAttendance);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== SUBSTITUTE ASSIGNMENTS SUBSCRIPTION =====
@@ -584,17 +509,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         console.log(snapshot.metadata.fromCache ? '📦 [substituteAssignments] CACHE' : '📡 [substituteAssignments] SERVER');
                         setSubstituteAssignments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as SubstituteAssignment[]);
                         console.log(`[useSchoolData] ✅ Substitute Assignments: ${snapshot.docs.length} docs`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Substitute Assignments error:', err);
                         setError(`Substitute Assignments error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubSubstitutes);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== CLASS SCHEDULES SUBSCRIPTION =====
@@ -616,17 +541,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         console.log(snapshot.metadata.fromCache ? '📦 [classSchedules] CACHE' : '📡 [classSchedules] SERVER');
                         setClassSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ClassSchedule[]);
                         console.log(`[useSchoolData] ✅ Class Schedules: ${snapshot.docs.length} docs`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Class Schedules error:', err);
                         setError(`Class Schedules error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubSchedules);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== ASSIGNMENTS SUBSCRIPTION =====
@@ -648,17 +573,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         console.log(snapshot.metadata.fromCache ? '📦 [assignments] CACHE' : '📡 [assignments] SERVER');
                         setAssignments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Assignment[]);
                         console.log(`[useSchoolData] ✅ Assignments: ${snapshot.docs.length} docs`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Assignments error:', err);
                         setError(`Assignments error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubAssignments);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== STUDENT ASSIGNMENT GRADES SUBSCRIPTION =====
@@ -680,17 +605,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         console.log(snapshot.metadata.fromCache ? '📦 [studentAssignmentGrades] CACHE' : '📡 [studentAssignmentGrades] SERVER');
                         setStudentAssignmentGrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as StudentAssignmentGrade[]);
                         console.log(`[useSchoolData] ✅ Student Assignment Grades: ${snapshot.docs.length} docs`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Student Assignment Grades error:', err);
                         setError(`Student Assignment Grades error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubStudentGrades);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== LESSON PLANS SUBSCRIPTION =====
@@ -712,17 +637,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         console.log(snapshot.metadata.fromCache ? '📦 [lessonPlans] CACHE' : '📡 [lessonPlans] SERVER');
                         setLessonPlans(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LessonPlan[]);
                         console.log(`[useSchoolData] ✅ Lesson Plans: ${snapshot.docs.length} docs`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Lesson Plans error:', err);
                         setError(`Lesson Plans error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubLessonPlans);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== ANNOUNCEMENTS SUBSCRIPTION =====
@@ -744,17 +669,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                         console.log(snapshot.metadata.fromCache ? '📦 [announcements] CACHE' : '📡 [announcements] SERVER');
                         setAnnouncements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Announcement[]);
                         console.log(`[useSchoolData] ✅ Announcements: ${snapshot.docs.length} docs`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Announcements error:', err);
                         setError(`Announcements error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubAnnouncements);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== SETTINGS SUBSCRIPTION =====
@@ -788,14 +713,14 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                                 console.warn('[useSchoolData] ⚠️ School document not found:', schoolId, '- using mock settings');
                                 setSettings(MOCK_SETTINGS);
                             }
-                            checkAllLoaded();
+                            checkAllLoaded("unknown");
                         },
                         (err) => {
                             console.error('[useSchoolData] ❌ Settings error:', err);
                             setError(`Settings error: ${err.message}`);
                             // Fallback to mock settings on error
                             setSettings(MOCK_SETTINGS);
-                            checkAllLoaded();
+                            checkAllLoaded("unknown");
                         }
                     );
                     unsubscribers.push(unsubSettings);
@@ -811,18 +736,18 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                                 setSettings({ ...MOCK_SETTINGS, ...snapshot.data() } as SchoolSettings);
                                 console.log('[useSchoolData] ✅ Settings loaded (legacy mode)');
                             }
-                            checkAllLoaded();
+                            checkAllLoaded("unknown");
                         },
                         (err) => {
                             console.error('[useSchoolData] ❌ Settings error:', err);
                             setError(`Settings error: ${err.message}`);
-                            checkAllLoaded();
+                            checkAllLoaded("unknown");
                         }
                     );
                     unsubscribers.push(unsubSettings);
                 }
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
             // ===== MONTHLY SCHOOL DAYS CONFIG SUBSCRIPTION =====
@@ -837,17 +762,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                             setMonthlySchoolDaysConfig({ ...DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG, ...snapshot.data() });
                             console.log('[useSchoolData] ✅ Monthly School Days loaded');
                         }
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     },
                     (err) => {
                         console.error('[useSchoolData] ❌ Monthly School Days error:', err);
                         setError(`Monthly School Days error: ${err.message}`);
-                        checkAllLoaded();
+                        checkAllLoaded("unknown");
                     }
                 );
                 unsubscribers.push(unsubMonthlyDays);
             } else {
-                checkAllLoaded();
+                checkAllLoaded("unknown");
             }
 
         }).catch((err) => {
@@ -2290,4 +2215,5 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         deleteAnnouncement,
     };
 }
+
 
