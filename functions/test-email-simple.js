@@ -18,7 +18,7 @@ async function testEmail() {
   try {
     const mailRef = await db.collection('mail').add({
       to: 'kramlig.dotillos@gmail.com',
-      from: 'official@edusync.ph',
+      from: 'EduSync <official@edusync.ph>',
       replyTo: 'official@edusync.ph',
       message: {
         subject: '✅ EduSync Email Test - ' + new Date().toLocaleString(),
