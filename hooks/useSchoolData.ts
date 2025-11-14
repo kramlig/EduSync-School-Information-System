@@ -181,22 +181,21 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             }
         };
 
-        // OFFLINE-FIRST-VISIT FIX: Timeout to prevent infinite loading
-        // If subscriptions don't receive data within 5 seconds, assume offline-first-visit
+        // PERFORMANCE FIX: Increased timeout from 5s to 60s for production
+        // Production Firestore with large datasets can take 30-50s initially
         const loadingTimeout = setTimeout(() => {
             if (isInitialLoad && loadedCollections < totalCollections) {
                 console.warn(
-                    `[useSchoolData] ⏰ Loading timeout - received ${loadedCollections}/${totalCollections} collections. ` +
-                    `Likely offline-first-visit with no cached data. Setting loading=false to show empty states.`
+                    `[useSchoolData] ⏰ Loading timeout (60s) - received ${loadedCollections}/${totalCollections} collections. ` +
+                    `This may indicate slow network or missing Firestore indexes. Setting loading=false.`
                 );
                 setLoading(false);
                 isInitialLoad = false;
             }
-        }, 5000); // 5 seconds timeout
+        }, 60000); // 60 seconds timeout for production
 
-        // Wait for auth before subscribing
-        waitForAuthReady().then(() => {
-            const db = getFirestoreInstance();
+        // PERFORMANCE FIX: Remove waitForAuthReady() - user is already authenticated
+        const db = getFirestoreInstance();
 
             // ===== STUDENTS SUBSCRIPTION =====
             if (shouldFetch('students')) {
@@ -849,12 +848,6 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             } else {
                 checkAllLoaded();
             }
-
-        }).catch((err) => {
-            console.error('[useSchoolData] ❌ Auth error:', err);
-            setError(`Auth error: ${err.message}`);
-            setLoading(false);
-        });
 
         // ===== CLEANUP =====
         return () => {
