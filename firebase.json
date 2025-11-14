@@ -34,8 +34,7 @@
         ]
       }
     ]
-  }
-  ,
+  },
   "emulators": {
     "firestore": {
       "host": "0.0.0.0",
@@ -49,13 +48,15 @@
       "host": "0.0.0.0",
       "port": 9200
     }
-  }
-  ,
+  },
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
   "storage": {
     "rules": "storage.rules"
+  },
+  "extensions": {
+    "firestore-send-email": "firebase/firestore-send-email@0.2.4"
   }
 }

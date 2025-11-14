@@ -177,7 +177,7 @@ const EmailTemplates = {
             <p style="text-align: center; color: #6b7280;">Overall Average</p>
             
             <div style="text-align: center;">
-              <a href="https://edusync-sis.web.app/grades" class="button">
+              <a href="https://edusync.ph/grades" class="button">
                 View Full Report Card
               </a>
             </div>
@@ -217,7 +217,7 @@ ${gradeSummary.subjects.map(s => `- ${s.name}: ${s.grade}`).join('\n')}
 
 Overall Average: ${averageGrade}
 
-View full report card: https://edusync-sis.web.app/grades
+View full report card: https://edusync.ph/grades
 
 Best regards,
 ${schoolName}

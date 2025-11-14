@@ -22,7 +22,9 @@ async function testEmailExtension() {
   try {
     // Create a test email document
     const mailRef = await db.collection('mail').add({
-      to: 'kramlig.dotillos@gmail.com', // Your verified reply-to email
+      to: 'kramlig.dotillos@gmail.com', // Test recipient
+      from: 'official@edusync.ph', // Official sender email
+      replyTo: 'official@edusync.ph',
       message: {
         subject: '✅ EduSync Email Extension Test',
         html: `
