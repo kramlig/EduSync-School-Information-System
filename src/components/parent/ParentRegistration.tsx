@@ -225,14 +225,15 @@ const ParentRegistration: React.FC = () => {
       
       console.log('[ParentRegistration] Parent account created:', userResult.userId);
       
-      // Send verification email
+      // Send verification email (without custom URL to avoid allowlist issues)
       const auth = getAuth();
-      await sendEmailVerification(userResult.userCredential.user, {
-        url: window.location.origin + '/verify-email',
-        handleCodeInApp: true
-      });
-      
-      console.log('[ParentRegistration] Verification email sent to', formData.parentEmail);
+      try {
+        await sendEmailVerification(userResult.userCredential.user);
+        console.log('[ParentRegistration] Verification email sent to', formData.parentEmail);
+      } catch (emailError) {
+        console.warn('[ParentRegistration] Email verification failed (non-critical):', emailError);
+        // Continue even if email fails - parent can verify later
+      }
       
       // Update student with parent link
       const studentRef = doc(db, 'students', verifiedStudent!.id);
