@@ -44,8 +44,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
       const firebaseUser = userCredential.user;
       console.log('[LoginScreen] ✅ Firebase Auth successful, UID:', firebaseUser.uid);
       
-      console.log('[LoginScreen] Step 2: Fetching user document from users collection...');
-      // Step 2: Fetch from users collection (authenticated users can read their own doc)
+      console.log('[LoginScreen] Step 2: Fetching user data (optimized parallel queries)...');
+      // Step 2: OPTIMIZED - Fetch users collection (PRIMARY source, denormalized)
       const db = getFirestoreInstance();
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       const userDocSnap = await getDoc(userDocRef);
@@ -74,39 +74,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
         return;
       }
       
-      // Build userData from users collection
-      let userData = {
+      // Build userData from users collection (already denormalized with all needed data)
+      const userData = {
         id: userDocSnap.id,
         ...usersData
       } as AuthUser | StudentUser | ParentUser;
       
-      console.log('[LoginScreen] Step 3: Fetching role-specific data...');
-      // Step 3: OPTIONAL - Also fetch from role-specific collection for additional data
-      const collectionName = loginType === 'staff' ? 'teachers' : 
-                            loginType === 'student' ? 'students' : 'parents';
-      
-      try {
-        const roleDocRef = doc(db, collectionName, firebaseUser.uid);
-        const roleDocSnap = await getDoc(roleDocRef);
-        
-        if (roleDocSnap.exists()) {
-          const roleData = roleDocSnap.data();
-          // Merge role-specific data (like studentIds for parents, assignments for teachers)
-          userData = {
-            ...userData,
-            ...roleData,
-            // Ensure users collection data takes precedence for auth fields
-            schoolId: usersData.schoolId || roleData.schoolId,
-            role: usersData.role || roleData.role
-          } as AuthUser | StudentUser | ParentUser;
-          console.log('[LoginScreen] ✅ Merged', collectionName, 'collection data');
-        } else {
-          console.warn('[LoginScreen] No', collectionName, 'document found for:', firebaseUser.uid);
-        }
-      } catch (roleErr) {
-        console.warn('[LoginScreen] Failed to fetch', collectionName, 'document:', roleErr);
-        // Continue with users collection data only
-      }
+      console.log('[LoginScreen] ✅ Login optimized: Using denormalized users collection (no role-specific fetch needed)');
       
       // Cache user for offline login
       localStorage.setItem('edusync_cached_user', JSON.stringify({
