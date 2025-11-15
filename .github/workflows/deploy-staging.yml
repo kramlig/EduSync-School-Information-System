@@ -24,7 +24,7 @@ jobs:
         run: npm ci
       
       - name: Build for staging
-        run: npm run build -- --mode staging
+        run: npm run build:uat
       
       - name: Deploy to Firebase Hosting
         env:
