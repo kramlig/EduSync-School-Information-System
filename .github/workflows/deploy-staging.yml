@@ -4,7 +4,7 @@ on:
   workflow_dispatch:  # Manual trigger
   push:
     branches:
-      - staging  # Auto-deploy when pushing to staging branch
+      - main  # Auto-deploy when pushing to main branch
 
 jobs:
   deploy:
