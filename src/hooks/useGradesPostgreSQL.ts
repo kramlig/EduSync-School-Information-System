@@ -68,27 +68,16 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
 
       let query = supabase
         .from('grades')
-        .select(`
-          *,
-          students!inner (
-            id,
-            section_id
-          )
-        `);
+        .select('*');
 
-      // Apply filters
-      if (schoolId) {
-        query = query.eq('school_id', schoolId);
-      }
+      // Apply filters - no joins for now since IDs don't match
       if (studentId) {
         query = query.eq('student_id', studentId);
       }
       if (learningAreaId) {
         query = query.eq('learning_area_id', learningAreaId);
       }
-      if (sectionId) {
-        query = query.eq('students.section_id', sectionId);
-      }
+      // Skip sectionId filter since it requires a join
 
       const { data, error: fetchError } = await query;
 
