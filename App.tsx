@@ -58,6 +58,9 @@ const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDash
 const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard'));
 const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
 
+// PostgreSQL Migration Test Components
+const GradebookViewPostgreSQL = lazy(() => import('./components/GradebookViewPostgreSQL'));
+
 // School Management for Super Admins
 const SchoolManagementView = lazy(() => import('./components/SchoolManagementView'));
 
@@ -556,6 +559,7 @@ const App: React.FC = () => {
                         <Route path="/grades/schoolforms/sf2" element={<SF2Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
                         <Route path="/grades/schoolforms/sf9" element={<SF9Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
                         <Route path="/gradebook" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/gradebook-pg-test" element={<GradebookViewPostgreSQL schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values-gradebook" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={staffSession} />} />
