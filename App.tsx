@@ -555,7 +555,7 @@ const App: React.FC = () => {
                         <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/grades/academic" element={<GradebookView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/grades/core-values" element={<CoreValuesGradebookView schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} defaultTab="deep-analytics" hideTabNavigation={true} />} />
                         
                         {/* LEGACY: Keep old route for backward compatibility (can remove later) */}
                         <Route path="/grades/entry" element={<Navigate to="/grades" replace />} />
@@ -627,7 +627,7 @@ const App: React.FC = () => {
             <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades/academic" element={<GradebookView schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades/core-values" element={<CoreValuesGradebookView schoolData={schoolData} session={studentSession} />} />
-            <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={studentSession} />} />
+            <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={studentSession} defaultTab="deep-analytics" hideTabNavigation={true} />} />
             <Route path="/core-values" element={<Navigate to="/grades/core-values" replace />} />
             <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={studentSession} />} />
             <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={studentSession} />} />
@@ -644,7 +644,7 @@ const App: React.FC = () => {
             <Route path="/assignments" element={<AssignmentsView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/grades" element={<GradesDashboard schoolData={schoolData} session={parentSession} />} />
             <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
-            <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
+            <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} defaultTab="deep-analytics" hideTabNavigation={true} />} />
             <Route path="/core-values" element={<Navigate to="/grades/overview" replace />} />
             <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />

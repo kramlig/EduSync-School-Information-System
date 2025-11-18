@@ -25,13 +25,21 @@ interface UnifiedAssessmentViewProps {
   schoolData: SchoolDataHook;
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
   forceStudentId?: string;
+  defaultTab?: TabType; // NEW: Allow specifying which tab to show
+  hideTabNavigation?: boolean; // NEW: Hide tab navigation when used as detail view
 }
 
 type TabType = 'overview' | 'academic-gradebook' | 'core-values-gradebook' | 'deep-analytics';
 type FilterType = 'all' | 'honor' | 'needs-improvement' | 'incomplete';
 
-const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolData, session, forceStudentId }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ 
+  schoolData, 
+  session, 
+  forceStudentId,
+  defaultTab = 'overview',
+  hideTabNavigation = false
+}) => {
+  const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [currentPrintStudents, setCurrentPrintStudents] = useState<string[]>([]);
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -1121,25 +1129,27 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ schoolDat
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-2">
-        <div className="flex flex-wrap gap-2">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-              }`}
-            >
-              <span>{tab.icon}</span>
-              <span className="hidden sm:inline">{tab.label}</span>
-            </button>
-          ))}
+      {/* Tab Navigation - Hidden when used as dedicated deep analytics view */}
+      {!hideTabNavigation && (
+        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-2">
+          <div className="flex flex-wrap gap-2">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                }`}
+              >
+                <span>{tab.icon}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
