@@ -1,8 +1,8 @@
 # PostgreSQL Migration Progress Tracker
 
-**Migration Period**: November 18 - December 9, 2025 (3 weeks)  
-**Current Status**: 🟡 **IN PROGRESS - Week 1**  
-**Overall Progress**: 5% (1/21 days completed)
+**Migration Period**: November 11 - December 2, 2025 (3 weeks)  
+**Current Status**: 🟡 **IN PROGRESS - Week 2**  
+**Overall Progress**: 40% (6/14 days completed)
 
 ---
 
@@ -10,74 +10,125 @@
 
 | Week | Phase | Status | Progress | Completion Date |
 |------|-------|--------|----------|----------------|
-| Week 1 | Preparation & Setup | 🟡 In Progress | 20% (1/5 days) | Target: Nov 24 |
-| Week 2 | Code Migration | ⏸️ Not Started | 0% (0/5 days) | Target: Dec 1 |
-| Week 3 | Testing & Deployment | ⏸️ Not Started | 0% (0/6 days) | Target: Dec 9 |
+| Week 1 | Database Setup & Seeding | ✅ Complete | 100% (5/5 days) | Nov 15 ✅ |
+| Week 2 | Code Migration & Integration | 🟡 In Progress | 20% (1/5 days) | Target: Nov 22 |
+| Week 3 | Testing & Deployment | ⏸️ Not Started | 0% (0/4 days) | Target: Dec 2 |
 
 **Legend**: ✅ Complete | 🟡 In Progress | ⏸️ Not Started | ⚠️ Blocked | ❌ Failed
 
 ---
 
-## Week 1: Preparation & Setup (Nov 18-24)
+## Week 1: Database Setup & Seeding (Nov 11-15) ✅
 
-### Day 1 - Monday, Nov 18, 2025 ✅
+### Day 1 - Nov 11, 2025 ✅
 
-**Status**: ✅ Complete (100%)  
-**Time Spent**: 4 hours  
-**Completed By**: Mark Gil Dotillos
+**Status**: ✅ Complete  
+**Commit**: `04a0b2f` - PostgreSQL Migration Plan
 
 #### Tasks Completed
-- [x] Created comprehensive migration plan (`MIGRATION_TO_POSTGRESQL.md`)
+- [x] Created comprehensive migration plan (`MIGRATION_TO_POSTGRESQL.md` - 35 pages)
 - [x] Documented PostgreSQL schema with all tables, relationships, constraints
 - [x] Created ER diagram (`SCHEMA_ER_DIAGRAM.md`)
 - [x] Created progress tracker (this file)
 - [x] Set up Git branch: `migration/postgresql`
 
-#### Deliverables
-- ✅ `MIGRATION_TO_POSTGRESQL.md` (35 pages, comprehensive)
-- ✅ `SCHEMA_ER_DIAGRAM.md` (Mermaid diagram + documentation)
-- ✅ `MIGRATION_PROGRESS.md` (this file)
-- ⏳ Backup scripts (pending - see Day 1 blockers)
+---
 
-#### Decisions Made
-- ✅ Approved full PostgreSQL migration (no hybrid)
-- ✅ Approved Supabase as hosting platform
-- ✅ Approved 3-week timeline
-- ✅ Confirmed schema design with all constraints
+### Day 2 - Nov 12, 2025 ✅
 
-#### Blockers
-- None
+**Status**: ✅ Complete  
+**Commit**: `845a900` - Supabase PostgreSQL schema created and tested
 
-#### Notes
-- Migration plan received positive feedback
-- Schema design accounts for all current Firestore bugs
-- ER diagram clearly shows multi-tenancy and relationships
-- Ready to proceed to Supabase setup tomorrow
+#### Tasks Completed
+- [x] Created Supabase project (https://zjuxulhxxeeupcskkcok.supabase.co)
+- [x] Executed schema SQL (`supabase-schema.sql`)
+- [x] Verified 14 tables created with constraints
+- [x] Set up connection credentials in `.env.local`
 
 ---
 
-### Day 2 - Tuesday, Nov 19, 2025 ⏸️
+### Day 3 - Nov 13, 2025 ✅
 
-**Status**: ⏸️ Not Started  
-**Assigned To**: Mark Gil Dotillos  
-**Estimated Time**: 4-6 hours
+**Status**: ✅ Complete  
+**Commits**: `6e6f9e7`, `d8bb213`, `118609f`
 
-#### Planned Tasks
-- [ ] Create Supabase project (free tier)
-  - [ ] Sign up at https://supabase.com
-  - [ ] Create project: `edusync-sis-migration`
-  - [ ] Note connection credentials
-  - [ ] Test connection from local machine
-- [ ] Run schema creation SQL
-  - [ ] Execute `docs/schema.sql` in Supabase SQL editor
-  - [ ] Verify all tables created
-  - [ ] Verify all constraints created
-  - [ ] Verify all triggers created
-- [ ] Set up Row-Level Security policies
-  - [ ] Create helper functions (get_user_school_id, get_user_role)
-  - [ ] Apply tenant isolation policies
-  - [ ] Apply role-based access policies
-  - [ ] Test with sample JWT tokens
+#### Tasks Completed
+- [x] Created clean PostgreSQL seeding script (`02-seed-clean-postgresql.js`)
+- [x] Seeded realistic demo data (5 teachers, 6 sections, 9 learning areas)
+- [x] Added DepEd behavioral indicators to core values
+- [x] Created COMPLETE-SEEDING-MASTER.sql (51 students, 105 grades)
+
+---
+
+### Day 4 - Nov 14, 2025 ✅
+
+**Status**: ✅ Complete  
+**Commits**: `8d3bbf8`, `1088e43`, `0a07c10`, `ce463b7`
+
+#### Tasks Completed
+- [x] Created Supabase SDK integration (`src/lib/supabase.ts`)
+- [x] Created `useSupabase` hook for data fetching
+- [x] Added SupabaseTest component to Dashboard
+- [x] Verified connection: 51 students, 6 sections loading
+
+---
+
+### Day 5 - Nov 15, 2025 ✅
+
+**Status**: ✅ Complete  
+**Commits**: `60ef16c`, `fc39b66`
+
+#### Tasks Completed
+- [x] Created `useGradesPostgreSQL` hook (270 lines)
+- [x] Created GradebookViewPostgreSQL test component (250 lines)
+- [x] Fixed UUID join issues
+- [x] Verified 51 students, 105 grades loading correctly
+- [x] Real-time subscriptions working
+- [x] MAPEH composite grades (JSONB) supported
+
+---
+
+## Week 2: Code Migration & Integration (Nov 16-22) 🟡
+
+### Day 6 - Nov 16-17, 2025 ✅
+
+**Status**: ✅ Complete  
+**Commits**: `43c49fc`, `d3d57ce`, `6d3c47c`, `126da07`, `78a9b0e`, `962f707`
+
+#### Tasks Completed
+- [x] Integrated PostgreSQL into production GradebookView (1242 lines)
+- [x] Added feature flag: `VITE_USE_POSTGRESQL`
+- [x] Fixed critical student count bug (48→8→8)
+- [x] Implemented Dashboard→Detail View navigation (UX overhaul)
+- [x] Created GradesDashboard landing page (358 lines)
+- [x] Restructured 9 routes for cleaner navigation
+
+#### Issues Discovered
+- ⚠️ **ID Mismatch**: Firestore students have IDs like `student_abc123`, PostgreSQL uses UUIDs
+- ⚠️ **Data Isolation**: Different student datasets between Firestore and PostgreSQL
+
+---
+
+### Day 7 - Nov 18, 2025 (TODAY) 🟡
+
+**Status**: 🟡 In Progress  
+**Commits**: `fb21e52`, `b9a95ed`
+
+#### Tasks Completed
+- [x] Disabled PostgreSQL feature flag temporarily (ID mismatch fix)
+- [x] Added MAPEH composite components to Firestore seeding
+- [x] Debugged grade display issues in GradebookView
+
+#### Current Blockers
+- ⚠️ **CRITICAL**: Student IDs don't match between Firestore and PostgreSQL
+  - Firestore: `student_xyz123` (string IDs from emulator)
+  - PostgreSQL: UUIDs from SQL seeding
+  - **Impact**: `gradeMap.get(student.id)` returns `undefined`
+  
+#### Planned Tasks (Rest of Day)
+- [ ] Create ID mapping strategy
+- [ ] Export Firestore students with current IDs
+- [ ] Reseed PostgreSQL with matching IDs
 - [ ] Test schema with sample data
   - [ ] Insert sample school
   - [ ] Insert sample teacher
