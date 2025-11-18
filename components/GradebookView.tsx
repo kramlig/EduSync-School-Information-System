@@ -5,6 +5,10 @@ import Modal from './Modal';
 import Toast, { ToastType } from './Toast';
 import KeyboardShortcutsModal from './KeyboardShortcutsModal';
 import { useDebounce } from '../hooks/useDebounce';
+import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
+
+// Feature flag for PostgreSQL migration
+const USE_POSTGRESQL = import.meta.env.VITE_USE_POSTGRESQL === 'true';
 
 // Helper: Convert gradeLevel string to numeric value (for filtering)
 const normalizeGradeLevel = (gradeLevel: string | number): number | null => {
@@ -129,6 +133,19 @@ const GradebookView: React.FC<{
 }> = ({ schoolData, session, selectedSectionId: propSectionId, onSectionChange, selectedQuarter: propQuarter, onQuarterChange, searchQuery: propSearchQuery, onSearchChange }) => {
   const { students, grades, learningAreas, sections, substituteAssignments, classSchedules, updateGrade } = schoolData;
   
+  // PostgreSQL grades (if enabled via feature flag)
+  const { 
+    grades: pgGrades, 
+    loading: pgLoading, 
+    updateGrade: updatePgGrade 
+  } = useGradesPostgreSQL({
+    sectionId: propSectionId || undefined
+  });
+  
+  // Use PostgreSQL grades if feature flag is enabled, otherwise use Firestore
+  const activeGrades = USE_POSTGRESQL ? pgGrades : grades;
+  const activeUpdateGrade = USE_POSTGRESQL ? updatePgGrade : updateGrade;
+  
   // Use props if provided (unified mode), otherwise use local state (standalone mode)
   const [localSectionId, setLocalSectionId] = useState<string | null>(null);
   const [localQuarterFilter, setLocalQuarterFilter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>(getCurrentQuarter());
@@ -248,7 +265,7 @@ const GradebookView: React.FC<{
   // Move gradeMap before studentsInSection since it's a dependency
   const gradeMap = useMemo(() => {
     const map = new Map<string, Map<string, Grade>>();
-    grades.forEach(g => {
+    activeGrades.forEach(g => {
         if (!map.has(g.studentId)) map.set(g.studentId, new Map());
         map.get(g.studentId)!.set(g.learningAreaId, g);
     });
@@ -270,7 +287,7 @@ const GradebookView: React.FC<{
     }
     
     return map;
-  }, [grades]);
+  }, [activeGrades]);
 
   // Group sections by level for better UX
   const groupedSections = useMemo(() => {
@@ -470,7 +487,7 @@ const GradebookView: React.FC<{
       
       setIsSaving(true);
       try {
-        await updateGrade(studentId, laId, quarter, numValue);
+        await activeUpdateGrade(studentId, laId, quarter, numValue);
         setLastSaved(new Date());
         
         // Show success toast but don't spam - only show every 3 seconds
@@ -508,7 +525,7 @@ const GradebookView: React.FC<{
       if (!laId) return;
       
       for (const studentId of selectedStudents) {
-        await updateGrade(studentId, laId, quarter, numValue);
+        await activeUpdateGrade(studentId, laId, quarter, numValue);
       }
       
       setToast({ message: `Grade ${numValue} applied to ${selectedStudents.size} students`, type: 'success' });
@@ -1231,7 +1248,7 @@ const GradebookView: React.FC<{
           learningArea={mapehModalState.la}
           quarter={mapehModalState.quarter}
           grades={gradeMap.get(mapehModalState.student.id)?.get(mapehModalState.la.id)}
-          updateGrade={updateGrade}
+          updateGrade={activeUpdateGrade}
           isReadOnly={isReadOnly}
         />
       )}
