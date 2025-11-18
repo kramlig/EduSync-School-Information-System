@@ -1887,6 +1887,109 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
       {/* Deep Analytics Tab - Tier 3 */}
       {activeTab === 'deep-analytics' && !(isStudentView || isParentView) && (
         <div className="space-y-6">
+          {/* Filters Section - Same as Overview */}
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-4">
+            <div className="flex flex-col gap-4">
+              {/* Section, Quarter, and Search Controls */}
+              <div className="flex flex-wrap items-center gap-3 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700 p-4 rounded-xl shadow-sm">
+                {/* Section Dropdown */}
+                <div className="flex items-center gap-2">
+                  <label htmlFor="deep-analytics-section-filter" className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z"/>
+                    </svg>
+                    Section:
+                  </label>
+                  <select
+                    id="deep-analytics-section-filter"
+                    value={selectedSectionId}
+                    onChange={(e) => setSelectedSectionId(e.target.value)}
+                    className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                  >
+                    <option value="all">{isTeacherView ? 'All My Sections' : 'All Sections'}</option>
+                    {availableSections?.map((section) => (
+                      <option key={section.id} value={section.id}>
+                        Grade {section.gradeLevel} - {section.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Quarter Dropdown */}
+                <div className="flex items-center gap-2">
+                  <label htmlFor="deep-analytics-quarter-filter" className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/>
+                    </svg>
+                    Quarter:
+                  </label>
+                  <select
+                    id="deep-analytics-quarter-filter"
+                    value={selectedQuarter}
+                    onChange={(e) => setSelectedQuarter(e.target.value as 'all' | 'q1' | 'q2' | 'q3' | 'q4')}
+                    className="px-4 py-2 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                  >
+                    <option value="all">All Quarters</option>
+                    <option value="q1">Quarter 1</option>
+                    <option value="q2">Quarter 2</option>
+                    <option value="q3">Quarter 3</option>
+                    <option value="q4">Quarter 4</option>
+                  </select>
+                </div>
+
+                {/* Search Input */}
+                <div className="flex-1 min-w-[280px]">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="block w-full pl-10 pr-3 py-2 border-2 border-slate-300 dark:border-slate-600 rounded-lg leading-5 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm shadow-sm hover:shadow-md transition-all"
+                      placeholder="Search students by name, email, or LRN..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Filters Display */}
+              {(selectedSectionId !== 'all' || selectedQuarter !== 'all' || searchQuery.trim()) && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">Active Filters:</span>
+                  {selectedSectionId !== 'all' && (
+                    <span className="px-3 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 rounded-full">
+                      Section: {availableSections.find(s => s.id === selectedSectionId)?.name}
+                    </span>
+                  )}
+                  {selectedQuarter !== 'all' && (
+                    <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded-full">
+                      {selectedQuarter.toUpperCase()}
+                    </span>
+                  )}
+                  {searchQuery.trim() && (
+                    <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">
+                      Search: "{searchQuery}"
+                    </span>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSelectedSectionId('all');
+                      setSelectedQuarter('all');
+                      setSearchQuery('');
+                    }}
+                    className="px-3 py-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Header with Export Actions */}
           <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg shadow-lg p-6">
             <div className="flex items-center justify-between mb-2">
