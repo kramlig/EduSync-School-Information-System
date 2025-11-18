@@ -442,6 +442,23 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
           </p>
         </div>
         <SupabaseTest />
+        
+        {/* PostgreSQL Gradebook Test Link */}
+        <div className="mt-6 pt-6 border-t border-blue-200 dark:border-blue-800">
+          <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">
+            📊 Test Components
+          </h4>
+          <button
+            onClick={() => navigate('/gradebook-pg-test')}
+            className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <ChartBarIcon className="w-5 h-5 mr-2" />
+            Test PostgreSQL Gradebook
+          </button>
+          <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+            View grades from PostgreSQL database
+          </p>
+        </div>
       </div>
     </div>
   );
