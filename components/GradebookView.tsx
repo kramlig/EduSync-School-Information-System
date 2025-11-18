@@ -237,12 +237,13 @@ const GradebookView: React.FC<{
   }, [sections, substituteAssignments, classSchedules, authUser]);
 
   useEffect(() => {
+    // Only auto-select first section if no section is selected AND we're not in "all" mode
     if (!selectedSectionId && visibleSections.length > 0) {
       setSelectedSectionId(visibleSections[0].id);
-    } else if (selectedSectionId && !visibleSections.some(s => s.id === selectedSectionId)) {
-      setSelectedSectionId(visibleSections[0]?.id || 'all');
     }
-  }, [visibleSections, selectedSectionId, setSelectedSectionId]);
+    // REMOVED: Don't override "all" selection from parent
+    // This was causing the bug where switching tabs changed the filter
+  }, [visibleSections]);
   
   // Keyboard shortcuts listener
   useEffect(() => {
@@ -348,8 +349,52 @@ const GradebookView: React.FC<{
   }, [learningAreas, selectedSectionId, sections]);
 
   const studentsInSection = useMemo(() => {
-    if (!selectedSectionId) return [];
+    // Support "all" sections or null/undefined
+    if (!selectedSectionId || selectedSectionId === 'all') {
+      // Show all students (no section filter)
+      let filtered = students.filter(s => {
+        const name = s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim();
+        return name.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+      });
+      
+      console.log('[GradebookView] Showing ALL sections:', filtered.length, 'students');
+      
+      // Apply advanced filters (same logic as before)
+      if (gradeFilter !== 'all') {
+        filtered = filtered.filter(student => {
+          const studentGrades = gradeMap.get(student.id);
+          if (!studentGrades) return gradeFilter === 'missing';
+          
+          let hasFailingGrade = false;
+          let hasExcellentGrade = false;
+          let hasMissingGrade = false;
+          
+          applicableLearningAreas.forEach(la => {
+            const grade = studentGrades.get(la.id);
+            ['q1', 'q2', 'q3', 'q4'].forEach(q => {
+              const qGrade = calculateQuarterAverage(grade?.[q as 'q1' | 'q2' | 'q3' | 'q4']);
+              if (qGrade === undefined) {
+                hasMissingGrade = true;
+              } else {
+                if (qGrade < 75) hasFailingGrade = true;
+                if (qGrade >= 90) hasExcellentGrade = true;
+              }
+            });
+          });
+          
+          switch (gradeFilter) {
+            case 'missing': return hasMissingGrade;
+            case 'failing': return hasFailingGrade;
+            case 'excellent': return hasExcellentGrade;
+            default: return true;
+          }
+        });
+      }
+      
+      return filtered;
+    }
     
+    // Specific section selected
     let filtered = students.filter(s => {
         const name = s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim();
         return s.sectionId === selectedSectionId &&
