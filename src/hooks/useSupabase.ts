@@ -79,7 +79,7 @@ export function useSupabase<T = any>(
 
       if (queryError) throw queryError;
 
-      setData(result || []);
+      setData((result as T[]) || []);
     } catch (err) {
       console.error(`Error fetching ${tableName}:`, err);
       setError(err instanceof Error ? err : new Error(String(err)));

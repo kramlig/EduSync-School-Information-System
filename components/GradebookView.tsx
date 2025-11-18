@@ -38,25 +38,47 @@ const MapehGradeModal: React.FC<{
     (grades?.[quarter] as SubGradeRecord) || {}
   );
 
+  // Only sync initial state when modal opens, not on every grade update
   useEffect(() => {
-    setSubGrades((grades?.[quarter] as SubGradeRecord) || {});
-  }, [grades, quarter]);
+    if (isOpen) {
+      setSubGrades((grades?.[quarter] as SubGradeRecord) || {});
+    }
+  }, [isOpen, quarter]);
 
   const handleSubGradeChange = (subSubject: string, value: string) => {
     const numValue = value === '' ? undefined : parseInt(value, 10);
     if (numValue !== undefined && (isNaN(numValue) || numValue < 0 || numValue > 100)) return;
     
-    const newSubGrades = { ...subGrades, [subSubject]: numValue! };
-    if(numValue === undefined) delete newSubGrades[subSubject];
+    const newSubGrades = { ...subGrades };
+    if (numValue === undefined) {
+      delete newSubGrades[subSubject];
+    } else {
+      newSubGrades[subSubject] = numValue;
+    }
     setSubGrades(newSubGrades);
+  };
 
-    updateGrade(student.id, learningArea.id, quarter, numValue, subSubject);
+  const handleSave = () => {
+    // Save all component grades as a single composite grade object
+    if (Object.keys(subGrades).length > 0) {
+      // Pass the entire subGrades object, not individual components
+      Object.keys(subGrades).forEach((component, index) => {
+        if (index === 0) {
+          // First component: create/update the grade document with all subgrades
+          updateGrade(student.id, learningArea.id, quarter, subGrades[component], component);
+        } else {
+          // Subsequent components: just trigger update (the first call should handle it)
+          updateGrade(student.id, learningArea.id, quarter, subGrades[component], component);
+        }
+      });
+    }
+    onClose();
   };
   
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Edit MAPEH Grades for ${student.name} (${quarter.toUpperCase()})`}>
       <div className="space-y-4">
-        {learningArea.subSubjects?.map(sub => (
+        {(learningArea.components || learningArea.subSubjects)?.map(sub => (
           <div key={sub} className="grid grid-cols-2 items-center">
             <label htmlFor={`${sub}-grade`} className="font-medium text-slate-700 dark:text-slate-300">{sub}</label>
             <input
@@ -70,7 +92,7 @@ const MapehGradeModal: React.FC<{
         ))}
       </div>
       <div className="flex justify-end mt-6">
-        <button onClick={onClose} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Done</button>
+        <button onClick={handleSave} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Done</button>
       </div>
     </Modal>
   );

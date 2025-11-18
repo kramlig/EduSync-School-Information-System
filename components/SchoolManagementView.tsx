@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   limit
 } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { getFirestoreInstance } from '../src/services/firestoreService';
 import { createUserWithRole } from '../services/userManagement';
 import Spinner from './Spinner';

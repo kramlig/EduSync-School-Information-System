@@ -155,6 +155,13 @@ const MapehGradeModal: React.FC<{
     (grades?.[quarter] as SubGradeRecord) || {}
   );
 
+  // Only sync initial state when modal opens, not on every grade update
+  useEffect(() => {
+    if (isOpen) {
+      setSubGrades((grades?.[quarter] as SubGradeRecord) || {});
+    }
+  }, [isOpen, quarter]);
+
   const handleSubGradeChange = (subSubject: string, value: string) => {
     const numValue = value === '' ? undefined : parseInt(value, 10);
     if (numValue !== undefined && (isNaN(numValue) || numValue < 0 || numValue > 100)) return;
@@ -166,13 +173,20 @@ const MapehGradeModal: React.FC<{
       newSubGrades[subSubject] = numValue;
     }
     setSubGrades(newSubGrades);
-    updateGrade(student.id, learningArea.id, quarter, numValue, subSubject);
+  };
+
+  const handleSave = () => {
+    // Save all component grades when Done is clicked
+    Object.entries(subGrades).forEach(([subSubject, value]) => {
+      updateGrade(student.id, learningArea.id, quarter, value, subSubject);
+    });
+    onClose();
   };
   
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Edit MAPEH Grades for ${student.name} (${quarter.toUpperCase()})`}>
       <div className="space-y-4">
-        {learningArea.subSubjects?.map(sub => (
+        {(learningArea.components || learningArea.subSubjects)?.map(sub => (
           <div key={sub} className="grid grid-cols-2 items-center">
             <label htmlFor={`${sub}-grade`} className="font-medium text-slate-700 dark:text-slate-300">{sub}</label>
             <input
@@ -189,7 +203,7 @@ const MapehGradeModal: React.FC<{
         ))}
       </div>
       <div className="flex justify-end mt-6">
-        <button onClick={onClose} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Done</button>
+        <button onClick={handleSave} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Done</button>
       </div>
     </Modal>
   );

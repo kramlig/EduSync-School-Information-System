@@ -326,6 +326,10 @@ CREATE TABLE core_values (
     code VARCHAR(20) NOT NULL, -- MAKA_DIYOS, MAKATAO, etc.
     name VARCHAR(100) NOT NULL, -- Maka-Diyos, Makatao, etc.
     description TEXT,
+    
+    -- Behavioral Indicators (similar to MAPEH components)
+    indicators TEXT[], -- Array of behavioral indicators for this core value
+    
     display_order INTEGER DEFAULT 0,
     
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -345,6 +349,11 @@ CREATE TABLE core_value_grades (
     core_value_id UUID NOT NULL REFERENCES core_values(id) ON DELETE CASCADE,
     school_year VARCHAR(10) NOT NULL,
     
+    -- Quarterly ratings stored as JSONB (similar to MAPEH composite grades)
+    -- Format: {"q1": {"indicator1": "AO", "indicator2": "SO"}, "q2": {...}}
+    indicator_ratings JSONB,
+    
+    -- Overall quarterly ratings (average/summary)
     q1 core_value_rating,
     q2 core_value_rating,
     q3 core_value_rating,

@@ -73,13 +73,21 @@ async function writeToFirestore(collectionName: string, id: string, data: any) {
     try {
         const db = getFirestoreInstance();
         const docRef = doc(db, collectionName, id);
+        
+        // Get schoolId from user's custom claims
+        const user = auth.currentUser;
+        const idTokenResult = user ? await user.getIdTokenResult() : null;
+        const schoolId = idTokenResult?.claims?.schoolId as string | undefined;
+        
         await setDoc(docRef, {
             ...data,
+            schoolId: data.schoolId || schoolId, // Use existing or from claims
             updatedAt: serverTimestamp(),
-            updatedBy: auth.currentUser?.uid || 'anon'
-        });
+            updatedBy: user?.uid || 'anon'
+        }, { merge: true }); // CRITICAL: Use merge to preserve existing fields
     } catch (error) {
         console.error(`Failed to write to ${collectionName}:`, error);
+        throw error; // Re-throw so caller knows it failed
     }
 }
 
@@ -275,13 +283,18 @@ export const useSchoolData = () => {
         return { finalGrade, remarks };
     };
 
-    const updateGrade = useCallback((
+    const updateGrade = useCallback(async (
         studentId: string, 
         learningAreaId: string, 
         quarter: 'q1'|'q2'|'q3'|'q4', 
         value?: number, 
         subSubject?: string
     ) => {
+        // Get schoolId from user's custom claims first
+        const user = auth.currentUser;
+        const idTokenResult = user ? await user.getIdTokenResult() : null;
+        const schoolId = idTokenResult?.claims?.schoolId as string | undefined;
+
         setState(prev => {
             const learningArea = prev.learningAreas.find(la => la.id === learningAreaId);
             let existing = prev.grades.find(g => g.studentId === studentId && g.learningAreaId === learningAreaId);
@@ -290,7 +303,8 @@ export const useSchoolData = () => {
                 existing = { 
                     id: `g_${studentId}_${learningAreaId}`, 
                     studentId, 
-                    learningAreaId 
+                    learningAreaId,
+                    schoolId: schoolId || '' // CRITICAL: Include schoolId from the start
                 } as Grade;
             } else {
                 existing = { ...existing };
@@ -310,8 +324,16 @@ export const useSchoolData = () => {
             existing.finalGrade = calc.finalGrade;
             existing.remarks = calc.remarks;
 
+            // Clean up undefined values before writing to Firestore
+            const cleanGrade = { ...existing };
+            ['q1', 'q2', 'q3', 'q4'].forEach(q => {
+                if (cleanGrade[q as keyof Grade] === undefined) {
+                    delete cleanGrade[q as keyof Grade];
+                }
+            });
+
             // Write to Firestore
-            writeToFirestore('grades', existing.id, existing);
+            writeToFirestore('grades', cleanGrade.id, cleanGrade);
 
             const nextGrades = [
                 ...prev.grades.filter(g => !(g.studentId === studentId && g.learningAreaId === learningAreaId)),

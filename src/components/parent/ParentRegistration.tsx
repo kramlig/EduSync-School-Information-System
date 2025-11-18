@@ -14,8 +14,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFirestoreInstance } from '../../services/firestoreService';
-import { collection, query, where, getDocs, doc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { getAuth, sendEmailVerification } from 'firebase/auth';
+import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, addDoc } from 'firebase/firestore';
 import { createParentWithRole } from '../../../services/userManagement';
 import type { Student } from '../../../types';
 
@@ -225,14 +224,97 @@ const ParentRegistration: React.FC = () => {
       
       console.log('[ParentRegistration] Parent account created:', userResult.userId);
       
-      // Send verification email (without custom URL to avoid allowlist issues)
-      const auth = getAuth();
+      // Send custom branded welcome email via SendGrid (instead of Firebase default)
       try {
-        await sendEmailVerification(userResult.userCredential.user);
-        console.log('[ParentRegistration] Verification email sent to', formData.parentEmail);
+        const welcomeEmailRef = collection(db, 'mail');
+        
+        // Queue welcome email through our SendGrid extension
+        await addDoc(welcomeEmailRef, {
+          to: formData.parentEmail,
+          from: 'EduSync <official@edusync.ph>',
+          replyTo: 'official@edusync.ph',
+          message: {
+            subject: '🎉 Welcome to EduSync Parent Portal!',
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                  <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to EduSync!</h1>
+                </div>
+                
+                <div style="background: white; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 10px 10px;">
+                  <p style="font-size: 18px; color: #1f2937;">Hello ${formData.parentName},</p>
+                  
+                  <p style="color: #4b5563; line-height: 1.6;">
+                    Thank you for registering with EduSync Parent Portal! Your account has been successfully created.
+                  </p>
+                  
+                  <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <h3 style="margin-top: 0; color: #1f2937;">📧 Your Account Details:</h3>
+                    <p style="color: #4b5563; margin: 5px 0;"><strong>Email:</strong> ${formData.parentEmail}</p>
+                    <p style="color: #4b5563; margin: 5px 0;"><strong>Linked Student:</strong> ${verifiedStudent!.name}</p>
+                    <p style="color: #4b5563; margin: 5px 0;"><strong>LRN:</strong> ${verifiedStudent!.lrn}</p>
+                  </div>
+                  
+                  <div style="background: #dbeafe; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
+                    <p style="margin: 0; color: #1e40af;">
+                      <strong>📱 Next Steps:</strong><br>
+                      You can now log in to the parent portal to view your child's grades, attendance, and announcements.
+                    </p>
+                  </div>
+                  
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="https://edusync-sis.web.app/login?type=parent" 
+                       style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                      🚀 Login to Parent Portal
+                    </a>
+                  </div>
+                  
+                  <div style="border-top: 1px solid #e5e7eb; margin-top: 30px; padding-top: 20px;">
+                    <p style="color: #6b7280; font-size: 14px; line-height: 1.6;">
+                      <strong>Need help?</strong><br>
+                      Contact us at <a href="mailto:official@edusync.ph" style="color: #667eea;">official@edusync.ph</a>
+                    </p>
+                    
+                    <p style="color: #9ca3af; font-size: 12px; margin-top: 20px;">
+                      <strong>EduSync School Information System</strong><br>
+                      Built for Philippine Schools • 100% DepEd Compliant<br>
+                      © ${new Date().getFullYear()} EduSync. All rights reserved.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            `,
+            text: `
+Welcome to EduSync Parent Portal!
+
+Hello ${formData.parentName},
+
+Thank you for registering with EduSync! Your account has been successfully created.
+
+Your Account Details:
+- Email: ${formData.parentEmail}
+- Linked Student: ${verifiedStudent!.name}
+- LRN: ${verifiedStudent!.lrn}
+
+Next Steps:
+You can now log in to the parent portal to view your child's grades, attendance, and announcements.
+
+Login here: https://edusync-sis.web.app/login?type=parent
+
+Need help? Contact us at official@edusync.ph
+
+---
+EduSync School Information System
+Built for Philippine Schools • 100% DepEd Compliant
+© ${new Date().getFullYear()} EduSync. All rights reserved.
+            `.trim()
+          }
+        });
+        
+        console.log('[ParentRegistration] Welcome email sent via SendGrid to', formData.parentEmail);
       } catch (emailError) {
-        console.warn('[ParentRegistration] Email verification failed (non-critical):', emailError);
-        // Continue even if email fails - parent can verify later
+        console.warn('[ParentRegistration] Welcome email failed (non-critical):', emailError);
+        // Continue even if email fails
       }
       
       // Update student with parent link

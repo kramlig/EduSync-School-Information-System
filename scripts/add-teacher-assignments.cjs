@@ -1,105 +1,159 @@
 #!/usr/bin/env node
 /**
- * Add assignments to class adviser teachers based on their sections
+ * Add Assignments Array to Teacher Document
+ * 
+ * The gradebook relies on teacher.assignments[] to filter visible students.
+ * This script creates assignments based on:
+ * 1. Sections where teacher is adviser (gets all subjects for that section)
+ * 2. Class schedules where teacher teaches specific subjects
  */
 
-const { initializeApp } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
+const projectId = 'edusync-staging';
 
-delete process.env.FIRESTORE_EMULATOR_HOST;
-initializeApp({ projectId: 'edusync-sis' });
-const db = getFirestore();
+async function run() {
+  const { initializeApp } = await import('firebase-admin/app');
+  const { getFirestore } = await import('firebase-admin/firestore');
 
-async function addAssignments() {
-  console.log('\n📝 Adding assignments to class adviser teachers...\n');
+  delete process.env.FIRESTORE_EMULATOR_HOST;
   
-  // Get all sections with advisers
-  const sectionsSnap = await db.collection('sections').get();
-  
-  // Group sections by adviser
-  const adviserSections = new Map();
-  for (const doc of sectionsSnap.docs) {
-    const section = doc.data();
-    if (section.adviserId) {
-      if (!adviserSections.has(section.adviserId)) {
-        adviserSections.set(section.adviserId, []);
-      }
-      adviserSections.get(section.adviserId).push(section);
-    }
-  }
-  
-  // Get all learning areas
-  const laSnap = await db.collection('learningAreas').get();
-  const learningAreas = laSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  
-  console.log(`Found ${adviserSections.size} teachers with sections\n`);
-  
-  const batch = db.batch();
-  let count = 0;
-  
-  for (const [teacherId, sections] of adviserSections.entries()) {
-    const teacherRef = db.collection('teachers').doc(teacherId);
-    const teacherSnap = await teacherRef.get();
+  initializeApp({ projectId });
+  const db = getFirestore();
+
+  try {
+    const teacherUID = '87YNvPlX90RaB2MWtQzKWiG5Osp2';
     
-    if (!teacherSnap.exists) {
-      console.log(`⚠️  Teacher ${teacherId} not found, skipping`);
-      continue;
-    }
+    console.log('\n🔧 CREATING TEACHER ASSIGNMENTS ARRAY');
+    console.log('═'.repeat(80));
     
-    const teacher = teacherSnap.data();
-    const gradeLevels = [...new Set(sections.map(s => s.gradeLevel))];
+    // 1. Get teacher document
+    const teacherDoc = await db.collection('teachers').doc(teacherUID).get();
+    const teacherData = teacherDoc.data();
     
-    // Assign all subjects for their grade level(s)
+    console.log(`\n👨‍🏫 Teacher: ${teacherData.firstName} ${teacherData.lastName}`);
+    console.log('   Email:', teacherData.email);
+    
+    // 2. Find sections where teacher is adviser
+    console.log('\n📚 Finding sections where teacher is adviser...');
+    const adviserSectionsQuery = await db.collection('sections')
+      .where('schoolId', '==', 'default')
+      .where('adviserId', '==', teacherUID)
+      .get();
+    
+    console.log(`   Found ${adviserSectionsQuery.size} sections`);
+    
+    // 3. Get all learning areas for these sections
     const assignments = [];
-    for (const gradeLevel of gradeLevels) {
-      // Get appropriate subjects for this grade level
-      const subjects = learningAreas.filter(la => {
-        if (!la.gradeLevel || !Array.isArray(la.gradeLevel)) return true;
-        return la.gradeLevel.includes(gradeLevel);
+    
+    for (const sectionDoc of adviserSectionsQuery.docs) {
+      const section = sectionDoc.data();
+      console.log(`\n   Section: ${section.name} (${sectionDoc.id})`);
+      console.log(`      Grade Level: ${section.gradeLevel}`);
+      
+      // Get learning areas appropriate for this grade level
+      const learningAreasQuery = await db.collection('learningAreas')
+        .where('schoolId', '==', 'default')
+        .get();
+      
+      const applicableLearningAreas = learningAreasQuery.docs.filter(doc => {
+        const la = doc.data();
+        // If no gradeLevel specified, include for all grades
+        if (!la.gradeLevel || la.gradeLevel.length === 0) return true;
+        
+        // Check if section's grade is in the allowed list
+        const sectionGrade = typeof section.gradeLevel === 'number' 
+          ? section.gradeLevel 
+          : parseInt(section.gradeLevel.replace(/\D/g, ''), 10) || 10;
+        
+        return la.gradeLevel.includes(sectionGrade);
       });
       
-      // Add assignments for 2-3 random subjects per grade level
-      const numSubjects = Math.min(3, subjects.length);
-      const selectedSubjects = subjects.sort(() => Math.random() - 0.5).slice(0, numSubjects);
+      console.log(`      Applicable Learning Areas: ${applicableLearningAreas.length}`);
       
-      for (const subject of selectedSubjects) {
+      // Create assignment for each learning area in this section
+      for (const laDoc of applicableLearningAreas) {
+        const la = laDoc.data();
         assignments.push({
-          gradeLevel,
-          learningAreaId: subject.id
+          gradeLevel: section.gradeLevel,
+          learningAreaId: laDoc.id,
+          sectionId: sectionDoc.id
         });
+        
+        console.log(`         - ${la.name} (${laDoc.id})`);
       }
     }
     
-    batch.update(teacherRef, { assignments });
-    console.log(`✅ ${teacher.name}: ${gradeLevels.join(', ')} - ${assignments.length} assignments`);
-    count++;
-  }
-  
-  if (count > 0) {
-    await batch.commit();
-    console.log(`\n✅ Updated ${count} teachers with assignments!`);
-  }
-  
-  // Show example
-  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-  console.log('Example Teacher (for testing):\n');
-  
-  const exampleTeacher = await db.collection('teachers').doc('teacher_elem_1').get();
-  if (exampleTeacher.exists) {
-    const t = exampleTeacher.data();
-    console.log(`👨‍🏫 ${t.name} (${t.email})`);
-    console.log(`   Password: Use any password (debug mode)`);
-    console.log(`   Assignments:`);
-    t.assignments?.forEach(a => {
-      const la = learningAreas.find(l => l.id === a.learningAreaId);
-      console.log(`      - Grade ${a.gradeLevel}: ${la?.name || a.learningAreaId}`);
+    // 4. Also check classSchedules for explicit assignments
+    console.log('\n📅 Checking class schedules for additional assignments...');
+    const schedulesQuery = await db.collection('classSchedules')
+      .where('schoolId', '==', 'default')
+      .where('teacherId', '==', teacherUID)
+      .get();
+    
+    console.log(`   Found ${schedulesQuery.size} class schedules`);
+    
+    for (const scheduleDoc of schedulesQuery.docs) {
+      const schedule = scheduleDoc.data();
+      
+      // Check if this assignment already exists
+      const exists = assignments.some(a => 
+        a.sectionId === schedule.sectionId && 
+        a.learningAreaId === schedule.learningAreaId
+      );
+      
+      if (!exists && schedule.sectionId && schedule.learningAreaId) {
+        // Get section to get grade level
+        const sectionDoc = await db.collection('sections').doc(schedule.sectionId).get();
+        const section = sectionDoc.data();
+        
+        assignments.push({
+          gradeLevel: section.gradeLevel,
+          learningAreaId: schedule.learningAreaId,
+          sectionId: schedule.sectionId
+        });
+        
+        console.log(`      Added: ${schedule.sectionId} - ${schedule.learningAreaId}`);
+      }
+    }
+    
+    console.log('\n📊 ASSIGNMENT SUMMARY:');
+    console.log('═'.repeat(80));
+    console.log(`   Total Assignments: ${assignments.length}`);
+    
+    // Group by section
+    const bySection = assignments.reduce((acc, assignment) => {
+      if (!acc[assignment.sectionId]) {
+        acc[assignment.sectionId] = [];
+      }
+      acc[assignment.sectionId].push(assignment);
+      return acc;
+    }, {});
+    
+    for (const [sectionId, sectionAssignments] of Object.entries(bySection)) {
+      console.log(`\n   ${sectionId}: ${sectionAssignments.length} subjects`);
+    }
+    
+    // 5. Update teacher document
+    console.log('\n💾 Updating teacher document...');
+    
+    await db.collection('teachers').doc(teacherUID).update({
+      assignments: assignments,
+      updatedAt: new Date().toISOString()
     });
+    
+    console.log('   ✅ Teacher document updated!');
+    
+    console.log('\n🎉 SUCCESS!');
+    console.log('═'.repeat(80));
+    console.log(`   Teacher now has ${assignments.length} assignments`);
+    console.log('   Gradebook should now load properly!');
+    console.log('\n   Next step: Re-run grading diagnostic test to verify\n');
+    
+    process.exit(0);
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    process.exit(1);
   }
 }
 
-addAssignments()
-  .then(() => process.exit(0))
-  .catch(e => {
-    console.error('\n❌ Error:', e.message);
-    process.exit(1);
-  });
+run();

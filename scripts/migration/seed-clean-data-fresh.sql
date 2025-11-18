@@ -131,22 +131,58 @@ FROM school, (VALUES
 ) AS la(code, name, description, grade_levels, is_composite, components, display_order, is_active)
 RETURNING id, code, name, is_composite;
 
--- STEP 7: CREATE DEPED CORE VALUES
+-- STEP 7: CREATE DEPED CORE VALUES (with behavioral indicators)
 WITH school AS (SELECT id FROM schools LIMIT 1)
-INSERT INTO core_values (school_id, code, name, description, display_order)
+INSERT INTO core_values (school_id, code, name, description, indicators, display_order)
 SELECT 
   school.id,
   cv.code,
   cv.name,
   cv.description,
+  cv.indicators,
   cv.display_order
 FROM school, (VALUES
-  ('MAKA_DIYOS', 'Maka-Diyos', 'Demonstrates spirituality and faith', 1),
-  ('MAKATAO', 'Makatao', 'Demonstrates care and respect for others', 2),
-  ('MAKAKALIKASAN', 'Makakalikasan', 'Demonstrates care for the environment', 3),
-  ('MAKABANSA', 'Makabansa', 'Demonstrates love of country', 4)
-) AS cv(code, name, description, display_order)
-RETURNING id, name;
+  (
+    'MAKA_DIYOS', 
+    'Maka-Diyos', 
+    'Demonstrates spirituality and faith',
+    ARRAY[
+      'Expresses one''s spiritual beliefs while respecting the spiritual beliefs of others',
+      'Shows adherence to ethical principles by upholding truth'
+    ],
+    1
+  ),
+  (
+    'MAKATAO', 
+    'Makatao', 
+    'Demonstrates care and respect for others',
+    ARRAY[
+      'Is sensitive to individual, social, and cultural differences',
+      'Demonstrates contributions toward solidarity'
+    ],
+    2
+  ),
+  (
+    'MAKAKALIKASAN', 
+    'Makakalikasan', 
+    'Demonstrates care for the environment',
+    ARRAY[
+      'Cares for the environment and utilizes resources wisely, judiciously, and economically'
+    ],
+    3
+  ),
+  (
+    'MAKABANSA', 
+    'Makabansa', 
+    'Demonstrates love of country',
+    ARRAY[
+      'Demonstrates pride in being a Filipino; exercises the rights and responsibilities of a Filipino citizen',
+      'Demonstrates appropriate civic engagement out activities in the school, community, and country'
+    ],
+    4
+  )
+) AS cv(code, name, description, indicators, display_order)
+RETURNING id, name, indicators;
 
 -- STEP 8: CREATE STUDENTS (realistic enrollment - 5-10 per section)
 WITH school AS (SELECT id FROM schools LIMIT 1),

@@ -1,4 +1,5 @@
 import DepEdLogo from './DepEdLogo';
+import EdusyncLogo from './EdusyncLogo';
 import React, { useState } from 'react';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
 import { getFirestoreInstance } from '../src/services/firestoreService';
@@ -66,10 +67,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
       });
       
       // Verify the role matches the login type
-      const expectedRole = loginType === 'staff' ? ['admin', 'principal', 'registrar', 'teacher'] : [loginType];
+      const expectedRole = loginType === 'staff' ? ['admin', 'principal', 'registrar', 'teacher', 'superadmin'] : [loginType];
       if (!expectedRole.includes(usersData.role)) {
         console.error('[LoginScreen] Role mismatch. Expected:', expectedRole, 'Got:', usersData.role);
-        setError(`Please use the ${usersData.role} login tab.`);
+        
+        // User-friendly error message (map internal roles to public-facing tabs)
+        const roleToTabMap: { [key: string]: string } = {
+          'admin': 'Staff',
+          'principal': 'Staff',
+          'registrar': 'Staff',
+          'teacher': 'Staff',
+          'superadmin': 'Staff',
+          'student': 'Student',
+          'parent': 'Parent'
+        };
+        const correctTab = roleToTabMap[usersData.role] || usersData.role;
+        setError(`Please use the ${correctTab} login tab.`);
         setIsLoading(false);
         return;
       }
@@ -173,10 +186,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
     <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900">
       <div className="w-full max-w-md p-8 space-y-6 bg-white dark:bg-slate-800 rounded-2xl shadow-lg">
         <div className="text-center">
-            <div className="flex flex-col items-center justify-center mb-4 text-slate-800 dark:text-white">
-                {/* Use bundled DepEd logo to avoid network/CORS issues */}
-                <DepEdLogo className="w-48 h-48 mb-3" />
-                <h1 className="text-3xl font-bold">EduSync</h1>
+            <div className="flex flex-col items-center justify-center mb-4">
+                {/* EduSync logo with landing page styling */}
+                <EdusyncLogo size="xl" showText={true} className="mb-2" />
             </div>
             <p className="text-slate-500 dark:text-slate-400">School Information System Portal</p>
         </div>

@@ -169,7 +169,8 @@ export interface LearningArea {
   name: string;
   credits: number;
   isComposite?: boolean;
-  subSubjects?: string[];
+  subSubjects?: string[];  // Legacy field for backward compatibility
+  components?: string[];   // New field for composite subjects like MAPEH
   
   // Phase 1: Essential metadata for better organization
   category?: 'core' | 'specialized' | 'elective' | 'tle' | 'sports';

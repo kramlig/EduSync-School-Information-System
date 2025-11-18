@@ -7,7 +7,8 @@ import { useSchoolContext } from '../../../contexts/SchoolContext';
 import type { EnrollmentApplication } from '../../../../types';
 import EdusyncLogo from '../../../../components/EdusyncLogo';
 
-// Import step components (we'll create these)
+// Import step components
+import { SchoolSelectionStep } from './steps/SchoolSelectionStep';
 import { StudentInfoStep } from './steps/StudentInfoStep';
 import { GuardianDetailsStep } from './steps/GuardianDetailsStep';
 import { AddressStep } from './steps/AddressStep';
@@ -32,42 +33,48 @@ interface StepProps {
 const STEPS: StepConfig[] = [
   {
     id: 1,
+    title: 'School Selection',
+    subtitle: 'Choose which school to enroll to',
+    component: SchoolSelectionStep
+  },
+  {
+    id: 2,
     title: 'Student Information',
     subtitle: 'Basic details about the student',
     component: StudentInfoStep
   },
   {
-    id: 2,
+    id: 3,
     title: 'Guardian Details',
     subtitle: 'Parent or guardian information',
     component: GuardianDetailsStep
   },
   {
-    id: 3,
+    id: 4,
     title: 'Address',
     subtitle: 'Residential address information',
     component: AddressStep
   },
   {
-    id: 4,
+    id: 5,
     title: 'Academic History',
     subtitle: 'Previous school and education details',
     component: AcademicHistoryStep
   },
   {
-    id: 5,
+    id: 6,
     title: 'Health Information',
     subtitle: 'Medical history and emergency contacts',
     component: HealthInfoStep
   },
   {
-    id: 6,
+    id: 7,
     title: 'Documents',
     subtitle: 'Upload required documents',
     component: DocumentsStep
   },
   {
-    id: 7,
+    id: 8,
     title: 'Review & Submit',
     subtitle: 'Review your application before submitting',
     component: ReviewStep
@@ -162,7 +169,13 @@ const ApplicationForm: React.FC = () => {
     const newErrors: Record<string, string> = {};
 
     switch (currentStep) {
-      case 1: // Student Info
+      case 1: // School Selection
+        if (!applicationData.selectedSchoolId) {
+          newErrors.school = 'Please select a school to continue';
+        }
+        break;
+
+      case 2: // Student Info
         if (!applicationData.studentInfo?.firstName?.trim()) {
           newErrors.firstName = 'First name is required';
         }
@@ -177,7 +190,7 @@ const ApplicationForm: React.FC = () => {
         }
         break;
 
-      case 2: // Guardian Details
+      case 3: // Guardian Details
         const guardian1 = applicationData.guardian1;
         
         // At least guardian1 must be filled
@@ -186,7 +199,7 @@ const ApplicationForm: React.FC = () => {
         }
         break;
 
-      case 3: // Address
+      case 4: // Address
         if (!applicationData.currentAddress?.barangay?.trim()) {
           newErrors.barangay = 'Barangay is required';
         }
@@ -198,20 +211,23 @@ const ApplicationForm: React.FC = () => {
         }
         break;
 
-      case 4: // Academic History
+      case 5: // Academic History
         if (!applicationData.academicInfo?.gradeLevel) {
           newErrors.gradeLevel = 'Grade level is required';
         }
         break;
 
-      case 5: // Health Info (optional, no validation)
+      case 6: // Health Info (optional, no validation)
         break;
 
-      case 6: // Documents (optional for now)
+      case 7: // Documents (optional for now)
         break;
 
-      case 7: // Review (final validation)
+      case 8: // Review (final validation)
         // Re-validate all critical fields
+        if (!applicationData.selectedSchoolId) {
+          newErrors.school = 'School selection is required';
+        }
         if (!applicationData.studentInfo?.firstName?.trim()) {
           newErrors.student = 'Student information is incomplete';
         }
@@ -261,10 +277,18 @@ const ApplicationForm: React.FC = () => {
       const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
       const applicationNumber = `ENR-${year}-${randomSuffix}`;
       
+      // Use the schoolId selected by the user in Step 1
+      const applicationSchoolId = applicationData.selectedSchoolId || 'default';
+      console.log('[ApplicationForm] Submitting with schoolId:', applicationSchoolId, '(from user selection)');
+      
+      if (!applicationData.selectedSchoolId) {
+        console.warn('[ApplicationForm] ⚠️ No school selected! Falling back to default');
+      }
+      
       // Prepare final application data
       const finalApplication: Partial<EnrollmentApplication> = {
         ...applicationData,
-        schoolId: schoolId || 'default', // Add schoolId for multi-tenant isolation
+        schoolId: applicationSchoolId, // CRITICAL: Use user-selected school for multi-tenant filtering
         applicationNumber,
         submittedBy: currentUser.email || '',
         status: 'submitted',
