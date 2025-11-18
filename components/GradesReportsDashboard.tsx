@@ -92,7 +92,7 @@ const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session
       id: 'grade-entry',
       title: 'Grade Entry & Management',
       description: 'Enter, edit, and manage student grades across all quarters and subjects',
-      route: '/grades/entry',
+      route: '/grades',
       icon: BookOpenIcon,
       gradient: 'from-violet-600 via-purple-600 to-blue-600',
       shadowColor: 'shadow-violet-500/25',
