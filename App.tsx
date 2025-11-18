@@ -22,6 +22,10 @@ const TeacherList = lazy(() => import('./components/TeacherList'));
 const ParentsView = lazy(() => import('./components/ParentsView'));
 const SectionsView = lazy(() => import('./components/SectionsView'));
 const UnifiedAssessmentView = lazy(() => import('./components/UnifiedAssessmentView'));
+const GradesDashboard = lazy(() => import('./components/GradesDashboard'));
+const GradesView = lazy(() => import('./components/GradesView'));
+const GradebookView = lazy(() => import('./components/GradebookView'));
+const CoreValuesGradebookView = lazy(() => import('./components/CoreValuesGradebookView'));
 const AttendanceView = lazy(() => import('./components/AttendanceView'));
 const SchedulerView = lazy(() => import('./components/SchedulerView'));
 const SubstituteView = lazy(() => import('./components/SubstituteView'));
@@ -546,8 +550,15 @@ const App: React.FC = () => {
                         <Route path="/forms/elln/results" element={<ELLNResults />} />
                         <Route path="/forms/elln/reports" element={<ELLNReports />} />
                         <Route path="/forms/elln/ilmp" element={<ILMPTemplate />} />
-                        <Route path="/grades" element={<GradesReportsDashboard session={staffSession} schoolData={schoolData} />} />
-                        <Route path="/grades/entry" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
+                        {/* NEW: Dashboard -> Detail View Navigation */}
+                        <Route path="/grades" element={<GradesDashboard session={staffSession} schoolData={schoolData} />} />
+                        <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/grades/academic" element={<GradebookView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/grades/core-values" element={<CoreValuesGradebookView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
+                        
+                        {/* LEGACY: Keep old route for backward compatibility (can remove later) */}
+                        <Route path="/grades/entry" element={<Navigate to="/grades" replace />} />
                         <Route path="/grades/form137" element={<Form137Dashboard />} />
                         <Route path="/grades/form137/:studentId" element={<Form137ManagerWrapper schoolYear={settings.schoolYear} />} />
                         <Route path="/grades/form137/new" element={<Form137CreateWrapper schoolYear={settings.schoolYear} />} />
@@ -558,10 +569,11 @@ const App: React.FC = () => {
                         <Route path="/grades/schoolforms/sf1" element={<SF1Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
                         <Route path="/grades/schoolforms/sf2" element={<SF2Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
                         <Route path="/grades/schoolforms/sf9" element={<SF9Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
-                        <Route path="/gradebook" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
+                        {/* LEGACY: Redirect old routes to new structure */}
+                        <Route path="/gradebook" element={<Navigate to="/grades/academic" replace />} />
                         <Route path="/gradebook-pg-test" element={<GradebookViewPostgreSQL schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/core-values" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/core-values-gradebook" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/core-values" element={<Navigate to="/grades/core-values" replace />} />
+                        <Route path="/core-values-gradebook" element={<Navigate to="/grades/core-values" replace />} />
                         <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/substitute" element={<SubstituteView schoolData={schoolData} />} />
@@ -611,8 +623,12 @@ const App: React.FC = () => {
           <>
             <Route path="/" element={<StudentDashboard schoolData={schoolData} session={studentSession} />} />
             <Route path="/assignments" element={<AssignmentsView schoolData={schoolData} session={studentSession} />} />
-            <Route path="/grades" element={<UnifiedAssessmentView schoolData={schoolData} session={studentSession} />} />
-            <Route path="/core-values" element={<UnifiedAssessmentView schoolData={schoolData} session={studentSession} />} />
+            <Route path="/grades" element={<GradesDashboard schoolData={schoolData} session={studentSession} />} />
+            <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={studentSession} />} />
+            <Route path="/grades/academic" element={<GradebookView schoolData={schoolData} session={studentSession} />} />
+            <Route path="/grades/core-values" element={<CoreValuesGradebookView schoolData={schoolData} session={studentSession} />} />
+            <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={studentSession} />} />
+            <Route path="/core-values" element={<Navigate to="/grades/core-values" replace />} />
             <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={studentSession} />} />
             <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={studentSession} />} />
           </>
@@ -626,8 +642,10 @@ const App: React.FC = () => {
             {/* <Route path="/email-verification" element={<EmailVerification />} /> */}
             <Route path="/announcements" element={<AnnouncementsView schoolData={schoolData} session={parentSession} />} />
             <Route path="/assignments" element={<AssignmentsView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
-            <Route path="/grades" element={<UnifiedAssessmentView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
-            <Route path="/core-values" element={<UnifiedAssessmentView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
+            <Route path="/grades" element={<GradesDashboard schoolData={schoolData} session={parentSession} />} />
+            <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
+            <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
+            <Route path="/core-values" element={<Navigate to="/grades/overview" replace />} />
             <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
           </>
