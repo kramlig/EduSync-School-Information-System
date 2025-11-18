@@ -15,6 +15,7 @@ import {
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import type { AuthUser, StudentUser } from '../types';
+import SupabaseTest from './SupabaseTest';
 
 interface DashboardProps {
   schoolData: SchoolDataHook;
@@ -428,6 +429,19 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Supabase Migration Test - TEMPORARY */}
+      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-6 border-2 border-blue-200 dark:border-blue-800">
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100">
+            🚀 PostgreSQL Migration Test
+          </h3>
+          <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+            Testing Supabase connection alongside Firestore. This will be removed after migration is complete.
+          </p>
+        </div>
+        <SupabaseTest />
       </div>
     </div>
   );
