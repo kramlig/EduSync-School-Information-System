@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { useSupabase, useStudents } from '../hooks/useSupabase';
+import { useSupabase, useStudents } from '../src/hooks/useSupabase';
 
 export const SupabaseTest: React.FC = () => {
   // Test 1: Fetch all schools
