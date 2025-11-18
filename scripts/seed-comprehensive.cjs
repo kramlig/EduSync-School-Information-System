@@ -203,7 +203,9 @@ const LEARNING_AREAS_OLD = [
     code: 'MAPEH', 
     name: 'Music, Arts, Physical Education, and Health (MAPEH)', 
     icon: '🎵',
-    gradeLevel: ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6']
+    gradeLevel: ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6'],
+    isComposite: true,
+    components: ['Music', 'Arts', 'Physical Education', 'Health']
   },
   { 
     code: 'ESP', 
