@@ -18,6 +18,7 @@ import React, { useState, useMemo } from 'react';
 import type { Student, LearningArea, Section, AuthUser, StudentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
+import { useSupabase } from '../src/hooks/useSupabase';
 
 interface GradebookViewPostgreSQLProps {
   schoolData: SchoolDataHook;
@@ -30,10 +31,30 @@ const GradebookViewPostgreSQL: React.FC<GradebookViewPostgreSQLProps> = ({
   session,
   selectedSectionId
 }) => {
-  const { students, learningAreas, sections } = schoolData;
+  const { sections } = schoolData; // Only use sections from Firestore for now
   
-  // Get school ID from first student (temporary - will come from auth context later)
-  const schoolId = students[0]?.schoolId;
+  const [selectedSection, setSelectedSection] = useState<string>(
+    selectedSectionId || sections[0]?.id || ''
+  );
+
+  // Fetch students from PostgreSQL
+  const {
+    data: pgStudents,
+    loading: studentsLoading,
+    error: studentsError
+  } = useSupabase('students', {
+    select: '*, sections(name, grade_level)',
+    orderBy: 'last_name'
+  });
+
+  // Fetch learning areas from PostgreSQL
+  const {
+    data: pgLearningAreas,
+    loading: areasLoading,
+    error: areasError
+  } = useSupabase('learning_areas', {
+    orderBy: 'name'
+  });
   
   // Fetch grades from PostgreSQL
   const {
@@ -42,34 +63,31 @@ const GradebookViewPostgreSQL: React.FC<GradebookViewPostgreSQLProps> = ({
     error: gradesError,
     updateGrade: updatePgGrade
   } = useGradesPostgreSQL({
-    sectionId: selectedSectionId || undefined,
-    schoolId
+    sectionId: selectedSection || undefined
   });
-
-  const [selectedSection, setSelectedSection] = useState<string>(
-    selectedSectionId || sections[0]?.id || ''
-  );
 
   // Filter students by selected section
   const sectionStudents = useMemo(() => {
-    if (!selectedSection) return students;
-    return students.filter(s => s.sectionId === selectedSection);
-  }, [students, selectedSection]);
+    if (!selectedSection) return pgStudents;
+    return pgStudents.filter((s: any) => s.section_id === selectedSection);
+  }, [pgStudents, selectedSection]);
 
   // Get learning areas for selected section
   const sectionLearningAreas = useMemo(() => {
     const section = sections.find(s => s.id === selectedSection);
-    if (!section) return learningAreas;
+    if (!section) return pgLearningAreas;
     
     // Filter learning areas by grade level
-    return learningAreas.filter(la => {
-      const laGrade = typeof la.gradeLevel === 'number' 
-        ? la.gradeLevel 
-        : parseInt(la.gradeLevel.replace('Grade ', ''));
+    return pgLearningAreas.filter((la: any) => {
+      const laGrade = typeof la.grade_level === 'number' 
+        ? la.grade_level 
+        : (typeof la.grade_level === 'string' && la.grade_level.includes('Grade'))
+          ? parseInt(la.grade_level.replace('Grade ', ''))
+          : parseInt(String(la.grade_level));
       const sectionGrade = section.gradeLevel;
       return laGrade === sectionGrade;
     });
-  }, [learningAreas, sections, selectedSection]);
+  }, [pgLearningAreas, sections, selectedSection]);
 
   // Get grade for specific student and learning area
   const getGrade = (studentId: string, learningAreaId: string) => {
@@ -78,7 +96,10 @@ const GradebookViewPostgreSQL: React.FC<GradebookViewPostgreSQLProps> = ({
     );
   };
 
-  if (gradesLoading) {
+  const loading = studentsLoading || areasLoading || gradesLoading;
+  const error = studentsError || areasError || gradesError;
+
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -89,13 +110,21 @@ const GradebookViewPostgreSQL: React.FC<GradebookViewPostgreSQLProps> = ({
     );
   }
 
-  if (gradesError) {
+  if (error) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-red-900 mb-2">
           ❌ Error Loading Grades
         </h3>
-        <p className="text-red-700">{gradesError.message}</p>
+        <p className="text-red-700 mb-2">{error.message || 'Unknown error'}</p>
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm text-red-600 hover:text-red-800">
+            Show error details
+          </summary>
+          <pre className="mt-2 p-3 bg-red-100 rounded text-xs overflow-auto">
+            {JSON.stringify(error, null, 2)}
+          </pre>
+        </details>
       </div>
     );
   }
@@ -135,62 +164,100 @@ const GradebookViewPostgreSQL: React.FC<GradebookViewPostgreSQLProps> = ({
         <div className="bg-blue-50 rounded-xl p-4">
           <div className="text-sm text-blue-600 font-medium">Students</div>
           <div className="text-2xl font-bold text-blue-900">{sectionStudents.length}</div>
+          <div className="text-xs text-blue-500 mt-1">From Firestore</div>
         </div>
         <div className="bg-green-50 rounded-xl p-4">
-          <div className="text-sm text-green-600 font-medium">Learning Areas</div>
-          <div className="text-2xl font-bold text-green-900">{sectionLearningAreas.length}</div>
+          <div className="text-sm text-green-600 font-medium">PostgreSQL Grades</div>
+          <div className="text-2xl font-bold text-green-900">{pgGrades.length}</div>
+          <div className="text-xs text-green-500 mt-1">Total grade records</div>
         </div>
         <div className="bg-purple-50 rounded-xl p-4">
-          <div className="text-sm text-purple-600 font-medium">Total Grades</div>
-          <div className="text-2xl font-bold text-purple-900">{pgGrades.length}</div>
+          <div className="text-sm text-purple-600 font-medium">Avg Final Grade</div>
+          <div className="text-2xl font-bold text-purple-900">
+            {pgGrades.length > 0 
+              ? Math.round(pgGrades.filter(g => g.finalGrade).reduce((sum, g) => sum + (g.finalGrade || 0), 0) / pgGrades.filter(g => g.finalGrade).length)
+              : '-'
+            }
+          </div>
+          <div className="text-xs text-purple-500 mt-1">Across all subjects</div>
         </div>
       </div>
 
-      {/* Simple Grade Table */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                  Student
-                </th>
-                {sectionLearningAreas.slice(0, 5).map(la => (
-                  <th key={la.id} className="px-4 py-3 text-center text-sm font-semibold text-slate-700">
-                    {la.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {sectionStudents.slice(0, 10).map(student => (
-                <tr key={student.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 text-sm font-medium text-slate-900">
-                    {student.name}
-                  </td>
-                  {sectionLearningAreas.slice(0, 5).map(la => {
-                    const grade = getGrade(student.id, la.id);
-                    return (
-                      <td key={la.id} className="px-4 py-3 text-center">
-                        <span className={`inline-block px-3 py-1 rounded-lg text-sm font-medium ${
-                          grade?.finalGrade
-                            ? grade.finalGrade >= 90
-                              ? 'bg-green-100 text-green-800'
-                              : grade.finalGrade >= 75
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-red-100 text-red-800'
-                            : 'bg-slate-100 text-slate-400'
-                        }`}>
-                          {grade?.finalGrade || '-'}
-                        </span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Grade Records List (Raw Data View) */}
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-4">
+          📊 Grade Records from PostgreSQL
+        </h3>
+        
+        {pgGrades.length === 0 ? (
+          <div className="text-center py-8 text-slate-500">
+            No grade records found in PostgreSQL database
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {pgGrades.slice(0, 10).map((grade) => {
+              const student = pgStudents.find((s: any) => s.id === grade.studentId);
+              const learningArea = pgLearningAreas.find((la: any) => la.id === grade.learningAreaId);
+              return (
+                <div key={grade.id} className="border border-slate-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-medium text-slate-900">
+                      {student ? `${student.first_name} ${student.last_name}` : `Student ID: ${grade.studentId.substring(0, 8)}...`}
+                    </div>
+                    <div className="text-sm text-slate-500">
+                      {learningArea?.name || `LA ID: ${grade.learningAreaId.substring(0, 8)}...`}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-5 gap-2 mt-2">
+                    <div className="text-center">
+                      <div className="text-xs text-slate-500">Q1</div>
+                      <div className="font-semibold text-slate-900">
+                        {typeof grade.q1 === 'number' ? grade.q1 : '-'}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-slate-500">Q2</div>
+                      <div className="font-semibold text-slate-900">
+                        {typeof grade.q2 === 'number' ? grade.q2 : '-'}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-slate-500">Q3</div>
+                      <div className="font-semibold text-slate-900">
+                        {typeof grade.q3 === 'number' ? grade.q3 : '-'}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-slate-500">Q4</div>
+                      <div className="font-semibold text-slate-900">
+                        {typeof grade.q4 === 'number' ? grade.q4 : '-'}
+                      </div>
+                    </div>
+                    <div className="text-center border-l border-slate-200 pl-2">
+                      <div className="text-xs text-slate-500">Final</div>
+                      <div className={`font-bold ${
+                        grade.finalGrade && grade.finalGrade >= 90 ? 'text-green-600' :
+                        grade.finalGrade && grade.finalGrade >= 75 ? 'text-blue-600' :
+                        'text-red-600'
+                      }`}>
+                        {grade.finalGrade || '-'}
+                      </div>
+                    </div>
+                  </div>
+                  {grade.remarks && (
+                    <div className="mt-2 text-sm">
+                      <span className={`inline-block px-2 py-1 rounded ${
+                        grade.remarks === 'Passed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {grade.remarks}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Success Message */}
