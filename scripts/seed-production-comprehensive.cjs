@@ -3,7 +3,11 @@
  * COMPREHENSIVE PRODUCTION SEEDING SCRIPT
  * 
  * Purpose: Seed ALL Firestore collections with realistic demo data
- * Target: Production (edusync-sis.web.app)
+ * Target: Production/Staging environments
+ * 
+ * Usage:
+ *   node scripts/seed-production-comprehensive.cjs                    # Uses edusync-sis
+ *   node scripts/seed-production-comprehensive.cjs --project=staging  # Uses edusync-sis-staging
  * 
  * What this creates:
  * - 30 students (Grades 1, 7, 10 - 10 students each)
@@ -25,9 +29,6 @@
  * - Tags all documents with isDemo: true for easy cleanup
  * - Includes rollback capability
  * 
- * Usage:
- *   node scripts/seed-production-comprehensive.cjs
- * 
  * IMPORTANT: 
  * 1. Make sure you're logged in: firebase login
  * 2. Backup current data first: firebase firestore:export backup-$(date +%Y%m%d)
@@ -38,10 +39,30 @@ const admin = require('firebase-admin');
 const { Timestamp, FieldValue } = require('firebase-admin/firestore');
 
 // ===== CONFIGURATION =====
-const PROJECT_ID = 'edusync-sis';
+// Parse command line arguments
+const args = process.argv.slice(2);
+const projectArg = args.find(arg => arg.startsWith('--project='));
+const projectAlias = projectArg ? projectArg.split('=')[1] : 'production';
+
+// Map alias to actual project ID
+const PROJECT_MAP = {
+  'production': 'edusync-sis',
+  'staging': 'edusync-staging',
+  'edusync-sis': 'edusync-sis',
+  'edusync-staging': 'edusync-staging'
+};
+
+const PROJECT_ID = PROJECT_MAP[projectAlias] || 'edusync-sis';
 const SCHOOL_ID = 'default'; // Multi-tenant school ID
 const SCHOOL_YEAR = '2024-2025';
 const DEMO_TAG = true; // Mark all documents with isDemo: true
+
+console.log('🌱 COMPREHENSIVE PRODUCTION SEED');
+console.log('='.repeat(80));
+console.log(`🎯 Target Project: ${PROJECT_ID} (alias: ${projectAlias})`);
+console.log(`🏫 School ID: ${SCHOOL_ID}`);
+console.log(`📅 School Year: ${SCHOOL_YEAR}`);
+console.log('='.repeat(80));
 
 // Clear emulator environment variables (force production)
 delete process.env.FIRESTORE_EMULATOR_HOST;

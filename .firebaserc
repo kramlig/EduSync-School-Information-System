@@ -1,8 +1,18 @@
 {
   "projects": {
-    "default": "edusync-sis"
+    "default": "edusync-sis",
+    "production": "edusync-sis",
+    "staging": "edusync-staging"
   },
-  "targets": {},
+  "targets": {
+    "edusync-staging": {
+      "hosting": {
+        "staging": [
+          "edusync-staging"
+        ]
+      }
+    }
+  },
   "etags": {
     "edusync-sis": {
       "extensionInstances": {

@@ -1,40 +1,97 @@
 #!/usr/bin/env node
 /**
- * Cleans production Firestore and reseeds with consistent sample data
- * Run: node scripts/clean-and-reseed-production.cjs
+ * COMPLETE DATABASE CLEANUP AND RESEED FOR STAGING
  * 
- * IMPORTANT: Make sure you're logged in with: firebase login
+ * This script:
+ * 1. Clears ALL collections
+ * 2. Runs comprehensive production seed
+ * 3. Adds E2E test data
+ * 
+ * Usage: node scripts/clean-and-reseed-production.cjs
+ * 
+ * ⚠️ WARNING: DELETES ALL DATA! Only use in staging/UAT environments.
  */
 
 const admin = require('firebase-admin');
+const { execSync } = require('child_process');
 
-// Initialize with production project
-const projectId = 'edusync-sis';
+// Parse command line arguments
+const args = process.argv.slice(2);
+const projectArg = args.find(arg => arg.startsWith('--project='));
+const projectAlias = projectArg ? projectArg.split('=')[1] : 'staging';
+
+// Map alias to actual project ID
+const PROJECT_MAP = {
+  'production': 'edusync-sis',
+  'staging': 'edusync-staging',
+  'edusync-sis': 'edusync-sis',
+  'edusync-staging': 'edusync-staging'
+};
+
+const projectId = PROJECT_MAP[projectAlias] || 'edusync-sis-staging';
+
+// SAFETY CHECK: Don't allow production cleanup without explicit confirmation
+if (projectId === 'edusync-sis' && !args.includes('--force-production')) {
+  console.error('\n❌ ERROR: Cannot clean production database!');
+  console.error('This would delete REAL STUDENT DATA from edusync.ph!');
+  console.error('\nIf you really want to clean production (NOT RECOMMENDED):');
+  console.error('  node scripts/clean-and-reseed-production.cjs --project=production --force-production');
+  console.error('\nFor staging (recommended):');
+  console.error('  node scripts/clean-and-reseed-production.cjs --project=staging');
+  process.exit(1);
+}
+
 admin.initializeApp({
   projectId: projectId,
 });
 
-console.log('[Clean & Reseed] 🚀 Initializing with project:', projectId);
+console.log('🚨 COMPLETE DATABASE CLEANUP AND RESEED');
+console.log('='.repeat(80));
+console.log(`📍 Target Project: ${projectId} (${projectAlias})`);
+console.log('='.repeat(80));
 
 const db = admin.firestore();
 
-// Collections to clean
+// Collections to clean (COMPREHENSIVE LIST)
 const COLLECTIONS_TO_CLEAN = [
+  // User collections
+  'users',
   'students',
-  'grades',
-  'sections',
-  'learningAreas',
   'teachers',
   'parents',
+  
+  // Academic collections
+  'sections',
+  'grades',
   'coreValues',
   'coreValueGrades',
+  'attendance',
   'attendanceRecords',
   'assignments',
   'studentAssignmentGrades',
   'lessonPlans',
-  'announcements',
   'classSchedules',
-  'substituteAssignments'
+  'learningAreas',
+  'schoolYears',
+  
+  // Enrollment
+  'enrollmentApplications',
+  
+  // Financial
+  'feeStructures',
+  'studentLedgers',
+  'receipts',
+  'billingStatements',
+  'paymentProofs',
+  
+  // System
+  'announcements',
+  'notifications',
+  'validationResults',
+  'substituteAssignments',
+  
+  // E2E Test data
+  'ellnAssessments'
 ];
 
 async function deleteCollection(collectionName, batchSize = 500) {
@@ -430,6 +487,16 @@ async function seedDatabase() {
 
 async function main() {
   try {
+    console.log('\n⚠️  WARNING: This will DELETE ALL DATA in the database!');
+    console.log('This operation cannot be undone.\n');
+    console.log('Collections to be cleared:', COLLECTIONS_TO_CLEAN.length);
+    console.log('Target project:', projectId);
+    console.log('\nPress Ctrl+C to cancel, or wait 5 seconds to continue...\n');
+    
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    const startTime = Date.now();
+    
     console.log('╔════════════════════════════════════════════════════════╗');
     console.log('║  🚨 PRODUCTION DATABASE CLEANUP & RESEED 🚨           ║');
     console.log('║                                                        ║');
@@ -437,17 +504,56 @@ async function main() {
     console.log('║  Project: edusync-sis                                  ║');
     console.log('╚════════════════════════════════════════════════════════╝\n');
     
-    // Clean database
+    // Step 1: Clean database
+    console.log('📦 STEP 1: CLEANING COLLECTIONS');
+    console.log('-'.repeat(80));
     await cleanDatabase();
     
-    // Seed database
-    await seedDatabase();
+    // Step 2: Run production seed script
+    console.log('\n🌱 STEP 2: RUNNING PRODUCTION SEED');
+    console.log('-'.repeat(80));
+    console.log('Executing: node scripts/seed-production-comprehensive.cjs\n');
+    try {
+      execSync('node scripts/seed-production-comprehensive.cjs', {
+        stdio: 'inherit',
+        cwd: process.cwd()
+      });
+      console.log('\n✅ Production seed complete');
+    } catch (error) {
+      console.error('❌ Error running production seed:', error.message);
+      process.exit(1);
+    }
+    
+    // Step 3: Add E2E test data
+    console.log('\n🧪 STEP 3: ADDING E2E TEST DATA');
+    console.log('-'.repeat(80));
+    console.log('Executing: node scripts/seed-e2e-test-data.cjs --production\n');
+    try {
+      execSync('node scripts/seed-e2e-test-data.cjs --production', {
+        stdio: 'inherit',
+        cwd: process.cwd()
+      });
+      console.log('\n✅ E2E test data added');
+    } catch (error) {
+      console.error('❌ Error running E2E seed:', error.message);
+      console.log('⚠️  Continuing anyway (E2E data is optional)');
+    }
+    
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     
     console.log('\n╔════════════════════════════════════════════════════════╗');
     console.log('║  ✅ CLEANUP & RESEED COMPLETE!                        ║');
     console.log('║                                                        ║');
-    console.log('║  You can now test the gradebook at:                   ║');
-    console.log('║  https://edusync-sis.web.app                          ║');
+    console.log('║  Your database now has:                               ║');
+    console.log('║  • 60+ teachers across all departments                ║');
+    console.log('║  • K-12 sections with complete curriculum             ║');
+    console.log('║  • Students with grades & attendance                  ║');
+    console.log('║  • 15 enrollment applications                         ║');
+    console.log('║  • Financial data & fee structures                    ║');
+    console.log('║  • Test accounts for E2E testing                      ║');
+    console.log('║                                                        ║');
+    console.log('║  Test at: https://edusync-sis.web.app                ║');
+    console.log(`║  Duration: ${duration} seconds                              ║`);
     console.log('╚════════════════════════════════════════════════════════╝\n');
     
   } catch (error) {

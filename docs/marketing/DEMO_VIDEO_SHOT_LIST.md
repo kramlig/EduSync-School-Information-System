@@ -603,7 +603,7 @@ Example:
      - **Upcoming Assignments:** 3 pending
 5. Click **"Billing"** in sidebar
 6. Show Parent Billing view:
-   - Student ledger summary
+   - Student ledger summary 
    - Recent payments list
    - "Upload Payment Proof" button (for bank transfer)
    - Download Statement of Account (PDF)

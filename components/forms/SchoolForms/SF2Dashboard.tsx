@@ -6,9 +6,9 @@ import type { SchoolDataHook } from '../../../hooks/useSchoolData.REACT_QUERY_BA
 import type { AuthUser, StudentUser, ParentUser, Student, Section, AttendanceRecord, AttendanceStatus } from '../../../types';
 import BackButton from '../../BackButton';
 // @ts-ignore - Vite asset import for DepEd logo and seal
-import depedLogoBase64 from '../../../src/assets/deped-logo.png.png?inline';
+import depedLogoBase64 from '/src/assets/deped-logo.png?inline';
 // @ts-ignore - Vite asset import for DepEd seal
-import depedSealBase64 from '../../../src/assets/deped-seal.png?inline';
+import depedSealBase64 from '/src/assets/deped-seal.png?inline';
 import {
   calculateStudentMonthlyTotals,
   calculateDailyAttendanceByGender,
