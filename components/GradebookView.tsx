@@ -146,6 +146,13 @@ const GradebookView: React.FC<{
   const activeGrades = USE_POSTGRESQL ? pgGrades : grades;
   const activeUpdateGrade = USE_POSTGRESQL ? updatePgGrade : updateGrade;
   
+  // DEBUG: Log which data source is being used
+  console.log('[GradebookView] 🔍 Data Source:', USE_POSTGRESQL ? 'PostgreSQL' : 'Firestore');
+  console.log('[GradebookView] 📊 Active Grades Count:', activeGrades.length);
+  if (activeGrades.length > 0) {
+    console.log('[GradebookView] 📝 Sample Grade:', activeGrades[0]);
+  }
+  
   // Use props if provided (unified mode), otherwise use local state (standalone mode)
   const [localSectionId, setLocalSectionId] = useState<string | null>(null);
   const [localQuarterFilter, setLocalQuarterFilter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>(getCurrentQuarter());
