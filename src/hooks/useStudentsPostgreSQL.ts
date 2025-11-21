@@ -30,7 +30,7 @@ interface Student {
   middleName?: string;
   lastName: string;
   suffix?: string;
-  gender: 'Male' | 'Female';
+  sex?: 'Male' | 'Female'; // Match global Student type
   dateOfBirth: Date | string;
   gradeLevel?: number | string;
   sectionId?: string;
@@ -61,6 +61,8 @@ interface UseStudentsOptions {
   includeSection?: boolean; // Load section name via join
   searchQuery?: string;
   status?: 'enrolled' | 'transferred' | 'dropped' | 'graduated'; // Match actual DB column
+  limit?: number; // Limit number of results (for pagination)
+  offset?: number; // Skip first N results (for pagination)
 }
 
 interface UseStudentsReturn {
@@ -71,6 +73,7 @@ interface UseStudentsReturn {
   createStudent: (student: Partial<Student>) => Promise<Student>;
   updateStudent: (id: string, updates: Partial<Student>) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
+  totalCount: number; // Total number of students (for pagination)
 }
 
 export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStudentsReturn {
@@ -80,12 +83,15 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
     schoolId, 
     includeSection = false,
     searchQuery,
-    status = 'enrolled' // Default to 'enrolled' to match DB
+    status = 'enrolled', // Default to 'enrolled' to match DB
+    limit,
+    offset
   } = options;
   
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchStudents = useCallback(async () => {
     try {
@@ -93,14 +99,16 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
       setError(null);
 
       // Generate cache key from query parameters
-      const cacheKey = JSON.stringify({ sectionId, gradeLevel, schoolId, includeSection, searchQuery, status });
+      const cacheKey = JSON.stringify({ sectionId, gradeLevel, schoolId, includeSection, searchQuery, status, limit, offset });
       
-      // Check cache first
-      const cached = queryCache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        setStudents(cached.data);
-        setLoading(false);
-        return;
+      // Check cache first (skip cache for paginated queries to ensure freshness)
+      if (!limit && !offset) {
+        const cached = queryCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+          setStudents(cached.data);
+          setLoading(false);
+          return;
+        }
       }
 
       // Fetching students
@@ -132,10 +140,36 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
       // Order by name
       query = query.order('name', { ascending: true });
 
+      // Apply pagination if specified
+      if (limit !== undefined) {
+        query = query.limit(limit);
+      }
+      if (offset !== undefined) {
+        query = query.range(offset, offset + (limit || 1000) - 1);
+      }
+
       const { data, error: fetchError } = await query;
 
       if (fetchError) {
         throw fetchError;
+      }
+
+      // Get total count (without limit/offset for accurate pagination)
+      if (limit !== undefined || offset !== undefined) {
+        let countQuery = supabase.from('students').select('*', { count: 'exact', head: true });
+        
+        // Apply same filters as main query
+        if (sectionId) countQuery = countQuery.eq('section_id', sectionId);
+        if (gradeLevel !== undefined) countQuery = countQuery.eq('grade_level', gradeLevel);
+        if (schoolId) countQuery = countQuery.eq('school_id', schoolId);
+        if (status) countQuery = countQuery.eq('enrollment_status', status);
+        if (searchQuery) countQuery = countQuery.or(`name.ilike.%${searchQuery}%,lrn.ilike.%${searchQuery}%`);
+        
+        const { count } = await countQuery;
+        setTotalCount(count || 0);
+      } else {
+        // If no pagination, count is just the data length
+        setTotalCount((data || []).length);
       }
 
       // Transform PostgreSQL data to match Firestore Student interface
@@ -148,7 +182,7 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
         middleName: row.middle_name || undefined,
         lastName: row.last_name,
         suffix: row.suffix || undefined,
-        gender: row.gender,
+        sex: row.gender, // Map DB 'gender' to Student 'sex'
         dateOfBirth: row.date_of_birth,
         gradeLevel: row.grade_level,
         sectionId: row.section_id || undefined,
@@ -174,15 +208,17 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
 
       setStudents(transformedStudents);
       
-      // Update cache
-      queryCache.set(cacheKey, { data: transformedStudents, timestamp: Date.now() });
+      // Update cache (only for non-paginated queries)
+      if (!limit && !offset) {
+        queryCache.set(cacheKey, { data: transformedStudents, timestamp: Date.now() });
+      }
       
     } catch (err) {
       setError(err as Error);
     } finally {
       setLoading(false);
     }
-  }, [sectionId, gradeLevel, schoolId, includeSection, searchQuery, status]);
+  }, [sectionId, gradeLevel, schoolId, includeSection, searchQuery, status, limit, offset]);
 
   // Initial fetch
   useEffect(() => {
@@ -260,7 +296,7 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
       if (!lastName) throw new Error('Last name is required');
       
       // Handle sex/gender field mapping (form uses 'sex', DB uses 'gender')
-      const gender = studentData.gender || (studentData as any).sex;
+      const gender = studentData.sex;
       if (!gender) throw new Error('Gender is required');
 
       // Get grade level from section if not provided directly
@@ -311,7 +347,7 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
         middleName: data.middle_name,
         lastName: data.last_name,
         suffix: data.suffix,
-        gender: data.gender,
+        sex: data.gender,
         dateOfBirth: data.date_of_birth,
         gradeLevel: data.grade_level,
         sectionId: data.section_id,
@@ -349,7 +385,8 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
       if (updates.middleName !== undefined) updateData.middle_name = updates.middleName;
       if (updates.lastName !== undefined) updateData.last_name = updates.lastName;
       if (updates.suffix !== undefined) updateData.suffix = updates.suffix;
-      if (updates.gender !== undefined) updateData.gender = updates.gender;
+      // Handle sex field (form uses 'sex', DB uses 'gender')
+      if (updates.sex !== undefined) updateData.gender = updates.sex;
       if (updates.dateOfBirth !== undefined) updateData.date_of_birth = updates.dateOfBirth;
       if (updates.gradeLevel !== undefined) updateData.grade_level = updates.gradeLevel;
       if (updates.sectionId !== undefined) updateData.section_id = updates.sectionId;
@@ -407,7 +444,8 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
     refetch: fetchStudents,
     createStudent: createStudent as (studentData: Partial<Student>) => Promise<Student>,
     updateStudent,
-    deleteStudent
+    deleteStudent,
+    totalCount
   };
 }
 

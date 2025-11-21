@@ -2,10 +2,10 @@ import { useState, useMemo, useCallback } from 'react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
-import { useSchoolContext } from '../../../contexts/SchoolContext';
-import { useStudentsPostgreSQL } from '../../../hooks/useStudentsPostgreSQL';
-import { useSectionsPostgreSQL } from '../../../hooks/useSectionsPostgreSQL';
-import { useAttendancePostgreSQL } from '../../../hooks/useAttendancePostgreSQL';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
+import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
 import type { AuthUser, StudentUser, ParentUser, Student, Section, AttendanceRecord, AttendanceStatus } from '../../../types';
 import BackButton from '../../BackButton';
 // @ts-ignore - Vite asset import for DepEd logo and seal

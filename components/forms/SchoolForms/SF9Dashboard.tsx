@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useSchoolContext } from '../../../contexts/SchoolContext';
-import { useStudentsPostgreSQL } from '../../../hooks/useStudentsPostgreSQL';
-import { useSectionsPostgreSQL } from '../../../hooks/useSectionsPostgreSQL';
-import { useGradesPostgreSQL } from '../../../hooks/useGradesPostgreSQL';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
+import { useGradesPostgreSQL } from '../../../src/hooks/useGradesPostgreSQL';
 import type { AuthUser, StudentUser, ParentUser, Student, Section, Grade, GradeSHS, GradeInput } from '../../../types';
 import BackButton from '../../BackButton';
 import { 
