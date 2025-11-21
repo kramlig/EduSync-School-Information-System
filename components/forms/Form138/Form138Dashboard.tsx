@@ -134,15 +134,9 @@ const Form138Dashboard: React.FC = () => {
   // Fetch core values and core value grades from PostgreSQL
   const { coreValues, coreValueGrades, loading: coreValuesLoading } = useCoreValuesPostgreSQL(true, schoolId);
   
-  // Fetch attendance records from PostgreSQL (current school year only for performance)
-  const currentDate = new Date();
-  const schoolYearStart = currentDate.getMonth() >= 5 // June or later
-    ? `${currentDate.getFullYear()}-06-01` 
-    : `${currentDate.getFullYear() - 1}-06-01`;
-  
+  // Fetch attendance records from PostgreSQL
   const { attendanceRecords, loading: attendanceLoading } = useAttendancePostgreSQL({ 
-    schoolId,
-    startDate: schoolYearStart // Only fetch current school year
+    schoolId
   });
   
   // State for additional data needed by PrintableReport
@@ -390,12 +384,9 @@ const Form138Dashboard: React.FC = () => {
   const handlePrintStudent = handlePrintSingleStudent;
 
   const handleViewStudent = useCallback((studentId: string) => {
-    const student = students.find(s => s.id === studentId);
-    if (student) {
-      setViewingStudent(student);
-      setShowViewModal(true);
-    }
-  }, [students]);
+    // Navigate to print page instead of showing modal
+    navigate(`/reports/form138/print?students=${studentId}`);
+  }, [navigate]);
 
   const clearFilters = useCallback(() => {
     setSearchQuery('');

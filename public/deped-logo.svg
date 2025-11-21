@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- DepEd Seal/Logo -->
+  <!-- Outer circle -->
+  <circle cx="100" cy="100" r="95" fill="none" stroke="#003f87" stroke-width="3"/>
+  
+  <!-- Inner circle -->
+  <circle cx="100" cy="100" r="85" fill="none" stroke="#003f87" stroke-width="2"/>
+  
+  <!-- Shield/Book shape in center -->
+  <path d="M 100 40 L 130 50 L 130 110 Q 130 130 100 145 Q 70 130 70 110 L 70 50 Z" 
+        fill="#003f87" stroke="#003f87" stroke-width="1"/>
+  
+  <!-- Book pages -->
+  <line x1="100" y1="50" x2="100" y2="125" stroke="white" stroke-width="2"/>
+  <path d="M 80 70 Q 100 65 120 70" fill="none" stroke="white" stroke-width="1.5"/>
+  <path d="M 80 85 Q 100 80 120 85" fill="none" stroke="white" stroke-width="1.5"/>
+  <path d="M 80 100 Q 100 95 120 100" fill="none" stroke="white" stroke-width="1.5"/>
+  
+  <!-- Stars -->
+  <polygon points="100,25 102,31 108,31 103,35 105,41 100,37 95,41 97,35 92,31 98,31" fill="#ffd700"/>
+  <polygon points="50,60 52,64 56,64 53,67 54,71 50,68 46,71 47,67 44,64 48,64" fill="#ffd700"/>
+  <polygon points="150,60 152,64 156,64 153,67 154,71 150,68 146,71 147,67 144,64 148,64" fill="#ffd700"/>
+  
+  <!-- Text curved around top -->
+  <path id="curve-top" d="M 30,100 A 70,70 0 0,1 170,100" fill="none"/>
+  <text font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#003f87">
+    <textPath href="#curve-top" startOffset="50%" text-anchor="middle">
+      DEPARTMENT OF EDUCATION
+    </textPath>
+  </text>
+  
+  <!-- Text curved around bottom -->
+  <path id="curve-bottom" d="M 30,100 A 70,70 0 0,0 170,100" fill="none"/>
+  <text font-family="Arial, sans-serif" font-size="12" fill="#003f87">
+    <textPath href="#curve-bottom" startOffset="50%" text-anchor="middle">
+      REPUBLIC OF THE PHILIPPINES
+    </textPath>
+  </text>
+</svg>

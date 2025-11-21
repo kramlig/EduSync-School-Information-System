@@ -4,12 +4,17 @@
  * Handles bulk printing of multiple students or single student reports
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
 import { useGradesPostgreSQL } from '../../../src/hooks/useGradesPostgreSQL';
 import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
+import { useCoreValuesPostgreSQL } from '../../../src/hooks/useCoreValuesPostgreSQL';
+import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { supabase } from '../../../src/lib/supabase';
+import { getFirestoreInstance } from '../../../src/services/firestoreService';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import PrintableReport from '../../PrintableReport';
 
 const Form138Print: React.FC = () => {
@@ -21,12 +26,129 @@ const Form138Print: React.FC = () => {
   const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
   const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
   const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { coreValues, coreValueGrades, loading: coreValuesLoading } = useCoreValuesPostgreSQL(true, schoolId);
   
-  const loading = studentsLoading || gradesLoading || sectionsLoading;
+  // Fetch attendance records from PostgreSQL
+  const { attendanceRecords, loading: attendanceLoading } = useAttendancePostgreSQL({ 
+    schoolId
+  });
+  
+  // State for additional data
+  const [learningAreas, setLearningAreas] = useState<any[]>([]);
+  const [settings, setSettings] = useState<any>({ schoolYear: '2024-2025' });
+  const [additionalDataLoading, setAdditionalDataLoading] = useState(true);
+  
+  const loading = studentsLoading || gradesLoading || sectionsLoading || coreValuesLoading || attendanceLoading || additionalDataLoading;
   const error = null;
+  
+  // Memoize empty teachers array
+  const teachers = useMemo(() => [], []);
+  
+  // Create schoolData object for PrintableReport
+  const schoolData = useMemo(() => ({
+    students,
+    grades,
+    sections,
+    teachers,
+    settings,
+    learningAreas,
+    coreValues,
+    coreValueGrades,
+    attendanceRecords,
+    monthlySchoolDaysConfig: [],
+    loading,
+    error
+  }), [students, grades, sections, teachers, settings, learningAreas, coreValues, coreValueGrades, attendanceRecords, loading, error]);
   
   const [selectedStudents, setSelectedStudents] = useState<any[]>([]);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  
+  // Fetch additional data (learning areas and settings)
+  useEffect(() => {
+    const fetchAdditionalData = async () => {
+      setAdditionalDataLoading(true);
+      
+      try {
+        const db = getFirestoreInstance();
+        let fetchedLearningAreas: any[] = [];
+        
+        if (schoolId !== 'default') {
+          // Fetch school settings - get all columns first
+          const { data: schoolData, error: schoolError } = await supabase
+            .from('schools')
+            .select('*')
+            .eq('id', schoolId)
+            .single();
+          
+          console.log('[Form138Print] School data:', schoolData, 'Error:', schoolError);
+          
+          if (schoolData) {
+            setSettings({
+              schoolYear: schoolData.current_school_year || schoolData.school_year || '2024-2025',
+              schoolName: schoolData.name || 'School Name',
+              division: schoolData.division || 'Division',
+              region: schoolData.region || 'Region',
+              district: schoolData.district || 'District',
+              principalName: schoolData.principal_name || '',
+              ...schoolData.settings
+            });
+          }
+          
+          // Fetch learning areas from PostgreSQL
+          const { data: learningAreasData } = await supabase
+            .from('learning_areas')
+            .select('*')
+            .eq('school_id', schoolId)
+            .is('deleted_at', null);
+          
+          if (learningAreasData && learningAreasData.length > 0) {
+            fetchedLearningAreas = learningAreasData.map((row: any) => ({
+              id: row.id,
+              schoolId: row.school_id,
+              name: row.name,
+              credits: row.credits || 0,
+              isComposite: row.is_composite || false,
+              subSubjects: row.sub_subjects || row.components || [],
+              components: row.components || [],
+              category: row.category,
+              gradeLevel: row.grade_level,
+              isActive: row.is_active !== false,
+              department: row.department,
+              order: row.display_order || row.order,
+              kToTwelveCode: row.k_to_twelve_code,
+              semesterBased: row.semester_based,
+              semester: row.semester,
+              trackRequired: row.track_required,
+              prerequisite: row.prerequisite,
+              description: row.description,
+              hoursPerWeek: row.hours_per_week
+            }));
+          }
+        }
+        
+        // Fallback to Firestore if needed
+        if (fetchedLearningAreas.length === 0) {
+          const learningAreasSnapshot = await getDocs(
+            query(collection(db, 'learningAreas'), where('schoolId', '==', schoolId))
+          );
+          fetchedLearningAreas = learningAreasSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+        }
+        
+        setLearningAreas(fetchedLearningAreas);
+      } catch (err) {
+        console.error('[Form138Print] Error fetching additional data:', err);
+      } finally {
+        setAdditionalDataLoading(false);
+      }
+    };
+    
+    if (schoolId) {
+      fetchAdditionalData();
+    }
+  }, [schoolId]);
 
   useEffect(() => {
     if (!loading && students.length > 0) {

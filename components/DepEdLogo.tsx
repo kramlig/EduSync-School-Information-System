@@ -8,8 +8,7 @@ type Props = {
 
 const DepEdLogo: React.FC<Props> = ({ className, size, alt }) => {
   const wh = size ? { width: size, height: size } : {};
-  // Use edusync logo instead
-  return <img src="/edusync-logo.png" alt={alt ?? 'EduSync Logo'} className={className} {...wh} />;
+  return <img src="/deped-logo.png" alt={alt ?? 'DepEd Logo'} className={className} {...wh} />;
 };
 
 export default DepEdLogo;

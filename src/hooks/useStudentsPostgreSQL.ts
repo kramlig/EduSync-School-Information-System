@@ -118,8 +118,7 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
       if (gradeLevel !== undefined) {
         query = query.eq('grade_level', gradeLevel);
       }
-      // Only filter by schoolId if it's a valid UUID (not "default")
-      if (schoolId && schoolId !== 'default') {
+      if (schoolId) {
         query = query.eq('school_id', schoolId);
       }
       if (status) {
@@ -234,12 +233,7 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
   // Create student
   const createStudent = useCallback(async (studentData: Partial<Student>, sections?: any[]): Promise<Student> => {
     try {
-      // Get actual school_id from database if schoolId is "default"
-      let actualSchoolId = studentData.schoolId;
-      if (!actualSchoolId || actualSchoolId === 'default') {
-        const { data: schools } = await supabase.from('schools').select('id').limit(1).single();
-        actualSchoolId = schools?.id;
-      }
+      const actualSchoolId = studentData.schoolId;
 
       // Parse full name into components if firstName/lastName not provided
       let firstName = studentData.firstName;
