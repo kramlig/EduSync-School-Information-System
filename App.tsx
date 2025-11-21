@@ -584,9 +584,9 @@ const App: React.FC = () => {
                         
                         {/* School Forms (SF1, SF2, SF9) */}
                         <Route path="/reports/school-forms" element={<SchoolFormsDashboard session={staffSession} />} />
-                        <Route path="/reports/school-forms/sf1" element={<SF1Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
-                        <Route path="/reports/school-forms/sf2" element={<SF2Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
-                        <Route path="/reports/school-forms/sf9" element={<SF9Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf1" element={<SF1Dashboard session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf2" element={<SF2Dashboard session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf9" element={<SF9Dashboard session={staffSession} onBack={() => window.history.back()} />} />
                         
                         {/* ELLN Assessment */}
                         <Route path="/reports/elln" element={<ELLNDashboard />} />

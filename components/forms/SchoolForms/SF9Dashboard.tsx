@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import type { SchoolDataHook } from '../../../hooks/useSchoolData.REACT_QUERY_BACKUP';
+import { useSchoolContext } from '../../../contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../hooks/useSectionsPostgreSQL';
+import { useGradesPostgreSQL } from '../../../hooks/useGradesPostgreSQL';
 import type { AuthUser, StudentUser, ParentUser, Student, Section, Grade, GradeSHS, GradeInput } from '../../../types';
 import BackButton from '../../BackButton';
 import { 
@@ -19,7 +22,6 @@ import {
 } from '../../icons';
 
 interface SF9DashboardProps {
-  schoolData: SchoolDataHook;
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
   onBack: () => void;
 }
@@ -86,13 +88,20 @@ interface SchoolYearSummary {
   };
 }
 
-const SF9Dashboard: React.FC<SF9DashboardProps> = ({ schoolData, session, onBack }) => {
+const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
+  const { schoolId } = useSchoolContext();
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
+  
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('2024-2025');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGradeLevel, setSelectedGradeLevel] = useState<number | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'overview' | 'detailed' | 'analytics'>('overview');
   const [promotionFilter, setPromotionFilter] = useState<'all' | 'promoted' | 'retained' | 'transferred' | 'graduated' | 'dropped'>('all');
+
+  const loading = studentsLoading || sectionsLoading || gradesLoading;
 
   // Utility function to export data as CSV
   const exportToCSV = (data: any[], filename: string) => {
@@ -133,11 +142,11 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ schoolData, session, onBack
 
   // Calculate final grades for students
   const calculateStudentFinalGrade = (studentId: string): number => {
-    const studentGrades = schoolData.grades.filter((grade: GradeInput) => grade.studentId === studentId);
+    const studentGrades = grades.filter((grade: GradeInput) => grade.studentId === studentId);
     
     if (studentGrades.length === 0) {
       // If no grades exist, generate a mock grade for demonstration
-      const student = schoolData.students.find((s: Student) => s.id === studentId);
+      const student = students.find((s: Student) => s.id === studentId);
       return student ? generateMockGrade(student.name) : 0;
     }
     
@@ -189,7 +198,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ schoolData, session, onBack
     if (student.status === 'dropped') return 'dropped';
     
     // Determine based on academic performance
-    const studentGrades = schoolData.grades.filter((grade: GradeInput) => grade.studentId === student.id);
+    const studentGrades = grades.filter((grade: GradeInput) => grade.studentId === student.id);
     let failedSubjects = 0;
     
     studentGrades.forEach((grade: GradeInput) => {
@@ -208,7 +217,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ schoolData, session, onBack
 
   // Calculate comprehensive promotion statistics
   const promotionStats = useMemo((): PromotionStats => {
-    const activeStudents = schoolData.students.filter((student: Student) => 
+    const activeStudents = students.filter((student: Student) => 
       student.status !== 'inactive'
     );
 
@@ -228,7 +237,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ schoolData, session, onBack
     activeStudents.forEach((student: Student) => {
       const finalGrade = calculateStudentFinalGrade(student.id);
       const promotionStatus = determinePromotionStatus(student, finalGrade);
-      const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
+      const section = sections.find((s: Section) => s.id === student.sectionId);
       
       // Count by status
       switch (promotionStatus) {
@@ -294,7 +303,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ schoolData, session, onBack
       
       // Calculate average grade for the level
       const studentsInGrade = activeStudents.filter((student: Student) => {
-        const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
+        const section = sections.find((s: Section) => s.id === student.sectionId);
         return section?.gradeLevel === parseInt(gradeLevel);
       });
       
@@ -320,19 +329,19 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ schoolData, session, onBack
     });
 
     return stats;
-  }, [schoolData.students, schoolData.sections, schoolData.grades]);
+  }, [students, sections, grades]);
 
   // Generate student promotion data
   const studentPromotionData = useMemo((): StudentPromotionData[] => {
-    return schoolData.students
+    return students
       .filter((student: Student) => student.status !== 'inactive')
       .map((student: Student) => {
         const finalGrade = calculateStudentFinalGrade(student.id);
         const promotionStatus = determinePromotionStatus(student, finalGrade);
-        const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
+        const section = sections.find((s: Section) => s.id === student.sectionId);
         
         // Calculate subject performance
-        const studentGrades = schoolData.grades.filter((grade: GradeInput) => grade.studentId === student.id);
+        const studentGrades = grades.filter((grade: GradeInput) => grade.studentId === student.id);
         let subjectsPassed = 0;
         let subjectsFailed = 0;
         let learningAreas: { name: string; grade: number; passed: boolean; }[] = [];
@@ -401,7 +410,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ schoolData, session, onBack
           learningAreas
         };
       });
-  }, [schoolData.students, schoolData.sections, schoolData.grades, schoolData.learningAreas, schoolData.attendanceRecords]);
+  }, [students, sections, grades, schoolData.learningAreas, schoolData.attendanceRecords]);
 
   // Filter students for display
   const filteredStudentData = useMemo(() => {
@@ -435,7 +444,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ schoolData, session, onBack
     });
   }, [studentPromotionData, searchQuery, selectedGradeLevel, selectedSection, promotionFilter]);
 
-  const gradeLevels = [...new Set(schoolData.sections.map((s: Section) => s.gradeLevel))].sort() as number[];
+  const gradeLevels = [...new Set(sections.map((s: Section) => s.gradeLevel))].sort() as number[];
   const schoolYears = ['2024-2025', '2023-2024', '2022-2023']; // Could be dynamic
 
   // Export SF9 promotion/retention report
@@ -521,6 +530,17 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ schoolData, session, onBack
         };
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-red-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
+          <p className="mt-4 text-slate-600 dark:text-slate-400">Loading promotion data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-red-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -786,7 +806,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ schoolData, session, onBack
                     className="px-3 py-2 bg-white/50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all duration-200"
                   >
                     <option value="">All Sections</option>
-                    {schoolData.sections
+                    {sections
                       .filter(section => !selectedGradeLevel || section.gradeLevel === selectedGradeLevel)
                       .map(section => (
                         <option key={section.id} value={section.id}>

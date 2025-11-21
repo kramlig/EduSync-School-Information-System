@@ -2,7 +2,10 @@ import { useState, useMemo, useCallback } from 'react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
-import type { SchoolDataHook } from '../../../hooks/useSchoolData.REACT_QUERY_BACKUP';
+import { useSchoolContext } from '../../../contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../hooks/useSectionsPostgreSQL';
+import { useAttendancePostgreSQL } from '../../../hooks/useAttendancePostgreSQL';
 import type { AuthUser, StudentUser, ParentUser, Student, Section, AttendanceRecord, AttendanceStatus } from '../../../types';
 import BackButton from '../../BackButton';
 // @ts-ignore - Vite asset import for DepEd logo and seal
@@ -36,7 +39,6 @@ import {
 } from '../../icons';
 
 interface SF2DashboardProps {
-  schoolData: SchoolDataHook;
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
   onBack: () => void;
 }
@@ -66,7 +68,12 @@ interface MonthlyAttendanceSummary {
   byGradeLevel: { [key: number]: { present: number; total: number; rate: number } };
 }
 
-const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack }) => {
+const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
+  const { schoolId } = useSchoolContext();
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { attendanceRecords, loading: attendanceLoading } = useAttendancePostgreSQL({ schoolId });
+  
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().getFullYear() + '-' + (new Date().getMonth() + 1).toString().padStart(2, '0'));
   const [searchQuery, setSearchQuery] = useState('');
@@ -80,7 +87,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
   const [currentPage, setCurrentPage] = useState(1);
   
   // Loading state
-  const isLoading = schoolData.loading;
+  const isLoading = studentsLoading || sectionsLoading || attendanceLoading;
   
   // Optimistic updates state
   const [localAttendance, setLocalAttendance] = useState<Map<string, AttendanceStatus>>(new Map());
@@ -155,7 +162,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
 
   // Calculate daily attendance statistics
   const attendanceStats = useMemo((): AttendanceStats => {
-    const activeStudents = schoolData.students.filter((student: Student) => 
+    const activeStudents = students.filter((student: Student) => 
       student.status !== 'transferred' && student.status !== 'dropped' && student.status !== 'graduated'
     );
 
@@ -173,7 +180,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
 
     // Get today's attendance
     activeStudents.forEach((student: Student) => {
-      const attendanceRecord = schoolData.attendanceRecords.find((record: AttendanceRecord) => 
+      const attendanceRecord = attendanceRecords.find((record: AttendanceRecord) => 
         record.studentId === student.id
       );
       
@@ -187,7 +194,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       }
 
       // Group by grade level
-      const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
+      const section = sections.find((s: Section) => s.id === student.sectionId);
       if (section) {
         const gradeLevel = section.gradeLevel;
         if (!stats.byGradeLevel[gradeLevel]) {
@@ -222,7 +229,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       let dayTotal = 0;
       
       activeStudents.forEach((student: Student) => {
-        const attendanceRecord = schoolData.attendanceRecords.find((record: AttendanceRecord) => 
+        const attendanceRecord = attendanceRecords.find((record: AttendanceRecord) => 
           record.studentId === student.id
         );
         const dayStatus = attendanceRecord?.dailyStatus[dateStr];
@@ -245,14 +252,14 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       Math.round(weeklyTrend.reduce((sum, day) => sum + day.rate, 0) / weeklyTrend.length) : 0;
 
     return stats;
-  }, [schoolData.students, schoolData.sections, schoolData.attendanceRecords, selectedDate]);
+  }, [students, sections, attendanceRecords, selectedDate]);
 
   // Calculate monthly summary
   const monthlyAttendanceSummary = useMemo((): MonthlyAttendanceSummary => {
     const [year, month] = selectedMonth.split('-').map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
     
-    const activeStudents = schoolData.students.filter((student: Student) => 
+    const activeStudents = students.filter((student: Student) => 
       student.status !== 'transferred' && student.status !== 'dropped' && student.status !== 'graduated'
     );
 
@@ -278,7 +285,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Skip Sunday (0) and Saturday (6)
       
       activeStudents.forEach((student: Student) => {
-        const attendanceRecord = schoolData.attendanceRecords.find((record: AttendanceRecord) => 
+        const attendanceRecord = attendanceRecords.find((record: AttendanceRecord) => 
           record.studentId === student.id
         );
         const dayStatus = attendanceRecord?.dailyStatus[dateStr];
@@ -291,7 +298,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
         }
 
         // Group by grade level
-        const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
+        const section = sections.find((s: Section) => s.id === student.sectionId);
         if (section) {
           const gradeLevel = section.gradeLevel;
           if (!summary.byGradeLevel[gradeLevel]) {
@@ -319,11 +326,11 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
     });
 
     return summary;
-  }, [schoolData.students, schoolData.sections, schoolData.attendanceRecords, selectedMonth]);
+  }, [students, sections, attendanceRecords, selectedMonth]);
 
   // Filter students for display
   const filteredStudents = useMemo(() => {
-    return schoolData.students.filter((student: Student) => {
+    return students.filter((student: Student) => {
       // Filter by active status
       if (student.status === 'transferred' || student.status === 'dropped' || student.status === 'graduated') {
         return false;
@@ -341,7 +348,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
 
       // Grade level filter
       if (selectedGradeLevel !== null) {
-        const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
+        const section = sections.find((s: Section) => s.id === student.sectionId);
         if (!section || section.gradeLevel !== selectedGradeLevel) return false;
       }
 
@@ -350,7 +357,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
 
       // Attendance filter
       if (attendanceFilter !== 'all') {
-        const attendanceRecord = schoolData.attendanceRecords.find((record: AttendanceRecord) => 
+        const attendanceRecord = attendanceRecords.find((record: AttendanceRecord) => 
           record.studentId === student.id
         );
         const todayStatus = attendanceRecord?.dailyStatus[selectedDate];
@@ -365,7 +372,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
 
       return true;
     });
-  }, [schoolData.students, schoolData.sections, schoolData.attendanceRecords, searchQuery, selectedGradeLevel, selectedSection, attendanceFilter, selectedDate]);
+  }, [students, sections, attendanceRecords, searchQuery, selectedGradeLevel, selectedSection, attendanceFilter, selectedDate]);
 
   // Paginated students
   const pagedStudents = useMemo(() => {
@@ -399,8 +406,8 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
 
   // Memoize grade levels calculation
   const gradeLevels = useMemo(() => {
-    return [...new Set(schoolData.sections.map((s: Section) => s.gradeLevel))].sort() as number[];
-  }, [schoolData.sections]);
+    return [...new Set(sections.map((s: Section) => s.gradeLevel))].sort() as number[];
+  }, [sections]);
 
   const schoolYearMonths = useMemo(() => getCurrentSchoolYearMonths(), []);
 
@@ -424,8 +431,8 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
   // Export SF2 daily attendance data
   const exportDailyAttendance = () => {
     const exportData = filteredStudents.map(student => {
-      const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
-      const attendanceRecord = schoolData.attendanceRecords.find((record: AttendanceRecord) => 
+      const section = sections.find((s: Section) => s.id === student.sectionId);
+      const attendanceRecord = attendanceRecords.find((record: AttendanceRecord) => 
         record.studentId === student.id
       );
       const todayStatus = attendanceRecord?.dailyStatus[selectedDate];
@@ -464,9 +471,9 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
     }
     
     // Fall back to actual data
-    const record = schoolData.attendanceRecords.find(r => r.studentId === studentId);
+    const record = attendanceRecords.find(r => r.studentId === studentId);
     return record?.dailyStatus[date] || null;
-  }, [localAttendance, schoolData.attendanceRecords]);
+  }, [localAttendance, attendanceRecords]);
   
   // Check if a cell is currently being updated (memoized)
   const isCellUpdating = useCallback((studentId: string, date: string): boolean => {
@@ -476,14 +483,14 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
 
   // Mark student attendance (memoized)
   const markAttendance = useCallback((studentId: string) => {
-    const student = schoolData.students.find(s => s.id === studentId);
+    const student = students.find(s => s.id === studentId);
     if (student) {
       setSelectedStudent(student);
       setAttendanceStatus('P'); // Default to present
       setAttendanceRemarks('');
       setIsAttendanceModalOpen(true);
     }
-  }, [schoolData.students]);
+  }, [students]);
 
   // Save attendance
   const handleSaveAttendance = async () => {
@@ -620,7 +627,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
     const validation = validateReportGeneration(
       filteredStudents,
       yearMonth,
-      schoolData.attendanceRecords
+      attendanceRecords
     );
 
     if (!validation.valid) {
@@ -860,7 +867,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
             }
             
             const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-            const genderStats = calculateDailyAttendanceByGender(dateStr, allStudents, schoolData.attendanceRecords);
+            const genderStats = calculateDailyAttendanceByGender(dateStr, allStudents, attendanceRecords);
             const dayX = daysStartX + (day * dayColWidth);
             
             doc.text(genderStats.combined.present.toString(), dayX - dayColWidth / 2, textY, { align: 'center', baseline: 'middle' });
@@ -885,7 +892,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
             }
             
             const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-            const genderStats = calculateDailyAttendanceByGender(dateStr, studentsForGender, schoolData.attendanceRecords);
+            const genderStats = calculateDailyAttendanceByGender(dateStr, studentsForGender, attendanceRecords);
             const dayX = daysStartX + (day * dayColWidth);
             
             const count = currentItem.type === 'male-total' ? genderStats.male.present : genderStats.female.present;
@@ -902,7 +909,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
           doc.setFontSize(7);
           doc.text(student.name.toUpperCase(), tableX + noColWidth + 2, textY, { baseline: 'middle' });
           
-          const studentRecord = schoolData.attendanceRecords.find(r => r.studentId === student.id);
+          const studentRecord = attendanceRecords.find(r => r.studentId === student.id);
           const [year, month] = yearMonth.split('-').map(Number);
           
           let monthlyAbsent = 0;
@@ -1078,7 +1085,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       const fieldSpacing = 18;
 
       // Get real data for header (will be passed to renderStudentPage)
-      const currentSection = selectedSection ? schoolData.sections.find(s => s.id === selectedSection) : null;
+      const currentSection = selectedSection ? sections.find(s => s.id === selectedSection) : null;
       const realSchoolId = '301234567'; // TODO: Add schoolId to settings
       const realSchoolName = schoolData.settings?.schoolName || 'EDUSYNC ELEMENTARY SCHOOL';
       const realGradeLevel = selectedGradeLevel ? `Grade ${selectedGradeLevel}` : 'N/A';
@@ -1383,8 +1390,8 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       
       // Calculate real data for Excel
       const schoolDays = getSchoolDaysInMonth(yearMonth);
-      const monthlyStats = calculateMonthlyAttendance(yearMonth, filteredStudents, schoolData.attendanceRecords);
-      const currentSection = selectedSection ? schoolData.sections.find(s => s.id === selectedSection) : null;
+      const monthlyStats = calculateMonthlyAttendance(yearMonth, filteredStudents, attendanceRecords);
+      const currentSection = selectedSection ? sections.find(s => s.id === selectedSection) : null;
       
       // Group students by gender (same as PDF)
       const maleStudents = filteredStudents.filter(s => s.sex === 'Male');
@@ -1412,7 +1419,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
         ['Total Late', monthlyStats.totalLate],
         ['Average Daily Attendance', monthlyStats.averageDailyAttendance.toFixed(1)],
         ['Attendance Rate', `${monthlyStats.attendanceRate.toFixed(1)}%`],
-        ['Data Completeness', `${calculateDataCompleteness(yearMonth, filteredStudents, schoolData.attendanceRecords).toFixed(1)}%`],
+        ['Data Completeness', `${calculateDataCompleteness(yearMonth, filteredStudents, attendanceRecords).toFixed(1)}%`],
       ];
       
       const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
@@ -1424,7 +1431,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       ];
       
       schoolDays.forEach(dateStr => {
-        const dailyStats = calculateDailyAttendanceByGender(dateStr, filteredStudents, schoolData.attendanceRecords);
+        const dailyStats = calculateDailyAttendanceByGender(dateStr, filteredStudents, attendanceRecords);
         const dayAbbrev = getDayAbbreviation(dateStr);
         const total = dailyStats.combined.total;
         const present = dailyStats.combined.present;
@@ -1465,7 +1472,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       maleStudents.forEach(student => {
         sf2RowNumber++;
         const row: (string | number)[] = [sf2RowNumber, student.name, 'M'];
-        const studentRecord = schoolData.attendanceRecords.find(r => r.studentId === student.id);
+        const studentRecord = attendanceRecords.find(r => r.studentId === student.id);
         
         let monthlyAbsent = 0;
         let monthlyLate = 0;
@@ -1501,7 +1508,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
         if (dayOfWeek === 0 || dayOfWeek === 6) continue;
         
         const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-        const dailyStats = calculateDailyAttendanceByGender(dateStr, maleStudents, schoolData.attendanceRecords);
+        const dailyStats = calculateDailyAttendanceByGender(dateStr, maleStudents, attendanceRecords);
         maleSubtotalRow.push(dailyStats.male.present);
       }
       maleSubtotalRow.push('', '');
@@ -1514,7 +1521,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       femaleStudents.forEach(student => {
         sf2RowNumber++;
         const row: (string | number)[] = [sf2RowNumber, student.name, 'F'];
-        const studentRecord = schoolData.attendanceRecords.find(r => r.studentId === student.id);
+        const studentRecord = attendanceRecords.find(r => r.studentId === student.id);
         
         let monthlyAbsent = 0;
         let monthlyLate = 0;
@@ -1550,7 +1557,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
         if (dayOfWeek === 0 || dayOfWeek === 6) continue;
         
         const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-        const dailyStats = calculateDailyAttendanceByGender(dateStr, femaleStudents, schoolData.attendanceRecords);
+        const dailyStats = calculateDailyAttendanceByGender(dateStr, femaleStudents, attendanceRecords);
         femaleSubtotalRow.push(dailyStats.female.present);
       }
       femaleSubtotalRow.push('', '');
@@ -1567,7 +1574,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
         if (dayOfWeek === 0 || dayOfWeek === 6) continue;
         
         const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-        const dailyStats = calculateDailyAttendanceByGender(dateStr, allStudentsForSF2, schoolData.attendanceRecords);
+        const dailyStats = calculateDailyAttendanceByGender(dateStr, allStudentsForSF2, attendanceRecords);
         combinedTotalRow.push(dailyStats.combined.present);
       }
       combinedTotalRow.push('', '');
@@ -1589,7 +1596,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
         const monthlyTotals = calculateStudentMonthlyTotals(
           student.id,
           yearMonth,
-          schoolData.attendanceRecords
+          attendanceRecords
         );
         
         studentDetailData.push([
@@ -1604,7 +1611,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       });
       
       // MALE SUBTOTAL
-      const maleMonthlyStats = calculateMonthlyAttendance(yearMonth, maleStudents, schoolData.attendanceRecords);
+      const maleMonthlyStats = calculateMonthlyAttendance(yearMonth, maleStudents, attendanceRecords);
       studentDetailData.push([
         '',
         'MALE | TOTAL',
@@ -1624,7 +1631,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
         const monthlyTotals = calculateStudentMonthlyTotals(
           student.id,
           yearMonth,
-          schoolData.attendanceRecords
+          attendanceRecords
         );
         
         studentDetailData.push([
@@ -1639,7 +1646,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       });
       
       // FEMALE SUBTOTAL
-      const femaleMonthlyStats = calculateMonthlyAttendance(yearMonth, femaleStudents, schoolData.attendanceRecords);
+      const femaleMonthlyStats = calculateMonthlyAttendance(yearMonth, femaleStudents, attendanceRecords);
       studentDetailData.push([
         '',
         'FEMALE | TOTAL',
@@ -1655,7 +1662,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
       
       // COMBINED TOTAL
       const allStudentsForTotal = [...maleStudents, ...femaleStudents];
-      const combinedMonthlyStats = calculateMonthlyAttendance(yearMonth, allStudentsForTotal, schoolData.attendanceRecords);
+      const combinedMonthlyStats = calculateMonthlyAttendance(yearMonth, allStudentsForTotal, attendanceRecords);
       studentDetailData.push([
         '',
         'COMBINED TOTAL',
@@ -2368,7 +2375,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
                     className="px-3 py-2 bg-white/50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200"
                   >
                     <option value="">All Sections</option>
-                    {schoolData.sections
+                    {sections
                       .filter(section => !selectedGradeLevel || section.gradeLevel === selectedGradeLevel)
                       .map(section => (
                         <option key={section.id} value={section.id}>
@@ -2431,7 +2438,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-600">
                     {pagedStudents.map((student: Student) => {
-                      const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
+                      const section = sections.find((s: Section) => s.id === student.sectionId);
                       
                       // Use optimistic attendance status (convert null to undefined for consistency)
                       const todayStatus = getAttendanceStatus(student.id, selectedDate) || undefined;
@@ -2703,10 +2710,10 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
                 </thead>
                 <tbody>
                   {pagedStudents.map((student: Student) => {
-                    const studentRecord = schoolData.attendanceRecords.find((record: AttendanceRecord) => 
+                    const studentRecord = attendanceRecords.find((record: AttendanceRecord) => 
                       record.studentId === student.id
                     );
-                    const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
+                    const section = sections.find((s: Section) => s.id === student.sectionId);
                     
                     // Calculate totals for this student in the selected month
                     let totalP = 0, totalA = 0, totalL = 0;
@@ -2947,7 +2954,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ schoolData, session, onBack
                   </div>
                   <div className="mt-2 pt-2 border-t border-slate-200/50 dark:border-slate-600/30">
                     <p className="text-xs text-slate-500 dark:text-slate-400">Section: {
-                      schoolData.sections.find(s => s.id === selectedStudent.sectionId)?.name || 'Unassigned'
+                      sections.find(s => s.id === selectedStudent.sectionId)?.name || 'Unassigned'
                     }</p>
                   </div>
                 </div>

@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
-import type { SchoolDataHook } from '../../../hooks/useSchoolData.REACT_QUERY_BACKUP';
+import { useSchoolContext } from '../../../contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../hooks/useSectionsPostgreSQL';
 import type { AuthUser, StudentUser, ParentUser, Student, Section } from '../../../types';
 import BackButton from '../../BackButton';
 import { 
@@ -13,7 +15,6 @@ import {
 } from '../../icons';
 
 interface SF1DashboardProps {
-  schoolData: SchoolDataHook;
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
   onBack: () => void;
 }
@@ -57,7 +58,11 @@ const exportToCSV = (data: any[], filename: string) => {
   }
 };
 
-const SF1Dashboard: React.FC<SF1DashboardProps> = ({ schoolData, session: _session, onBack: _onBack }) => {
+const SF1Dashboard: React.FC<SF1DashboardProps> = ({ session: _session, onBack: _onBack }) => {
+  const { schoolId } = useSchoolContext();
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGradeLevel, setSelectedGradeLevel] = useState<number | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
@@ -70,9 +75,11 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ schoolData, session: _sessi
   const [successMessage, setSuccessMessage] = useState('');
   const [savedStudentData, setSavedStudentData] = useState<Partial<Student> | null>(null);
 
+  const loading = studentsLoading || sectionsLoading;
+
   // Calculate enrollment statistics
   const enrollmentStats = useMemo((): EnrollmentStats => {
-    const activeStudents = schoolData.students.filter((student: Student) => 
+    const activeStudents = students.filter((student: Student) => 
       student.status !== 'transferred' && student.status !== 'dropped' && student.status !== 'graduated'
     );
 
@@ -91,7 +98,7 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ schoolData, session: _sessi
 
     activeStudents.forEach((student: Student) => {
       // Count by section and derive grade level
-      const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
+      const section = sections.find((s: Section) => s.id === student.sectionId);
       if (section) {
         const gradeLevel = section.gradeLevel;
         
@@ -127,11 +134,11 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ schoolData, session: _sessi
     });
 
     return stats;
-  }, [schoolData.students, schoolData.sections]);
+  }, [students, sections]);
 
   // Filter students based on search and filters
   const filteredStudents = useMemo(() => {
-    return schoolData.students.filter((student: Student) => {
+    return students.filter((student: Student) => {
       // Filter by active status
       if (student.status === 'transferred' || student.status === 'dropped' || student.status === 'graduated') {
         return false;
@@ -149,7 +156,7 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ schoolData, session: _sessi
 
       // Grade level filter
       if (selectedGradeLevel !== null) {
-        const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
+        const section = sections.find((s: Section) => s.id === student.sectionId);
         if (!section || section.gradeLevel !== selectedGradeLevel) return false;
       }
 
@@ -158,14 +165,14 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ schoolData, session: _sessi
 
       return true;
     });
-  }, [schoolData.students, schoolData.sections, searchQuery, selectedGradeLevel, selectedSection]);
+  }, [students, sections, searchQuery, selectedGradeLevel, selectedSection]);
 
-  const gradeLevels = [...new Set(schoolData.sections.map((s: Section) => s.gradeLevel))].sort() as number[];
+  const gradeLevels = [...new Set(sections.map((s: Section) => s.gradeLevel))].sort() as number[];
 
   // Export SF1 data function
   const exportSF1Data = () => {
     const exportData = filteredStudents.map(student => {
-      const section = schoolData.sections.find((s: Section) => s.id === student.sectionId);
+      const section = sections.find((s: Section) => s.id === student.sectionId);
       return {
         'Student Name': student.name,
         'LRN': student.lrn || 'Not set',
@@ -236,6 +243,18 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ schoolData, session: _sessi
     setEditForm(selectedStudent);
     setIsEditMode(false);
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-slate-600 dark:text-slate-400">Loading enrollment data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
@@ -389,7 +408,7 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ schoolData, session: _sessi
                 className="px-3 py-2 bg-white/50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200"
               >
                 <option value="">All Sections</option>
-                {schoolData.sections
+                {sections
                   .filter(section => !selectedGradeLevel || section.gradeLevel === selectedGradeLevel)
                   .map(section => (
                     <option key={section.id} value={section.id}>
@@ -456,7 +475,7 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ schoolData, session: _sessi
         {viewMode === 'cards' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredStudents.map(student => {
-              const section = schoolData.sections.find(s => s.id === student.sectionId);
+              const section = sections.find(s => s.id === student.sectionId);
               return (
                 <div key={student.id} className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
                   <div className="flex items-start justify-between mb-4">
@@ -547,7 +566,7 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ schoolData, session: _sessi
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-600">
                   {filteredStudents.map(student => {
-                    const section = schoolData.sections.find(s => s.id === student.sectionId);
+                    const section = sections.find(s => s.id === student.sectionId);
                     return (
                       <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors duration-200">
                         <td className="px-6 py-4">
@@ -672,7 +691,7 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ schoolData, session: _sessi
               {/* Modal Body */}
               <div className="px-8 py-6 space-y-6">
                 {(() => {
-                  const section = schoolData.sections.find((s: Section) => s.id === selectedStudent.sectionId);
+                  const section = sections.find((s: Section) => s.id === selectedStudent.sectionId);
                   
                   return (
                     <>
