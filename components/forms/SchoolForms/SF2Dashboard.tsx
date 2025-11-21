@@ -626,6 +626,16 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
   const generateMonthlyReport = () => {
     // Validate data before generating report
     const yearMonth = selectedMonth; // Already in YYYY-MM format
+    
+    // Debug logging
+    console.log('[SF2] Generate Monthly Report Debug:', {
+      yearMonth,
+      filteredStudentsCount: filteredStudents.length,
+      attendanceRecordsCount: attendanceRecords.length,
+      sampleAttendanceRecord: attendanceRecords[0],
+      settingsLoaded: !!settings
+    });
+    
     const validation = validateReportGeneration(
       filteredStudents,
       yearMonth,
@@ -633,6 +643,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
     );
 
     if (!validation.valid) {
+      console.error('[SF2] Validation failed:', validation.message);
       toast.error(validation.message, {
         duration: 5000,
         icon: '⚠️',
