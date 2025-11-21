@@ -37,8 +37,7 @@ export function useAttendancePostgreSQL(options: UseAttendanceOptions) {
   const refetch = () => setRefetchTrigger(prev => prev + 1);
 
   useEffect(() => {
-    // Skip if schoolId is not a valid UUID (e.g., "default")
-    if (!options.schoolId || options.schoolId === 'default') {
+    if (!options.schoolId) {
       setLoading(false);
       return;
     }
@@ -71,14 +70,8 @@ export function useAttendancePostgreSQL(options: UseAttendanceOptions) {
           query = query.lte('date', options.endDate);
         }
         
-        // Add limit for performance (fetch only current school year)
-        // For bulk fetching without filters, limit to recent 3 months
-        if (!options.studentId && !options.sectionId && !options.startDate) {
-          const threeMonthsAgo = new Date();
-          threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-          query = query.gte('date', threeMonthsAgo.toISOString().split('T')[0]);
-        }
-
+        // REMOVED: Automatic 3-month filter - let caller decide date range
+        
         const { data, error: fetchError } = await query;
         
         if (fetchError) {

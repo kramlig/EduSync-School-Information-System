@@ -166,8 +166,7 @@ export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ ch
         setIsSuperAdmin(userIsSuperAdmin);
         
         // Set active schoolId
-        // Priority: user.schoolId > first schoolIds > query PostgreSQL for default school
-        // BUT: Replace "default" string with proper UUID from PostgreSQL
+        // CRITICAL: NEVER use "default" - always query database for actual UUID
         if (userSchoolId && userSchoolId !== 'default') {
           console.log('[SchoolContext] Using user.schoolId:', userSchoolId);
           setSchoolId(userSchoolId);
@@ -175,30 +174,48 @@ export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ ch
           console.log('[SchoolContext] Using user.schoolIds[0]:', userSchoolIds[0]);
           setSchoolId(userSchoolIds[0]);
         } else {
-          // FALLBACK: Query PostgreSQL for the default school UUID
-          console.warn('[SchoolContext] User schoolId is "default" or missing - fetching proper UUID from PostgreSQL');
+          // CRITICAL FIX: Query students table to get the actual school_id being used
+          console.warn('[SchoolContext] User schoolId is "default" or missing - fetching actual school_id from students');
           
-          const { data: schools, error } = await supabase
-            .from('schools')
-            .select('id')
+          const { data: students, error: studentsError } = await supabase
+            .from('students')
+            .select('school_id')
             .limit(1);
           
-          console.log('[SchoolContext] PostgreSQL schools query result:', { schools, error });
+          if (studentsError || !students || students.length === 0) {
+            console.error('[SchoolContext] ❌ No students found - cannot determine schoolId:', studentsError);
+            throw new Error('Cannot determine school ID - no students in database');
+          }
           
-          if (error || !schools || schools.length === 0) {
-            console.error('[SchoolContext] Failed to fetch default school:', error);
-            // Ultimate fallback - use 'default' string (will cause errors but at least visible)
-            console.warn('[SchoolContext] ⚠️ Setting schoolId to "default" - PostgreSQL queries will fail!');
-            setSchoolId('default');
-          } else {
-            const defaultSchoolId = schools[0].id;
-            console.log('[SchoolContext] ✅ Using school UUID from PostgreSQL:', defaultSchoolId);
-            setSchoolId(defaultSchoolId);
+          const actualSchoolId = students[0].school_id;
+          
+          if (!actualSchoolId) {
+            console.error('[SchoolContext] ❌ Students have null school_id');
+            throw new Error('Students table has null school_id values');
+          }
+          
+          console.log('[SchoolContext] ✅ Using school_id from students table:', actualSchoolId);
+          setSchoolId(actualSchoolId);
+          
+          // Update the session to use the proper UUID
+          const sessionStr = localStorage.getItem('edusync_session');
+          if (sessionStr) {
+            const session = JSON.parse(sessionStr);
+            session.user = {
+              ...session.user,
+              schoolId: actualSchoolId,
+              schoolIds: [actualSchoolId]
+            };
+            localStorage.setItem('edusync_session', JSON.stringify(session));
+            console.log('[SchoolContext] ✅ Updated session in localStorage');
             
-            // Update the session to use the proper UUID
-            const updatedUser = { ...user, schoolId: defaultSchoolId };
-            localStorage.setItem('edusync_session', JSON.stringify(updatedUser));
-            console.log('[SchoolContext] ✅ Updated session with proper schoolId');
+            // CRITICAL: Only reload once - set flag to prevent infinite loop
+            const hasReloaded = sessionStorage.getItem('schoolId_fixed');
+            if (!hasReloaded) {
+              sessionStorage.setItem('schoolId_fixed', 'true');
+              console.log('[SchoolContext] 🔄 Reloading page once to apply new schoolId...');
+              setTimeout(() => window.location.reload(), 100);
+            }
           }
         }
         

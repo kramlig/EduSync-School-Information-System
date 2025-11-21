@@ -47,7 +47,7 @@ async function seedAttendance() {
     console.log('📚 Fetching students...');
     const { data: students, error: studentsError } = await supabase
       .from('students')
-      .select('id, first_name, last_name, section_id')
+      .select('id, first_name, last_name, section_id, school_id')
       .is('deleted_at', null);
 
     if (studentsError) {
@@ -61,12 +61,17 @@ async function seedAttendance() {
       return;
     }
 
+    // Determine the school_id to use
+    // Priority: 1. From first student, 2. "default" for emulator
+    const schoolId = students[0].school_id || 'default';
+    console.log(`📍 Using school_id: ${schoolId}\n`);
+
     // 2. Clear existing attendance records (optional - comment out to keep existing)
     console.log('🧹 Clearing existing attendance records...');
     const { error: deleteError } = await supabase
       .from('attendance_records')
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+      .or(`school_id.eq.${schoolId},school_id.eq.default`); // Clear both default and real UUID
 
     if (deleteError) {
       console.warn('Warning: Could not clear existing records:', deleteError.message);
@@ -90,7 +95,7 @@ async function seedAttendance() {
           const status = getRandomStatus();
 
           batch.push({
-            school_id: students[0].school_id || (await getDefaultSchoolId()),
+            school_id: schoolId, // Use the determined schoolId
             student_id: student.id,
             section_id: student.section_id,
             date: date,

@@ -215,8 +215,16 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, 
     // FIX: Ensure a consistently typed object is returned to avoid `unknown` type inference downstream.
     const summary: Record<string, { present: number, absent: number }> = {};
     
+    console.log(`[PrintableReport] Total attendance records:`, attendanceRecords.length);
+    console.log(`[PrintableReport] Student ID:`, student.id);
+    
     // Get individual attendance records for this student
     const studentAttendanceRecords = attendanceRecords.filter(r => r.studentId === student.id);
+    
+    console.log(`[PrintableReport] Student attendance records:`, studentAttendanceRecords.length);
+    if (studentAttendanceRecords.length > 0) {
+      console.log(`[PrintableReport] Sample record:`, studentAttendanceRecords[0]);
+    }
     
     if (studentAttendanceRecords.length === 0) {
         return summary;
