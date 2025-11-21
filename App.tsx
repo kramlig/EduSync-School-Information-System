@@ -43,7 +43,7 @@ const ParentRegistration = lazy(() => import('./src/components/parent/ParentRegi
 const FeeStructureManager = lazy(() => import('./components/FeeStructureManager'));
 const PaymentRecording = lazy(() => import('./components/PaymentRecording'));
 const FinancialReports = lazy(() => import('./components/FinancialReports'));
-const FormsLibrary = lazy(() => import('./components/forms/FormsLibrary'));
+// const FormsLibrary = lazy(() => import('./components/forms/FormsLibrary')); // Deprecated - using direct form routes now
 const Form137Dashboard = lazy(() => import('./components/forms/Form137/Form137Dashboard'));
 const Form137Manager = lazy(() => import('./components/forms/Form137/Form137Manager'));
 const Form138Dashboard = lazy(() => import('./components/forms/Form138/Form138Dashboard'));
@@ -127,16 +127,18 @@ const App: React.FC = () => {
   // Determine if we should skip expensive Firebase operations
   // Skip ONLY if: (1) no session AND (2) on a public route
   // This allows logged-in users on / to load data, while anonymous users skip Firebase
+  // NOTE: PostgreSQL mode still needs Firebase Auth for authentication!
   const shouldSkipFirebase = !session && isPublicRoute;
   
   // TIER 1B: Monitor online/offline status and pending writes (only for authenticated routes)
   const { isOnline, wasOffline } = useOnlineStatus();
   // CRITICAL: Always call useFirestoreSyncStatus (can't conditionally call hooks!)
-  // Pass skip=true to disable monitoring for public routes without session
-  const { pendingCount } = useFirestoreSyncStatus(shouldSkipFirebase || isAdminLoginRoute);
+  // Pass skip=true to disable monitoring for public routes without session OR when using PostgreSQL
+  const usePostgreSQL = import.meta.env.VITE_USE_POSTGRESQL === 'true';
+  const { pendingCount } = useFirestoreSyncStatus(shouldSkipFirebase || isAdminLoginRoute || usePostgreSQL);
   
   // Ensure we have a Firebase Auth user for Firestore writes (rules require request.auth != null)
-  // SKIP for public routes without session AND /admin login page to avoid 30+ second delay
+  // SKIP for public routes without session, /admin login page, AND PostgreSQL mode
   const [authReady, setAuthReady] = useState(shouldSkipFirebase || isAdminLoginRoute);
   const [authError, setAuthError] = useState<string | null>(null);
   
@@ -172,10 +174,10 @@ const App: React.FC = () => {
   
   // Persist session changes
   useEffect(() => {
-    devLog('[App] 📦 Session changed:', session ? `${session.user.email} (${session.type})` : 'null');
+    // devLog('[App] 📦 Session changed:', session ? `${session.user.email} (${session.type})` : 'null');
     if (session) {
       localStorage.setItem('edusync_session', JSON.stringify(session));
-      devLog('[App] 💾 Session saved to localStorage');
+      // devLog('[App] 💾 Session saved to localStorage');
     } else {
       localStorage.removeItem('edusync_session');
       devLog('[App] 🗑️ Session removed from localStorage');
@@ -223,49 +225,71 @@ const App: React.FC = () => {
     
     const path = location.pathname;
     
-    // Core collections needed for most routes
-    const core = ['settings', 'students', 'sections'];
+    // Core collections needed for MOST routes (NOT all routes!)
+    // Only include settings, which is lightweight
+    const core = ['settings'];
     
-    // Route-specific collections
+    // Route-specific collections - ONLY load what's needed!
     if (path === '/' || path === '/dashboard') {
-      return [...core, 'grades', 'substituteAssignments', 'classSchedules', 'learningAreas'];
+      console.log('[App] 📊 Loading Dashboard collections');
+      return [...core, 'students', 'sections', 'grades', 'substituteAssignments', 'classSchedules', 'learningAreas'];
     }
     if (path.startsWith('/students')) {
-      return [...core, 'grades', 'coreValueGrades', 'attendanceRecords', 'learningAreas'];
+      console.log('[App] 👨‍🎓 Loading Students collections');
+      return [...core, 'students', 'sections', 'grades', 'coreValueGrades', 'attendanceRecords', 'learningAreas'];
     }
     if (path.startsWith('/teachers')) {
-      return [...core, 'teachers', 'classSchedules', 'substituteAssignments'];
+      console.log('[App] 👨‍🏫 Loading Teachers collections (optimized)');
+      return [...core, 'teachers', 'learningAreas'];
+    }
+    if (path.startsWith('/sections')) {
+      console.log('[App] 🏫 Loading Sections collections');
+      return [...core, 'sections', 'students', 'teachers', 'learningAreas'];
     }
     if (path.startsWith('/parents')) {
-      return [...core, 'parents'];
+      console.log('[App] 👨‍👩‍👧 Loading Parents collections');
+      return [...core, 'parents', 'students'];
     }
     if (path.startsWith('/grades') || path.startsWith('/assessment')) {
-      return [...core, 'grades', 'learningAreas', 'coreValues', 'coreValueGrades'];
+      console.log('[App] 📝 Loading Grades collections');
+      return [...core, 'students', 'sections', 'grades', 'learningAreas', 'coreValues', 'coreValueGrades'];
+    }
+    if (path.startsWith('/reports')) {
+      console.log('[App] 📊 Loading Reports collections');
+      return [...core, 'students', 'sections', 'grades', 'learningAreas', 'coreValues', 'coreValueGrades', 'teachers', 'attendanceRecords'];
     }
     if (path.startsWith('/attendance')) {
-      return [...core, 'attendanceRecords'];
+      console.log('[App] 📅 Loading Attendance collections');
+      return [...core, 'students', 'sections', 'attendanceRecords'];
     }
     if (path.startsWith('/schedule')) {
-      return [...core, 'teachers', 'classSchedules', 'learningAreas'];
+      console.log('[App] 🗓️ Loading Schedule collections');
+      return [...core, 'students', 'sections', 'teachers', 'classSchedules', 'learningAreas'];
     }
     if (path.startsWith('/substitute')) {
-      return [...core, 'teachers', 'substituteAssignments', 'classSchedules'];
+      console.log('[App] 🔄 Loading Substitute collections');
+      return [...core, 'students', 'sections', 'teachers', 'substituteAssignments', 'classSchedules'];
     }
     if (path.startsWith('/assignments')) {
-      return [...core, 'assignments', 'studentAssignmentGrades', 'learningAreas'];
+      console.log('[App] 📋 Loading Assignments collections');
+      return [...core, 'students', 'sections', 'assignments', 'studentAssignmentGrades', 'learningAreas'];
     }
     if (path.startsWith('/lessons')) {
-      return [...core, 'lessonPlans', 'learningAreas'];
+      console.log('[App] 📖 Loading Lessons collections');
+      return [...core, 'sections', 'teachers', 'learningAreas', 'lessonPlans'];
     }
     if (path.startsWith('/announcements')) {
+      console.log('[App] 📢 Loading Announcements collections');
       return [...core, 'announcements'];
     }
     if (path.startsWith('/billing') || path.startsWith('/financial')) {
-      return [...core, 'parents']; // Financial data managed separately
+      console.log('[App] 💰 Loading Billing collections');
+      return [...core, 'students', 'parents'];
     }
     
-    // Default: Load core + commonly used collections
-    return [...core, 'grades', 'teachers', 'learningAreas'];
+    // Default: Load minimal data
+    console.log('[App] ⚙️ Loading default collections');
+    return [...core, 'students', 'sections'];
   }, [shouldLoadData, location.pathname, emptyCollections]);
   
   const schoolData = useSchoolData(requiredCollections);
@@ -322,7 +346,7 @@ const App: React.FC = () => {
   
   const handleLogout = useCallback(async () => {
     try {
-      // Sign out from Firebase Auth (fast - just clears token)
+      // Sign out from Firebase Auth (required even in PostgreSQL mode)
       await signOut(auth);
       
       // Clear local state immediately (instant UI update)
@@ -341,7 +365,7 @@ const App: React.FC = () => {
     }
   }, [devError]);
 
-  devLog('[App] Loading check:', { authReady, loading, studentsCount: students.length, teachersCount: teachers.length, loadTimeout });
+  // devLog('[App] Loading check:', { authReady, loading, studentsCount: students.length, teachersCount: teachers.length, loadTimeout });
   
   // TIER 1 OPTIMIZATION: Simplified initialization logic
   // Show login screen as soon as auth is ready
@@ -492,8 +516,6 @@ const App: React.FC = () => {
     return <FullScreenLoader message="Loading your data..." />;
   }
   
-  devLog('[App] ✅ Session exists - rendering Router/Dashboard');
-  
   const staffSession = session as { user: AuthUser, type: 'staff' };
   const studentSession = session as { user: StudentUser, type: 'student' };
   const parentSession = session as { user: ParentUser, type: 'parent' };
@@ -530,46 +552,72 @@ const App: React.FC = () => {
           <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-100 dark:bg-slate-900 px-6 pb-6">
             <Suspense fallback={<FullScreenLoader message="Loading page..." />}>
               <Routes>
+                {/* Redirect root to dashboard when logged in */}
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 {/* Redirect logged-in users from /admin to dashboard */}
-                <Route path="/admin" element={<Navigate to="/" replace />} />
+                <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
                 
                 {session.type === 'staff' && (
                     <>
-                        <Route path="/" element={<Dashboard schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/dashboard" element={<Dashboard schoolData={schoolData} session={staffSession} />} />
                         <Route path="/students" element={<StudentList schoolData={schoolData} session={staffSession} />} />
                         <Route path="/teachers" element={<TeacherList schoolData={schoolData} session={staffSession} />} />
                         <Route path="/parents" element={<ParentsView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/sections" element={<SectionsView schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/forms" element={<FormsLibrary user={staffSession.user} />} />
-                        <Route path="/forms/137" element={<Form137Dashboard />} />
-                        <Route path="/forms/137/:studentId" element={<Form137ManagerWrapper schoolYear={settings.schoolYear} />} />
-                        <Route path="/forms/137/new" element={<Form137CreateWrapper schoolYear={settings.schoolYear} />} />
-                        <Route path="/forms/138" element={<Form138Dashboard />} />
-                        <Route path="/forms/elln" element={<ELLNDashboard />} />
-                        <Route path="/forms/elln/assessment" element={<ELLNAssessment />} />
-                        <Route path="/forms/elln/results" element={<ELLNResults />} />
-                        <Route path="/forms/elln/reports" element={<ELLNReports />} />
-                        <Route path="/forms/elln/ilmp" element={<ILMPTemplate />} />
-                        {/* NEW: Dashboard -> Detail View Navigation */}
+                        {/* ========== GRADE ENTRY ========== */}
                         <Route path="/grades" element={<GradesDashboard session={staffSession} schoolData={schoolData} />} />
                         <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/grades/academic" element={<GradebookView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/grades/core-values" element={<CoreValuesGradebookView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} defaultTab="deep-analytics" hideTabNavigation={true} />} />
                         
-                        {/* LEGACY: Keep old route for backward compatibility (can remove later) */}
+                        {/* ========== REPORTS & FORMS (NEW STRUCTURE) ========== */}
+                        {/* Form 137 - Permanent Record */}
+                        <Route path="/reports/form137" element={<Form137Dashboard />} />
+                        <Route path="/reports/form137/:studentId" element={<Form137ManagerWrapper schoolYear={settings.schoolYear} />} />
+                        <Route path="/reports/form137/new" element={<Form137CreateWrapper schoolYear={settings.schoolYear} />} />
+                        
+                        {/* Form 138 - Report Card */}
+                        <Route path="/reports/form138" element={<Form138Dashboard />} />
+                        <Route path="/reports/form138/view/:studentId" element={<Form138View />} />
+                        <Route path="/reports/form138/print" element={<Form138Print />} />
+                        
+                        {/* School Forms (SF1, SF2, SF9) */}
+                        <Route path="/reports/school-forms" element={<SchoolFormsDashboard session={staffSession} />} />
+                        <Route path="/reports/school-forms/sf1" element={<SF1Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf2" element={<SF2Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf9" element={<SF9Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
+                        
+                        {/* ELLN Assessment */}
+                        <Route path="/reports/elln" element={<ELLNDashboard />} />
+                        <Route path="/reports/elln/assessment" element={<ELLNAssessment />} />
+                        <Route path="/reports/elln/results" element={<ELLNResults />} />
+                        <Route path="/reports/elln/reports" element={<ELLNReports />} />
+                        <Route path="/reports/elln/ilmp" element={<ILMPTemplate />} />
+                        
+                        {/* ========== BACKWARD COMPATIBILITY REDIRECTS ========== */}
+                        {/* Old /forms/* paths → /reports/* */}
+                        <Route path="/forms" element={<Navigate to="/reports/form137" replace />} />
+                        <Route path="/forms/137" element={<Navigate to="/reports/form137" replace />} />
+                        <Route path="/forms/137/:studentId" element={<Navigate to="/reports/form137/:studentId" replace />} />
+                        <Route path="/forms/138" element={<Navigate to="/reports/form138" replace />} />
+                        <Route path="/forms/elln" element={<Navigate to="/reports/elln" replace />} />
+                        <Route path="/forms/elln/assessment" element={<Navigate to="/reports/elln/assessment" replace />} />
+                        
+                        {/* Old /grades/form* paths → /reports/* */}
                         <Route path="/grades/entry" element={<Navigate to="/grades" replace />} />
-                        <Route path="/grades/form137" element={<Form137Dashboard />} />
-                        <Route path="/grades/form137/:studentId" element={<Form137ManagerWrapper schoolYear={settings.schoolYear} />} />
-                        <Route path="/grades/form137/new" element={<Form137CreateWrapper schoolYear={settings.schoolYear} />} />
-                        <Route path="/grades/form138" element={<Form138Dashboard />} />
-                        <Route path="/grades/form138/view/:studentId" element={<Form138View />} />
-                        <Route path="/grades/form138/print" element={<Form138Print />} />
-                        <Route path="/grades/schoolforms" element={<SchoolFormsDashboard session={staffSession} />} />
-                        <Route path="/grades/schoolforms/sf1" element={<SF1Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
-                        <Route path="/grades/schoolforms/sf2" element={<SF2Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
-                        <Route path="/grades/schoolforms/sf9" element={<SF9Dashboard schoolData={schoolData} session={staffSession} onBack={() => window.history.back()} />} />
-                        {/* LEGACY: Redirect old routes to new structure */}
+                        <Route path="/grades/form137" element={<Navigate to="/reports/form137" replace />} />
+                        <Route path="/grades/form137/:studentId" element={<Navigate to="/reports/form137/:studentId" replace />} />
+                        <Route path="/grades/form137/new" element={<Navigate to="/reports/form137/new" replace />} />
+                        <Route path="/grades/form138" element={<Navigate to="/reports/form138" replace />} />
+                        <Route path="/grades/form138/view/:studentId" element={<Navigate to="/reports/form138/view/:studentId" replace />} />
+                        <Route path="/grades/form138/print" element={<Navigate to="/reports/form138/print" replace />} />
+                        <Route path="/grades/schoolforms" element={<Navigate to="/reports/school-forms" replace />} />
+                        <Route path="/grades/schoolforms/sf1" element={<Navigate to="/reports/school-forms/sf1" replace />} />
+                        <Route path="/grades/schoolforms/sf2" element={<Navigate to="/reports/school-forms/sf2" replace />} />
+                        <Route path="/grades/schoolforms/sf9" element={<Navigate to="/reports/school-forms/sf9" replace />} />
+                        
+                        {/* Other legacy grade paths */}
                         <Route path="/gradebook" element={<Navigate to="/grades/academic" replace />} />
                         <Route path="/gradebook-pg-test" element={<GradebookViewPostgreSQL schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values" element={<Navigate to="/grades/core-values" replace />} />
@@ -621,7 +669,7 @@ const App: React.FC = () => {
                 )}
         {session.type === 'student' && (
           <>
-            <Route path="/" element={<StudentDashboard schoolData={schoolData} session={studentSession} />} />
+            <Route path="/dashboard" element={<StudentDashboard schoolData={schoolData} session={studentSession} />} />
             <Route path="/assignments" element={<AssignmentsView schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades" element={<GradesDashboard schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={studentSession} />} />
@@ -635,7 +683,7 @@ const App: React.FC = () => {
         )}
         {session.type === 'parent' && (
            <>
-            <Route path="/" element={<ParentDashboard schoolData={schoolData} session={parentSession} />} />
+            <Route path="/dashboard" element={<ParentDashboard schoolData={schoolData} session={parentSession} />} />
             <Route path="/profile" element={<ParentProfile schoolData={schoolData} session={parentSession} onSessionUpdate={(updatedUser) => setSession({ user: updatedUser, type: 'parent' })} />} />
             <Route path="/billing" element={<ParentBilling schoolData={schoolData} session={parentSession} selectedChildId={parentSelectedChildId} />} />
             {/* <Route path="/verify-email" element={<EmailVerification />} /> */}

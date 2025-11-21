@@ -17,6 +17,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '../lib/supabase';
 import { auth } from '../services/firestoreService';
 import type { User } from 'firebase/auth';
 
@@ -109,7 +110,7 @@ interface SchoolContextProviderProps {
  * 4. Makes this data available to all child components
  */
 export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ children }) => {
-  console.log('[SchoolContext] 🏗️ SchoolContextProvider mounting...');
+  // SchoolContextProvider mounted
   const [schoolId, setSchoolId] = useState<string | null>(null);
   const [schoolIds, setSchoolIds] = useState<string[]>([]);
   const [role, setRole] = useState<string | null>(null);
@@ -121,7 +122,7 @@ export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ ch
     // read schoolId from the session stored in localStorage by the login flow.
     // This ensures multi-tenant isolation works with the current authentication architecture.
     
-    const loadSchoolIdFromSession = () => {
+    const loadSchoolIdFromSession = async () => {
       try {
         const sessionStr = localStorage.getItem('edusync_session');
         if (!sessionStr) {
@@ -165,15 +166,40 @@ export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ ch
         setIsSuperAdmin(userIsSuperAdmin);
         
         // Set active schoolId
-        // Priority: user.schoolId > first schoolIds > 'default' (fallback for single-tenant)
-        if (userSchoolId) {
+        // Priority: user.schoolId > first schoolIds > query PostgreSQL for default school
+        // BUT: Replace "default" string with proper UUID from PostgreSQL
+        if (userSchoolId && userSchoolId !== 'default') {
+          console.log('[SchoolContext] Using user.schoolId:', userSchoolId);
           setSchoolId(userSchoolId);
-        } else if (userSchoolIds.length > 0) {
+        } else if (userSchoolIds.length > 0 && userSchoolIds[0] !== 'default') {
+          console.log('[SchoolContext] Using user.schoolIds[0]:', userSchoolIds[0]);
           setSchoolId(userSchoolIds[0]);
         } else {
-          // FALLBACK: Use 'default' as schoolId for single-tenant deployments
-          console.warn('[SchoolContext] User has no school assignment - using default schoolId');
-          setSchoolId('default');
+          // FALLBACK: Query PostgreSQL for the default school UUID
+          console.warn('[SchoolContext] User schoolId is "default" or missing - fetching proper UUID from PostgreSQL');
+          
+          const { data: schools, error } = await supabase
+            .from('schools')
+            .select('id')
+            .limit(1);
+          
+          console.log('[SchoolContext] PostgreSQL schools query result:', { schools, error });
+          
+          if (error || !schools || schools.length === 0) {
+            console.error('[SchoolContext] Failed to fetch default school:', error);
+            // Ultimate fallback - use 'default' string (will cause errors but at least visible)
+            console.warn('[SchoolContext] ⚠️ Setting schoolId to "default" - PostgreSQL queries will fail!');
+            setSchoolId('default');
+          } else {
+            const defaultSchoolId = schools[0].id;
+            console.log('[SchoolContext] ✅ Using school UUID from PostgreSQL:', defaultSchoolId);
+            setSchoolId(defaultSchoolId);
+            
+            // Update the session to use the proper UUID
+            const updatedUser = { ...user, schoolId: defaultSchoolId };
+            localStorage.setItem('edusync_session', JSON.stringify(updatedUser));
+            console.log('[SchoolContext] ✅ Updated session with proper schoolId');
+          }
         }
         
         setLoading(false);

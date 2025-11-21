@@ -423,6 +423,19 @@ const GradesView: React.FC<GradesViewProps> = ({
   onSearchChange
 }) => {
   const { students, grades, learningAreas, sections, substituteAssignments, classSchedules } = schoolData;
+  
+  // DEBUG: Single check for data structure
+  useEffect(() => {
+    if (grades.length > 0 && students.length > 0) {
+      console.log('[GradesView] 🔍 Data structure check:', {
+        firstStudent: { id: students[0].id, name: students[0].name },
+        firstGrade: { studentId: grades[0].studentId, learningAreaId: grades[0].learningAreaId },
+        gradesTotal: grades.length,
+        studentsTotal: students.length
+      });
+    }
+  }, []);
+  
   const isStudentView = session.type === 'student';
   const isParentView = session.type === 'parent';
 
@@ -543,14 +556,18 @@ const GradesView: React.FC<GradesViewProps> = ({
   // Helper: Calculate student's overall average and completion rate
   const calculateStudentStats = useCallback((student: Student) => {
     const studentGrades = grades.filter(g => g.studentId === student.id);
-    console.log(`[GradesView] Student ${student.name} (ID: ${student.id}): Found ${studentGrades.length} grades`);
+    
+    // DEBUG: Check why no grades match
+    if (studentGrades.length === 0 && grades.length > 0) {
+      console.log('[calculateStudentStats] No grades found for student:', {
+        studentId: student.id,
+        studentName: student.name,
+        totalGrades: grades.length,
+        sampleGradeStudentIds: grades.slice(0, 3).map(g => g.studentId)
+      });
+    }
+    
     if (studentGrades.length === 0) {
-      // DEBUG: Check if there are ANY grades with similar student IDs
-      const allStudentIds = new Set(grades.map(g => g.studentId));
-      console.log(`[GradesView] Total unique student IDs in grades: ${allStudentIds.size}`);
-      if (allStudentIds.size > 0 && allStudentIds.size < 10) {
-        console.log(`[GradesView] Sample student IDs from grades:`, Array.from(allStudentIds).slice(0, 5));
-      }
       return { average: 0, completion: 0, hasIncomplete: true };
     }
     

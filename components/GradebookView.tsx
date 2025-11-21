@@ -6,6 +6,8 @@ import Toast, { ToastType } from './Toast';
 import KeyboardShortcutsModal from './KeyboardShortcutsModal';
 import { useDebounce } from '../hooks/useDebounce';
 import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
 
 // Feature flag for PostgreSQL migration
 const USE_POSTGRESQL = import.meta.env.VITE_USE_POSTGRESQL === 'true';
@@ -131,34 +133,63 @@ const GradebookView: React.FC<{
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
 }> = ({ schoolData, session, selectedSectionId: propSectionId, onSectionChange, selectedQuarter: propQuarter, onQuarterChange, searchQuery: propSearchQuery, onSearchChange }) => {
-  const { students, grades, learningAreas, sections, substituteAssignments, classSchedules, updateGrade } = schoolData;
+  const { students: firestoreStudents, grades, learningAreas, sections: firestoreSections, substituteAssignments, classSchedules, updateGrade } = schoolData;
   
-  // PostgreSQL grades (if enabled via feature flag)
+  // PostgreSQL data hooks (if enabled via feature flag)
   const { 
     grades: pgGrades, 
-    loading: pgLoading, 
+    loading: pgGradesLoading, 
     updateGrade: updatePgGrade 
   } = useGradesPostgreSQL({
     sectionId: propSectionId || undefined
   });
   
-  // Use PostgreSQL grades if feature flag is enabled, otherwise use Firestore
+  const {
+    students: pgStudents,
+    loading: pgStudentsLoading
+  } = useStudentsPostgreSQL({
+    sectionId: propSectionId || undefined,
+    includeSection: true,
+    status: 'enrolled' // Only show enrolled students
+  });
+  
+  const {
+    sections: pgSections,
+    loading: pgSectionsLoading
+  } = useSectionsPostgreSQL({
+    includeAdviser: true,
+    includeStudentCount: true
+  });
+  
+  // Use PostgreSQL data if feature flag is enabled, otherwise use Firestore
   const activeGrades = USE_POSTGRESQL ? pgGrades : grades;
   const activeUpdateGrade = USE_POSTGRESQL ? updatePgGrade : updateGrade;
+  const activeStudents = USE_POSTGRESQL ? pgStudents : firestoreStudents;
+  const activeSections = USE_POSTGRESQL ? pgSections : firestoreSections;
+  const isLoading = USE_POSTGRESQL 
+    ? (pgGradesLoading || pgStudentsLoading || pgSectionsLoading)
+    : false;
   
-  // DEBUG: Log which data source is being used
-  console.log('[GradebookView] 🔍 Data Source:', USE_POSTGRESQL ? 'PostgreSQL' : 'Firestore');
-  console.log('[GradebookView] 📊 Active Grades Count:', activeGrades.length);
-  if (activeGrades.length > 0) {
-    console.log('[GradebookView] 📝 Sample Grade:', activeGrades[0]);
-  }
   
   // Use props if provided (unified mode), otherwise use local state (standalone mode)
   const [localSectionId, setLocalSectionId] = useState<string | null>(null);
   const [localQuarterFilter, setLocalQuarterFilter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>(getCurrentQuarter());
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   
-  const selectedSectionId = propSectionId !== undefined ? propSectionId : localSectionId;
+  
+  // CRITICAL FIX: Validate that selectedSectionId exists in activeSections
+  // If the stored ID doesn't exist (e.g., after re-seeding database), reset to null
+  const validatedLocalSectionId = useMemo(() => {
+    if (!localSectionId) return null;
+    const sectionExists = activeSections.some(s => s.id === localSectionId);
+    if (!sectionExists) {
+      console.warn('[GradebookView] ⚠️ Selected section ID not found, resetting to null:', localSectionId);
+      return null;
+    }
+    return localSectionId;
+  }, [localSectionId, activeSections]);
+  
+  const selectedSectionId = propSectionId !== undefined ? propSectionId : validatedLocalSectionId;
   const quarterFilter = propQuarter !== undefined ? propQuarter : localQuarterFilter;
   const searchQuery = propSearchQuery !== undefined ? propSearchQuery : localSearchQuery;
   
@@ -196,7 +227,7 @@ const GradebookView: React.FC<{
   const isReadOnly = authUser.role === 'principal';
 
   const visibleSections = useMemo(() => {
-    if (['admin', 'principal', 'registrar'].includes(authUser.role)) return sections;
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) return activeSections;
 
     const authorizedSectionIds = new Set<string>();
 
@@ -210,7 +241,7 @@ const GradebookView: React.FC<{
     }
 
     // PRIORITY 2: Check adviser status
-    const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
+    const teacherAdviserSection = activeSections.find(s => s.adviserId === authUser.id);
     if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
 
     // PRIORITY 3: Check substitute assignments
@@ -221,7 +252,7 @@ const GradebookView: React.FC<{
 
     if (activeSubAssignments.length > 0) {
         const originalTeacherIds = activeSubAssignments.map(sub => sub.originalTeacherId);
-        sections.forEach(s => {
+        activeSections.forEach(s => {
             if (s.adviserId && originalTeacherIds.includes(s.adviserId)) {
                 authorizedSectionIds.add(s.id);
             }
@@ -240,8 +271,8 @@ const GradebookView: React.FC<{
       }
     });
 
-    return sections.filter(s => authorizedSectionIds.has(s.id));
-  }, [sections, substituteAssignments, classSchedules, authUser]);
+    return activeSections.filter(s => authorizedSectionIds.has(s.id));
+  }, [activeSections, substituteAssignments, classSchedules, authUser]);
 
   useEffect(() => {
     // Only auto-select first section if no section is selected AND we're not in "all" mode
@@ -322,17 +353,17 @@ const GradebookView: React.FC<{
   // Calculate student count per section
   const sectionStudentCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    students.forEach(student => {
+    activeStudents.forEach(student => {
       if (student.sectionId) {
         counts.set(student.sectionId, (counts.get(student.sectionId) || 0) + 1);
       }
     });
     return counts;
-  }, [students]);
+  }, [activeStudents]);
 
   // K-12 COMPLIANCE: Filter learning areas by grade level
   const applicableLearningAreas = useMemo(() => {
-    const selectedSection = sections.find(s => s.id === selectedSectionId);
+    const selectedSection = activeSections.find(s => s.id === selectedSectionId);
     if (!selectedSection) {
       return learningAreas;
     }
@@ -353,13 +384,13 @@ const GradebookView: React.FC<{
     
     // Sort by order field (DepEd-compliant subject ordering)
     return filtered.sort((a, b) => (a.order || 999) - (b.order || 999));
-  }, [learningAreas, selectedSectionId, sections]);
+  }, [learningAreas, selectedSectionId, activeSections]);
 
   const studentsInSection = useMemo(() => {
     // Support "all" sections or null/undefined
     if (!selectedSectionId || selectedSectionId === 'all') {
       // Show all students (no section filter)
-      let filtered = students.filter(s => {
+      let filtered = activeStudents.filter(s => {
         const name = s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim();
         return name.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
       });
@@ -402,16 +433,11 @@ const GradebookView: React.FC<{
     }
     
     // Specific section selected
-    let filtered = students.filter(s => {
+    let filtered = activeStudents.filter(s => {
         const name = s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim();
         return s.sectionId === selectedSectionId &&
                name.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
     });
-    
-    console.log('[GradebookView] Students in selected section:', filtered.length);
-    if (filtered.length > 0) {
-      console.log('[GradebookView] Sample filtered students:', filtered.slice(0, 3).map(s => ({ id: s.id, name: s.name, sectionId: s.sectionId })));
-    }
     
     // Priority 2: Advanced filtering
     if (gradeFilter !== 'all') {
@@ -501,7 +527,7 @@ const GradebookView: React.FC<{
     });
     
     return filtered;
-  }, [students, selectedSectionId, debouncedSearchQuery, gradeFilter, sortBy, sortOrder, gradeMap, applicableLearningAreas]);
+  }, [activeStudents, selectedSectionId, debouncedSearchQuery, gradeFilter, sortBy, sortOrder, gradeMap, applicableLearningAreas]);
 
   // Phase 1: Paginated students
   const totalPages = Math.max(1, Math.ceil(studentsInSection.length / pageSize));
@@ -738,6 +764,17 @@ const GradebookView: React.FC<{
           {!isSaving && lastSaved && (
             <div className="text-sm text-green-600 dark:text-green-400">
               ✓ Saved {new Date(lastSaved).toLocaleTimeString()}
+            </div>
+          )}
+          
+          {/* PostgreSQL Loading Indicator */}
+          {USE_POSTGRESQL && isLoading && (
+            <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Loading PostgreSQL...
             </div>
           )}
         </div>

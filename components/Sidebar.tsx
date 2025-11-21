@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { AuthUser, StudentUser, ParentUser, Announcement } from '../types';
-import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronRightIcon, BuildingOfficeIcon, CheckBadgeIcon, UserCircleIcon, CreditCardIcon, CurrencyDollarIcon, ChartPieIcon } from './icons';
+import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronRightIcon, BuildingOfficeIcon, CheckBadgeIcon, UserCircleIcon, CreditCardIcon, CurrencyDollarIcon, ChartPieIcon, DocumentTextIcon } from './icons';
 import DepEdLogo from './DepEdLogo';
 
 interface SidebarProps {
@@ -47,8 +47,17 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
       items: [
         { path: '/lesson-plan', label: 'Lesson Plans', icon: <ClipboardDocumentIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
         { path: '/assignments', label: 'Assignments', icon: <ClipboardDocumentCheckIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
-        { path: '/grades', label: 'Grades & Reports', icon: <TableCellsIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
+        { path: '/grades', label: 'Grade Entry', icon: <TableCellsIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
         { path: '/attendance', label: 'Attendance', icon: <CalendarDaysIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
+      ]
+    },
+    {
+      title: 'Reports & Forms',
+      items: [
+        { path: '/reports/form137', label: 'Form 137', icon: <DocumentTextIcon />, roles: ['admin', 'registrar', 'principal'], badge: null },
+        { path: '/reports/form138', label: 'Form 138', icon: <DocumentTextIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
+        { path: '/reports/school-forms', label: 'School Forms', icon: <ClipboardDocumentListIcon />, roles: ['admin', 'registrar', 'principal'], badge: null },
+        { path: '/reports/elln', label: 'ELLN Assessment', icon: <BookOpenIcon />, roles: ['admin', 'teacher', 'principal'], badge: null },
       ]
     },
     {

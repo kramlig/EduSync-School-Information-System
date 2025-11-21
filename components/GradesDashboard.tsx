@@ -152,7 +152,7 @@ const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData }
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">
-          Grades & Reports
+          Grade Entry & Analytics
         </h1>
         <p className="text-slate-600 dark:text-slate-400">
           {isStudentView 
@@ -160,8 +160,8 @@ const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData }
             : isParentView
             ? "View your child's academic performance"
             : isTeacherView
-            ? 'Manage grades and assessments for your students'
-            : 'Comprehensive grade management and analytics'
+            ? 'Enter and manage grades for your students'
+            : 'Enter grades, record assessments, and view analytics'
           }
         </p>
       </div>

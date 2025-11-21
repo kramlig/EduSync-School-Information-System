@@ -28,6 +28,11 @@ const getRoleStyle = (role: Teacher['role']) => {
 const ITEMS_PER_PAGE = 25;
 
 const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
+  // Performance tracking
+  const renderCount = React.useRef(0);
+  renderCount.current++;
+  console.log(`[TeacherList] 🔄 Render #${renderCount.current}`);
+  
   const { teachers, learningAreas, addTeacher, updateTeacher, deleteTeacher, searchTeachers, isSearching } = schoolData;
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -44,9 +49,14 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
+  // Error and success messages
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
   const authUser = session.user as AuthUser;
 
   // Server-side search effect
+  // CRITICAL: Memoize to prevent infinite loops from searchTeachers function reference changes
   useEffect(() => {
     const performSearch = async () => {
       if (debouncedSearchQuery.trim()) {
@@ -60,7 +70,8 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
     };
 
     performSearch();
-  }, [debouncedSearchQuery, searchTeachers]);
+    // ONLY depend on debouncedSearchQuery, NOT searchTeachers (function changes every render)
+  }, [debouncedSearchQuery]);
 
   // Use search results if searching, otherwise use regular teachers list
   const visibleTeachers = searchResults || teachers;
@@ -102,26 +113,50 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
   setTargetTeacher((prev: any) => ({ ...prev!, assignments: prev!.assignments?.filter((_: any, i: number) => i !== index) }));
   };
 
-  const handleAddTeacher = (e: React.FormEvent) => {
+  const handleAddTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newTeacher.name && newTeacher.email) {
-      addTeacher(newTeacher); 
-      setNewTeacher({ name: '', email: '', contactNumber: '', assignments: [], role: 'teacher' });
-      setIsAddModalOpen(false);
+      try {
+        setError(null);
+        await addTeacher(newTeacher); 
+        setSuccess(`Teacher "${newTeacher.name}" added successfully!`);
+        setNewTeacher({ name: '', email: '', contactNumber: '', assignments: [], role: 'teacher' });
+        setIsAddModalOpen(false);
+        // Auto-hide success message after 3 seconds
+        setTimeout(() => setSuccess(null), 3000);
+      } catch (err: any) {
+        const errorMessage = err?.message || err?.msg || (typeof err === 'string' ? err : 'Failed to add teacher. Please try again.');
+        setError(errorMessage);
+        console.error('Add teacher error:', err);
+        // Don't close modal on error, let user fix and retry
+      }
     }
   };
 
   const handleEditClick = (teacher: Teacher) => {
+    setError(null); // Clear any errors when opening edit modal
     setTeacherToEdit({ ...teacher });
     setIsEditModalOpen(true);
   };
 
-  const handleUpdateTeacher = (e: React.FormEvent) => {
+  const handleUpdateTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (teacherToEdit) {
-      updateTeacher(teacherToEdit);
-      setIsEditModalOpen(false);
-      setTeacherToEdit(null);
+      try {
+        setError(null);
+        await updateTeacher(teacherToEdit);
+        setSuccess(`Teacher "${teacherToEdit.name}" updated successfully!`);
+        setIsEditModalOpen(false);
+        setTeacherToEdit(null);
+        // Auto-hide success message after 3 seconds
+        setTimeout(() => setSuccess(null), 3000);
+      } catch (err: any) {
+        const errorMessage = err?.message || err?.msg || (typeof err === 'string' ? err : 'Failed to update teacher. Please try again.');
+        console.error('[TeacherList] Caught error, setting error state:', errorMessage);
+        setError(errorMessage);
+        console.error('[TeacherList] Error state should now be:', errorMessage);
+        // Don't close modal on error, let user fix and retry
+      }
     }
   };
 
@@ -134,11 +169,23 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
     setIsDeleteModalOpen(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (teacherToDelete) {
-        deleteTeacher(teacherToDelete.id);
+      try {
+        setError(null);
+        await deleteTeacher(teacherToDelete.id);
+        setSuccess(`Teacher "${teacherToDelete.name}" deleted successfully!`);
         setIsDeleteModalOpen(false);
         setTeacherToDelete(null);
+        // Auto-hide success message after 3 seconds
+        setTimeout(() => setSuccess(null), 3000);
+      } catch (err: any) {
+        const errorMessage = err?.message || err?.msg || (typeof err === 'string' ? err : 'Failed to delete teacher. Please try again.');
+        setError(errorMessage);
+        console.error('Delete teacher error:', err);
+        setIsDeleteModalOpen(false);
+        setTeacherToDelete(null);
+      }
     }
   };
   
@@ -200,6 +247,20 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
           <button onClick={() => setIsAddModalOpen(true)} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Add Teacher</button>
         )}
       </div>
+
+      {/* Success/Error Messages */}
+      {success && (
+        <div className="mb-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 px-4 py-3 rounded-lg flex justify-between items-center shadow-sm alert-success">
+          <span className="font-medium">{success}</span>
+          <button onClick={() => setSuccess(null)} className="text-green-700 dark:text-green-300 hover:text-green-900 dark:hover:text-green-100 font-bold text-xl leading-none">×</button>
+        </div>
+      )}
+      {error && (
+        <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg flex justify-between items-center shadow-sm alert-error">
+          <span className="font-medium">{error}</span>
+          <button onClick={() => setError(null)} className="text-red-700 dark:text-red-300 hover:text-red-900 dark:hover:text-red-100 font-bold text-xl leading-none">×</button>
+        </div>
+      )}
       
       <div className="mb-4 flex items-center gap-4">
         <div className="relative flex-1 max-w-sm">
@@ -297,6 +358,14 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
 
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add New Teacher" size="2xl">
         <form onSubmit={handleAddTeacher}>
+          {/* Error message inside modal */}
+          {error && (
+            <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg flex justify-between items-center shadow-sm alert-error">
+              <span className="font-medium">{error}</span>
+              <button type="button" onClick={() => setError(null)} className="text-red-700 dark:text-red-300 hover:text-red-900 dark:hover:text-red-100 font-bold text-xl leading-none">×</button>
+            </div>
+          )}
+          
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
                <div><label htmlFor="name" className="block text-sm font-medium">Full Name</label><input type="text" name="name" id="name" value={newTeacher.name} onChange={handleInputChange} className="mt-1 w-full input-style" required /></div>
@@ -323,6 +392,14 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
 
       <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Teacher" size="2xl">
         <form onSubmit={handleUpdateTeacher}>
+          {/* Error message inside modal */}
+          {error && (
+            <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg flex justify-between items-center shadow-sm alert-error">
+              <span className="font-medium">{error}</span>
+              <button type="button" onClick={() => setError(null)} className="text-red-700 dark:text-red-300 hover:text-red-900 dark:hover:text-red-100 font-bold text-xl leading-none">×</button>
+            </div>
+          )}
+          
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
                <div><label htmlFor="name" className="block text-sm font-medium">Full Name</label><input type="text" name="name" id="name" value={teacherToEdit?.name ?? ''} onChange={handleEditInputChange} className="mt-1 w-full input-style" required /></div>
@@ -360,4 +437,18 @@ const TeacherList: React.FC<TeacherListProps> = ({ schoolData, session }) => {
   );
 };
 
-export default TeacherList;
+// Memoize component to prevent unnecessary re-renders from parent
+// Only re-render if schoolData or session actually changes
+export default React.memo(TeacherList, (prevProps, nextProps) => {
+  // Only re-render if teachers, learningAreas, or session user ID changes
+  const teachersEqual = prevProps.schoolData.teachers === nextProps.schoolData.teachers;
+  const learningAreasEqual = prevProps.schoolData.learningAreas === nextProps.schoolData.learningAreas;
+  const sessionEqual = prevProps.session.user.id === nextProps.session.user.id;
+  
+  if (!teachersEqual || !learningAreasEqual || !sessionEqual) {
+    console.log('[TeacherList] 🔄 Props changed, will re-render', { teachersEqual, learningAreasEqual, sessionEqual });
+    return false; // Re-render
+  }
+  
+  return true; // Skip re-render
+});

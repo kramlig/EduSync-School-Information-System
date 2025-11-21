@@ -4,18 +4,17 @@
  * AUTO-GENERATES Form 137 from existing system data
  * NO MANUAL DATA ENTRY NEEDED!
  * 
- * Data Sources:
- * - students collection (demographics, LRN)
- * - grades collection (quarterly grades)
- * - attendanceRecords collection (daily attendance)
- * - coreValueGrades collection (behavior ratings)
- * - sections collection (grade level, adviser)
+ * Data Sources (ALL FROM POSTGRESQL):
+ * - students table (demographics, LRN)
+ * - grades table (quarterly grades)
+ * - attendance_records table (daily attendance)
+ * - core_value_grades table (behavior ratings)
+ * - sections table (grade level, adviser)
  */
 
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { getFirestoreInstance } from '../src/services/firestoreService';
-import type { Student, Grade, CoreValueGrade, AttendanceRecord, Section, LearningArea, CoreValue, CoreValueMarking } from '../types';
-import type { AcademicHistory, SubjectGrade, SchoolYearRecord, CoreValuesRecord } from '../components/forms/shared/FormTypes';
+import { supabase } from '../src/lib/supabase';
+import type { Student, Grade, Section } from '../types';
+import type { AcademicHistory, SubjectGrade, SchoolYearRecord } from '../components/forms/shared/FormTypes';
 import { 
   computeFinalGrade, 
   computeGeneralAverage,
@@ -23,8 +22,6 @@ import {
 } from './gradingFormulas';
 import { getCurrentSchoolYear } from './dateHelpers';
 import { Form137Service } from './formsService';
-
-const db = getFirestoreInstance();
 
 interface GenerationOptions {
   studentId: string;
@@ -55,16 +52,21 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
   try {
     const schoolYear = options.schoolYear || getCurrentSchoolYear();
     
-    // Step 1: Get student profile
-    const studentDoc = await getDoc(doc(db, 'students', options.studentId));
-    if (!studentDoc.exists()) {
+    // Step 1: Get student profile from PostgreSQL
+    const { data: studentData, error: studentError } = await supabase
+      .from('students')
+      .select('*')
+      .eq('id', options.studentId)
+      .single();
+    
+    if (studentError || !studentData) {
       return {
         success: false,
         error: 'Student not found'
       };
     }
     
-    const student = { id: studentDoc.id, ...studentDoc.data() } as Student;
+    const student = studentData as Student;
 
     // Step 1.5: Check if Form 137 already exists for this student
     const existingRecord = await Form137Service.getByStudentId(options.studentId);
@@ -78,20 +80,30 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
       }
     }
 
-    // Step 2: Get student's section
+    // Step 2: Get student's section from PostgreSQL
     let sectionData: Section | null = null;
     let adviserName = '';
     
     if (student.sectionId) {
-      const sectionDoc = await getDoc(doc(db, 'sections', student.sectionId));
-      if (sectionDoc.exists()) {
-        sectionData = { id: sectionDoc.id, ...sectionDoc.data() } as Section;
+      const { data: section } = await supabase
+        .from('sections')
+        .select('*')
+        .eq('id', student.sectionId)
+        .single();
+      
+      if (section) {
+        sectionData = section as Section;
         
-        // Get adviser name
+        // Get adviser name from PostgreSQL
         if (sectionData.adviserId) {
-          const adviserDoc = await getDoc(doc(db, 'teachers', sectionData.adviserId));
-          if (adviserDoc.exists()) {
-            adviserName = adviserDoc.data().name || '';
+          const { data: teacher } = await supabase
+            .from('teachers')
+            .select('name')
+            .eq('id', sectionData.adviserId)
+            .single();
+          
+          if (teacher) {
+            adviserName = teacher.name || '';
           }
         }
       }
@@ -101,50 +113,59 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
       warnings.push('No section assignment found');
     }
 
-    // Step 3: Get quarterly grades
-    const gradesRef = collection(db, 'grades');
-    const gradesQuery = query(gradesRef, where('studentId', '==', options.studentId));
-    const gradesSnapshot = await getDocs(gradesQuery);
-    const grades = gradesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Grade));
+    // Step 3: Get quarterly grades from PostgreSQL
+    const { data: gradesData } = await supabase
+      .from('grades')
+      .select('*')
+      .eq('student_id', options.studentId);
+    
+    const grades = (gradesData || []).map(g => ({
+      id: g.id,
+      studentId: g.student_id,
+      learningAreaId: g.learning_area_id,
+      quarter: g.quarter,
+      grade: g.grade,
+      schoolYear: g.school_year
+    })) as Grade[];
 
     if (grades.length === 0) {
       warnings.push('No grades found for this student');
     }
     
-    // Step 4: Get learning areas for names
-    const learningAreasRef = collection(db, 'learningAreas');
-    const learningAreasSnapshot = await getDocs(learningAreasRef);
+    // Step 4: Get learning areas for names from PostgreSQL
+    const { data: learningAreasData } = await supabase
+      .from('learning_areas')
+      .select('id, name, code')
+      .is('deleted_at', null);
+    
     const learningAreasMap = new Map<string, string>();
-    learningAreasSnapshot.docs.forEach(doc => {
-      const data = doc.data() as LearningArea;
-      learningAreasMap.set(doc.id, data.name);
+    (learningAreasData || []).forEach(la => {
+      learningAreasMap.set(la.id, la.name);
     });
 
     // Step 5: Transform grades to Form 137 format
     const subjectGrades = transformGradesToForm137(grades, learningAreasMap);
 
-    // Step 6: Get attendance
-    const attendanceRef = collection(db, 'attendanceRecords');
-    const attendanceQuery = query(attendanceRef, where('studentId', '==', options.studentId));
-    const attendanceSnapshot = await getDocs(attendanceQuery);
+    // Step 6: Get attendance from PostgreSQL
+    const { data: attendanceData } = await supabase
+      .from('attendance_records')
+      .select('*')
+      .eq('student_id', options.studentId);
     
     let daysPresent = 0;
     let totalDays = 0;
     
-    if (!attendanceSnapshot.empty) {
-      const attendanceRecord = attendanceSnapshot.docs[0].data() as AttendanceRecord;
-      const dailyStatus = attendanceRecord.dailyStatus || {};
-      
+    if (attendanceData && attendanceData.length > 0) {
       // Count attendance for the school year
-      Object.entries(dailyStatus).forEach(([date, status]) => {
-        const recordDate = new Date(date);
+      attendanceData.forEach((record: any) => {
+        const recordDate = new Date(record.date);
         const [startYear] = schoolYear.split('-').map(Number);
         const yearMatches = recordDate.getFullYear() === startYear || 
                            recordDate.getFullYear() === startYear + 1;
         
         if (yearMatches) {
           totalDays++;
-          if (status === 'P') daysPresent++;
+          if (record.status === 'Present') daysPresent++;
         }
       });
     }
@@ -154,31 +175,35 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
       totalDays = 200; // Default school days
     }
 
-    // Step 7: Get core values
-    const coreValuesGradesRef = collection(db, 'coreValueGrades');
-    const coreValuesQuery = query(coreValuesGradesRef, where('studentId', '==', options.studentId));
-    const coreValuesSnapshot = await getDocs(coreValuesQuery);
+    // Step 7: Get core values from PostgreSQL
+    const { data: coreValuesGradesData } = await supabase
+      .from('core_value_grades')
+      .select('*')
+      .eq('student_id', options.studentId);
     
-    // Get core value names
-    const coreValuesRef = collection(db, 'coreValues');
-    const coreValuesCollSnapshot = await getDocs(coreValuesRef);
-    const coreValuesMap = new Map<string, CoreValue>();
-    coreValuesCollSnapshot.docs.forEach(doc => {
-      coreValuesMap.set(doc.id, { id: doc.id, ...doc.data() } as CoreValue);
+    // Get core value names from PostgreSQL
+    const { data: coreValuesData } = await supabase
+      .from('core_values')
+      .select('id, name, code')
+      .is('deleted_at', null);
+    
+    const coreValuesMap = new Map<string, { name: string; code: string }>();
+    (coreValuesData || []).forEach(cv => {
+      coreValuesMap.set(cv.id, { name: cv.name, code: cv.code });
     });
     
     const observedValues: Record<string, 'SO' | 'AO' | 'RO' | 'NO'> = {};
     
-    coreValuesSnapshot.docs.forEach(doc => {
-      const cvGrade = doc.data() as CoreValueGrade;
-      const coreValue = coreValuesMap.get(cvGrade.coreValueId);
+    (coreValuesGradesData || []).forEach((cvGrade: any) => {
+      const coreValue = coreValuesMap.get(cvGrade.core_value_id);
       
       if (coreValue) {
-        // Get most recent quarter's marking (Q4 > Q3 > Q2 > Q1)
-        const q4 = cvGrade.q4;
-        const q3 = cvGrade.q3;
-        const q2 = cvGrade.q2;
-        const q1 = cvGrade.q1;
+        // Get most recent quarter's marking from indicator_ratings JSONB
+        const indicatorRatings = cvGrade.indicator_ratings || {};
+        const q4 = indicatorRatings.q4 || cvGrade.q4;
+        const q3 = indicatorRatings.q3 || cvGrade.q3;
+        const q2 = indicatorRatings.q2 || cvGrade.q2;
+        const q1 = indicatorRatings.q1 || cvGrade.q1;
         
         // Get the first behavior marking from the most recent quarter
         const latestQuarter = q4 || q3 || q2 || q1;
@@ -188,6 +213,9 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
             const marking = latestQuarter[firstBehavior];
             observedValues[coreValue.name] = marking as 'SO' | 'AO' | 'RO' | 'NO';
           }
+        } else if (typeof latestQuarter === 'string') {
+          // Fallback for direct rating (e.g., q1: "AO")
+          observedValues[coreValue.name] = latestQuarter as 'SO' | 'AO' | 'RO' | 'NO';
         }
       }
     });
@@ -244,11 +272,11 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
       // This is creating a new Form 137 with first year
       const newForm137: Omit<AcademicHistory, 'id'> = {
         studentId: student.id,
-        studentName: student.name,
+        studentName: student.name || `${student.first_name} ${student.last_name}`,
         lrn: student.lrn || '',
-        birthDate: student.dateOfBirth || '',
-        birthPlace: student.placeOfBirth || '',
-        parentGuardian: student.guardianName || '',
+        birthDate: student.date_of_birth || student.dateOfBirth || '',
+        birthPlace: student.place_of_birth || student.placeOfBirth || '',
+        parentGuardian: student.guardianName || student.guardian_name || '',
         
         currentSchoolName: 'Your School Name', // TODO: Get from school settings
         currentSchoolId: 'SCH001', // TODO: Get from school settings
@@ -286,7 +314,7 @@ function transformGradesToForm137(
   grades: Grade[],
   learningAreasMap: Map<string, string>
 ): SubjectGrade[] {
-  // Group grades by learning area
+  // Group grades by learning area (PostgreSQL has one record per student per subject per year)
   const gradesBySubject = new Map<string, Grade[]>();
   
   grades.forEach(grade => {
@@ -303,17 +331,17 @@ function transformGradesToForm137(
   gradesBySubject.forEach((subjectGradesList, learningAreaId) => {
     const learningAreaName = learningAreasMap.get(learningAreaId) || learningAreaId;
     
-    // Get the grade record (should be one per student per subject)
+    // Get the grade record (PostgreSQL: one record per student per subject per year)
     const gradeRecord = subjectGradesList[0];
     
-    // Extract quarterly grades (handle both number and SubGradeRecord)
-    const q1 = typeof gradeRecord.q1 === 'number' ? gradeRecord.q1 : 0;
-    const q2 = typeof gradeRecord.q2 === 'number' ? gradeRecord.q2 : 0;
-    const q3 = typeof gradeRecord.q3 === 'number' ? gradeRecord.q3 : 0;
-    const q4 = typeof gradeRecord.q4 === 'number' ? gradeRecord.q4 : 0;
+    // PostgreSQL grades already have q1, q2, q3, q4 as numbers (not objects)
+    const q1 = gradeRecord.q1 || 0;
+    const q2 = gradeRecord.q2 || 0;
+    const q3 = gradeRecord.q3 || 0;
+    const q4 = gradeRecord.q4 || 0;
     
-    // Compute final grade (renamed from finalRating for consistency)
-    const finalGrade = gradeRecord.finalGrade || computeFinalGrade(q1, q2, q3, q4);
+    // Use final_grade from PostgreSQL or compute it
+    const finalGrade = gradeRecord.final_grade || gradeRecord.finalGrade || computeFinalGrade(q1, q2, q3, q4);
     const remarks: 'Passed' | 'Failed' = finalGrade >= 75 ? 'Passed' : 'Failed';
     
     subjectGrades.push({

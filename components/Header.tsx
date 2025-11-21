@@ -61,9 +61,6 @@ const Header: React.FC<HeaderProps> = ({
   const { isOnline, wasOffline } = useOnlineStatus();
   const { hasPendingWrites, pendingCount } = useFirestoreSyncStatus();
 
-  // DEBUG: Log online status
-  console.log('[Header] Online status:', { isOnline, wasOffline, navigatorOnline: navigator.onLine });
-
   // Role badge colors
   const getRoleBadgeClass = (role: string) => {
     switch (role) {

@@ -75,7 +75,7 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
       title: 'SF1 - Enrollment Record',
       description: 'Student enrollment data by grade level and section. Required for EBEIS reporting.',
       icon: UsersIcon,
-      route: '/grades/schoolforms/sf1',
+      route: '/reports/school-forms/sf1',
       gradient: 'from-blue-600 via-indigo-600 to-purple-600',
       shadowColor: 'shadow-blue-500/25',
       roles: ['admin', 'registrar', 'principal'],
@@ -91,7 +91,7 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
       title: 'SF2 - Daily Attendance Record',
       description: 'Daily attendance tracking and monthly summaries for learners and teachers.',
       icon: CalendarDaysIcon,
-      route: '/grades/schoolforms/sf2',
+      route: '/reports/school-forms/sf2',
       gradient: 'from-green-600 via-emerald-600 to-teal-600',
       shadowColor: 'shadow-green-500/25',
       roles: ['admin', 'teacher', 'registrar', 'principal'],
@@ -107,7 +107,7 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
       title: 'SF9 - Promotion/Retention Report',
       description: 'End-of-year promotion status and retention statistics for performance tracking.',
       icon: TrendingUpIcon,
-      route: '/grades/schoolforms/sf9',
+      route: '/reports/school-forms/sf9',
       gradient: 'from-orange-600 via-red-600 to-pink-600',
       shadowColor: 'shadow-orange-500/25',
       roles: ['admin', 'registrar', 'principal'],
@@ -139,7 +139,7 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
       title: 'View Statistics',
       description: 'School-wide analytics and trends',
       icon: ChartBarIcon,
-      action: () => navigate('/grades/schoolforms/analytics'),
+      action: () => navigate('/grades/analytics'),
       color: 'bg-gradient-to-r from-emerald-600 to-green-600'
     }
   ];
@@ -173,13 +173,13 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
               
               <div className="flex flex-col sm:flex-row gap-4">
                 <button 
-                  onClick={() => navigate('/grades/schoolforms/help')}
+                  onClick={() => window.open('https://www.deped.gov.ph/ebeis', '_blank')}
                   className="px-6 py-3 bg-white text-slate-700 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200 border border-slate-200 hover:border-slate-300"
                 >
                   📖 EBEIS Guide
                 </button>
                 <button 
-                  onClick={() => navigate('/grades/schoolforms/export')}
+                  onClick={() => console.log('Export all forms - TODO: Implement bulk export')}
                   className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200"
                 >
                   📊 Export All Data
