@@ -237,6 +237,14 @@ export const calculateDataCompleteness = (
   let totalExpectedEntries = 0;
   let totalMarkedEntries = 0;
 
+  console.log('[calculateDataCompleteness] Debug:', {
+    yearMonth,
+    studentsCount: students.length,
+    attendanceRecordsCount: attendanceRecords.length,
+    daysInMonth,
+    sampleRecord: attendanceRecords[0]
+  });
+
   for (let day = 1; day <= daysInMonth; day++) {
     const dayOfWeek = new Date(year, month - 1, day).getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) continue;
@@ -253,7 +261,15 @@ export const calculateDataCompleteness = (
     });
   }
 
-  return totalExpectedEntries > 0 ? (totalMarkedEntries / totalExpectedEntries) * 100 : 0;
+  const completeness = totalExpectedEntries > 0 ? (totalMarkedEntries / totalExpectedEntries) * 100 : 0;
+  
+  console.log('[calculateDataCompleteness] Result:', {
+    totalExpectedEntries,
+    totalMarkedEntries,
+    completeness: completeness.toFixed(1) + '%'
+  });
+
+  return completeness;
 };
 
 // ==================== ENROLLMENT CALCULATIONS ====================
