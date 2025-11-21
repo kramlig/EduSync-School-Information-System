@@ -6,7 +6,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
-export interface AttendanceRecord {
+// PostgreSQL row structure
+interface AttendanceRow {
   id: string;
   schoolId: string;
   studentId: string;
@@ -17,6 +18,13 @@ export interface AttendanceRecord {
   recordedBy?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// Firestore-compatible structure (expected by SF2Dashboard)
+export interface AttendanceRecord {
+  schoolId: string;
+  studentId: string;
+  dailyStatus: Record<string, 'P' | 'A' | 'L' | 'E'>; // "YYYY-MM-DD": "P"
 }
 
 interface UseAttendanceOptions {
@@ -81,20 +89,34 @@ export function useAttendancePostgreSQL(options: UseAttendanceOptions) {
 
         if (!isMounted) return;
 
-        // Transform to camelCase
-        const transformedRecords: AttendanceRecord[] = (data || []).map((row: any) => ({
-          id: row.id,
-          schoolId: row.school_id,
-          studentId: row.student_id,
-          sectionId: row.section_id,
-          date: row.date,
-          status: row.status,
-          remarks: row.remarks,
-          recordedBy: row.recorded_by,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at
-        }));
+        // Transform PostgreSQL rows to Firestore-compatible structure
+        // Group by studentId and build dailyStatus object
+        const studentAttendanceMap = new Map<string, AttendanceRecord>();
+        
+        (data || []).forEach((row: any) => {
+          const studentId = row.student_id;
+          const date = row.date;
+          const statusMap: Record<string, 'P' | 'A' | 'L' | 'E'> = {
+            'Present': 'P',
+            'Absent': 'A',
+            'Late': 'L',
+            'Excused': 'E'
+          };
+          const status = statusMap[row.status] || 'A';
+          
+          if (!studentAttendanceMap.has(studentId)) {
+            studentAttendanceMap.set(studentId, {
+              schoolId: row.school_id,
+              studentId: studentId,
+              dailyStatus: {}
+            });
+          }
+          
+          const record = studentAttendanceMap.get(studentId)!;
+          record.dailyStatus[date] = status;
+        });
 
+        const transformedRecords = Array.from(studentAttendanceMap.values());
         setAttendanceRecords(transformedRecords);
         
       } catch (err) {
