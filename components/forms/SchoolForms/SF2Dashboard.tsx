@@ -644,10 +644,16 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
 
     if (!validation.valid) {
       console.error('[SF2] Validation failed:', validation.message);
-      toast.error(validation.message, {
-        duration: 5000,
-        icon: '⚠️',
-      });
+      toast.error(
+        `${validation.message}\n\nPlease mark attendance in the Daily View first, or select a different month.`,
+        {
+          duration: 7000,
+          icon: '⚠️',
+          style: {
+            maxWidth: '500px',
+          },
+        }
+      );
       return;
     }
 
