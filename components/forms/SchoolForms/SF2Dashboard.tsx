@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { useSchoolData } from '../../../hooks/useSchoolData';
 import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
 import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
 import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
@@ -70,6 +71,7 @@ interface MonthlyAttendanceSummary {
 
 const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
   const { schoolId } = useSchoolContext();
+  const { settings } = useSchoolData(['settings']);
   const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
   const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
   const { attendanceRecords, loading: attendanceLoading } = useAttendancePostgreSQL({ schoolId });
@@ -1087,7 +1089,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
       // Get real data for header (will be passed to renderStudentPage)
       const currentSection = selectedSection ? sections.find(s => s.id === selectedSection) : null;
       const realSchoolId = '301234567'; // TODO: Add schoolId to settings
-      const realSchoolName = schoolData.settings?.schoolName || 'EDUSYNC ELEMENTARY SCHOOL';
+      const realSchoolName = settings?.schoolName || 'EDUSYNC ELEMENTARY SCHOOL';
       const realGradeLevel = selectedGradeLevel ? `Grade ${selectedGradeLevel}` : 'N/A';
       const realSectionName = currentSection?.name || 'N/A';
       
@@ -1405,9 +1407,9 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
         [`Generated: ${currentDate.toLocaleDateString()}`],
         [],
         ['SCHOOL INFORMATION'],
-        ['School Name', schoolData.settings?.schoolName || 'EduSync Elementary School'],
-        ['Division', schoolData.settings?.division || 'N/A'],
-        ['Region', schoolData.settings?.region || 'N/A'],
+        ['School Name', settings?.schoolName || 'EduSync Elementary School'],
+        ['Division', settings?.division || 'N/A'],
+        ['Region', settings?.region || 'N/A'],
         ['Grade Level', selectedGradeLevel ? `Grade ${selectedGradeLevel}` : 'N/A'],
         ['Section', currentSection?.name || 'N/A'],
         [],
