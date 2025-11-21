@@ -5,10 +5,11 @@
  * Handles navigation between viewing and editing states
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AcademicHistory } from '../shared/FormTypes';
-import { useSchoolData } from '../../../hooks/useSchoolData';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
 import Breadcrumb from '../../Breadcrumb';
 import Form137View from './Form137View';
 import Form137Editor from './Form137Editor';
@@ -32,9 +33,16 @@ export const Form137Manager: React.FC<Form137ManagerProps> = ({
   const [selectedRecord, setSelectedRecord] = useState<AcademicHistory | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   
-  // Get school data to find student name
-  const { students } = useSchoolData(['students']);
-  const student = students.find(s => s.id === studentId);
+  // Get school context and students from PostgreSQL
+  const { schoolId } = useSchoolContext();
+  const { students } = useStudentsPostgreSQL({ schoolId });
+  
+  // Memoize student lookup to prevent infinite loops
+  const student = useMemo(
+    () => students.find(s => s.id === studentId),
+    [students, studentId]
+  );
+  
   const studentName = student ? `${student.firstName} ${student.lastName}` : 'Student Record';
 
   const handleEdit = (record: AcademicHistory) => {

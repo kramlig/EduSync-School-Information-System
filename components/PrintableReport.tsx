@@ -131,7 +131,11 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, 
     .replace(/^-+|-+$/g, '')
     .substring(0, 80);
   
-  const studentGrades = useMemo(() => new Map(grades.filter(g => g.studentId === student.id).map(g => [g.learningAreaId, g])), [grades, student.id]);
+  const studentGrades = useMemo(() => {
+    const gradeMap = new Map(grades.filter(g => g.studentId === student.id).map(g => [g.learningAreaId, g]));
+    return gradeMap;
+  }, [grades, student.id]);
+  
   const studentCoreValues = useMemo(() => new Map(coreValueGrades.filter(g => g.studentId === student.id).map(g => [g.coreValueId, g])), [coreValueGrades, student.id]);
   const section = useMemo(() => sections.find(s => s.id === student.sectionId), [sections, student.sectionId]);
   const adviser = useMemo(() => teachers.find(t => t.id === section?.adviserId), [teachers, section]);
@@ -213,6 +217,7 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, 
     
     // Get individual attendance records for this student
     const studentAttendanceRecords = attendanceRecords.filter(r => r.studentId === student.id);
+    
     if (studentAttendanceRecords.length === 0) {
         return summary;
     }
@@ -230,13 +235,14 @@ const PrintableReport: React.FC<PrintableReportProps> = ({ student, schoolData, 
             summary[monthAbbr] = { present: 0, absent: 0 };
         }
         
-        const status = recordData.status;
+        const status = recordData.status?.toLowerCase(); // Handle both 'Present' and 'present'
         if (status === 'present' || status === 'late') {
             summary[monthAbbr].present++;
-        } else if (status === 'absent') {
+        } else if (status === 'absent' || status === 'excused') {
             summary[monthAbbr].absent++;
         }
     }
+    
     return summary;
   }, [attendanceRecords, student.id]);
 

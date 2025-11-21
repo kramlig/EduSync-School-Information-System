@@ -6,24 +6,23 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useSchoolData } from '../../../hooks/useSchoolData';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useGradesPostgreSQL } from '../../../src/hooks/useGradesPostgreSQL';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
 import PrintableReport from '../../PrintableReport';
 
 const Form138View: React.FC = () => {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
-  const schoolData = useSchoolData([
-    'students', 
-    'grades', 
-    'sections', 
-    'teachers',
-    'learningAreas',
-    'coreValues',
-    'coreValueGrades',
-    'attendanceRecords',
-    'parents'
-  ]);
-  const { students, loading, error } = schoolData;
+  const { schoolId } = useSchoolContext();
+  
+  // Use PostgreSQL hooks
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
+  const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId, studentId });
+  
+  const loading = studentsLoading || gradesLoading;
+  const error = null;
+  
   const [student, setStudent] = useState<any>(null);
 
   useEffect(() => {

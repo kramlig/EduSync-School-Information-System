@@ -11,7 +11,7 @@
  * - Real-time validation
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { AcademicHistory, SubjectGrade, ObservedValue, SchoolYearRecord } from '../shared/FormTypes';
 import { Form137Service } from '../../../services/formsService';
 import { 
@@ -180,12 +180,19 @@ export const Form137Editor: React.FC<Form137EditorProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
-  // Auto-calculate grades when subjects change
-  useEffect(() => {
-    calculateAverages();
+  // Memoize raw quarter grades to detect actual changes (not calculated fields)
+  const subjectQuarterGrades = useMemo(() => {
+    return formData.subjects.map(s => ({
+      id: s.learningAreaId,
+      q1: s.q1,
+      q2: s.q2,
+      q3: s.q3,
+      q4: s.q4
+    }));
   }, [formData.subjects]);
 
-  const calculateAverages = () => {
+  // Auto-calculate grades when quarter grades change (not when finalGrade/remarks change)
+  useEffect(() => {
     if (!formData.subjects || formData.subjects.length === 0) return;
 
     // Calculate final grades for each subject
@@ -208,18 +215,29 @@ export const Form137Editor: React.FC<Form137EditorProps> = ({
 
     // Determine promotion status
     const promotionStatusRaw = determinePromotionStatus(generalAverage);
-    // Convert to proper case format
     const promotionStatus: 'Promoted' | 'Retained' | 'Conditional' = 
       promotionStatusRaw === 'PROMOTED' ? 'Promoted' :
       promotionStatusRaw === 'RETAINED' ? 'Retained' : 'Conditional';
 
-    setFormData(prev => ({
-      ...prev,
-      subjects: updatedSubjects,
-      generalAverage,
-      promotionStatus
-    }));
-  };
+    // Only update if values actually changed (prevent infinite loop)
+    setFormData(prev => {
+      // Check if calculated values are different
+      const gradesChanged = JSON.stringify(prev.subjects.map(s => s.finalGrade)) !== 
+                           JSON.stringify(updatedSubjects.map(s => s.finalGrade));
+      const avgChanged = prev.generalAverage !== generalAverage;
+      const statusChanged = prev.promotionStatus !== promotionStatus;
+
+      if (gradesChanged || avgChanged || statusChanged) {
+        return {
+          ...prev,
+          subjects: updatedSubjects,
+          generalAverage,
+          promotionStatus
+        };
+      }
+      return prev; // No changes, return same reference
+    });
+  }, [subjectQuarterGrades]); // Only depend on quarter grades, not the whole subjects array
 
   const handleInputChange = (field: keyof Form137EditorData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));

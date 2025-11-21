@@ -25,6 +25,7 @@ interface Grade {
   schoolId: string;
   studentId: string;
   learningAreaId: string;
+  schoolYear?: string;
   q1?: number | SubGradeRecord;
   q2?: number | SubGradeRecord;
   q3?: number | SubGradeRecord;
@@ -89,6 +90,7 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
         schoolId: row.school_id,
         studentId: row.student_id,
         learningAreaId: row.learning_area_id,
+        schoolYear: row.school_year, // Add school year for filtering
         q1: row.composite_grades?.q1 || row.q1,
         q2: row.composite_grades?.q2 || row.q2,
         q3: row.composite_grades?.q3 || row.q3,
@@ -123,7 +125,6 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
           table: 'grades'
         },
         (payload) => {
-          console.log('[useGradesPostgreSQL] Real-time update:', payload);
           fetchGrades(); // Refetch on any change
         }
       )

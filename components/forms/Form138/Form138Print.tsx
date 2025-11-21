@@ -6,24 +6,25 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { useSchoolData } from '../../../hooks/useSchoolData';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useGradesPostgreSQL } from '../../../src/hooks/useGradesPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
 import PrintableReport from '../../PrintableReport';
 
 const Form138Print: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const schoolData = useSchoolData([
-    'students', 
-    'grades', 
-    'sections', 
-    'teachers',
-    'learningAreas',
-    'coreValues',
-    'coreValueGrades',
-    'attendanceRecords',
-    'parents'
-  ]);
-  const { students, grades, sections, teachers, settings, loading, error } = schoolData;
+  const { schoolId } = useSchoolContext();
+  
+  // Use PostgreSQL hooks
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
+  const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  
+  const loading = studentsLoading || gradesLoading || sectionsLoading;
+  const error = null;
+  
   const [selectedStudents, setSelectedStudents] = useState<any[]>([]);
   const [showPrintModal, setShowPrintModal] = useState(false);
 

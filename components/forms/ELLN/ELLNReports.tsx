@@ -93,7 +93,11 @@ const AVAILABLE_GRADES = [0, 1, 2, 3, 7, 8]; // K-3 and Grade 7-8 for demo
 
 export default function ELLNReports() {
   const navigate = useNavigate();
-  const { students, sections } = useSchoolData();
+  const { schoolId } = useSchoolContext();
+  
+  // Use PostgreSQL hooks
+  const { students } = useStudentsPostgreSQL({ schoolId });
+  const { sections } = useSectionsPostgreSQL({ schoolId });
 
   // State
   const [reportType, setReportType] = useState<'section' | 'grade' | 'school'>('section');

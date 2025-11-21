@@ -14,9 +14,9 @@ import { useNavigate } from 'react-router-dom';
 import { Form137Service } from '../../../services/formsService';
 import { getCurrentSchoolYear, getSchoolYearOptions } from '../../../services/dateHelpers';
 import { generateForm137FromSystemData } from '../../../services/form137Generator';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { getFirestoreInstance } from '../../../src/services/firestoreService';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
 import type { Student } from '../../../types';
 import {
   SectionHeader,
@@ -89,56 +89,32 @@ export const Form137Dashboard: React.FC = () => {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, status: '' });
   const [batchResults, setBatchResults] = useState<{ success: string[], failed: Array<{ student: string, error: string }>, warnings: Array<{ student: string, warning: string }> }>({ success: [], failed: [], warnings: [] });
 
+  // Use PostgreSQL hooks instead of Firestore
+  const { students: allStudentsFromDB, loading: studentsLoading } = useStudentsPostgreSQL({ 
+    schoolId,
+    gradeLevel: selectedGradeLevel === 'all' ? undefined : selectedGradeLevel,
+    includeSection: true 
+  });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+
   useEffect(() => {
     loadStudentRecords();
-    loadAllStudents();
   }, [selectedSchoolYear, selectedGradeLevel, schoolId]);
 
-  const loadAllStudents = async () => {
-    if (!schoolId) {
-      console.warn('[Form137Dashboard] No schoolId - skipping loadAllStudents');
-      return;
-    }
-    
-    try {
-      const db = getFirestoreInstance();
-      
-      // Load sections first to get grade levels
-      const sectionsQuery = query(
-        collection(db, 'sections'),
-        where('schoolId', '==', schoolId)
-      );
-      const sectionsSnapshot = await getDocs(sectionsQuery);
-      const sectionsMap = new Map(
-        sectionsSnapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() } as any])
-      );
-      
-      // Load students
-      const studentsQuery = query(
-        collection(db, 'students'),
-        where('schoolId', '==', schoolId)
-      );
-      const snapshot = await getDocs(studentsQuery);
-      const studentsList = snapshot.docs.map(doc => {
-        const studentData = { id: doc.id, ...doc.data() } as Student;
-        const section = studentData.sectionId ? sectionsMap.get(studentData.sectionId) : null;
+  // Update allStudents when PostgreSQL data changes
+  useEffect(() => {
+    if (!studentsLoading && allStudentsFromDB.length > 0) {
+      // Add computed grade level for compatibility
+      const studentsWithGradeLevel = allStudentsFromDB.map(student => {
+        const section = sections.find(s => s.id === student.sectionId);
         return {
-          ...studentData,
-          _gradeLevel: section?.gradeLevel as number | undefined // Add computed grade level for filtering
+          ...student,
+          _gradeLevel: section?.gradeLevel as number | undefined
         };
       });
-      
-      // Filter by grade level if selected
-      let filtered = studentsList;
-      if (selectedGradeLevel !== 'all') {
-        filtered = studentsList.filter(s => s._gradeLevel === selectedGradeLevel);
-      }
-      
-      setAllStudents(filtered);
-    } catch (error) {
-      console.error('Error loading students:', error);
+      setAllStudents(studentsWithGradeLevel);
     }
-  };
+  }, [allStudentsFromDB, studentsLoading, sections]);
 
   const loadStudentRecords = async () => {
     try {
@@ -194,11 +170,11 @@ export const Form137Dashboard: React.FC = () => {
   };
 
   const handleViewRecord = (studentId: string) => {
-    navigate(`/forms/137/${studentId}`);
+    navigate(`/reports/form137/${studentId}`);
   };
 
   const handleCreateRecord = () => {
-    navigate('/forms/137/new');
+    navigate('/reports/form137/new');
   };
 
   const handleAutoGenerate = () => {
@@ -289,9 +265,9 @@ export const Form137Dashboard: React.FC = () => {
       setPreviewWarnings([]);
       
       // Give Firestore a moment to propagate, then navigate
-      console.log(`Navigating to /forms/137/${studentId}...`);
+      console.log(`Navigating to /reports/form137/${studentId}...`);
       setTimeout(() => {
-        navigate(`/forms/137/${studentId}`);
+        navigate(`/reports/form137/${studentId}`);
       }, 500); // Increased to 500ms
     } catch (error: any) {
       console.error('❌ Error saving Form 137:', error);

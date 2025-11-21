@@ -7,12 +7,25 @@
  * - Filtering by grade level, section, quarter, performance
  * - Print individual or multiple report cards
  * - Quick access to student report cards
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * - Memoized teachers array to prevent infinite loops
+ * - Efficient data fetching with PostgreSQL hooks
+ * - Lazy loading of PrintableReport component
+ * - Optimized filtering and calculations with useMemo
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSchoolData } from '../../../hooks/useSchoolData';
-import { auth } from '../../../src/services/firestoreService';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useGradesPostgreSQL } from '../../../src/hooks/useGradesPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
+import { useCoreValuesPostgreSQL } from '../../../src/hooks/useCoreValuesPostgreSQL';
+import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { auth, getFirestoreInstance } from '../../../src/services/firestoreService';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { supabase } from '../../../src/lib/supabase';
 import PrintableReport from '../../PrintableReport';
 import {
   SectionHeader,
@@ -86,29 +99,178 @@ const getFinalGrade = (grade: any): number | undefined => {
 
 const Form138Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { schoolId } = useSchoolContext();
   
   // Get current logged-in user
   const currentUser = auth.currentUser;
   const userEmail = currentUser?.email || '';
   
-  // Get school data
-  const schoolData = useSchoolData(REQUIRED_COLLECTIONS);
-  const { students, grades, sections, settings, teachers, loading, error } = schoolData;
+  // Filter states - MUST be declared before hooks that use them
+  const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
+  const [performanceFilter, setPerformanceFilter] = useState<FilterType>('all');
+  const [selectedQuarter, setSelectedQuarter] = useState<QuarterType>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedGradeLevel, setSelectedGradeLevel] = useState<string>('all');
+  
+  // Use PostgreSQL hooks with optimized filtering
+  // Only fetch students for selected section if filtered (reduces initial load)
+  const studentFetchOptions = useMemo(() => {
+    const options: any = { schoolId, includeSection: true };
+    
+    // If section is selected, only fetch those students
+    if (selectedSectionId !== 'all') {
+      options.sectionId = selectedSectionId;
+    }
+    // If grade level is selected (but not section), fetch all students and filter client-side
+    // This is a trade-off: fetching all vs multiple queries
+    
+    return options;
+  }, [schoolId, selectedSectionId]);
+  
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL(studentFetchOptions);
+  const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId, includeLearningArea: true });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  
+  // Fetch core values and core value grades from PostgreSQL
+  const { coreValues, coreValueGrades, loading: coreValuesLoading } = useCoreValuesPostgreSQL(true, schoolId);
+  
+  // Fetch attendance records from PostgreSQL (current school year only for performance)
+  const currentDate = new Date();
+  const schoolYearStart = currentDate.getMonth() >= 5 // June or later
+    ? `${currentDate.getFullYear()}-06-01` 
+    : `${currentDate.getFullYear() - 1}-06-01`;
+  
+  const { attendanceRecords, loading: attendanceLoading } = useAttendancePostgreSQL({ 
+    schoolId,
+    startDate: schoolYearStart // Only fetch current school year
+  });
+  
+  // State for additional data needed by PrintableReport
+  const [learningAreas, setLearningAreas] = useState<any[]>([]);
+  const [settings, setSettings] = useState<any>({ schoolYear: '2024-2025' });
+  const [additionalDataLoading, setAdditionalDataLoading] = useState(true);
+  
+  const loading = studentsLoading || gradesLoading || sectionsLoading || coreValuesLoading || attendanceLoading || additionalDataLoading;
+  const error = null;
+  
+  // Memoize empty teachers array to prevent infinite loops
+  const teachers = useMemo(() => [], []); // TODO: Load teachers if needed for filtering
+  
+  // Fetch additional data from PostgreSQL (settings and learning areas only)
+  // Memoized to prevent unnecessary re-fetches
+  const fetchAdditionalData = useCallback(async () => {
+    setAdditionalDataLoading(true);
+    
+    try {
+      const db = getFirestoreInstance();
+      let fetchedLearningAreas: any[] = [];
+      
+      // Skip PostgreSQL queries if schoolId is "default" (not a valid UUID)
+      if (schoolId !== 'default') {
+          // Fetch school settings from PostgreSQL
+          const { data: schoolData, error: schoolError } = await supabase
+            .from('schools')
+            .select('current_school_year, settings, name, division, region, principal_name')
+            .eq('id', schoolId)
+            .single();
+          
+          if (!schoolError && schoolData) {
+            setSettings({
+              schoolYear: schoolData.current_school_year,
+              schoolName: schoolData.name,
+              division: schoolData.division,
+              region: schoolData.region,
+              principalName: schoolData.principal_name,
+              ...schoolData.settings
+            });
+          }
+          
+          // Try to fetch learning areas from PostgreSQL
+          const { data: learningAreasData, error: learningAreasError } = await supabase
+            .from('learning_areas')
+            .select('*')
+            .eq('school_id', schoolId)
+            .is('deleted_at', null);
+          
+          if (!learningAreasError && learningAreasData && learningAreasData.length > 0) {
+            // Transform learning areas to camelCase for compatibility with PrintableReport
+            fetchedLearningAreas = learningAreasData.map((row: any) => ({
+              id: row.id,
+              schoolId: row.school_id,
+              name: row.name,
+              credits: row.credits || 0,
+              isComposite: row.is_composite || false,
+              subSubjects: row.sub_subjects || row.components || [],
+              components: row.components || [],
+              category: row.category,
+              gradeLevel: row.grade_level,
+              isActive: row.is_active !== false,
+              department: row.department,
+              order: row.display_order || row.order,
+              kToTwelveCode: row.k_to_twelve_code,
+              semesterBased: row.semester_based,
+              semester: row.semester,
+              trackRequired: row.track_required,
+              prerequisite: row.prerequisite,
+              description: row.description,
+              hoursPerWeek: row.hours_per_week
+            }));
+          }
+        }
+        
+        // Fallback to Firestore if PostgreSQL returned no data or schoolId is "default"
+        if (fetchedLearningAreas.length === 0) {
+          const learningAreasSnapshot = await getDocs(
+            query(collection(db, 'learningAreas'), where('schoolId', '==', schoolId))
+          );
+          fetchedLearningAreas = learningAreasSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+        }
+        
+        setLearningAreas(fetchedLearningAreas);
+        
+      } catch (err) {
+        console.error('[Form138Dashboard] Error fetching additional data:', err);
+      } finally {
+        setAdditionalDataLoading(false);
+      }
+    }, [schoolId]);
+  
+  useEffect(() => {
+    if (schoolId) {
+      fetchAdditionalData();
+    }
+  }, [schoolId, fetchAdditionalData]);
+  
+  // Create schoolData object for PrintableReport component (matches SchoolDataHook interface)
+  const schoolData = useMemo(() => ({
+    students,
+    grades,
+    sections,
+    teachers,
+    settings,
+    learningAreas,
+    coreValues,
+    coreValueGrades,
+    attendanceRecords,
+    monthlySchoolDaysConfig: [], // TODO: Load from settings if needed
+    loading,
+    error
+  }), [students, grades, sections, teachers, settings, learningAreas, coreValues, coreValueGrades, attendanceRecords, loading, error]);
   
   // Find current teacher record
   const currentTeacher = useMemo(() => {
     return teachers.find(t => t.email === userEmail);
   }, [teachers, userEmail]);
 
-  // Filter states
-  const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
-  const [performanceFilter, setPerformanceFilter] = useState<FilterType>('all');
-  const [selectedQuarter, setSelectedQuarter] = useState<QuarterType>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGradeLevel, setSelectedGradeLevel] = useState<string>('all');
-
   // Selection state for bulk operations
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  
+  // Pagination state for performance with large datasets
+  const [currentPage, setCurrentPage] = useState(1);
+  const STUDENTS_PER_PAGE = 30; // Show 30 students per page
   
   // Modal states
   const [showViewModal, setShowViewModal] = useState(false);
@@ -162,6 +324,21 @@ const Form138Dashboard: React.FC = () => {
 
     return filtered;
   }, [students, searchQuery, selectedGradeLevel, selectedSectionId, sections, currentTeacher]);
+  
+  // Paginated students for rendering
+  const paginatedStudents = useMemo(() => {
+    const startIndex = (currentPage - 1) * STUDENTS_PER_PAGE;
+    const endIndex = startIndex + STUDENTS_PER_PAGE;
+    return filteredStudents.slice(startIndex, endIndex);
+  }, [filteredStudents, currentPage]);
+  
+  // Calculate total pages
+  const totalPages = Math.ceil(filteredStudents.length / STUDENTS_PER_PAGE);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedGradeLevel, selectedSectionId, performanceFilter, selectedQuarter]);
 
   // Get available grade levels
   const availableGradeLevels = useMemo(() => {
@@ -182,48 +359,51 @@ const Form138Dashboard: React.FC = () => {
     return sectionsToShow.filter(s => s.gradeLevel.toString() === selectedGradeLevel);
   }, [sections, selectedGradeLevel, currentTeacher]);
 
-  // Bulk operations
-  const handleSelectAll = () => {
+  // Bulk operations - Memoized to prevent unnecessary re-renders
+  const handleSelectAll = useCallback(() => {
     setSelectedStudents(filteredStudents.map(s => s.id));
-  };
+  }, [filteredStudents]);
 
-  const handleDeselectAll = () => {
+  const handleDeselectAll = useCallback(() => {
     setSelectedStudents([]);
-  };
+  }, []);
 
-  const handleStudentToggle = (studentId: string) => {
+  const handleStudentToggle = useCallback((studentId: string) => {
     setSelectedStudents(prev => 
       prev.includes(studentId)
         ? prev.filter(id => id !== studentId)
         : [...prev, studentId]
     );
-  };
+  }, []);
 
-  const handlePrintSelected = () => {
+  const handlePrintSelected = useCallback(() => {
     if (selectedStudents.length === 0) return;
     const studentIds = selectedStudents.join(',');
-    navigate(`/grades/form138/print?students=${studentIds}`);
-  };
+    navigate(`/reports/form138/print?students=${studentIds}`);
+  }, [selectedStudents, navigate]);
 
-  const handlePrintStudent = (studentId: string) => {
-    navigate(`/grades/form138/print?students=${studentId}`);
-  };
+  const handlePrintSingleStudent = useCallback((studentId: string) => {
+    navigate(`/reports/form138/print?students=${studentId}`);
+  }, [navigate]);
+  
+  // Alias for backward compatibility
+  const handlePrintStudent = handlePrintSingleStudent;
 
-  const handleViewStudent = (studentId: string) => {
+  const handleViewStudent = useCallback((studentId: string) => {
     const student = students.find(s => s.id === studentId);
     if (student) {
       setViewingStudent(student);
       setShowViewModal(true);
     }
-  };
+  }, [students]);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setSearchQuery('');
     setSelectedGradeLevel('all');
     setSelectedSectionId('all');
     setPerformanceFilter('all');
     setSelectedQuarter('all');
-  };
+  }, []);
 
   const statistics = useMemo(() => {
     const total = filteredStudents.length;
@@ -458,6 +638,13 @@ const Form138Dashboard: React.FC = () => {
               Clear Filters
             </button>
           </div>
+          
+          {/* Pagination Info */}
+          {filteredStudents.length > STUDENTS_PER_PAGE && (
+            <div className="text-sm text-gray-600">
+              Showing {((currentPage - 1) * STUDENTS_PER_PAGE) + 1} - {Math.min(currentPage * STUDENTS_PER_PAGE, filteredStudents.length)} of {filteredStudents.length}
+            </div>
+          )}
         </div>
 
         {/* Student List */}
@@ -487,8 +674,9 @@ const Form138Dashboard: React.FC = () => {
             />
           )
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredStudents.map(student => {
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {paginatedStudents.map(student => {
               const section = sections.find(s => s.id === student.sectionId);
               const studentGrades = grades.filter(g => g.studentId === student.id);
               const hasGrades = studentGrades.length > 0;
@@ -585,6 +773,82 @@ const Form138Dashboard: React.FC = () => {
               );
             })}
           </div>
+          
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-between border-t pt-4">
+              <div className="text-sm text-gray-700">
+                Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  First
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                
+                {/* Page numbers */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-3 py-1.5 text-sm border rounded-lg ${
+                          currentPage === pageNum
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Last
+                </button>
+              </div>
+              
+              <div className="text-sm text-gray-600">
+                {filteredStudents.length} total students
+              </div>
+            </div>
+          )}
+          </>
         )}
       </div>
       

@@ -102,7 +102,6 @@ export function useSupabase<T = any>(
           table: tableName,
         },
         (payload) => {
-          console.log(`Change received in ${tableName}:`, payload);
           // Refetch data when changes occur
           fetchData();
         }
@@ -126,6 +125,8 @@ export function useSupabase<T = any>(
 /**
  * Fetch students with section and grades data
  * Example of a specialized hook
+ * 
+ * DEPRECATED: Use useStudentsPostgreSQL from './useStudentsPostgreSQL' for better type safety
  */
 export function useStudents(gradeLevel?: number) {
   return useSupabase('students', {
@@ -137,6 +138,8 @@ export function useStudents(gradeLevel?: number) {
 
 /**
  * Fetch grades with student and learning area data
+ * 
+ * DEPRECATED: Use useGradesPostgreSQL from './useGradesPostgreSQL' for better type safety
  */
 export function useGrades(studentId?: string) {
   return useSupabase('grades', {
@@ -147,6 +150,8 @@ export function useGrades(studentId?: string) {
 
 /**
  * Fetch sections with adviser and student count
+ * 
+ * DEPRECATED: Use useSectionsPostgreSQL from './useSectionsPostgreSQL' for better type safety
  */
 export function useSections() {
   return useSupabase('sections', {
@@ -154,5 +159,15 @@ export function useSections() {
     orderBy: 'grade_level',
   });
 }
+
+// Re-export specialized PostgreSQL hooks for convenience
+export { useGradesPostgreSQL } from './useGradesPostgreSQL';
+export { useStudentsPostgreSQL } from './useStudentsPostgreSQL';
+export { useSectionsPostgreSQL } from './useSectionsPostgreSQL';
+export { useCoreValuesPostgreSQL } from './useCoreValuesPostgreSQL';
+export { useAttendancePostgreSQL } from './useAttendancePostgreSQL';
+
+// Re-export supabase client
+export { supabase };
 
 export default useSupabase;

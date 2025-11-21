@@ -2035,4 +2035,4 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   );
 };
 
-export default StudentList;
+export default React.memo(StudentList);

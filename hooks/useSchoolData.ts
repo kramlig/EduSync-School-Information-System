@@ -55,8 +55,19 @@ import type {
 // Import interface from backup (will match exactly)
 import type { SchoolDataHook, SchoolDataState } from './useSchoolData.REACT_QUERY_BACKUP';
 
+// PostgreSQL hooks (located in src/hooks/)
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useTeachersPostgreSQL } from '../src/hooks/useTeachersPostgreSQL';
+import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
+import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
+import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
+
 // Re-export for external use
 export type { SchoolDataHook, SchoolDataState };
+
+// Feature flag: Use PostgreSQL instead of Firestore
+const USE_POSTGRESQL = import.meta.env.VITE_USE_POSTGRESQL === 'true';
 
 // Mock settings (same as React Query version)
 const MOCK_SETTINGS: SchoolSettings = {
@@ -92,7 +103,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     // MULTI-TENANT: Get current user's schoolId from context
     const { schoolId, loading: schoolContextLoading } = useSchoolContext();
     
-    console.log('[useSchoolData] SchoolContext state - schoolId:', schoolId, 'loading:', schoolContextLoading);
+    // SchoolContext state updated
 
     // ===== STATE MANAGEMENT =====
     // Collections state
@@ -134,6 +145,79 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         }
         return !collectionsToFetch || collectionsToFetch.includes(collectionName);
     }, [collectionsToFetch]);
+
+    // ===== POSTGRESQL INTEGRATION =====
+    // Use PostgreSQL hooks if feature flag is enabled (with proper memoization)
+    const postgresStudents = useStudentsPostgreSQL(
+        USE_POSTGRESQL && shouldFetch('students') 
+            ? { schoolId, includeSection: true, status: 'enrolled' } 
+            : {}
+    );
+    const postgresSections = useSectionsPostgreSQL(
+        USE_POSTGRESQL && shouldFetch('sections') 
+            ? { schoolId, includeAdviser: true, includeStudentCount: false } 
+            : {}
+    );
+    const postgresTeachers = useTeachersPostgreSQL(
+        USE_POSTGRESQL && shouldFetch('teachers') 
+            ? { schoolId: schoolId || undefined, enableRealtime: false } 
+            : {}
+    );
+    const postgresGrades = useGradesPostgreSQL(USE_POSTGRESQL && shouldFetch('grades'), schoolId);
+    const postgresCoreValues = useCoreValuesPostgreSQL(USE_POSTGRESQL && (shouldFetch('coreValues') || shouldFetch('coreValueGrades')), schoolId);
+    const postgresLearningAreas = useLearningAreasPostgreSQL(USE_POSTGRESQL && shouldFetch('learningAreas') ? schoolId : undefined);
+
+    // Use PostgreSQL data directly (no Firestore override needed)
+    useEffect(() => {
+        if (!USE_POSTGRESQL) return;
+        
+        console.log('[useSchoolData] 🐘 PostgreSQL mode active - using ONLY PostgreSQL data');
+        
+        // Set data directly from PostgreSQL hooks (cast to match Firestore types)
+        // Only update if not loading to avoid flickering
+        if (!postgresStudents.loading) setStudents(postgresStudents.students as any);
+        if (!postgresSections.loading) setSections(postgresSections.sections as any);
+        if (!postgresTeachers.loading) setTeachers(postgresTeachers.teachers as any);
+        if (!postgresGrades.loading) setGrades(postgresGrades.grades);
+        if (!postgresCoreValues.loading) {
+            setCoreValues(postgresCoreValues.coreValues);
+            setCoreValueGrades(postgresCoreValues.coreValueGrades as any);
+        }
+        if (!postgresLearningAreas.loading) setLearningAreas(postgresLearningAreas.learningAreas as any);
+        
+        // Calculate loading state
+        const isPostgresLoading = 
+            postgresStudents.loading ||
+            postgresSections.loading ||
+            postgresTeachers.loading ||
+            postgresGrades.loading ||
+            postgresCoreValues.loading ||
+            postgresLearningAreas.loading;
+        
+        setLoading(isPostgresLoading);
+        
+        if (!isPostgresLoading) {
+            console.log('[useSchoolData] 🐘 PostgreSQL loaded:', {
+                students: postgresStudents.students.length,
+                sections: postgresSections.sections.length,
+                teachers: postgresTeachers.teachers.length,
+                grades: postgresGrades.grades.length,
+                coreValues: postgresCoreValues.coreValues.length,
+                coreValueGrades: postgresCoreValues.coreValueGrades.length,
+                learningAreas: postgresLearningAreas.learningAreas.length
+            });
+        }
+        // CRITICAL: Only depend on loading states, NOT data arrays!
+        // Data arrays change reference every render, causing infinite loops
+    }, [
+        USE_POSTGRESQL,
+        postgresStudents.loading,
+        postgresSections.loading,
+        postgresTeachers.loading,
+        postgresGrades.loading,
+        postgresCoreValues.loading,
+        postgresLearningAreas.loading
+    ]);
 
     // ===== FIRESTORE SUBSCRIPTIONS =====
     useEffect(() => {
@@ -198,7 +282,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         const db = getFirestoreInstance();
 
             // ===== STUDENTS SUBSCRIPTION =====
-            if (shouldFetch('students')) {
+            if (shouldFetch('students') && !USE_POSTGRESQL) {
                 console.log('[useSchoolData] 👥 Subscribing to students with schoolId:', schoolId);
                 
                 // MULTI-TENANT: Filter by schoolId
@@ -352,7 +436,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             }
 
             // ===== SECTIONS SUBSCRIPTION =====
-            if (shouldFetch('sections')) {
+            if (shouldFetch('sections') && !USE_POSTGRESQL) {
                 if (ENABLE_SUBSCRIPTION_LOGS) {
                     console.log('[useSchoolData] 📚 Subscribing to sections...');
                 }
@@ -426,7 +510,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             }
 
             // ===== GRADES SUBSCRIPTION =====
-            if (shouldFetch('grades')) {
+            if (shouldFetch('grades') && !USE_POSTGRESQL) {
                 console.log('[useSchoolData] 📊 Subscribing to grades...');
                 console.log('[useSchoolData] 📊 SchoolId for grades query:', schoolId);
                 
@@ -466,7 +550,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             }
 
             // ===== CORE VALUES SUBSCRIPTION =====
-            if (shouldFetch('coreValues')) {
+            if (shouldFetch('coreValues') && !USE_POSTGRESQL) {
                 console.log('[useSchoolData] 💎 Subscribing to coreValues...');
                 
                 // MULTI-TENANT: Filter by schoolId
@@ -500,7 +584,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             }
 
             // ===== CORE VALUE GRADES SUBSCRIPTION =====
-            if (shouldFetch('coreValueGrades')) {
+            if (shouldFetch('coreValueGrades') && !USE_POSTGRESQL) {
                 console.log('[useSchoolData] 💯 Subscribing to coreValueGrades...');
                 
                 // MULTI-TENANT: Filter by schoolId
@@ -932,6 +1016,30 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         setIsSearching(true);
 
         try {
+            // Use PostgreSQL search if enabled
+            if (USE_POSTGRESQL) {
+                console.log('[useSchoolData] 🔍 Using PostgreSQL search for:', trimmedQuery);
+                
+                // Client-side filtering of already-loaded students
+                const results = students.filter(student => {
+                    const fullName = student.name?.toLowerCase() || '';
+                    const separateName = `${student.firstName || ''} ${student.lastName || ''}`.toLowerCase().trim();
+                    const email = student.email?.toLowerCase() || '';
+                    const lrn = student.lrn?.toLowerCase() || '';
+                    
+                    return fullName.includes(trimmedQuery) || 
+                           separateName.includes(trimmedQuery) || 
+                           email.includes(trimmedQuery) ||
+                           lrn.includes(trimmedQuery);
+                });
+                
+                // Cache results
+                setSearchCache(prev => new Map(prev).set(cacheKey, results));
+                console.log(`[useSchoolData] ✅ PostgreSQL search found ${results.length} students`);
+                return results;
+            }
+
+            // Fallback to Firestore search
             await waitForAuthReady();
             const db = getFirestoreInstance();
 
@@ -987,6 +1095,16 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         console.log('[useSchoolData] 🔍 Searching teachers for:', trimmedQuery);
 
         try {
+            if (USE_POSTGRESQL) {
+                console.log('[useSchoolData] 🐘 PostgreSQL: Searching teachers');
+                const results = await postgresTeachers.searchTeachers(searchQuery);
+                setSearchCache(prev => new Map(prev).set(`teachers:${trimmedQuery}`, results));
+                if (ENABLE_SUCCESS_LOGS) {
+                    console.log(`[useSchoolData] ✅ Found ${results.length} matching teachers via PostgreSQL`);
+                }
+                return results;
+            }
+            
             await waitForAuthReady();
             const db = getFirestoreInstance();
 
@@ -1018,7 +1136,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         } finally {
             setIsSearching(false);
         }
-    }, [teachers, searchCache, schoolId]); // Added schoolId dependency
+    }, [USE_POSTGRESQL, postgresTeachers, teachers, searchCache, schoolId]); // Added PostgreSQL dependencies
 
     // ===== SEARCH: Parents =====
     const searchParents = useCallback(async (searchQuery: string): Promise<Parent[]> => {
@@ -1082,6 +1200,16 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     // ===== STUDENT CRUD =====
     const addStudent = useCallback(async (student: Omit<Student, 'id' | 'enrollmentDate'>): Promise<{ success: boolean; message?: string }> => {
         try {
+            // Use PostgreSQL if enabled
+            if (USE_POSTGRESQL) {
+                console.log('[useSchoolData] 🐘 Adding student via PostgreSQL');
+                const newStudent = await postgresStudents.createStudent(student, sections);
+                console.log('[useSchoolData] ✅ Student added via PostgreSQL:', newStudent.id);
+                await postgresStudents.refetch(); // Refresh list
+                return { success: true };
+            }
+
+            // Fallback to Firestore
             await waitForAuthReady();
             const db = getFirestoreInstance();
 
@@ -1109,10 +1237,20 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error adding student:', err);
             return { success: false, message: err.message };
         }
-    }, [students, schoolId]);
+    }, [students, schoolId, USE_POSTGRESQL, postgresStudents]);
 
     const updateStudent = useCallback(async (student: Student): Promise<void> => {
         try {
+            // Use PostgreSQL if enabled
+            if (USE_POSTGRESQL) {
+                console.log('[useSchoolData] 🐘 Updating student via PostgreSQL:', student.id);
+                await postgresStudents.updateStudent(student.id, student);
+                console.log('[useSchoolData] ✅ Student updated via PostgreSQL');
+                await postgresStudents.refetch(); // Refresh list
+                return;
+            }
+
+            // Fallback to Firestore
             await waitForAuthReady();
             const db = getFirestoreInstance();
             
@@ -1137,10 +1275,20 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error updating student:', err);
             throw err;
         }
-    }, [schoolId]);
+    }, [schoolId, USE_POSTGRESQL, postgresStudents]);
 
     const deleteStudent = useCallback(async (studentId: string): Promise<void> => {
         try {
+            // Use PostgreSQL if enabled
+            if (USE_POSTGRESQL) {
+                console.log('[useSchoolData] 🐘 Deleting student via PostgreSQL:', studentId);
+                await postgresStudents.deleteStudent(studentId);
+                console.log('[useSchoolData] ✅ Student deleted via PostgreSQL');
+                await postgresStudents.refetch(); // Refresh list
+                return;
+            }
+
+            // Fallback to Firestore
             await waitForAuthReady();
             const db = getFirestoreInstance();
             
@@ -1182,11 +1330,18 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error deleting student:', err);
             throw err;
         }
-    }, [schoolId]);
+    }, [schoolId, USE_POSTGRESQL, postgresStudents]);
 
     // ===== TEACHER CRUD =====
     const addTeacher = useCallback(async (teacher: Omit<Teacher, 'id'>): Promise<void> => {
         try {
+            if (USE_POSTGRESQL) {
+                console.log('[useSchoolData] 🐘 PostgreSQL: Creating teacher');
+                await postgresTeachers.createTeacher(teacher);
+                console.log('[useSchoolData] ✅ Teacher created via PostgreSQL');
+                return;
+            }
+            
             await waitForAuthReady();
             const db = getFirestoreInstance();
             
@@ -1203,10 +1358,18 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error adding teacher:', err);
             throw err;
         }
-    }, [schoolId]);
+    }, [USE_POSTGRESQL, postgresTeachers, schoolId]);
 
     const updateTeacher = useCallback(async (teacher: Teacher): Promise<void> => {
         try {
+            if (USE_POSTGRESQL) {
+                console.log('[useSchoolData] 🐘 PostgreSQL: Updating teacher', teacher.id);
+                const { id, ...updates } = teacher;
+                await postgresTeachers.updateTeacher(id, updates);
+                console.log('[useSchoolData] ✅ Teacher updated via PostgreSQL');
+                return;
+            }
+            
             await waitForAuthReady();
             const db = getFirestoreInstance();
             
@@ -1223,10 +1386,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error updating teacher:', err);
             throw err;
         }
-    }, [schoolId]);
+    }, [USE_POSTGRESQL, postgresTeachers, schoolId]);
 
     const deleteTeacher = useCallback(async (teacherId: string): Promise<void> => {
         try {
+            if (USE_POSTGRESQL) {
+                console.log('[useSchoolData] 🐘 PostgreSQL: Deleting teacher', teacherId);
+                await postgresTeachers.deleteTeacher(teacherId);
+                console.log('[useSchoolData] ✅ Teacher deleted via PostgreSQL');
+                return;
+            }
+            
             await waitForAuthReady();
             const db = getFirestoreInstance();
             
@@ -1250,7 +1420,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error deleting teacher:', err);
             throw err;
         }
-    }, [schoolId]);
+    }, [USE_POSTGRESQL, postgresTeachers, schoolId]);
 
     // ===== PARENT CRUD =====
     const addParent = useCallback(async (parent: Omit<Parent, 'id'>): Promise<void> => {
@@ -1613,6 +1783,96 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         value: CoreValueMarking | ''
     ): Promise<void> => {
         try {
+            // POSTGRESQL: Use PostgreSQL for updates
+            if (USE_POSTGRESQL) {
+                const { supabase } = await import('../src/hooks/useSupabase');
+                
+                // Find existing core value grade
+                const { data: existingGrades, error: fetchError } = await supabase
+                    .from('core_value_grades')
+                    .select('*')
+                    .eq('student_id', studentId)
+                    .eq('core_value_id', coreValueId)
+                    .limit(1);
+                
+                if (fetchError) throw fetchError;
+                
+                if (!existingGrades || existingGrades.length === 0) {
+                    // Create new record
+                    const newIndicatorRatings = {
+                        [quarter]: { [behavior]: value }
+                    };
+                    
+                    const { error: insertError } = await supabase
+                        .from('core_value_grades')
+                        .insert({
+                            school_id: schoolId || 'default',
+                            student_id: studentId,
+                            core_value_id: coreValueId,
+                            school_year: '2024-2025',
+                            indicator_ratings: newIndicatorRatings
+                        });
+                    
+                    if (insertError) throw insertError;
+                } else {
+                    // Update existing record
+                    const existing = existingGrades[0];
+                    const currentRatings = existing.indicator_ratings || {};
+                    const currentQuarter = currentRatings[quarter] || {};
+                    
+                    const updatedRatings = {
+                        ...currentRatings,
+                        [quarter]: { ...currentQuarter, [behavior]: value }
+                    };
+                    
+                    const { error: updateError } = await supabase
+                        .from('core_value_grades')
+                        .update({ indicator_ratings: updatedRatings })
+                        .eq('id', existing.id);
+                    
+                    if (updateError) throw updateError;
+                }
+                
+                console.log('[useSchoolData] 🐘 PostgreSQL core value grade updated:', { studentId, coreValueId, quarter, behavior });
+                
+                // Trigger refetch by updating state directly
+                // Since we don't have a direct refetch mechanism, we'll refetch manually
+                const { supabase: supabaseRefetch } = await import('../src/hooks/useSupabase');
+                const { data: updatedGrades } = await supabaseRefetch
+                    .from('core_value_grades')
+                    .select('*')
+                    .eq('student_id', studentId);
+                
+                if (updatedGrades && updatedGrades.length > 0) {
+                    // Update the specific grade in state
+                    setCoreValueGrades(prev => {
+                        const updated = prev.filter(g => g.studentId !== studentId || g.coreValueId !== coreValueId);
+                        const newGrade = updatedGrades.find((g: any) => g.core_value_id === coreValueId);
+                        if (newGrade) {
+                            const indicatorRatings = newGrade.indicator_ratings || {};
+                            updated.push({
+                                id: newGrade.id,
+                                schoolId: newGrade.school_id,
+                                studentId: newGrade.student_id,
+                                coreValueId: newGrade.core_value_id,
+                                schoolYear: newGrade.school_year,
+                                q1: indicatorRatings.q1 || {},
+                                q2: indicatorRatings.q2 || {},
+                                q3: indicatorRatings.q3 || {},
+                                q4: indicatorRatings.q4 || {},
+                                gradedBy: newGrade.graded_by,
+                                createdAt: newGrade.created_at,
+                                updatedAt: newGrade.updated_at
+                            });
+                        }
+                        return updated;
+                    });
+                }
+                
+                return;
+            }
+            
+            // FIRESTORE: Original Firestore logic
             await waitForAuthReady();
             const db = getFirestoreInstance();
             
