@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
-import { useSchoolContext } from '../../../contexts/SchoolContext';
-import { useStudentsPostgreSQL } from '../../../hooks/useStudentsPostgreSQL';
-import { useSectionsPostgreSQL } from '../../../hooks/useSectionsPostgreSQL';
+import { useState, useMemo, useEffect } from 'react';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
 import type { AuthUser, StudentUser, ParentUser, Student, Section } from '../../../types';
 import BackButton from '../../BackButton';
 import { 
@@ -60,12 +60,36 @@ const exportToCSV = (data: any[], filename: string) => {
 
 const SF1Dashboard: React.FC<SF1DashboardProps> = ({ session: _session, onBack: _onBack }) => {
   const { schoolId } = useSchoolContext();
-  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
-  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  
+  // Pagination state (moved before hook to use in useStudentsPostgreSQL)
+  const [currentPage, setCurrentPage] = useState(1);
+  const studentsPerPage = 30;
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGradeLevel, setSelectedGradeLevel] = useState<number | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
+
+  // Calculate offset for database pagination
+  const offset = (currentPage - 1) * studentsPerPage;
+
+  // Fetch paginated students from database
+  const { 
+    students, 
+    loading: studentsLoading, 
+    updateStudent, 
+    refetch,
+    totalCount 
+  } = useStudentsPostgreSQL({ 
+    schoolId,
+    limit: studentsPerPage,
+    offset: offset,
+    searchQuery: searchQuery || undefined,
+    gradeLevel: selectedGradeLevel || undefined,
+    // Note: section filter will be applied client-side for now
+  });
+  
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -136,38 +160,29 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ session: _session, onBack: 
     return stats;
   }, [students, sections]);
 
-  // Filter students based on search and filters
+  // Filter students based on section filter (search and gradeLevel already handled by database)
   const filteredStudents = useMemo(() => {
+    if (!selectedSection) {
+      return students;
+    }
+    
     return students.filter((student: Student) => {
-      // Filter by active status
-      if (student.status === 'transferred' || student.status === 'dropped' || student.status === 'graduated') {
-        return false;
-      }
-
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesSearch = 
-          student.name.toLowerCase().includes(query) ||
-          student.lrn?.toLowerCase().includes(query) ||
-          student.email.toLowerCase().includes(query);
-        if (!matchesSearch) return false;
-      }
-
-      // Grade level filter
-      if (selectedGradeLevel !== null) {
-        const section = sections.find((s: Section) => s.id === student.sectionId);
-        if (!section || section.gradeLevel !== selectedGradeLevel) return false;
-      }
-
-      // Section filter
+      // Section filter (client-side since database query doesn't support it yet)
       if (selectedSection && student.sectionId !== selectedSection) return false;
-
       return true;
     });
-  }, [students, sections, searchQuery, selectedGradeLevel, selectedSection]);
+  }, [students, selectedSection]);
 
   const gradeLevels = [...new Set(sections.map((s: Section) => s.gradeLevel))].sort() as number[];
+
+  // Pagination calculations (using totalCount from database)
+  const totalPages = Math.ceil(totalCount / studentsPerPage);
+  const paginatedStudents = filteredStudents; // Already paginated by database
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedGradeLevel, selectedSection]);
 
   // Export SF1 data function
   const exportSF1Data = () => {
@@ -211,28 +226,40 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ session: _session, onBack: 
   };
 
   // Handle save student changes
-  const handleSaveStudent = () => {
+  const handleSaveStudent = async () => {
     if (!selectedStudent || !editForm) return;
     
-    // Store the saved student data for success modal
-    const updatedStudent = { ...selectedStudent, ...editForm };
-    setSavedStudentData(updatedStudent);
-    setSuccessMessage(`Student "${editForm.name || selectedStudent.name}" updated successfully!`);
-    
-    // In a real application, you would make an API call to update the student
-    // For now, we'll show a premium success modal
-    
-    // Reset edit mode and close edit modal
-    setIsEditMode(false);
-    setIsModalOpen(false);
-    
-    // Show success modal
-    setShowSuccessModal(true);
-    
-    // Auto-close success modal after 4 seconds
-    setTimeout(() => {
-      setShowSuccessModal(false);
-    }, 4000);
+    try {
+      // Update student in PostgreSQL
+      await updateStudent(selectedStudent.id, editForm);
+      
+      // Refetch students to update the list immediately
+      await refetch();
+      
+      // Store the saved student data for success modal
+      const updatedStudent = { ...selectedStudent, ...editForm };
+      setSavedStudentData(updatedStudent);
+      setSuccessMessage(`Student "${editForm.name || selectedStudent.name}" updated successfully!`);
+      
+      // Reset edit mode and close edit modal
+      setIsEditMode(false);
+      setIsModalOpen(false);
+      
+      // Show success modal
+      setShowSuccessModal(true);
+      
+      // Auto-close success modal after 4 seconds
+      setTimeout(() => {
+        setShowSuccessModal(false);
+      }, 4000);
+    } catch (error) {
+      console.error('Error updating student:', error);
+      setSuccessMessage(`Failed to update student. Please try again.`);
+      setShowSuccessModal(true);
+      setTimeout(() => {
+        setShowSuccessModal(false);
+      }, 4000);
+    }
   };
 
   // Handle cancel edit
@@ -455,7 +482,7 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ session: _session, onBack: 
           </div>
 
           <div className="mt-4 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
-            <span>Showing {filteredStudents.length} of {enrollmentStats.totalEnrolled} enrolled students</span>
+            <span>Showing {totalCount} enrolled students</span>
             {(searchQuery || selectedGradeLevel || selectedSection) && (
               <button
                 onClick={() => {
@@ -474,7 +501,7 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ session: _session, onBack: 
         {/* Student List */}
         {viewMode === 'cards' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredStudents.map(student => {
+            {paginatedStudents.map(student => {
               const section = sections.find(s => s.id === student.sectionId);
               return (
                 <div key={student.id} className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
@@ -565,7 +592,7 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ session: _session, onBack: 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-600">
-                  {filteredStudents.map(student => {
+                  {paginatedStudents.map(student => {
                     const section = sections.find(s => s.id === student.sectionId);
                     return (
                       <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors duration-200">
@@ -611,6 +638,58 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ session: _session, onBack: 
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {totalCount > 0 && totalPages > 1 && (
+          <div className="flex items-center justify-between bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-4 border border-white/20 shadow-lg">
+            <div className="text-sm text-slate-600 dark:text-slate-300">
+              Showing {offset + 1}-{Math.min(offset + studentsPerPage, totalCount)} of {totalCount} students
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Previous
+              </button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 py-1 rounded ${
+                        currentPage === pageNum
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                      } transition-colors`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
             </div>
           </div>
         )}

@@ -9,9 +9,9 @@
 
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSchoolContext } from '../../../contexts/SchoolContext';
-import { useStudentsPostgreSQL } from '../../../hooks/useStudentsPostgreSQL';
-import { useAttendancePostgreSQL } from '../../../hooks/useAttendancePostgreSQL';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
 import { 
   UsersIcon,
   CalendarDaysIcon,
