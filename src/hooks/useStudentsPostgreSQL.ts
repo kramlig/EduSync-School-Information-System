@@ -111,12 +111,12 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
         }
       }
 
-      // Fetching students
+      // Fetching students with optimized single query
 
       let query = supabase.from('students').select(
-        includeSection 
-          ? 'id, school_id, lrn, name, first_name, middle_name, last_name, suffix, gender, date_of_birth, grade_level, section_id, enrollment_status, address, contact_number, email, religion, indigenous_people, created_at, updated_at, sections(name)'
-          : '*'
+        // Only select essential columns for better performance
+        'id, school_id, lrn, name, first_name, middle_name, last_name, suffix, gender, date_of_birth, grade_level, section_id, enrollment_status, contact_number, email',
+        { count: 'exact' } // Get count in same query
       );
 
       // Apply filters
@@ -148,29 +148,14 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
         query = query.range(offset, offset + (limit || 1000) - 1);
       }
 
-      const { data, error: fetchError } = await query;
+      const { data, error: fetchError, count } = await query;
 
       if (fetchError) {
         throw fetchError;
       }
 
-      // Get total count (without limit/offset for accurate pagination)
-      if (limit !== undefined || offset !== undefined) {
-        let countQuery = supabase.from('students').select('*', { count: 'exact', head: true });
-        
-        // Apply same filters as main query
-        if (sectionId) countQuery = countQuery.eq('section_id', sectionId);
-        if (gradeLevel !== undefined) countQuery = countQuery.eq('grade_level', gradeLevel);
-        if (schoolId) countQuery = countQuery.eq('school_id', schoolId);
-        if (status) countQuery = countQuery.eq('enrollment_status', status);
-        if (searchQuery) countQuery = countQuery.or(`name.ilike.%${searchQuery}%,lrn.ilike.%${searchQuery}%`);
-        
-        const { count } = await countQuery;
-        setTotalCount(count || 0);
-      } else {
-        // If no pagination, count is just the data length
-        setTotalCount((data || []).length);
-      }
+      // Set total count from single query
+      setTotalCount(count || 0);
 
       // Transform PostgreSQL data to match Firestore Student interface
       const transformedStudents: Student[] = (data || []).map((row: any) => ({
@@ -225,7 +210,9 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
     fetchStudents();
   }, [fetchStudents]);
 
-  // Real-time subscriptions
+  // Real-time subscriptions DISABLED for performance
+  // Re-enable if you need live updates
+  /*
   useEffect(() => {
     let channel: RealtimeChannel | null = null;
 
@@ -265,6 +252,7 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
       }
     };
   }, [sectionId, gradeLevel, schoolId, status, fetchStudents]);
+  */
 
   // Create student
   const createStudent = useCallback(async (studentData: Partial<Student>, sections?: any[]): Promise<Student> => {

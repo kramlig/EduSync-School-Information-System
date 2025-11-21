@@ -99,16 +99,13 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ session: _session, onBack: 
   const [successMessage, setSuccessMessage] = useState('');
   const [savedStudentData, setSavedStudentData] = useState<Partial<Student> | null>(null);
 
-  const loading = studentsLoading || sectionsLoading;
+  // Only show loading for students, not sections (non-blocking)
+  const loading = studentsLoading;
 
-  // Calculate enrollment statistics
+  // Simplified stats - only calculate from current page data for performance
   const enrollmentStats = useMemo((): EnrollmentStats => {
-    const activeStudents = students.filter((student: Student) => 
-      student.status !== 'transferred' && student.status !== 'dropped' && student.status !== 'graduated'
-    );
-
     const stats: EnrollmentStats = {
-      totalEnrolled: activeStudents.length,
+      totalEnrolled: totalCount, // Use database total count instead of filtering
       byGradeLevel: {},
       bySection: {},
       byGender: { male: 0, female: 0, unspecified: 0 },
@@ -116,28 +113,8 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ session: _session, onBack: 
       transferees: 0
     };
 
-    // Calculate current school year for new enrollees
-    const currentYear = new Date().getFullYear();
-    const currentSchoolYear = new Date().getMonth() >= 6 ? currentYear : currentYear - 1;
-
-    activeStudents.forEach((student: Student) => {
-      // Count by section and derive grade level
-      const section = sections.find((s: Section) => s.id === student.sectionId);
-      if (section) {
-        const gradeLevel = section.gradeLevel;
-        
-        // By grade level
-        stats.byGradeLevel[gradeLevel] = (stats.byGradeLevel[gradeLevel] || 0) + 1;
-        
-        // By section
-        const sectionKey = `${gradeLevel}-${section.name}`;
-        if (!stats.bySection[sectionKey]) {
-          stats.bySection[sectionKey] = { name: `Grade ${gradeLevel} - ${section.name}`, count: 0 };
-        }
-        stats.bySection[sectionKey].count++;
-      }
-
-      // By gender
+    // Only calculate gender stats from current page (fast)
+    students.forEach((student: Student) => {
       if (student.sex === 'Male') {
         stats.byGender.male++;
       } else if (student.sex === 'Female') {
@@ -145,32 +122,15 @@ const SF1Dashboard: React.FC<SF1DashboardProps> = ({ session: _session, onBack: 
       } else {
         stats.byGender.unspecified++;
       }
-
-      // New enrollees vs transferees
-      const enrollmentYear = new Date(student.enrollmentDate).getFullYear();
-      if (enrollmentYear === currentSchoolYear) {
-        if (student.previousSchool) {
-          stats.transferees++;
-        } else {
-          stats.newEnrollees++;
-        }
-      }
     });
 
     return stats;
-  }, [students, sections]);
+  }, [students, totalCount]);
 
-  // Filter students based on section filter (search and gradeLevel already handled by database)
+  // Filter by section only (search and gradeLevel already handled by database)
   const filteredStudents = useMemo(() => {
-    if (!selectedSection) {
-      return students;
-    }
-    
-    return students.filter((student: Student) => {
-      // Section filter (client-side since database query doesn't support it yet)
-      if (selectedSection && student.sectionId !== selectedSection) return false;
-      return true;
-    });
+    if (!selectedSection) return students;
+    return students.filter(s => s.sectionId === selectedSection);
   }, [students, selectedSection]);
 
   const gradeLevels = [...new Set(sections.map((s: Section) => s.gradeLevel))].sort() as number[];
