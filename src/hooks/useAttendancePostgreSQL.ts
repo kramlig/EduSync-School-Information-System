@@ -93,9 +93,19 @@ export function useAttendancePostgreSQL(options: UseAttendanceOptions) {
         // Group by studentId and build dailyStatus object
         const studentAttendanceMap = new Map<string, AttendanceRecord>();
         
+        console.log('[useAttendancePostgreSQL] Transforming data:', {
+          rowCount: (data || []).length,
+          sampleRow: data?.[0]
+        });
+        
         (data || []).forEach((row: any) => {
           const studentId = row.student_id;
-          const date = row.date;
+          // Normalize date to YYYY-MM-DD format (PostgreSQL may return ISO string)
+          const rawDate = row.date;
+          const date = typeof rawDate === 'string' && rawDate.includes('T') 
+            ? rawDate.split('T')[0]  // Extract YYYY-MM-DD from ISO timestamp
+            : rawDate;
+          
           const statusMap: Record<string, 'P' | 'A' | 'L' | 'E'> = {
             'Present': 'P',
             'Absent': 'A',
@@ -117,6 +127,13 @@ export function useAttendancePostgreSQL(options: UseAttendanceOptions) {
         });
 
         const transformedRecords = Array.from(studentAttendanceMap.values());
+        
+        console.log('[useAttendancePostgreSQL] Transformation complete:', {
+          recordCount: transformedRecords.length,
+          sampleRecord: transformedRecords[0],
+          sampleDailyStatusKeys: transformedRecords[0] ? Object.keys(transformedRecords[0].dailyStatus).slice(0, 5) : []
+        });
+        
         setAttendanceRecords(transformedRecords);
         
       } catch (err) {

@@ -242,7 +242,10 @@ export const calculateDataCompleteness = (
     studentsCount: students.length,
     attendanceRecordsCount: attendanceRecords.length,
     daysInMonth,
-    sampleRecord: attendanceRecords[0]
+    sampleRecord: attendanceRecords[0],
+    sampleRecordDailyStatus: attendanceRecords[0]?.dailyStatus,
+    dailyStatusKeys: attendanceRecords[0] ? Object.keys(attendanceRecords[0].dailyStatus) : [],
+    firstFewDates: attendanceRecords[0] ? Object.keys(attendanceRecords[0].dailyStatus).slice(0, 5) : []
   });
 
   for (let day = 1; day <= daysInMonth; day++) {
