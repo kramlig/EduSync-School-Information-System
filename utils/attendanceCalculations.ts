@@ -263,6 +263,22 @@ export const calculateDataCompleteness = (
       }
     });
   }
+  
+  // Debug: Check first student's record in detail
+  if (students.length > 0 && attendanceRecords.length > 0) {
+    const firstStudent = students[0];
+    const firstStudentRecord = attendanceRecords.find(r => r.studentId === firstStudent.id);
+    const testDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+    
+    console.log('[calculateDataCompleteness] Detailed check:', {
+      firstStudentId: firstStudent.id,
+      hasRecord: !!firstStudentRecord,
+      dailyStatusKeys: firstStudentRecord ? Object.keys(firstStudentRecord.dailyStatus) : [],
+      lookingForDate: testDate,
+      foundInDailyStatus: firstStudentRecord?.dailyStatus[testDate],
+      entireDailyStatus: firstStudentRecord?.dailyStatus
+    });
+  }
 
   const completeness = totalExpectedEntries > 0 ? (totalMarkedEntries / totalExpectedEntries) * 100 : 0;
   

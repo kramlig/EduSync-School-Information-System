@@ -82,6 +82,12 @@ export function useAttendancePostgreSQL(options: UseAttendanceOptions) {
         
         const { data, error: fetchError } = await query;
         
+        console.log('[useAttendancePostgreSQL] RAW data from database:', {
+          rowCount: data?.length || 0,
+          firstThreeRows: data?.slice(0, 3),
+          dateFormats: data?.slice(0, 3).map(r => ({ date: r.date, type: typeof r.date }))
+        });
+        
         if (fetchError) {
           console.error('[useAttendancePostgreSQL] Error fetching attendance:', fetchError);
           throw fetchError;
