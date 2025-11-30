@@ -3,16 +3,15 @@ import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import toast, { Toaster } from 'react-hot-toast';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
-import { useSchoolData } from '../../../hooks/useSchoolData';
+import { useSchoolDataPostgreSQL } from '../../../src/hooks/useSchoolDataPostgreSQL';
 import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
 import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
 import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
 import type { AuthUser, StudentUser, ParentUser, Student, Section, AttendanceRecord, AttendanceStatus } from '../../../types';
 import BackButton from '../../BackButton';
-// @ts-ignore - Vite asset import for DepEd logo and seal
-import depedLogoBase64 from '/src/assets/deped-logo.png?inline';
-// @ts-ignore - Vite asset import for DepEd seal
-import depedSealBase64 from '/src/assets/deped-seal.png?inline';
+// Import DepEd logo and seal - Vite will handle these as URLs
+import depedLogoUrl from '../../../src/assets/deped-logo.png';
+import depedSealUrl from '../../../src/assets/deped-seal.png';
 import {
   calculateStudentMonthlyTotals,
   calculateDailyAttendanceByGender,
@@ -71,25 +70,35 @@ interface MonthlyAttendanceSummary {
 
 const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
   const { schoolId } = useSchoolContext();
-  const { settings } = useSchoolData(['settings']);
+  
+  // Fetch data from PostgreSQL
+  const { settings, loading: settingsLoading } = useSchoolDataPostgreSQL({ schoolId });
   const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
   const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
   const { attendanceRecords, loading: attendanceLoading } = useAttendancePostgreSQL({ schoolId });
   
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().getFullYear() + '-' + (new Date().getMonth() + 1).toString().padStart(2, '0'));
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGradeLevel, setSelectedGradeLevel] = useState<number | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'daily' | 'monthly' | 'summary'>('daily');
   const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'present' | 'absent' | 'late' | 'excused'>('all');
   
+  // Auto-sync month filter when date changes
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+    // Extract YYYY-MM from the date and update month filter
+    const monthFromDate = newDate.slice(0, 7);
+    setSelectedMonth(monthFromDate);
+  };
+  
   // Pagination state
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
   
   // Loading state
-  const isLoading = studentsLoading || sectionsLoading || attendanceLoading;
+  const isLoading = settingsLoading || studentsLoading || sectionsLoading || attendanceLoading;
   
   // Optimistic updates state
   const [localAttendance, setLocalAttendance] = useState<Map<string, AttendanceStatus>>(new Map());
@@ -150,11 +159,19 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
     const schoolYearEnd = schoolYearStart + 1;
     
     const months = [];
-    // June to December of start year
+    
+    // Include previous school year for historical data (2023-2024)
+    for (let month = 5; month < 12; month++) {
+      months.push(`${schoolYearStart - 1}-${(month + 1).toString().padStart(2, '0')}`);
+    }
+    for (let month = 0; month < 5; month++) {
+      months.push(`${schoolYearStart}-${(month + 1).toString().padStart(2, '0')}`);
+    }
+    
+    // Current school year (2024-2025 or 2025-2026)
     for (let month = 5; month < 12; month++) {
       months.push(`${schoolYearStart}-${(month + 1).toString().padStart(2, '0')}`);
     }
-    // January to May of end year
     for (let month = 0; month < 5; month++) {
       months.push(`${schoolYearEnd}-${(month + 1).toString().padStart(2, '0')}`);
     }
@@ -627,15 +644,6 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
     // Validate data before generating report
     const yearMonth = selectedMonth; // Already in YYYY-MM format
     
-    // Debug logging
-    console.log('[SF2] Generate Monthly Report Debug:', {
-      yearMonth,
-      filteredStudentsCount: filteredStudents.length,
-      attendanceRecordsCount: attendanceRecords.length,
-      sampleAttendanceRecord: attendanceRecords[0],
-      settingsLoaded: !!settings
-    });
-    
     const validation = validateReportGeneration(
       filteredStudents,
       yearMonth,
@@ -643,7 +651,6 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
     );
 
     if (!validation.valid) {
-      console.error('[SF2] Validation failed:', validation.message);
       toast.error(
         `${validation.message}\n\nPlease mark attendance in the Daily View first, or select a different month.`,
         {
@@ -726,16 +733,18 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
         // Bottom Row of Fields
         fieldY += 12;
         doc.text('Name of School', leftMargin, fieldY);
-        doc.rect(leftMargin, fieldY + 1, 100, fieldHeight);
+        doc.rect(leftMargin, fieldY + 1, 160, fieldHeight);
+        doc.setFontSize(7); // Slightly smaller font for long school names
         doc.text(realSchoolName.toUpperCase(), leftMargin + 2, fieldY + 5);
+        doc.setFontSize(8); // Reset to normal
 
-        doc.text('Grade Level', leftMargin + 120, fieldY);
-        doc.rect(leftMargin + 120, fieldY + 1, 50, fieldHeight);
-        doc.text(realGradeLevel, leftMargin + 122, fieldY + 5);
+        doc.text('Grade Level', leftMargin + 170, fieldY);
+        doc.rect(leftMargin + 170, fieldY + 1, 45, fieldHeight);
+        doc.text(realGradeLevel, leftMargin + 172, fieldY + 5);
 
-        doc.text('Section', leftMargin + 180, fieldY);
-        doc.rect(leftMargin + 180, fieldY + 1, 40, fieldHeight);
-        doc.text(realSectionName, leftMargin + 182, fieldY + 5);
+        doc.text('Section', leftMargin + 225, fieldY);
+        doc.rect(leftMargin + 225, fieldY + 1, 42, fieldHeight);
+        doc.text(realSectionName, leftMargin + 227, fieldY + 5);
       }
       
       // Group students by gender for this chunk
@@ -1014,19 +1023,52 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
       // Add DepEd Logo and Seal using Vite inline import
       // Convert transparent PNGs to non-transparent by drawing on white canvas
       try {
-        const logoData = (typeof depedLogoBase64 === 'string' && depedLogoBase64.startsWith('data:'))
-          ? depedLogoBase64
-          : (depedLogoBase64 as any);
+        // Helper function to load image from URL and convert to base64
+        const loadImageAsBase64 = async (url: string): Promise<string> => {
+          return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            const timeout = setTimeout(() => {
+              reject(new Error('Image load timeout'));
+            }, 5000);
+            
+            img.onload = () => {
+              clearTimeout(timeout);
+              const canvas = document.createElement('canvas');
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.drawImage(img, 0, 0);
+              }
+              resolve(canvas.toDataURL('image/png'));
+            };
+            
+            img.onerror = () => {
+              clearTimeout(timeout);
+              reject(new Error('Failed to load image'));
+            };
+            
+            img.src = url;
+          });
+        };
         
-        const sealData = (typeof depedSealBase64 === 'string' && depedSealBase64.startsWith('data:'))
-          ? depedSealBase64
-          : (depedSealBase64 as any);
+        const logoData = await loadImageAsBase64(depedLogoUrl);
+        const sealData = await loadImageAsBase64(depedSealUrl);
         
         // Helper function to remove transparency from image with high quality
         const removeTransparency = async (base64Data: string): Promise<{data: string, width: number, height: number}> => {
-          return new Promise((resolve) => {
+          return new Promise((resolve, reject) => {
             const img = new Image();
+            
+            // Add timeout to prevent hanging
+            const timeout = setTimeout(() => {
+              reject(new Error('Image load timeout'));
+            }, 5000);
+            
             img.onload = () => {
+              clearTimeout(timeout);
               const canvas = document.createElement('canvas');
               // Use original size for best quality in PDF
               canvas.width = img.width;
@@ -1051,6 +1093,12 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
                 height: img.height
               });
             };
+            
+            img.onerror = (error) => {
+              clearTimeout(timeout);
+              reject(new Error('Failed to load image'));
+            };
+            
             img.src = base64Data;
           });
         };
@@ -1105,8 +1153,8 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
 
       // Get real data for header (will be passed to renderStudentPage)
       const currentSection = selectedSection ? sections.find(s => s.id === selectedSection) : null;
-      const realSchoolId = '301234567'; // TODO: Add schoolId to settings
-      const realSchoolName = settings?.schoolName || 'EDUSYNC ELEMENTARY SCHOOL';
+      const realSchoolId = settings?.schoolId || '301234567';
+      const realSchoolName = settings?.schoolName || 'School Name Not Set';
       const realGradeLevel = selectedGradeLevel ? `Grade ${selectedGradeLevel}` : 'N/A';
       const realSectionName = currentSection?.name || 'N/A';
       
@@ -1386,15 +1434,25 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
       doc.text(`School Form 2: Page ${totalPages} of ${totalPages}`, leftMargin, pageHeight - 10);
       
       // Save PDF with better download handling
-      const pdfBlob = doc.output('blob');
-      const pdfUrl = URL.createObjectURL(pdfBlob);
-      const pdfLink = document.createElement('a');
-      pdfLink.href = pdfUrl;
-      pdfLink.download = `SF2_Monthly_Report_${monthName.replace(' ', '_')}.pdf`;
-      document.body.appendChild(pdfLink);
-      pdfLink.click();
-      document.body.removeChild(pdfLink);
-      URL.revokeObjectURL(pdfUrl);
+      try {
+        const pdfBlob = doc.output('blob');
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        const pdfLink = document.createElement('a');
+        pdfLink.href = pdfUrl;
+        pdfLink.download = `SF2_Monthly_Report_${monthName.replace(' ', '_')}.pdf`;
+        pdfLink.style.display = 'none';
+        document.body.appendChild(pdfLink);
+        pdfLink.click();
+        
+        // Clean up after delay
+        setTimeout(() => {
+          document.body.removeChild(pdfLink);
+          URL.revokeObjectURL(pdfUrl);
+        }, 1000);
+      } catch (error) {
+        toast.error('Failed to download PDF report');
+        throw error;
+      }
       
       // Show success toast
       toast.success(`PDF report for ${monthName} generated successfully!`, {
@@ -1696,17 +1754,27 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
       XLSX.utils.book_append_sheet(workbook, studentDetailSheet, 'Student Details');
       
       // Save Excel with better download handling and unique timestamp
-      const timestamp = new Date().getTime();
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-      const excelBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const excelUrl = URL.createObjectURL(excelBlob);
-      const excelLink = document.createElement('a');
-      excelLink.href = excelUrl;
-      excelLink.download = `SF2_Monthly_Report_${monthName.replace(/\s+/g, '_')}_${timestamp}.xlsx`;
-      document.body.appendChild(excelLink);
-      excelLink.click();
-      document.body.removeChild(excelLink);
-      URL.revokeObjectURL(excelUrl);
+      try {
+        const timestamp = new Date().getTime();
+        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const excelBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const excelUrl = URL.createObjectURL(excelBlob);
+        const excelLink = document.createElement('a');
+        excelLink.href = excelUrl;
+        excelLink.download = `SF2_Monthly_Report_${monthName.replace(/\s+/g, '_')}_${timestamp}.xlsx`;
+        excelLink.style.display = 'none';
+        document.body.appendChild(excelLink);
+        excelLink.click();
+        
+        // Clean up after delay
+        setTimeout(() => {
+          document.body.removeChild(excelLink);
+          URL.revokeObjectURL(excelUrl);
+        }, 1000);
+      } catch (error) {
+        toast.error('Failed to download Excel report');
+        throw error;
+      }
       
       // Show success toast
       toast.success(`Excel report for ${monthName} generated successfully!`, {
@@ -1715,9 +1783,13 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
       });
     };
     
-    // Generate both files
+    // Generate both files with proper error handling
     generatePDF().then(() => {
-      setTimeout(() => generateExcel(), 500); // Slight delay to prevent browser conflicts
+      setTimeout(() => {
+        generateExcel();
+      }, 1500); // Increased delay to prevent browser conflicts
+    }).catch(error => {
+      toast.error('Failed to generate reports. Please try again.');
     });
     
     // Show success notification
@@ -1764,19 +1836,52 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
       // Add DepEd Logo and Seal using Vite inline import
       // Convert transparent PNGs to non-transparent by drawing on white canvas
       try {
-        const logoData = typeof depedLogoBase64 === 'string' && depedLogoBase64.startsWith('data:')
-          ? depedLogoBase64
-          : (depedLogoBase64 as any);
+        // Helper function to load image from URL and convert to base64
+        const loadImageAsBase64 = async (url: string): Promise<string> => {
+          return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            const timeout = setTimeout(() => {
+              reject(new Error('Image load timeout'));
+            }, 5000);
+            
+            img.onload = () => {
+              clearTimeout(timeout);
+              const canvas = document.createElement('canvas');
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.drawImage(img, 0, 0);
+              }
+              resolve(canvas.toDataURL('image/png'));
+            };
+            
+            img.onerror = () => {
+              clearTimeout(timeout);
+              reject(new Error('Failed to load image'));
+            };
+            
+            img.src = url;
+          });
+        };
         
-        const sealData = typeof depedSealBase64 === 'string' && depedSealBase64.startsWith('data:')
-          ? depedSealBase64
-          : (depedSealBase64 as any);
+        const logoData = await loadImageAsBase64(depedLogoUrl);
+        const sealData = await loadImageAsBase64(depedSealUrl);
         
         // Helper function to remove transparency from image with high quality
         const removeTransparency = async (base64Data: string): Promise<{data: string, width: number, height: number}> => {
-          return new Promise((resolve) => {
+          return new Promise((resolve, reject) => {
             const img = new Image();
+            
+            // Add timeout to prevent hanging
+            const timeout = setTimeout(() => {
+              reject(new Error('Image load timeout'));
+            }, 5000);
+            
             img.onload = () => {
+              clearTimeout(timeout);
               const canvas = document.createElement('canvas');
               // Use original size for best quality in PDF
               canvas.width = img.width;
@@ -1801,6 +1906,12 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
                 height: img.height
               });
             };
+            
+            img.onerror = (error) => {
+              clearTimeout(timeout);
+              reject(new Error('Failed to load image'));
+            };
+            
             img.src = base64Data;
           });
         };
@@ -1820,7 +1931,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
         doc.addImage(logoResult.data, 'PNG', 10, 5, logoWidth, logoHeight);
         doc.addImage(sealResult.data, 'PNG', 210 - 10 - sealWidth, 5, sealWidth, sealHeight);
       } catch (error) {
-        console.warn('Failed to load DepEd logo/seal for annual report:', error);
+        // Silently skip logo/seal if loading fails - form will still generate
       }
       
       // DepEd Official Header
@@ -2249,7 +2360,7 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
                   type="date"
                   aria-label="Select attendance date"
                   value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
+                  onChange={(e) => handleDateChange(e.target.value)}
                   className="px-4 py-2 bg-white/50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200"
                 />
               </div>
@@ -2606,40 +2717,23 @@ const SF2Dashboard: React.FC<SF2DashboardProps> = ({ session, onBack }) => {
 
             {!isLoading && (
             <>
-            {/* Month Selector & Summary Stats */}
+            {/* Monthly Summary Stats */}
             <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-lg space-y-4">
-              {/* Month Selector */}
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center">
-                    <div className="w-6 h-6 text-white">
-                      <CalendarDaysIcon />
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-200">
-                      Monthly Attendance Calendar
-                    </h3>
-                    <p className="text-slate-600 dark:text-slate-300">
-                      Click any cell to mark attendance for that day
-                    </p>
+              {/* Month Display */}
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                  <div className="w-6 h-6 text-white">
+                    <CalendarDaysIcon />
                   </div>
                 </div>
-                
-                <select
-                  aria-label="Select month for calendar"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="px-4 py-2 bg-white/50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200"
-                >
-                  {schoolYearMonths.map(month => {
-                    const [year, monthNum] = month.split('-');
-                    const monthName = new Date(parseInt(year), parseInt(monthNum) - 1).toLocaleString('default', { month: 'long', year: 'numeric' });
-                    return (
-                      <option key={month} value={month}>{monthName}</option>
-                    );
-                  })}
-                </select>
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-200">
+                    {new Date(selectedMonth + '-01').toLocaleDateString('default', { month: 'long', year: 'numeric' })}
+                  </h3>
+                  <p className="text-slate-600 dark:text-slate-300">
+                    Click any cell to mark attendance for that day
+                  </p>
+                </div>
               </div>
               
               {/* Compact Summary Stats */}

@@ -19,7 +19,7 @@ import {
   getStudentLedger, 
   getStudentBillingStatements, 
   getStudentReceipts 
-} from '../src/services/billingService';
+} from '../src/services/billingServicePostgreSQL';
 import { downloadReceipt } from '../src/services/receiptPDFGenerator';
 import { collection, addDoc, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';

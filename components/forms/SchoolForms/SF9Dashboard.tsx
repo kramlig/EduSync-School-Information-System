@@ -1,8 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
 import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
 import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
 import { useGradesPostgreSQL } from '../../../src/hooks/useGradesPostgreSQL';
+import { useLearningAreasPostgreSQL } from '../../../src/hooks/useLearningAreasPostgreSQL';
+import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
 import type { AuthUser, StudentUser, ParentUser, Student, Section, Grade, GradeSHS, GradeInput } from '../../../types';
 import BackButton from '../../BackButton';
 import { 
@@ -17,8 +19,7 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   ClockIcon,
-  ExclamationTriangleIcon,
-  StarIcon
+  ExclamationTriangleIcon
 } from '../../icons';
 
 interface SF9DashboardProps {
@@ -88,11 +89,55 @@ interface SchoolYearSummary {
   };
 }
 
+// Constants
+const PASSING_GRADE = 75;
+const MAX_FAILING_SUBJECTS_FOR_PROMOTION = 2;
+const SCHOOL_YEARS = ['2024-2025', '2023-2024', '2022-2023'];
+const MOCK_SUBJECTS = ['Mathematics', 'Science', 'English', 'Filipino', 'Social Studies'];
+
+// Helper function for CSV export
+const exportToCSV = (data: any[], filename: string) => {
+  if (data.length === 0) return;
+  
+  const headers = Object.keys(data[0]);
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row => headers.map(header => {
+      const value = row[header];
+      return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
+        ? `"${value.replace(/"/g, '""')}"` 
+        : value;
+    }).join(','))
+  ].join('\n');
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  
+  if (link.download !== undefined) {
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+};
+
+// Generate mock grade for demonstration
+const generateMockGrade = (studentName: string): number => {
+  const hash = studentName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const baseGrade = 75 + ((hash % 20));
+  return Math.round((baseGrade + (hash % 10)) * 100) / 100;
+};
+
 const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
   const { schoolId } = useSchoolContext();
   const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
   const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
   const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
+  const { learningAreas, loading: learningAreasLoading } = useLearningAreasPostgreSQL(schoolId);
+  const { attendanceRecords, loading: attendanceLoading } = useAttendancePostgreSQL({ schoolId });
   
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('2024-2025');
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,44 +146,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
   const [viewMode, setViewMode] = useState<'overview' | 'detailed' | 'analytics'>('overview');
   const [promotionFilter, setPromotionFilter] = useState<'all' | 'promoted' | 'retained' | 'transferred' | 'graduated' | 'dropped'>('all');
 
-  const loading = studentsLoading || sectionsLoading || gradesLoading;
-
-  // Utility function to export data as CSV
-  const exportToCSV = (data: any[], filename: string) => {
-    if (data.length === 0) return;
-    
-    const headers = Object.keys(data[0]);
-    const csvContent = [
-      headers.join(','),
-      ...data.map(row => headers.map(header => {
-        const value = row[header];
-        return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
-          ? `"${value.replace(/"/g, '""')}"` 
-          : value;
-      }).join(','))
-    ].join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', filename);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-  };
-
-  // Generate mock grade for demonstration purposes if no actual grades exist
-  const generateMockGrade = (studentName: string): number => {
-    // Create consistent "random" grades based on student name for demo
-    const hash = studentName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const baseGrade = 75 + ((hash % 20)); // Grades between 75-94
-    return Math.round((baseGrade + (hash % 10)) * 100) / 100;
-  };
+  const loading = studentsLoading || sectionsLoading || gradesLoading || learningAreasLoading || attendanceLoading;
 
   // Calculate final grades for students
   const calculateStudentFinalGrade = (studentId: string): number => {
@@ -202,7 +210,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
     let failedSubjects = 0;
     
     studentGrades.forEach((grade: GradeInput) => {
-      if (grade.finalGrade !== undefined && grade.finalGrade < 75) {
+      if (grade.finalGrade !== undefined && grade.finalGrade < PASSING_GRADE) {
         failedSubjects++;
       }
     });
@@ -344,13 +352,13 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
         const studentGrades = grades.filter((grade: GradeInput) => grade.studentId === student.id);
         let subjectsPassed = 0;
         let subjectsFailed = 0;
-        let learningAreas: { name: string; grade: number; passed: boolean; }[] = [];
+        let studentLearningAreas: { name: string; grade: number; passed: boolean; }[] = [];
         
         if (studentGrades.length > 0) {
           // Use actual grade data
-          learningAreas = studentGrades.map((grade: GradeInput) => {
-            const learningArea = schoolData.learningAreas.find(la => la.id === grade.learningAreaId);
-            const passed = (grade.finalGrade || 0) >= 75;
+          studentLearningAreas = studentGrades.map((grade: GradeInput) => {
+            const learningArea = learningAreas.find(la => la.id === grade.learningAreaId);
+            const passed = (grade.finalGrade || 0) >= PASSING_GRADE;
             
             if (passed) {
               subjectsPassed++;
@@ -366,14 +374,13 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
           });
         } else {
           // Generate mock subject data for demonstration
-          const mockSubjects = ['Mathematics', 'Science', 'English', 'Filipino', 'Social Studies'];
           const mockGrade = finalGrade > 0 ? finalGrade : generateMockGrade(student.name);
           
-          learningAreas = mockSubjects.map(subjectName => {
+          studentLearningAreas = MOCK_SUBJECTS.map(subjectName => {
             // Generate slight variations around the final grade
             const variation = (Math.random() - 0.5) * 10; // ±5 points variation
             const subjectGrade = Math.max(60, Math.min(100, mockGrade + variation));
-            const passed = subjectGrade >= 75;
+            const passed = subjectGrade >= PASSING_GRADE;
             
             if (passed) {
               subjectsPassed++;
@@ -390,7 +397,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
         }
 
         // Calculate attendance rate (simplified)
-        const attendanceRecord = schoolData.attendanceRecords.find(record => record.studentId === student.id);
+        const attendanceRecord = attendanceRecords.find(record => record.studentId === student.id);
         let attendanceRate = 100; // Default if no attendance data
         
         if (attendanceRecord) {
@@ -407,10 +414,10 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
           subjectsFailed,
           attendanceRate,
           promotionStatus,
-          learningAreas
+          learningAreas: studentLearningAreas
         };
       });
-  }, [students, sections, grades, schoolData.learningAreas, schoolData.attendanceRecords]);
+  }, [students, sections, grades, learningAreas, attendanceRecords]);
 
   // Filter students for display
   const filteredStudentData = useMemo(() => {
@@ -444,8 +451,12 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
     });
   }, [studentPromotionData, searchQuery, selectedGradeLevel, selectedSection, promotionFilter]);
 
-  const gradeLevels = [...new Set(sections.map((s: Section) => s.gradeLevel))].sort() as number[];
-  const schoolYears = ['2024-2025', '2023-2024', '2022-2023']; // Could be dynamic
+  const gradeLevels = useMemo(() => 
+    [...new Set(sections.map((s: Section) => s.gradeLevel))].sort() as number[],
+    [sections]
+  );
+
+  const schoolYears = SCHOOL_YEARS;
 
   // Export SF9 promotion/retention report
   const exportSF9Report = () => {
@@ -484,7 +495,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
   };
 
   // Get promotion status icon and color
-  const getPromotionStatusDisplay = (status: string) => {
+  const getPromotionStatusDisplay = useCallback((status: string) => {
     switch (status) {
       case 'promoted':
         return {
@@ -529,7 +540,7 @@ const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
           label: 'Unknown'
         };
     }
-  };
+  }, []);
 
   if (loading) {
     return (

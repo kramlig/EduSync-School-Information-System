@@ -6,11 +6,14 @@
  */
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { ELLNAssessment, ProficiencyLevel } from '../shared/FormTypes';
-import { ELLNService } from '../../../services/formsService';
+import { ProficiencyLevel } from '../shared/FormTypes';
 import { getCurrentSchoolYear, formatDepEdDate } from '../../../services/dateHelpers';
-import { useSchoolData } from '../../../hooks/useSchoolData.simplified';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
+import { useELLNPostgreSQL } from '../../../src/hooks/useELLNPostgreSQL';
 import { auth } from '../../../src/services/firestoreService';
 import { ArrowLeftIcon, CheckCircleIcon, XCircleIcon, HomeIcon, ChevronRightIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
@@ -83,7 +86,10 @@ function getProficiencyColor(level: ProficiencyLevel): string {
 
 export default function ELLNAssessmentComponent() {
   const navigate = useNavigate();
-  const { students, sections } = useSchoolData();
+  const { schoolId } = useSchoolContext();
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { createAssessment } = useELLNPostgreSQL({ schoolId });
 
   // Form state
   const [selectedStudent, setSelectedStudent] = useState('');
@@ -241,48 +247,65 @@ export default function ELLNAssessmentComponent() {
       const currentUser = auth.currentUser;
       const displayName = assessorName || currentUser?.displayName || 'Unknown Teacher';
 
-      const assessmentData: Omit<ELLNAssessment, 'id'> = {
-        studentId: student.id,
-        studentName: student.name || `${student.firstName} ${student.middleName || ''} ${student.lastName}`.trim(),
-        gradeLevel: student.gradeLevel as 0 | 1 | 2 | 3,
-        schoolYear: getCurrentSchoolYear(),
+      const assessmentData = {
+        school_id: schoolId,
+        student_id: student.id,
+        student_name: student.name || `${student.firstName} ${student.middleName || ''} ${student.lastName}`.trim(),
+        grade_level: student.gradeLevel || 0,
+        school_year: getCurrentSchoolYear(),
         quarter,
-        literacy: literacyScores,
-        numeracy: numeracyScores,
-        literacyScore,
-        numeracyScore,
-        overallScore,
-        proficiencyLevel,
-        assessedBy: currentUser?.uid || 'system',
-        assessedByName: displayName,
-        assessmentDate: formatDepEdDate(new Date()),
+        literacy_scores: literacyScores,
+        numeracy_scores: numeracyScores,
+        literacy_score: literacyScore,
+        numeracy_score: numeracyScore,
+        overall_score: overallScore,
+        proficiency_level: proficiencyLevel,
+        assessed_by: currentUser?.uid || 'system',
+        assessed_by_name: displayName,
+        assessment_date: formatDepEdDate(new Date()),
         notes,
         recommendations,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       };
 
-      await ELLNService.create(assessmentData);
+      await createAssessment(assessmentData);
       
-      setSuccess(true);
+      // Force immediate state update and render
+      flushSync(() => {
+        setSaving(false);
+        setError('');
+        setSuccess(true);
+      });
       
-      // Reset form after 2 seconds
+      // Reset form after 3 seconds
       setTimeout(() => {
         setSelectedStudent('');
         setLiteracyScores(INITIAL_LITERACY);
         setNumeracyScores(INITIAL_NUMERACY);
         setNotes('');
         setRecommendations('');
+        setAssessorName('');
         setSuccess(false);
-      }, 2000);
+      }, 3000);
 
     } catch (err) {
-      console.error('Error saving assessment:', err);
-      setError('Failed to save assessment. Please try again.');
-    } finally {
       setSaving(false);
+      setSuccess(false);
+      setError(err instanceof Error ? err.message : 'Failed to save assessment. Please try again.');
     }
   };
+
+  const loading = studentsLoading || sectionsLoading;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading students...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -311,7 +334,7 @@ export default function ELLNAssessmentComponent() {
             <li className="flex items-center">
               <ChevronRightIcon className="h-5 w-5 text-gray-400" />
               <button
-                onClick={() => navigate('/forms/elln')}
+                onClick={() => navigate('/reports/elln')}
                 className="ml-2 text-gray-500 hover:text-gray-700"
               >
                 ELLN Assessment
@@ -332,7 +355,7 @@ export default function ELLNAssessmentComponent() {
           </p>
         </div>
 
-        {/* Success/Error Messages */}
+        {/* Success/Error Messages - Top banner (legacy, can be removed if bottom message works) */}
         {success && (
           <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-start">
             <CheckCircleIcon className="h-5 w-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
@@ -734,11 +757,32 @@ export default function ELLNAssessmentComponent() {
             </div>
           </div>
 
+          {/* Success/Error Messages - Positioned near action buttons */}
+          {success && (
+            <div className="mt-6 bg-green-50 border-2 border-green-400 rounded-lg p-4 flex items-start animate-pulse">
+              <CheckCircleIcon className="h-6 w-6 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-green-800 text-lg">✅ Assessment Saved Successfully!</h3>
+                <p className="text-sm text-green-700 mt-1">The assessment has been saved to the database. Form will reset in a moment...</p>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-6 bg-red-50 border-2 border-red-400 rounded-lg p-4 flex items-start">
+              <XCircleIcon className="h-6 w-6 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-red-800 text-lg">❌ Error Saving Assessment</h3>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
+              </div>
+            </div>
+          )}
+
           {/* Action Buttons */}
-          <div className="flex justify-end space-x-4">
+          <div className="flex justify-end space-x-4 mt-6">
             <button
               type="button"
-              onClick={() => navigate('/forms/elln')}
+              onClick={() => navigate('/reports/elln')}
               className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium"
               disabled={saving}
             >

@@ -4,6 +4,7 @@ import type { AuthUser, StudentUser, ParentUser } from '../types';
 import { SchoolDataState } from '../hooks/useSchoolData';
 import { useFirestoreSyncStatus } from '../hooks/useFirestoreSyncStatus';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { useSchoolProfilePostgreSQL } from '../src/hooks/useSchoolProfilePostgreSQL';
 import SchoolSwitcher from './SchoolSwitcher';
 import EdusyncLogo from './EdusyncLogo';
 
@@ -11,8 +12,6 @@ interface HeaderProps {
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
   onLogout: () => void;
   students: SchoolDataState['students'];
-  schoolYear?: string;
-  schoolName?: string;
   parentSelectedChildId?: string | null;
   onParentChildChange?: (id: string) => void;
   unreadCount?: number;
@@ -22,12 +21,12 @@ const Header: React.FC<HeaderProps> = ({
   session, 
   onLogout, 
   students, 
-  schoolYear,
-  schoolName, 
   parentSelectedChildId, 
   onParentChildChange, 
   unreadCount = 0
 }) => {
+  // Fetch school profile from PostgreSQL instead of receiving as props
+  const { schoolName, schoolYear } = useSchoolProfilePostgreSQL();
   const userRole = session.type === 'staff' ? (session.user as AuthUser).role : session.type;
   
   // State for parent's selected child view

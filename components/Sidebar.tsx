@@ -2,16 +2,18 @@ import React, { useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { AuthUser, StudentUser, ParentUser, Announcement } from '../types';
 import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronRightIcon, BuildingOfficeIcon, CheckBadgeIcon, UserCircleIcon, CreditCardIcon, CurrencyDollarIcon, ChartPieIcon, DocumentTextIcon } from './icons';
+import { useSchoolProfilePostgreSQL } from '../src/hooks/useSchoolProfilePostgreSQL';
 import DepEdLogo from './DepEdLogo';
 
 interface SidebarProps {
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
-  schoolName?: string;
-  schoolYear?: string;
   announcements?: Announcement[];
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoolYear, announcements = [] }) => {
+const Sidebar: React.FC<SidebarProps> = ({ session, announcements = [] }) => {
+  // Fetch school profile from PostgreSQL instead of receiving as props
+  const { schoolName, schoolYear } = useSchoolProfilePostgreSQL();
+  
   const [isCollapsed, setIsCollapsed] = useState(false);
   
   // Calculate announcement count for parents
@@ -65,6 +67,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, schoolName = 'School', schoo
       items: [
         { path: '/fee-structures', label: 'Fee Structures', icon: <CurrencyDollarIcon />, roles: ['admin', 'registrar'], badge: null },
         { path: '/record-payment', label: 'Record Payment', icon: <CreditCardIcon />, roles: ['admin', 'registrar'], badge: null },
+        { path: '/receipts', label: 'Receipt Register', icon: <ClipboardDocumentCheckIcon />, roles: ['admin', 'registrar'], badge: null },
         { path: '/financial-reports', label: 'Financial Reports', icon: <ChartPieIcon />, roles: ['admin', 'registrar'], badge: null },
       ]
     },

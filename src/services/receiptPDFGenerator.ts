@@ -136,29 +136,56 @@ export function generateReceiptPDF(
     doc.text(text, (pageWidth - textWidth) / 2, y);
   };
 
+  // Use school info from database if available, otherwise fallback to settings
+  const schoolInfo = (receipt as any).schoolInfo;
+  console.log('[receiptPDFGenerator] Receipt school info:', schoolInfo);
+  console.log('[receiptPDFGenerator] Settings:', settings);
+  
+  const schoolName = schoolInfo?.name || settings.schoolName || 'School Name';
+  const region = schoolInfo?.region || settings.region;
+  const division = schoolInfo?.division || settings.division;
+  const district = schoolInfo?.district || settings.district;
+  const contactPhone = schoolInfo?.contact_phone; // Updated field name
+  const contactEmail = schoolInfo?.contact_email; // Updated field name
+  const tin = schoolInfo?.tin;
+
   // Header - School Name
-  addCenteredText(settings.schoolName || 'School Name', 16, 'bold');
+  addCenteredText(schoolName.toUpperCase(), 16, 'bold');
   y += 6;
   
   // Region/Division/District Info
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  const locationInfo = `${settings.region} • ${settings.division} • ${settings.district}`;
-  const locationWidth = doc.getTextWidth(locationInfo);
-  doc.text(locationInfo, (pageWidth - locationWidth) / 2, y);
-  y += 5;
+  const locationParts = [];
+  if (region) locationParts.push(`Region ${region}`);
+  if (division) locationParts.push(`Division of ${division}`);
+  if (district) locationParts.push(`${district}`);
+  if (locationParts.length > 0) {
+    const locationInfo = locationParts.join(' • ');
+    const locationWidth = doc.getTextWidth(locationInfo);
+    doc.text(locationInfo, (pageWidth - locationWidth) / 2, y);
+    y += 5;
+  }
 
-  // Contact placeholder (can be configured later)
+  // Contact info from database
   doc.setFontSize(8);
-  const contactInfo = 'Tel: (000) 000-0000 • email@school.edu.ph';
-  const contactWidth = doc.getTextWidth(contactInfo);
-  doc.text(contactInfo, (pageWidth - contactWidth) / 2, y);
-  y += 5;
+  const contactParts = [];
+  if (contactPhone) contactParts.push(`Tel: ${contactPhone}`); // Updated variable name
+  if (contactEmail) contactParts.push(contactEmail); // Updated variable name
+  if (contactParts.length > 0) {
+    const contactInfo = contactParts.join(' • ');
+    const contactWidth = doc.getTextWidth(contactInfo);
+    doc.text(contactInfo, (pageWidth - contactWidth) / 2, y);
+    y += 5;
+  }
 
-  // TIN placeholder (for BIR compliance)
-  const tinText = 'TIN: 000-000-000-000';
-  const tinWidth = doc.getTextWidth(tinText);
-  doc.text(tinText, (pageWidth - tinWidth) / 2, y);
+  // TIN from database (for BIR compliance)
+  if (tin) {
+    const tinText = `TIN: ${tin}`;
+    const tinWidth = doc.getTextWidth(tinText);
+    doc.text(tinText, (pageWidth - tinWidth) / 2, y);
+    y += 5;
+  }
   y += 5;
 
   y += 3;
@@ -206,7 +233,8 @@ export function generateReceiptPDF(
   
   // Student details
   doc.setFontSize(9);
-  const studentDetails = `LRN: ${student.lrn || 'N/A'} • Section: ${student.sectionId || 'N/A'}`;
+  const sectionDisplay = student.sectionName || (student.sectionId ? `Section ${student.sectionId.substring(0, 8)}...` : 'N/A');
+  const studentDetails = `LRN: ${student.lrn || 'N/A'} • Section: ${sectionDisplay}`;
   doc.text(studentDetails, margin + 5, y);
   y += 8;
 

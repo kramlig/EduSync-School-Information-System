@@ -16,10 +16,12 @@ CREATE TABLE schools (
     school_id_number VARCHAR(50) UNIQUE, -- DepEd School ID
     division VARCHAR(100) NOT NULL,
     region VARCHAR(100) NOT NULL,
+    district VARCHAR(100), -- DepEd District (Region → Division → District → School)
     address TEXT,
     contact_email VARCHAR(255),
     contact_phone VARCHAR(20),
     principal_name VARCHAR(255),
+    tin VARCHAR(20), -- Tax Identification Number for BIR receipts
     current_school_year VARCHAR(10) NOT NULL, -- e.g., "2024-2025"
     settings JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -28,6 +30,7 @@ CREATE TABLE schools (
 );
 
 CREATE INDEX idx_schools_school_id_number ON schools(school_id_number);
+CREATE INDEX idx_schools_district ON schools(district) WHERE deleted_at IS NULL;
 CREATE INDEX idx_schools_deleted_at ON schools(deleted_at);
 
 -- ==========================================

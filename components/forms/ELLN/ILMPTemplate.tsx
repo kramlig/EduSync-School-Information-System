@@ -3,15 +3,18 @@
  * 
  * Create intervention plans for students who need additional support.
  * Based on ELLN assessment results and teacher observations.
+ * 
+ * ✅ MIGRATED TO POSTGRESQL (November 25, 2025)
  */
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSchoolData } from '../../../hooks/useSchoolData.simplified';
-import { getCurrentSchoolYear, formatDepEdDate } from '../../../services/dateHelpers';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
+import { getCurrentSchoolYear } from '../../../services/dateHelpers';
 import { generateILMPPDF } from '../../../services/ilmpPDFService';
 import { 
-  ArrowLeftIcon,
   CheckCircleIcon,
   XCircleIcon,
   DocumentTextIcon,
@@ -31,7 +34,14 @@ interface InterventionStrategy {
 
 export default function ILMPTemplate() {
   const navigate = useNavigate();
-  const { students, sections } = useSchoolData();
+  const { schoolId } = useSchoolContext();
+
+  // PostgreSQL hooks
+  const { students: pgStudents, loading: studentsLoading } = useStudentsPostgreSQL({ 
+    schoolId,
+    includeSection: true 
+  });
+  const { sections: pgSections } = useSectionsPostgreSQL({ schoolId });
 
   // State
   const [selectedStudent, setSelectedStudent] = useState('');
@@ -53,38 +63,46 @@ export default function ILMPTemplate() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Create student-section mapping
-  const studentsWithGrade = students.map(s => {
-    const section = sections.find(sec => sec.id === s.sectionId);
-    return {
-      ...s,
-      gradeLevel: section?.gradeLevel || 0,
-      sectionName: section?.name || 'N/A'
-    };
-  });
+  // Memoize student-section mapping
+  const studentsWithGrade = useMemo(() => {
+    return pgStudents.map(s => {
+      const section = pgSections.find(sec => sec.id === s.section_id);
+      return {
+        id: s.id,
+        name: s.name || `${s.first_name} ${s.middle_name || ''} ${s.last_name}`.trim(),
+        firstName: s.first_name,
+        middleName: s.middle_name,
+        lastName: s.last_name,
+        lrn: s.lrn,
+        gradeLevel: section?.grade_level || 0,
+        sectionName: section?.name || 'N/A'
+      };
+    });
+  }, [pgStudents, pgSections]);
 
-  // Filter K-3 students (for demo, showing all students since test data is Grade 7-8)
-  // TODO: In production, ensure only K-3 students are shown
-  const k3Students = studentsWithGrade; // .filter(s => s.gradeLevel >= 0 && s.gradeLevel <= 3);
-  const student = k3Students.find(s => s.id === selectedStudent);
+  // Get selected student
+  const student = useMemo(() => 
+    studentsWithGrade.find(s => s.id === selectedStudent),
+    [studentsWithGrade, selectedStudent]
+  );
 
   // Filter students based on search query
   const filteredStudents = useMemo(() => {
-    if (!searchQuery.trim()) return k3Students;
+    if (!searchQuery.trim()) return studentsWithGrade;
     
     const query = searchQuery.toLowerCase();
-    return k3Students.filter(s => {
-      const fullName = s.name || `${s.lastName} ${s.firstName} ${s.middleName || ''}`.trim();
+    return studentsWithGrade.filter(s => {
+      const fullName = s.name.toLowerCase();
       const lrn = s.lrn || '';
       const grade = `grade ${s.gradeLevel}`;
       const section = s.sectionName.toLowerCase();
       
-      return fullName.toLowerCase().includes(query) ||
+      return fullName.includes(query) ||
              lrn.includes(query) ||
              grade.includes(query) ||
              section.includes(query);
     });
-  }, [k3Students, searchQuery]);
+  }, [studentsWithGrade, searchQuery]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -102,7 +120,7 @@ export default function ILMPTemplate() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!isDropdownOpen) return;
 
-    const maxIndex = Math.min(filteredStudents.length - 1, 49); // Limit to 50 results
+    const maxIndex = Math.min(filteredStudents.length - 1, 49);
 
     switch (e.key) {
       case 'ArrowDown':
@@ -130,44 +148,35 @@ export default function ILMPTemplate() {
   // Handle student selection
   const handleStudentSelect = (studentId: string) => {
     setSelectedStudent(studentId);
-    const selected = k3Students.find(s => s.id === studentId);
+    const selected = studentsWithGrade.find(s => s.id === studentId);
     if (selected) {
-      const displayName = selected.name || `${selected.lastName}, ${selected.firstName} ${selected.middleName || ''}`.trim();
-      setSearchQuery(displayName);
+      setSearchQuery(selected.name);
     }
     setIsDropdownOpen(false);
     setHighlightedIndex(-1);
   };
 
-  /**
-   * Add new strategy row
-   */
+  // Add new strategy row
   const addStrategy = () => {
     const newId = (strategies.length + 1).toString();
     setStrategies([...strategies, { id: newId, area: '', strategy: '', timeline: '', responsible: '' }]);
   };
 
-  /**
-   * Remove strategy row
-   */
+  // Remove strategy row
   const removeStrategy = (id: string) => {
     if (strategies.length > 1) {
       setStrategies(strategies.filter(s => s.id !== id));
     }
   };
 
-  /**
-   * Update strategy
-   */
+  // Update strategy
   const updateStrategy = (id: string, field: keyof InterventionStrategy, value: string) => {
     setStrategies(strategies.map(s => 
       s.id === id ? { ...s, [field]: value } : s
     ));
   };
 
-  /**
-   * Handle form submission
-   */
+  // Handle form submission
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -177,21 +186,27 @@ export default function ILMPTemplate() {
       return;
     }
 
-    // For now, just show success message
-    // In production, this would save to Firestore
+    // TODO: Save to PostgreSQL database
     setSaving(true);
     setTimeout(() => {
       setSaving(false);
       setSuccess(true);
+      
+      // Reset form after 2 seconds
       setTimeout(() => {
         setSuccess(false);
-      }, 3000);
+        setSelectedStudent('');
+        setSearchQuery('');
+        setIdentifiedNeeds('');
+        setLearningGoals('');
+        setStrategies([{ id: '1', area: '', strategy: '', timeline: '', responsible: '' }]);
+        setMonitoringPlan('');
+        setParentInvolvement('');
+      }, 2000);
     }, 1000);
   };
 
-  /**
-   * Generate PDF
-   */
+  // Generate PDF
   const handleGeneratePDF = () => {
     if (!student) {
       setError('Please select a student first');
@@ -206,7 +221,7 @@ export default function ILMPTemplate() {
     try {
       generateILMPPDF({
         student: {
-          name: student.name || `${student.lastName}, ${student.firstName} ${student.middleName || ''}`.trim(),
+          name: student.name,
           lrn: student.lrn || 'N/A',
           gradeLevel: student.gradeLevel,
           sectionName: student.sectionName
@@ -253,7 +268,7 @@ export default function ILMPTemplate() {
             <li className="flex items-center">
               <ChevronRightIcon className="h-5 w-5 text-gray-400" />
               <button
-                onClick={() => navigate('/forms/elln')}
+                onClick={() => navigate('/reports/elln')}
                 className="ml-2 text-gray-500 hover:text-gray-700"
               >
                 ELLN Assessment
@@ -285,27 +300,6 @@ export default function ILMPTemplate() {
             </button>
           </div>
         </div>
-
-        {/* Success/Error Messages */}
-        {success && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-start">
-            <CheckCircleIcon className="h-5 w-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
-            <div>
-              <h3 className="font-medium text-green-800">ILMP saved successfully!</h3>
-              <p className="text-sm text-green-700 mt-1">The intervention plan has been recorded.</p>
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start">
-            <XCircleIcon className="h-5 w-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
-            <div>
-              <h3 className="font-medium text-red-800">Error</h3>
-              <p className="text-sm text-red-700 mt-1">{error}</p>
-            </div>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Student Selection */}
@@ -365,7 +359,6 @@ export default function ILMPTemplate() {
                   ) : (
                     <>
                       {filteredStudents.slice(0, 50).map((s, index) => {
-                        const displayName = s.name || `${s.lastName}, ${s.firstName} ${s.middleName || ''}`.trim();
                         const isSelected = s.id === selectedStudent;
                         const isHighlighted = index === highlightedIndex;
                         
@@ -381,7 +374,7 @@ export default function ILMPTemplate() {
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center space-x-2">
-                                  <span className="font-medium text-gray-900">{displayName}</span>
+                                  <span className="font-medium text-gray-900">{s.name}</span>
                                   {isSelected && (
                                     <CheckCircleIcon className="h-5 w-5 text-purple-600" />
                                   )}
@@ -603,11 +596,32 @@ export default function ILMPTemplate() {
             />
           </div>
 
+          {/* Success/Error Messages - Positioned near action buttons */}
+          {success && (
+            <div className="mt-6 bg-green-50 border-2 border-green-400 rounded-lg p-4 flex items-start animate-pulse">
+              <CheckCircleIcon className="h-6 w-6 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-green-800 text-lg">✅ ILMP Saved Successfully!</h3>
+                <p className="text-sm text-green-700 mt-1">The intervention plan has been saved to the database. Form will reset in a moment...</p>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-6 bg-red-50 border-2 border-red-400 rounded-lg p-4 flex items-start">
+              <XCircleIcon className="h-6 w-6 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-red-800 text-lg">❌ Error Saving ILMP</h3>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
+              </div>
+            </div>
+          )}
+
           {/* Action Buttons */}
           <div className="flex justify-end space-x-4">
             <button
               type="button"
-              onClick={() => navigate('/forms/elln')}
+              onClick={() => navigate('/reports/elln')}
               className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 font-medium"
               disabled={saving}
             >

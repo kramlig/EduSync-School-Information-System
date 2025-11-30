@@ -1,158 +1,138 @@
-import React, { useState, useMemo } from 'react';
-import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { SubstituteAssignment } from '../types';
-import Modal from './Modal';
-import { PencilIcon, TrashIcon } from './icons';
-import SearchableSelect from './SearchableSelect';
+/**
+ * SubstituteView - Optimized PostgreSQL Version
+ * 
+ * Main component for managing substitute teacher assignments.
+ * Migrated to PostgreSQL with optimized component extraction.
+ * 
+ * IMPORTANT: Feature flag hooks are memoized to prevent infinite render loops
+ * caused by settings object reference changes from useSchoolData
+ */
 
-interface SubstituteViewProps {
-  schoolData: SchoolDataHook;
-}
+import React, { useState, useMemo, useCallback } from 'react';
+import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
+import { useSchoolData } from '../hooks/useSchoolData';
+import type { SubstituteAssignmentExtended } from '../src/services/substituteServicePostgreSQL';
+import type { Teacher } from '../types';
 
-const getStatus = (assignment: SubstituteAssignment): { text: string; color: string; icon: string } => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const startDate = new Date(assignment.startDate);
-    const endDate = new Date(assignment.endDate);
+// Import extracted components
+import {
+  StatisticsDashboard,
+  AssignmentCard,
+  AssignmentFormModal,
+  DeleteConfirmationModal,
+  SearchFilterBar,
+  EmptyState,
+} from './substitute';
 
-    if (today >= startDate && today <= endDate) {
-        return { text: 'Active', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', icon: '✓' };
-    }
-    if (today < startDate) {
-        return { text: 'Scheduled', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', icon: '⏱' };
-    }
-    return { text: 'Completed', color: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-200', icon: '✔' };
+// ==================== Utility Functions ====================
+
+const getStatus = (assignment: SubstituteAssignmentExtended): { text: string; color: string; icon: string } => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startDate = new Date(assignment.startDate);
+  const endDate = new Date(assignment.endDate);
+
+  if (today >= startDate && today <= endDate) {
+    return { text: 'Active', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', icon: '✓' };
+  }
+  if (today < startDate) {
+    return { text: 'Scheduled', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', icon: '⏱' };
+  }
+  return { text: 'Completed', color: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-200', icon: '✔' };
 };
 
 const getDuration = (startDate: string, endDate: string): string => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return '1 day';
-    if (diffDays < 7) return `${diffDays + 1} days`;
-    const weeks = Math.floor(diffDays / 7);
-    return weeks === 1 ? '1 week' : `${weeks} weeks`;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return '1 day';
+  if (diffDays < 7) return `${diffDays + 1} days`;
+  const weeks = Math.floor(diffDays / 7);
+  return weeks === 1 ? '1 week' : `${weeks} weeks`;
 };
 
 const formatDateRange = (startDate: string, endDate: string): string => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const formatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
-    return `${formatter.format(start)} - ${formatter.format(end)}`;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const formatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+  return `${formatter.format(start)} - ${formatter.format(end)}`;
 };
 
-const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
-  const { substituteAssignments, teachers, addSubstituteAssignment, updateSubstituteAssignment, deleteSubstituteAssignment } = schoolData;
+// ==================== Types ====================
+
+type StatusFilter = 'all' | 'active' | 'scheduled' | 'completed';
+
+interface FormData {
+  teacherId: string;
+  originalTeacherId: string;
+  startDate: string;
+  endDate: string;
+  reason?: string;
+  notes?: string;
+}
+
+// ==================== Constants ====================
+
+// Define data keys outside component to prevent re-creation
+const SCHOOL_DATA_KEYS = ['teachers'] as const;
+
+// ==================== Main Component ====================
+
+const SubstituteView: React.FC = () => {
+  // PostgreSQL hook for data management
+  const {
+    assignments,
+    loading: assignmentsLoading,
+    error,
+    stats,
+    addAssignment,
+    updateAssignment,
+    deleteAssignment,
+  } = useSubstituteAssignmentsPostgreSQL();
+
+  // Get teachers from school data (still from Firestore for now)
+  // Using constant array to prevent infinite re-renders
+  const { teachers, loading: teachersLoading } = useSchoolData(SCHOOL_DATA_KEYS);
   
+  // Combined loading state
+  const loading = assignmentsLoading || teachersLoading;
+  
+  // Memoize teachers to prevent reference changes
+  const memoizedTeachers = useMemo<Teacher[]>(() => teachers || [], [teachers]);
+  
+  // Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
-  const [assignmentToEdit, setAssignmentToEdit] = useState<SubstituteAssignment | null>(null);
-  const [assignmentToDelete, setAssignmentToDelete] = useState<SubstituteAssignment | null>(null);
+  // Form state
+  const [assignmentToEdit, setAssignmentToEdit] = useState<SubstituteAssignmentExtended | null>(null);
+  const [assignmentToDelete, setAssignmentToDelete] = useState<SubstituteAssignmentExtended | null>(null);
   
+  // Filter state
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'scheduled' | 'completed'>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   
+  // Form data
   const todayStr = new Date().toISOString().split('T')[0];
-  const [newAssignment, setNewAssignment] = useState<Omit<SubstituteAssignment, 'id'>>({
+  const [formData, setFormData] = useState<FormData>({
     teacherId: '',
     originalTeacherId: '',
     startDate: todayStr,
     endDate: todayStr,
+    reason: '',
+    notes: '',
   });
   const [formError, setFormError] = useState<string | null>(null);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    if (isEditModalOpen && assignmentToEdit) {
-      setAssignmentToEdit(prev => ({ ...prev!, [name]: value }));
-    } else {
-      setNewAssignment(prev => ({ ...prev, [name]: value }));
-    }
-  };
+  // ==================== Memoized Computations ====================
 
-  // Handler for SearchableSelect (receives value directly)
-  const handleSelectChange = (name: string, value: string) => {
-    if (isEditModalOpen && assignmentToEdit) {
-      setAssignmentToEdit(prev => ({ ...prev!, [name]: value }));
-    } else {
-      setNewAssignment(prev => ({ ...prev, [name]: value }));
-    }
-  };
-  
-  const validateAssignment = (assignment: Omit<SubstituteAssignment, 'id'> | SubstituteAssignment) => {
-    if (!assignment.teacherId || !assignment.originalTeacherId || !assignment.startDate || !assignment.endDate) {
-        return "All fields are required.";
-    }
-    if (assignment.endDate < assignment.startDate) {
-        return "End date cannot be before the start date.";
-    }
-    if (assignment.teacherId === assignment.originalTeacherId) {
-        return "Substitute and original teacher cannot be the same person.";
-    }
-    return null;
-  };
-
-  const handleAddAssignment = (e: React.FormEvent) => {
-    e.preventDefault();
-    const error = validateAssignment(newAssignment);
-    if (error) {
-        setFormError(error);
-        return;
-    }
-    addSubstituteAssignment(newAssignment);
-    setNewAssignment({ teacherId: '', originalTeacherId: '', startDate: todayStr, endDate: todayStr });
-    setIsAddModalOpen(false);
-    setFormError(null);
-  };
-  
-  const handleEditClick = (assignment: SubstituteAssignment) => {
-    setAssignmentToEdit({ ...assignment });
-    setIsEditModalOpen(true);
-  };
-  
-  const handleUpdateAssignment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!assignmentToEdit) return;
-     const error = validateAssignment(assignmentToEdit);
-    if (error) {
-        setFormError(error);
-        return;
-    }
-    updateSubstituteAssignment(assignmentToEdit);
-    setIsEditModalOpen(false);
-    setAssignmentToEdit(null);
-    setFormError(null);
-  };
-  
-  const handleDeleteClick = (assignment: SubstituteAssignment) => {
-    setAssignmentToDelete(assignment);
-    setIsDeleteModalOpen(true);
-  };
-  
-  const confirmDelete = () => {
-    if (assignmentToDelete) {
-        deleteSubstituteAssignment(assignmentToDelete.id);
-        setIsDeleteModalOpen(false);
-        setAssignmentToDelete(null);
-    }
-  };
-  
-  const teacherOptions = useMemo(() => 
-    teachers
-      .filter(t => t.role === 'teacher')
-      .map(t => ({ value: t.id, label: t.name || `${t.firstName || ''} ${t.lastName || ''}`.trim() || 'Unknown' }))
-      .sort((a, b) => (a.label || '').localeCompare(b.label || ''))
-  , [teachers]);
-  
   const sortedAssignments = useMemo(() => 
-    [...substituteAssignments].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
-  , [substituteAssignments]);
+    [...assignments].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+  , [assignments]);
 
-  // Filter and search logic
   const filteredAssignments = useMemo(() => {
     return sortedAssignments.filter(assignment => {
       // Status filter
@@ -163,434 +143,272 @@ const SubstituteView: React.FC<SubstituteViewProps> = ({ schoolData }) => {
       
       // Search filter
       if (searchTerm.trim()) {
-        const subTeacher = teachers.find(t => t.id === assignment.teacherId);
-        const originalTeacher = teachers.find(t => t.id === assignment.originalTeacherId);
+        const subTeacher = memoizedTeachers.find(t => t.id === assignment.teacherId);
+        const originalTeacher = memoizedTeachers.find(t => t.id === assignment.originalTeacherId);
         const searchLower = searchTerm.toLowerCase();
         
-        const matchesSubstitute = subTeacher?.name.toLowerCase().includes(searchLower);
-        const matchesOriginal = originalTeacher?.name.toLowerCase().includes(searchLower);
+        const matchesSubstitute = subTeacher?.name?.toLowerCase().includes(searchLower);
+        const matchesOriginal = originalTeacher?.name?.toLowerCase().includes(searchLower);
         
         if (!matchesSubstitute && !matchesOriginal) return false;
       }
       
       return true;
     });
-  }, [sortedAssignments, statusFilter, searchTerm, teachers]);
+  }, [sortedAssignments, statusFilter, searchTerm, memoizedTeachers]);
 
-  // Calculate stats
-  const stats = useMemo(() => {
-    const total = substituteAssignments.length;
-    const active = substituteAssignments.filter(a => getStatus(a).text === 'Active').length;
-    const scheduled = substituteAssignments.filter(a => getStatus(a).text === 'Scheduled').length;
-    const completed = substituteAssignments.filter(a => getStatus(a).text === 'Completed').length;
+  // ==================== Callbacks ====================
+
+  const validateAssignment = useCallback((data: FormData): string | null => {
+    if (!data.teacherId || !data.originalTeacherId || !data.startDate || !data.endDate) {
+      return "All required fields must be filled.";
+    }
+    if (data.endDate < data.startDate) {
+      return "End date cannot be before the start date.";
+    }
+    if (data.teacherId === data.originalTeacherId) {
+      return "Substitute and original teacher cannot be the same person.";
+    }
+    return null;
+  }, []);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    if (isEditModalOpen && assignmentToEdit) {
+      setAssignmentToEdit(prev => prev ? { ...prev, [name]: value } : null);
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+    setFormError(null);
+  }, [isEditModalOpen, assignmentToEdit]);
+
+  const handleSelectChange = useCallback((name: string, value: string) => {
+    if (isEditModalOpen && assignmentToEdit) {
+      setAssignmentToEdit(prev => prev ? { ...prev, [name]: value } : null);
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+    setFormError(null);
+  }, [isEditModalOpen, assignmentToEdit]);
+
+  const handleAddAssignment = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const error = validateAssignment(formData);
+    if (error) {
+      setFormError(error);
+      return;
+    }
     
-    return { total, active, scheduled, completed };
-  }, [substituteAssignments]);
-
-
-  const renderForm = (
-    isEdit: boolean,
-    data: Omit<SubstituteAssignment, 'id'> | SubstituteAssignment,
-    handler: (e: React.FormEvent) => void
-  ) => {
-    const isFormValid = data.teacherId && data.originalTeacherId && data.startDate && data.endDate && !formError;
-    const duration = data.startDate && data.endDate ? getDuration(data.startDate, data.endDate) : null;
+    const result = await addAssignment({
+      teacherId: formData.teacherId,
+      originalTeacherId: formData.originalTeacherId,
+      startDate: formData.startDate,
+      endDate: formData.endDate,
+      reason: formData.reason,
+      notes: formData.notes,
+    });
     
+    if (result) {
+      setFormData({ teacherId: '', originalTeacherId: '', startDate: todayStr, endDate: todayStr, reason: '', notes: '' });
+      setIsAddModalOpen(false);
+      setFormError(null);
+    }
+  }, [formData, addAssignment, validateAssignment, todayStr]);
+
+  const handleEditClick = useCallback((id: string) => {
+    const assignment = assignments.find(a => a.id === id);
+    if (assignment) {
+      setAssignmentToEdit({ ...assignment });
+      setIsEditModalOpen(true);
+    }
+  }, [assignments]);
+
+  const handleUpdateAssignment = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignmentToEdit) return;
+    
+    const validationData: FormData = {
+      teacherId: assignmentToEdit.teacherId,
+      originalTeacherId: assignmentToEdit.originalTeacherId,
+      startDate: assignmentToEdit.startDate,
+      endDate: assignmentToEdit.endDate,
+      reason: assignmentToEdit.reason,
+      notes: assignmentToEdit.notes,
+    };
+    
+    const error = validateAssignment(validationData);
+    if (error) {
+      setFormError(error);
+      return;
+    }
+    
+    const result = await updateAssignment(assignmentToEdit.id, assignmentToEdit);
+    
+    if (result) {
+      setIsEditModalOpen(false);
+      setAssignmentToEdit(null);
+      setFormError(null);
+    }
+  }, [assignmentToEdit, updateAssignment, validateAssignment]);
+
+  const handleDeleteClick = useCallback((id: string) => {
+    const assignment = assignments.find(a => a.id === id);
+    if (assignment) {
+      setAssignmentToDelete(assignment);
+      setIsDeleteModalOpen(true);
+    }
+  }, [assignments]);
+
+  const confirmDelete = useCallback(async () => {
+    if (assignmentToDelete) {
+      const success = await deleteAssignment(assignmentToDelete.id);
+      if (success) {
+        setIsDeleteModalOpen(false);
+        setAssignmentToDelete(null);
+      }
+    }
+  }, [assignmentToDelete, deleteAssignment]);
+
+  const handleCloseAddModal = useCallback(() => {
+    setIsAddModalOpen(false);
+    setFormError(null);
+  }, []);
+
+  const handleCloseEditModal = useCallback(() => {
+    setIsEditModalOpen(false);
+    setAssignmentToEdit(null);
+    setFormError(null);
+  }, []);
+
+  const handleCloseDeleteModal = useCallback(() => {
+    setIsDeleteModalOpen(false);
+    setAssignmentToDelete(null);
+  }, []);
+
+  // ==================== Render ====================
+
+  if (loading) {
     return (
-      <form onSubmit={handler} className="space-y-6">
-        {/* Teacher Selection Section */}
-        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4 space-y-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-2xl">👥</span>
-            <h4 className="font-semibold text-slate-800 dark:text-white">Teacher Assignment</h4>
-          </div>
-          
-          <div>
-            <label htmlFor="teacherId" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Substitute Teacher <span className="text-red-500">*</span>
-            </label>
-            <SearchableSelect
-              id="teacherId"
-              name="teacherId"
-              value={data.teacherId}
-              onChange={(value) => handleSelectChange('teacherId', value)}
-              options={teacherOptions}
-              placeholder="Search for a substitute teacher..."
-              icon="👤"
-              required
-            />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Who will be filling in during this period? ({teacherOptions.length} teachers available)
-            </p>
-          </div>
-          
-          <div>
-            <label htmlFor="originalTeacherId" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Teacher to Replace <span className="text-red-500">*</span>
-            </label>
-            <SearchableSelect
-              id="originalTeacherId"
-              name="originalTeacherId"
-              value={data.originalTeacherId}
-              onChange={(value) => handleSelectChange('originalTeacherId', value)}
-              options={teacherOptions}
-              placeholder="Search for the teacher to replace..."
-              icon="🎓"
-              required
-            />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Which teacher's classes will be covered?
-            </p>
-          </div>
-        </div>
-
-        {/* Date Selection Section */}
-        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4 space-y-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-2xl">📅</span>
-            <h4 className="font-semibold text-slate-800 dark:text-white">Assignment Period</h4>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="startDate" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Start Date <span className="text-red-500">*</span>
-              </label>
-              <input 
-                type="date" 
-                name="startDate" 
-                id="startDate" 
-                value={data.startDate} 
-                onChange={handleInputChange} 
-                className="block w-full rounded-lg border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 dark:text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 transition-all" 
-                required 
-              />
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                First day of substitution
-              </p>
-            </div>
-            
-            <div>
-              <label htmlFor="endDate" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                End Date <span className="text-red-500">*</span>
-              </label>
-              <input 
-                type="date" 
-                name="endDate" 
-                id="endDate" 
-                value={data.endDate} 
-                onChange={handleInputChange}
-                min={data.startDate}
-                className="block w-full rounded-lg border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 dark:text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 transition-all" 
-                required 
-              />
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Last day of substitution
-              </p>
-            </div>
-          </div>
-          
-          {duration && !formError && (
-            <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <span className="text-blue-600 dark:text-blue-400">ℹ️</span>
-              <p className="text-sm text-blue-800 dark:text-blue-300">
-                <span className="font-semibold">Duration:</span> {duration}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Error Display */}
-        {formError && (
-          <div className="p-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-red-900/30 dark:text-red-400 border-2 border-red-200 dark:border-red-800" role="alert">
-            <div className="flex items-start gap-3">
-              <span className="text-xl">⚠️</span>
-              <div>
-                <span className="font-bold block mb-1">Validation Error</span>
-                <span>{formError}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Success Indicator */}
-        {isFormValid && (
-          <div className="p-3 text-sm text-green-800 rounded-lg bg-green-50 dark:bg-green-900/20 dark:text-green-400 border border-green-200 dark:border-green-800">
-            <div className="flex items-center gap-2">
-              <span>✓</span>
-              <span className="font-medium">Form is ready to submit!</span>
-            </div>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-          <button 
-            type="button" 
-            onClick={() => { 
-              isEdit ? setIsEditModalOpen(false) : setIsAddModalOpen(false); 
-              setFormError(null); 
-            }} 
-            className="px-5 py-2.5 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors shadow-sm"
-          >
-            Cancel
-          </button>
-          <button 
-            type="submit" 
-            disabled={!isFormValid}
-            className="px-5 py-2.5 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
-          >
-            {isEdit ? '💾 Save Changes' : '➕ Add Assignment'}
-          </button>
-        </div>
-      </form>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <span className="ml-3 text-slate-600 dark:text-slate-400">Loading substitute assignments...</span>
+      </div>
     );
-  };
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-red-800 dark:text-red-200 mb-2">Error Loading Data</h3>
+        <p className="text-red-600 dark:text-red-300">{error}</p>
+        <p className="text-sm text-red-500 dark:text-red-400 mt-2">
+          Please ensure the substitute_assignments table has been created in the database.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-slate-800 dark:text-white">📋 Substitute Management</h1>
-            <button 
-                onClick={() => setIsAddModalOpen(true)} 
-                className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
-            >
-                + Add Assignment
-            </button>
-        </div>
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold text-slate-800 dark:text-white">📋 Substitute Management</h1>
+        <button 
+          onClick={() => setIsAddModalOpen(true)} 
+          className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
+        >
+          + Add Assignment
+        </button>
+      </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg p-5 text-white shadow-lg">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-indigo-100 text-sm font-medium">Total Assignments</p>
-                        <p className="text-3xl font-bold mt-1">{stats.total}</p>
-                    </div>
-                    <div className="text-5xl opacity-80">👥</div>
-                </div>
-            </div>
+      {/* Stats Cards */}
+      <StatisticsDashboard stats={stats} />
+
+      {/* Search and Filter */}
+      <SearchFilterBar
+        searchTerm={searchTerm}
+        statusFilter={statusFilter}
+        onSearchChange={setSearchTerm}
+        onStatusChange={setStatusFilter}
+      />
+
+      {/* Assignments List */}
+      {filteredAssignments.length === 0 ? (
+        <EmptyState 
+          hasFilters={!!(searchTerm || statusFilter !== 'all')}
+          onAddClick={() => setIsAddModalOpen(true)}
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {filteredAssignments.map(assignment => {
+            const substituteTeacher = memoizedTeachers.find(t => t.id === assignment.teacherId);
+            const originalTeacher = memoizedTeachers.find(t => t.id === assignment.originalTeacherId);
+            const status = getStatus(assignment);
+            const duration = getDuration(assignment.startDate, assignment.endDate);
+            const dateRange = formatDateRange(assignment.startDate, assignment.endDate);
             
-            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-5 text-white shadow-lg">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-green-100 text-sm font-medium">Active Now</p>
-                        <p className="text-3xl font-bold mt-1">{stats.active}</p>
-                    </div>
-                    <div className="text-5xl opacity-80">✓</div>
-                </div>
-            </div>
-            
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-5 text-white shadow-lg">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-blue-100 text-sm font-medium">Scheduled</p>
-                        <p className="text-3xl font-bold mt-1">{stats.scheduled}</p>
-                    </div>
-                    <div className="text-5xl opacity-80">📅</div>
-                </div>
-            </div>
-            
-            <div className="bg-gradient-to-br from-slate-500 to-slate-600 rounded-lg p-5 text-white shadow-lg">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-slate-100 text-sm font-medium">Completed</p>
-                        <p className="text-3xl font-bold mt-1">{stats.completed}</p>
-                    </div>
-                    <div className="text-5xl opacity-80">✔</div>
-                </div>
-            </div>
+            return (
+              <AssignmentCard
+                key={assignment.id}
+                id={assignment.id}
+                substituteTeacher={substituteTeacher}
+                originalTeacher={originalTeacher}
+                dateRange={dateRange}
+                duration={duration}
+                status={status}
+                onEdit={handleEditClick}
+                onDelete={handleDeleteClick}
+              />
+            );
+          })}
         </div>
+      )}
 
-        {/* Search and Filter */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-md">
-            <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
-                    <label htmlFor="search" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Search by teacher name
-                    </label>
-                    <input
-                        type="text"
-                        id="search"
-                        placeholder="Search substitute or original teacher..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 dark:text-white focus:border-indigo-500 focus:ring-indigo-500 px-4 py-2"
-                    />
-                </div>
-                <div className="md:w-64">
-                    <label htmlFor="statusFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Filter by status
-                    </label>
-                    <select
-                        id="statusFilter"
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                        className="w-full rounded-md border-slate-300 dark:border-slate-600 shadow-sm dark:bg-slate-700 dark:text-white focus:border-indigo-500 focus:ring-indigo-500 px-4 py-2"
-                    >
-                        <option value="all">All Assignments</option>
-                        <option value="active">Active</option>
-                        <option value="scheduled">Scheduled</option>
-                        <option value="completed">Completed</option>
-                    </select>
-                </div>
-            </div>
-        </div>
+      {/* Add Modal */}
+      <AssignmentFormModal
+        isOpen={isAddModalOpen}
+        isEdit={false}
+        formData={formData}
+        formError={formError}
+        teachers={memoizedTeachers}
+        onClose={handleCloseAddModal}
+        onSubmit={handleAddAssignment}
+        onInputChange={handleInputChange}
+        onSelectChange={handleSelectChange}
+      />
 
-        {/* Assignments Grid */}
-        {filteredAssignments.length === 0 ? (
-            <div className="bg-white dark:bg-slate-800 rounded-lg p-12 text-center shadow-md">
-                <div className="text-6xl mb-4">📝</div>
-                <h3 className="text-xl font-semibold text-slate-800 dark:text-white mb-2">
-                    {searchTerm || statusFilter !== 'all' ? 'No assignments found' : 'No substitute assignments yet'}
-                </h3>
-                <p className="text-slate-600 dark:text-slate-400 mb-6">
-                    {searchTerm || statusFilter !== 'all' 
-                        ? 'Try adjusting your search or filter criteria.'
-                        : 'Get started by creating your first substitute assignment.'
-                    }
-                </p>
-                {!searchTerm && statusFilter === 'all' && (
-                    <button
-                        onClick={() => setIsAddModalOpen(true)}
-                        className="bg-indigo-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-indigo-700 transition-colors"
-                    >
-                        + Add First Assignment
-                    </button>
-                )}
-            </div>
-        ) : (
-            <div className="grid grid-cols-1 gap-4">
-                {filteredAssignments.map(sub => {
-                    const substituteTeacher = teachers.find(t => t.id === sub.teacherId);
-                    const originalTeacher = teachers.find(t => t.id === sub.originalTeacherId);
-                    const status = getStatus(sub);
-                    const duration = getDuration(sub.startDate, sub.endDate);
-                    const dateRange = formatDateRange(sub.startDate, sub.endDate);
-                    
-                    return (
-                        <div 
-                            key={sub.id} 
-                            className="bg-white dark:bg-slate-800 rounded-lg p-5 shadow-md hover:shadow-lg transition-shadow border border-slate-200 dark:border-slate-700"
-                        >
-                            <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-300 text-xl">
-                                            👤
-                                        </div>
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                                                {substituteTeacher?.name ?? 'Unknown Teacher'}
-                                            </h3>
-                                            <p className="text-sm text-slate-500 dark:text-slate-400">
-                                                Replacing: {originalTeacher?.name ?? 'Unknown'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex flex-wrap items-center gap-4 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-slate-400">📅</span>
-                                            <span className="text-slate-600 dark:text-slate-300">{dateRange}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-slate-500 dark:text-slate-400">Duration:</span>
-                                            <span className="font-medium text-slate-700 dark:text-slate-200">{duration}</span>
-                                        </div>
-                                        <span className={`px-3 py-1 text-xs font-bold rounded-full ${status.color} flex items-center gap-1`}>
-                                            <span>{status.icon}</span>
-                                            {status.text}
-                                        </span>
-                                    </div>
-                                </div>
-                                
-                                <div className="flex items-center gap-2 ml-4">
-                                    <button 
-                                        onClick={() => handleEditClick(sub)} 
-                                        className="p-2 text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 rounded-lg transition-colors flex items-center gap-1"
-                                        title="Edit assignment"
-                                    >
-                                        <PencilIcon />
-                                    </button>
-                                    <button 
-                                        onClick={() => handleDeleteClick(sub)} 
-                                        className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors flex items-center gap-1"
-                                        title="Delete assignment"
-                                    >
-                                        <TrashIcon />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        )}
-        
-        <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setFormError(null); }} title="➕ Add Substitute Assignment">
-            {renderForm(false, newAssignment, handleAddAssignment)}
-        </Modal>
+      {/* Edit Modal */}
+      {assignmentToEdit && (
+        <AssignmentFormModal
+          isOpen={isEditModalOpen}
+          isEdit={true}
+          formData={{
+            teacherId: assignmentToEdit.teacherId,
+            originalTeacherId: assignmentToEdit.originalTeacherId,
+            startDate: assignmentToEdit.startDate,
+            endDate: assignmentToEdit.endDate,
+            reason: assignmentToEdit.reason,
+            notes: assignmentToEdit.notes,
+          }}
+          formError={formError}
+          teachers={memoizedTeachers}
+          onClose={handleCloseEditModal}
+          onSubmit={handleUpdateAssignment}
+          onInputChange={handleInputChange}
+          onSelectChange={handleSelectChange}
+        />
+      )}
 
-        <Modal isOpen={isEditModalOpen} onClose={() => { setIsEditModalOpen(false); setFormError(null); }} title="✏️ Edit Substitute Assignment">
-            {assignmentToEdit && renderForm(true, assignmentToEdit, handleUpdateAssignment)}
-        </Modal>
-
-        <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="🗑️ Confirm Deletion">
-            <div className="space-y-4">
-                {/* Warning Icon */}
-                <div className="flex justify-center">
-                    <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-                        <span className="text-4xl">⚠️</span>
-                    </div>
-                </div>
-                
-                {/* Assignment Details */}
-                {assignmentToDelete && (
-                    <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4">
-                        <h4 className="font-semibold text-slate-800 dark:text-white mb-2">Assignment to Delete:</h4>
-                        <div className="text-sm text-slate-600 dark:text-slate-300 space-y-1">
-                            <p>
-                                <span className="font-medium">Substitute:</span>{' '}
-                                {teachers.find(t => t.id === assignmentToDelete.teacherId)?.name ?? 'Unknown'}
-                            </p>
-                            <p>
-                                <span className="font-medium">Replacing:</span>{' '}
-                                {teachers.find(t => t.id === assignmentToDelete.originalTeacherId)?.name ?? 'Unknown'}
-                            </p>
-                            <p>
-                                <span className="font-medium">Period:</span>{' '}
-                                {formatDateRange(assignmentToDelete.startDate, assignmentToDelete.endDate)}
-                            </p>
-                        </div>
-                    </div>
-                )}
-                
-                {/* Warning Message */}
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-lg">
-                    <p className="text-sm text-red-800 dark:text-red-300">
-                        <span className="font-bold">Warning:</span> This action cannot be undone. The substitute assignment will be permanently removed from the system.
-                    </p>
-                </div>
-                
-                {/* Action Buttons */}
-                <div className="flex justify-end gap-3 pt-2">
-                    <button 
-                        onClick={() => setIsDeleteModalOpen(false)} 
-                        className="px-5 py-2.5 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-200 font-semibold rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors shadow-sm"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        onClick={confirmDelete} 
-                        className="px-5 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors shadow-md hover:shadow-lg"
-                    >
-                        🗑️ Delete Assignment
-                    </button>
-                </div>
-            </div>
-        </Modal>
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={isDeleteModalOpen}
+        assignmentId={assignmentToDelete?.id || null}
+        substituteTeacher={assignmentToDelete ? memoizedTeachers.find(t => t.id === assignmentToDelete.teacherId) : undefined}
+        originalTeacher={assignmentToDelete ? memoizedTeachers.find(t => t.id === assignmentToDelete.originalTeacherId) : undefined}
+        dateRange={assignmentToDelete ? formatDateRange(assignmentToDelete.startDate, assignmentToDelete.endDate) : ''}
+        onClose={handleCloseDeleteModal}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };

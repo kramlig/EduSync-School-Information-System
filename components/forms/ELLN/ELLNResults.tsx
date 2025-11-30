@@ -3,16 +3,19 @@
  * 
  * View individual student assessment results with quarterly trends,
  * domain breakdowns, proficiency levels, and class comparisons.
+ * 
+ * ✅ MIGRATED TO POSTGRESQL (November 25, 2025)
+ * ✅ OPTIMIZED (November 25, 2025)
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ELLNAssessment, ProficiencyLevel } from '../shared/FormTypes';
-import { ELLNService } from '../../../services/formsService';
-import { getCurrentSchoolYear } from '../../../services/dateHelpers';
-import { useSchoolData } from '../../../hooks/useSchoolData.simplified';
+import { ProficiencyLevel } from '../shared/FormTypes';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
+import { useELLNPostgreSQL, ELLNAssessment as PostgresELLNAssessment } from '../../../src/hooks/useELLNPostgreSQL';
 import { 
-  ArrowLeftIcon, 
   ChartBarIcon,
   AcademicCapIcon,
   TrophyIcon,
@@ -21,6 +24,67 @@ import {
   MagnifyingGlassIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
+
+/**
+ * Local type for component-level usage (matches Firestore format for backward compatibility)
+ */
+interface ELLNAssessment {
+  id: string;
+  studentId: string;
+  studentName: string;
+  gradeLevel: number;
+  schoolYear: string;
+  quarter: 'q1' | 'q2' | 'q3' | 'q4';
+  literacy: {
+    oralLanguage: number;
+    phonologicalAwareness: number;
+    bookAndPrintKnowledge: number;
+    alphabetKnowledge: number;
+    phonics: number;
+    comprehension: number;
+  };
+  numeracy: {
+    numberSense: number;
+    measurement: number;
+    geometry: number;
+    patterns: number;
+    dataAnalysis: number;
+  };
+  literacyScore: number;
+  numeracyScore: number;
+  overallScore: number;
+  proficiencyLevel: ProficiencyLevel;
+  assessedBy: string;
+  assessedByName: string;
+  assessmentDate: string;
+  notes?: string;
+  recommendations?: string;
+}
+
+/**
+ * Convert PostgreSQL format to component format
+ */
+function mapPostgresToComponent(pgAssessment: PostgresELLNAssessment): ELLNAssessment {
+  return {
+    id: pgAssessment.id,
+    studentId: pgAssessment.student_id,
+    studentName: pgAssessment.student_name,
+    gradeLevel: pgAssessment.grade_level,
+    schoolYear: pgAssessment.school_year,
+    quarter: pgAssessment.quarter,
+    literacy: pgAssessment.literacy_scores,
+    numeracy: pgAssessment.numeracy_scores,
+    literacyScore: pgAssessment.literacy_score,
+    numeracyScore: pgAssessment.numeracy_score,
+    overallScore: pgAssessment.overall_score,
+    proficiencyLevel: pgAssessment.proficiency_level,
+    assessedBy: pgAssessment.assessed_by,
+    assessedByName: pgAssessment.assessed_by_name,
+    assessmentDate: pgAssessment.assessment_date,
+    notes: pgAssessment.notes,
+    recommendations: pgAssessment.recommendations
+  };
+}
 
 /**
  * Get proficiency level color classes
@@ -65,53 +129,88 @@ const numeracyDomains = [
 
 export default function ELLNResults() {
   const navigate = useNavigate();
-  const { students, sections } = useSchoolData();
+  const { schoolId } = useSchoolContext();
 
   // State
   const [selectedStudent, setSelectedStudent] = useState('');
-  const [assessments, setAssessments] = useState<ELLNAssessment[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  
-  // Searchable dropdown state
   const [searchQuery, setSearchQuery] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Create student-section mapping
-  const studentsWithGrade = students.map(s => {
-    const section = sections.find(sec => sec.id === s.sectionId);
-    return {
-      ...s,
-      gradeLevel: section?.gradeLevel || 0,
-      sectionName: section?.name || 'N/A'
-    };
+  // PostgreSQL data hooks
+  const { students: pgStudents, loading: studentsLoading } = useStudentsPostgreSQL({ 
+    schoolId,
+    includeSection: true 
+  });
+  const { sections: pgSections } = useSectionsPostgreSQL({ schoolId });
+  const { 
+    assessments: pgAssessments, 
+    loading: assessmentsLoading,
+    error: assessmentsError
+  } = useELLNPostgreSQL({ 
+    schoolId,
+    studentId: selectedStudent || undefined
   });
 
-  // Filter K-3 students (for demo, showing all students since test data is Grade 7-8)
-  // TODO: In production, ensure only K-3 students are shown
-  const k3Students = studentsWithGrade; // .filter(s => s.gradeLevel >= 0 && s.gradeLevel <= 3);
-  const student = k3Students.find(s => s.id === selectedStudent);
+  // Memoize student-section mapping
+  const studentsWithGrade = useMemo(() => {
+    return pgStudents.map(s => {
+      const section = pgSections.find(sec => sec.id === s.section_id);
+      return {
+        id: s.id,
+        name: s.name || `${s.first_name} ${s.middle_name || ''} ${s.last_name}`.trim(),
+        lrn: s.lrn,
+        gradeLevel: section?.grade_level || 0,
+        sectionName: section?.name || 'N/A'
+      };
+    });
+  }, [pgStudents, pgSections]);
 
   // Filter students based on search query
   const filteredStudents = useMemo(() => {
-    if (!searchQuery.trim()) return k3Students;
+    if (!searchQuery.trim()) return studentsWithGrade;
     
     const query = searchQuery.toLowerCase();
-    return k3Students.filter(s => {
-      const name = s.name || `${s.firstName} ${s.middleName || ''} ${s.lastName}`.trim();
+    return studentsWithGrade.filter(s => {
+      const name = s.name.toLowerCase();
       const lrn = s.lrn || '';
       const grade = `grade ${s.gradeLevel}`;
-      const section = s.sectionName || '';
+      const section = s.sectionName.toLowerCase();
       
-      return name.toLowerCase().includes(query) ||
+      return name.includes(query) ||
              lrn.includes(query) ||
              grade.includes(query) ||
-             section.toLowerCase().includes(query);
+             section.includes(query);
     });
-  }, [searchQuery, k3Students]);
+  }, [searchQuery, studentsWithGrade]);
+
+  // Convert and sort assessments
+  const assessments = useMemo(() => {
+    if (!selectedStudent || !pgAssessments.length) return [];
+    
+    const converted = pgAssessments.map(mapPostgresToComponent);
+    return converted.sort((a, b) => {
+      const quarterOrder = { q1: 1, q2: 2, q3: 3, q4: 4 };
+      return quarterOrder[a.quarter] - quarterOrder[b.quarter];
+    });
+  }, [selectedStudent, pgAssessments]);
+
+  // Get selected student
+  const student = useMemo(() => 
+    studentsWithGrade.find(s => s.id === selectedStudent),
+    [studentsWithGrade, selectedStudent]
+  );
+
+  // Calculate quarter-over-quarter growth
+  const quarterlyGrowth = useMemo(() => {
+    if (assessments.length < 2) return 0;
+    return calculateGrowth(
+      assessments[0].overallScore, 
+      assessments[assessments.length - 1].overallScore
+    );
+  }, [assessments]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -125,8 +224,16 @@ export default function ELLNResults() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Handle student selection
+  const handleStudentSelect = useCallback((studentId: string) => {
+    setSelectedStudent(studentId);
+    setIsDropdownOpen(false);
+    setSearchQuery('');
+    setHighlightedIndex(0);
+  }, []);
+
   // Handle keyboard navigation
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!isDropdownOpen) {
       if (e.key === 'Enter' || e.key === 'ArrowDown') {
         setIsDropdownOpen(true);
@@ -156,54 +263,7 @@ export default function ELLNResults() {
         setIsDropdownOpen(false);
         break;
     }
-  };
-
-  // Handle student selection
-  const handleStudentSelect = (studentId: string) => {
-    setSelectedStudent(studentId);
-    setIsDropdownOpen(false);
-    setSearchQuery('');
-    setHighlightedIndex(0);
-  };
-
-  /**
-   * Load assessments when student is selected
-   */
-  useEffect(() => {
-    if (!selectedStudent) {
-      setAssessments([]);
-      return;
-    }
-
-    const loadAssessments = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const data = await ELLNService.getByStudentId(selectedStudent);
-        // Sort by quarter
-        const sorted = data.sort((a, b) => {
-          const quarterOrder = { q1: 1, q2: 2, q3: 3, q4: 4 };
-          return quarterOrder[a.quarter] - quarterOrder[b.quarter];
-        });
-        setAssessments(sorted);
-      } catch (err) {
-        console.error('Error loading assessments:', err);
-        setError('Failed to load assessment data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadAssessments();
-  }, [selectedStudent]);
-
-  // Calculate quarter-over-quarter growth
-  const quarterlyGrowth = assessments.length > 1 
-    ? calculateGrowth(
-        assessments[0].overallScore, 
-        assessments[assessments.length - 1].overallScore
-      )
-    : 0;
+  }, [isDropdownOpen, filteredStudents, highlightedIndex, handleStudentSelect]);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -232,7 +292,7 @@ export default function ELLNResults() {
             <li className="flex items-center">
               <ChevronRightIcon className="h-5 w-5 text-gray-400" />
               <button
-                onClick={() => navigate('/forms/elln')}
+                onClick={() => navigate('/reports/elln')}
                 className="ml-2 text-gray-500 hover:text-gray-700"
               >
                 ELLN Assessment
@@ -377,7 +437,7 @@ export default function ELLNResults() {
                 <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
                 </svg>
-                {k3Students.length} students available
+                {studentsWithGrade.length} students available
               </span>
               <span className="text-xs text-gray-500">
                 Use ↑↓ to navigate, Enter to select
@@ -387,14 +447,14 @@ export default function ELLNResults() {
         </div>
 
         {/* Error Message */}
-        {error && (
+        {assessmentsError && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-800">{error}</p>
+            <p className="text-red-800">Failed to load assessment data</p>
           </div>
         )}
 
         {/* Loading State */}
-        {loading && (
+        {(studentsLoading || assessmentsLoading) && (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Loading assessment data...</p>
@@ -402,7 +462,7 @@ export default function ELLNResults() {
         )}
 
         {/* Student Profile & Results */}
-        {student && !loading && (
+        {student && !studentsLoading && !assessmentsLoading && (
           <>
             {/* No Assessments State */}
             {assessments.length === 0 && (
@@ -413,7 +473,7 @@ export default function ELLNResults() {
                   This student has not been assessed yet. Conduct an assessment to see results here.
                 </p>
                 <button
-                  onClick={() => navigate('/forms/elln/assessment')}
+                  onClick={() => navigate('/reports/elln/assessment')}
                   className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
                 >
                   Conduct Assessment
