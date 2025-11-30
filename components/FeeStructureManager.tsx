@@ -1,22 +1,37 @@
 /**
- * FeeStructureManager - Admin interface for managing fee structures
+ * FeeStructureManager - PostgreSQL-backed Fee Structure Management
  * 
- * IMPORTANT: Uses memoized hooks to prevent infinite render loops
- * caused by settings object reference changes from useSchoolData
+ * Features:
+ * - Create/edit fee structures per grade level and school year
+ * - Manage tuition, miscellaneous fees, lab fees, and fixed fees
+ * - Set discounts for full payment, quarterly, and monthly plans
+ * - Duplicate detection to prevent conflicts
+ * - Real-time validation and error handling with modal dialogs
+ * 
+ * Performance Optimizations:
+ * - useCallback for all event handlers to prevent re-renders
+ * - useMemo for static data (grade levels, tracks, strands)
+ * - Memoized calculations for totals and filtered lists
+ * - Optimized state updates using functional setters
+ * 
+ * Migration Status: ✅ Fully migrated to PostgreSQL (Nov 2025)
+ * Database: Supabase PostgreSQL with JSONB for flexible fee structures
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
 import type { FeeStructure } from '../types';
+import type { AuthUser } from '../types/auth';
 import { 
   saveFeeStructure,
   getFeeStructures
-} from '../src/services/billingService';
-import { useOnlineStatus, getOfflineMessage } from '../src/services/connectionService';
+} from '../src/services/billingServicePostgreSQL';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
 import { PencilIcon, TrashIcon } from './icons';
 
 interface FeeStructureManagerProps {
   schoolData: SchoolDataHook;
+  session?: { user: AuthUser; type: 'staff' };
 }
 
 interface MiscFee {
@@ -32,11 +47,9 @@ interface LabFee {
   amount: number;
 }
 
-const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData }) => {
+const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData, session }) => {
   const { loading } = schoolData;
-  
-  // Online status
-  const isOnline = useOnlineStatus();
+  const { schoolId } = useSchoolContext();
   
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
   const [editingStructure, setEditingStructure] = useState<FeeStructure | null>(null);
@@ -65,8 +78,8 @@ const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData })
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGradeFilter, setSelectedGradeFilter] = useState<number | 'all'>('all');
 
-  // Grade level options
-  const gradeLevels = [
+  // Grade level options (K-12)
+  const gradeLevels = useMemo(() => [
     { value: 0, label: 'Kindergarten' },
     { value: 1, label: 'Grade 1' },
     { value: 2, label: 'Grade 2' },
@@ -80,37 +93,45 @@ const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData })
     { value: 10, label: 'Grade 10' },
     { value: 11, label: 'Grade 11' },
     { value: 12, label: 'Grade 12' }
-  ];
+  ], []);
 
-  // SHS tracks and strands
-  const tracks = ['Academic', 'TVL', 'Sports', 'Arts & Design'];
-  const strands: Record<string, string[]> = {
+  // SHS tracks and strands (DepEd K-12 curriculum)
+  const tracks = useMemo(() => ['Academic', 'TVL', 'Sports', 'Arts & Design'], []);
+  const strands = useMemo(() => ({
     'Academic': ['STEM', 'HUMSS', 'ABM', 'GAS'],
     'TVL': ['HE', 'ICT', 'IA', 'Agri-Fishery'],
     'Sports': ['Sports'],
     'Arts & Design': ['Arts & Design']
-  };
+  }), []);
 
   // Load existing fee structures
   useEffect(() => {
-    loadFeeStructures();
-  }, []);
+    if (schoolId) {
+      loadFeeStructures();
+    }
+  }, [schoolId]);
 
-  const loadFeeStructures = async () => {
+  // Load fee structures from PostgreSQL
+  const loadFeeStructures = useCallback(async () => {
+    if (!schoolId) {
+      setLoadingStructures(false);
+      return;
+    }
+
     try {
       setLoadingStructures(true);
-      const structures = await getFeeStructures();
+      const structures = await getFeeStructures(schoolId);
       setFeeStructures(structures);
-      console.log('✅ Loaded fee structures:', structures.length);
     } catch (err) {
-      console.error('Error loading fee structures:', err);
-      setError('Failed to load fee structures');
+      console.error('[FeeStructureManager] Load error:', err);
+      setError('Failed to load fee structures. Please refresh the page.');
     } finally {
       setLoadingStructures(false);
     }
-  };
+  }, [schoolId]);
 
-  const resetForm = () => {
+  // Reset form to default values
+  const resetForm = useCallback(() => {
     setGradeLevel(1);
     setSchoolYear('2024-2025');
     setTrack('');
@@ -126,27 +147,34 @@ const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData })
     setMonthlyDiscount(0);
     setEditingStructure(null);
     setIsCreating(false);
-  };
+  }, []);
 
-  const loadStructureForEdit = (structure: FeeStructure) => {
+  // Load structure for editing
+  const loadStructureForEdit = useCallback((structure: any) => {
     setEditingStructure(structure);
     setGradeLevel(structure.gradeLevel);
     setSchoolYear(structure.schoolYear);
     setTrack(structure.track || '');
     setStrand(structure.strand || '');
-    setTuitionAmount(structure.fees.tuitionFee);
-    setMiscFees(structure.fees.miscFees || []);
-    setLabFees(structure.fees.labFees || []);
-    setRegistrationAmount(structure.fees.registrationFee || 500);
-    setIdAmount(structure.fees.idFee || 150);
-    setInsuranceAmount(structure.fees.insuranceFee || 300);
-    setFullPaymentDiscount(structure.paymentOptions.fullPayment.discount || 0.05);
-    setQuarterlyDiscount(0); // Not stored in current structure
-    setMonthlyDiscount(0); // Not stored in current structure
+    setTuitionAmount(structure.tuitionAmount || 0);
+    setMiscFees(structure.miscFees || []);
+    setLabFees(structure.labFees || []);
+    setRegistrationAmount(structure.registrationFee || 500);
+    setIdAmount(structure.idFee || 150);
+    setInsuranceAmount(structure.insuranceFee || 300);
+    setFullPaymentDiscount(structure.fullPaymentDiscount || 0.05);
+    setQuarterlyDiscount(structure.quarterlyDiscount || 0);
+    setMonthlyDiscount(structure.monthlyDiscount || 0);
     setIsCreating(true);
-  };
+  }, []);
 
-  const handleSave = async () => {
+  // Save fee structure (create or update)
+  const handleSave = useCallback(async () => {
+    if (!schoolId) {
+      setError('Cannot save - school not loaded. Please refresh the page.');
+      return;
+    }
+
     try {
       setSaving(true);
       setError(null);
@@ -168,6 +196,25 @@ const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData })
         return;
       }
 
+      // Check for duplicate fee structure (only when creating new)
+      if (!editingStructure?.id) {
+        const existingStructure = feeStructures.find(fs => 
+          fs.gradeLevel === gradeLevel &&
+          fs.schoolYear === schoolYear &&
+          (fs.track || '') === (track || '') &&
+          (fs.strand || '') === (strand || '')
+        );
+
+        if (existingStructure) {
+          setError(
+            `A fee structure for Grade ${gradeLevel}, ${schoolYear}` +
+            `${track ? ` - ${track}` : ''}${strand ? ` - ${strand}` : ''} already exists. ` +
+            `Please edit the existing structure instead of creating a new one.`
+          );
+          return;
+        }
+      }
+
       // Calculate totals
       const totalRequired = tuitionAmount + 
         miscFees.filter(f => f.required).reduce((sum, f) => sum + f.amount, 0) +
@@ -178,93 +225,88 @@ const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData })
       const totalOptional = miscFees.filter(f => !f.required).reduce((sum, f) => sum + f.amount, 0) +
         (labFees || []).reduce((sum, f) => sum + f.amount, 0);
 
-      // Build fee structure
-      const feeStructure: FeeStructure = {
-        id: editingStructure?.id || `${gradeLevel}-${schoolYear}${track ? `-${track}` : ''}${strand ? `-${strand}` : ''}`,
+      // Build fee structure for PostgreSQL
+      const feeStructure: any = {
+        schoolId,
         gradeLevel,
         schoolYear,
         ...(track && { track }),
         ...(strand && { strand }),
-        fees: {
-          tuitionFee: tuitionAmount,
-          miscFees: miscFees,
-          ...(labFees && labFees.length > 0 && { labFees }),
-          ...(registrationAmount && { registrationFee: registrationAmount }),
-          ...(idAmount && { idFee: idAmount }),
-          ...(insuranceAmount && { insuranceFee: insuranceAmount })
-        },
-        totalRequired,
-        totalOptional,
-        paymentOptions: {
-          fullPayment: {
-            enabled: true,
-            discount: fullPaymentDiscount
-          },
-          quarterly: {
-            enabled: true,
-            numberOfPayments: 4
-          },
-          monthly: {
-            enabled: true,
-            numberOfPayments: 10
-          }
-        },
-        createdAt: editingStructure?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        createdBy: editingStructure?.createdBy || 'system' // TODO: Get from session
+        tuitionAmount,
+        registrationFee: registrationAmount || 0,
+        idFee: idAmount || 0,
+        insuranceFee: insuranceAmount || 0,
+        miscFees: miscFees,
+        labFees: labFees || [],
+        fullPaymentDiscount: fullPaymentDiscount || 0,
+        quarterlyDiscount: quarterlyDiscount || 0,
+        monthlyDiscount: monthlyDiscount || 0,
+        allowInstallments: true,
+        installmentPlans: [],
+        isActive: true,
+        // Only set createdBy if we have a valid user ID
+        ...(session?.user?.id && { createdBy: session.user.id })
       };
+
+      // Only include id if updating existing structure
+      if (editingStructure?.id) {
+        feeStructure.id = editingStructure.id;
+      }
 
       await saveFeeStructure(feeStructure);
       
-      setSuccess(`Fee structure ${editingStructure ? 'updated' : 'created'} successfully`);
+      setSuccess(`Fee structure ${editingStructure ? 'updated' : 'created'} successfully!`);
       resetForm();
-      loadFeeStructures();
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      console.error('Error saving fee structure:', err);
-      setError('Failed to save fee structure');
+      await loadFeeStructures(); // Reload to show updated list
+    } catch (err: any) {
+      console.error('[FeeStructureManager] Save error:', err);
+      setError(err?.message || 'Failed to save fee structure. Please try again.');
     } finally {
       setSaving(false);
     }
-  };
+  }, [schoolId, editingStructure, feeStructures, gradeLevel, schoolYear, track, strand, tuitionAmount, miscFees, labFees, registrationAmount, idAmount, insuranceAmount, fullPaymentDiscount, quarterlyDiscount, monthlyDiscount, session, resetForm, loadFeeStructures]);
 
-  const addMiscFee = () => {
-    setMiscFees([...miscFees, { 
+  // Miscellaneous fees management
+  const addMiscFee = useCallback(() => {
+    setMiscFees(prev => [...prev, { 
       id: `misc-${Date.now()}`,
       name: '', 
       amount: 0, 
       required: true, 
       description: '' 
     }]);
-  };
+  }, []);
 
-  const updateMiscFee = (index: number, field: keyof MiscFee, value: string | number | boolean) => {
-    const updated = [...miscFees];
-    updated[index] = { ...updated[index], [field]: value };
-    setMiscFees(updated);
-  };
+  const updateMiscFee = useCallback((index: number, field: keyof MiscFee, value: string | number | boolean) => {
+    setMiscFees(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  }, []);
 
-  const removeMiscFee = (index: number) => {
-    setMiscFees(miscFees.filter((_, i) => i !== index));
-  };
+  const removeMiscFee = useCallback((index: number) => {
+    setMiscFees(prev => prev.filter((_, i) => i !== index));
+  }, []);
 
-  const addLabFee = () => {
-    setLabFees([...labFees, { subject: '', amount: 0 }]);
-  };
+  // Laboratory fees management
+  const addLabFee = useCallback(() => {
+    setLabFees(prev => [...prev, { subject: '', amount: 0 }]);
+  }, []);
 
-  const updateLabFee = (index: number, field: 'subject' | 'amount', value: string | number) => {
-    const updated = [...labFees];
-    updated[index] = { ...updated[index], [field]: value };
-    setLabFees(updated);
-  };
+  const updateLabFee = useCallback((index: number, field: 'subject' | 'amount', value: string | number) => {
+    setLabFees(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  }, []);
 
-  const removeLabFee = (index: number) => {
-    setLabFees(labFees.filter((_, i) => i !== index));
-  };
+  const removeLabFee = useCallback((index: number) => {
+    setLabFees(prev => prev.filter((_, i) => i !== index));
+  }, []);
 
-  // Calculate totals
+  // Calculate totals (memoized for performance)
   const totalRequired = useMemo(() => {
     return tuitionAmount + 
       miscFees.filter(f => f.required).reduce((sum, f) => sum + f.amount, 0) +
@@ -311,7 +353,7 @@ const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData })
   }, [feeStructures, searchQuery, selectedGradeFilter]);
 
   // Loading state - must come after all hooks
-  if (loading || loadingStructures) {
+  if (loading || loadingStructures || !schoolId) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -327,17 +369,65 @@ const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData })
         <p className="text-gray-600 mt-2">Define and manage fee structures for different grade levels</p>
       </div>
 
-      {/* Success/Error Messages */}
+      {/* Success/Error Modals */}
       {success && (
-        <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded flex justify-between items-center">
-          <span>{success}</span>
-          <button onClick={() => setSuccess(null)} className="text-green-700 hover:text-green-900">✕</button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setSuccess(null)}>
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full mx-4 transform transition-all" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-medium text-gray-900">Success</h3>
+                  <div className="mt-2 text-sm text-gray-600">
+                    {success}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setSuccess(null)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
+                >
+                  Great!
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
+      
+      {/* Error Modal/Dialog */}
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded flex justify-between items-center">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-700 hover:text-red-900">✕</button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setError(null)}>
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full mx-4 transform transition-all" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-medium text-gray-900">Error</h3>
+                  <div className="mt-2 text-sm text-gray-600">
+                    {error}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setError(null)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors"
+                >
+                  Got it
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -395,8 +485,7 @@ const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData })
             <div className="flex gap-2">
               <button
                 onClick={() => setIsCreating(true)}
-                disabled={!isOnline}
-                className={`bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium shadow-sm ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium shadow-sm"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -438,27 +527,6 @@ const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData })
               ✕ Cancel
             </button>
           </div>
-
-          {/* Offline Warning */}
-          {!isOnline && (
-            <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-yellow-700">
-                    <strong className="font-medium">Offline Mode</strong>
-                  </p>
-                  <p className="mt-1 text-sm text-yellow-700">
-                    {getOfflineMessage('FEE_STRUCTURE')}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Basic Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -793,7 +861,7 @@ const FeeStructureManager: React.FC<FeeStructureManagerProps> = ({ schoolData })
           <div className="flex gap-4">
             <button
               onClick={handleSave}
-              disabled={!isOnline || saving}
+              disabled={saving}
               className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               {saving ? 'Saving...' : editingStructure ? 'Update Fee Structure' : 'Create Fee Structure'}

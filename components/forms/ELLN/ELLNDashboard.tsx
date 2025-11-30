@@ -37,7 +37,7 @@ export default function ELLNDashboard() {
       title: 'ELLN Assessment',
       description: 'Conduct literacy and numeracy assessments for K-3 students',
       icon: <PencilSquareIcon className="h-8 w-8" />,
-      route: '/forms/elln/assessment',
+      route: '/reports/elln/assessment',
       color: 'blue',
       badge: 'K-3'
     },
@@ -46,7 +46,7 @@ export default function ELLNDashboard() {
       title: 'View Results',
       description: 'View individual student assessment results and progress tracking',
       icon: <ChartBarIcon className="h-8 w-8" />,
-      route: '/forms/elln/results',
+      route: '/reports/elln/results',
       color: 'green'
     },
     {
@@ -54,7 +54,7 @@ export default function ELLNDashboard() {
       title: 'Reports & Analytics',
       description: 'Generate section, grade-level, and school-wide ELLN reports',
       icon: <DocumentTextIcon className="h-8 w-8" />,
-      route: '/forms/elln/reports',
+      route: '/reports/elln/reports',
       color: 'purple'
     },
     {
@@ -62,7 +62,7 @@ export default function ELLNDashboard() {
       title: 'ILMP Templates',
       description: 'Individualized Learning & Monitoring Plans for intervention',
       icon: <ClipboardDocumentListIcon className="h-8 w-8" />,
-      route: '/forms/elln/ilmp',
+      route: '/reports/elln/ilmp',
       color: 'orange',
       badge: 'Intervention'
     }

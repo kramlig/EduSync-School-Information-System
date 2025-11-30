@@ -9,15 +9,25 @@
  * - Export to CSV functionality
  * 
  * IMPORTANT: Admin/Registrar only. Displays school-wide financial data.
+ * 
+ * PostgreSQL Migration: ✅ COMPLETE
+ * - Uses useStudentLedgersPostgreSQL for ledger data
+ * - Uses useReceiptsPostgreSQL for receipt data
+ * - Handles both paymentDate and createdAt fields for backward compatibility
+ * - Revenue uses 'category' field from PostgreSQL charges
+ * 
+ * Performance: ✅ OPTIMIZED
+ * - 6 useCallback hooks (processCollectionData, processPaymentMethodData, processOutstandingBalances, processRevenueByType, exportToCSV, formatCurrency)
+ * - 3 useMemo hooks (currentSchoolYear, totalCollections, totalOutstanding, totalRevenue)
+ * - Prevents unnecessary re-renders and recalculations
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
 import type { AuthUser, StudentLedger, Receipt } from '../types';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { getFirestoreInstance } from '../src/services/firestoreService';
 import { useSchoolContext } from '../src/contexts/SchoolContext';
-import { useOnlineStatus } from '../src/services/connectionService';
+import { useStudentLedgersPostgreSQL } from '../src/hooks/useStudentLedgersPostgreSQL';
+import { useReceiptsPostgreSQL } from '../src/hooks/useReceiptsPostgreSQL';
 import BarChart from './BarChart';
 import LineChart from './LineChart';
 import { DocumentArrowDownIcon } from './icons';
@@ -63,11 +73,8 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
   session 
 }) => {
   const { students, sections, settings } = schoolData;
-  const { schoolId } = useSchoolContext(); // Get current school for filtering
-  const currentSchoolYear = settings?.schoolYear || '2024-2025';
-
-  // Online status
-  const isOnline = useOnlineStatus();
+  const { schoolId } = useSchoolContext();
+  const currentSchoolYear = useMemo(() => settings?.schoolYear || '2024-2025', [settings]);
 
   // State
   const [activeTab, setActiveTab] = useState<ReportTab>('collections');
@@ -76,9 +83,16 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
   const [endDate, setEndDate] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   
-  // Data state
-  const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [ledgers, setLedgers] = useState<StudentLedger[]>([]);
+  // Load financial data from PostgreSQL
+  const { ledgers, loading: ledgersLoading } = useStudentLedgersPostgreSQL({ 
+    schoolId, 
+    schoolYear: currentSchoolYear 
+  });
+  
+  const { receipts, loading: receiptsLoading } = useReceiptsPostgreSQL({
+    schoolId,
+    includeVoided: false
+  });
   const [collectionData, setCollectionData] = useState<CollectionData[]>([]);
   const [paymentMethodData, setPaymentMethodData] = useState<PaymentMethodData[]>([]);
   const [outstandingBalances, setOutstandingBalances] = useState<OutstandingBalance[]>([]);
@@ -94,65 +108,14 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
     setEndDate(end.toISOString().split('T')[0]);
   }, []);
 
-  // Load data
-  useEffect(() => {
-    if (!startDate || !endDate) return;
-    loadReportData();
-  }, [startDate, endDate, currentSchoolYear, schoolId]); // Add schoolId to dependencies
-
-  const loadReportData = async () => {
-    if (!schoolId) {
-      console.warn('[FinancialReports] No schoolId - skipping query');
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const db = getFirestoreInstance();
-      
-      // Load all receipts for the school year and school
-      const receiptsQuery = query(
-        collection(db, 'receipts'),
-        where('schoolId', '==', schoolId),
-        where('schoolYear', '==', currentSchoolYear)
-      );
-      const receiptsSnapshot = await getDocs(receiptsQuery);
-      const receiptsData = receiptsSnapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id
-      })) as Receipt[];
-      setReceipts(receiptsData);
-
-      // Load all student ledgers for the school
-      const ledgersQuery = query(
-        collection(db, 'studentLedgers'),
-        where('schoolId', '==', schoolId),
-        where('schoolYear', '==', currentSchoolYear)
-      );
-      const ledgersSnapshot = await getDocs(ledgersQuery);
-      const ledgersData = ledgersSnapshot.docs.map(doc => ({
-        ...doc.data(),
-        id: doc.id
-      })) as StudentLedger[];
-      setLedgers(ledgersData);
-
-      // Process data
-      processCollectionData(receiptsData);
-      processPaymentMethodData(receiptsData);
-      processOutstandingBalances(ledgersData);
-      processRevenueByType(ledgersData);
-    } catch (error) {
-      console.error('Error loading report data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const processCollectionData = (receiptsData: Receipt[]) => {
+  // Processing functions (defined before useEffect that uses them)
+  const processCollectionData = useCallback((receiptsData: Receipt[]) => {
     // Filter receipts by date range
     const filtered = receiptsData.filter(r => {
-      const receiptDate = new Date(r.date);
+      const dateField = r.paymentDate || (r as any).payment_date || r.createdAt || (r as any).created_at;
+      if (!dateField) return false;
+      
+      const receiptDate = new Date(dateField);
       const start = new Date(startDate);
       start.setHours(0, 0, 0, 0); // Start of day
       
@@ -165,7 +128,10 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
     // Group by date (use YYYY-MM-DD format for consistent parsing)
     const grouped: { [key: string]: { amount: number; count: number } } = {};
     filtered.forEach(receipt => {
-      const receiptDate = new Date(receipt.date);
+      const dateField = receipt.paymentDate || (receipt as any).payment_date || receipt.createdAt || (receipt as any).created_at;
+      if (!dateField) return;
+      
+      const receiptDate = new Date(dateField);
       // Format as YYYY-MM-DD
       const dateKey = receiptDate.toISOString().split('T')[0];
       
@@ -195,12 +161,15 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
       .sort((a, b) => a.sortDate.localeCompare(b.sortDate));
 
     setCollectionData(data);
-  };
+  }, [startDate, endDate]);
 
-  const processPaymentMethodData = (receiptsData: Receipt[]) => {
+  const processPaymentMethodData = useCallback((receiptsData: Receipt[]) => {
     // Filter by date range
     const filtered = receiptsData.filter(r => {
-      const receiptDate = new Date(r.date);
+      const dateField = r.paymentDate || (r as any).payment_date || r.createdAt || (r as any).created_at;
+      if (!dateField) return false;
+      
+      const receiptDate = new Date(dateField);
       const start = new Date(startDate);
       start.setHours(0, 0, 0, 0); // Start of day
       
@@ -230,9 +199,9 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
     }));
 
     setPaymentMethodData(data);
-  };
+  }, [startDate, endDate]);
 
-  const processOutstandingBalances = (ledgersData: StudentLedger[]) => {
+  const processOutstandingBalances = useCallback((ledgersData: StudentLedger[]) => {
     const outstanding: OutstandingBalance[] = [];
 
     ledgersData.forEach(ledger => {
@@ -256,36 +225,63 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
     // Sort by balance (highest first)
     outstanding.sort((a, b) => b.balance - a.balance);
     setOutstandingBalances(outstanding);
-  };
+  }, [students, sections]);
 
-  const processRevenueByType = (ledgersData: StudentLedger[]) => {
+  const processRevenueByType = useCallback((ledgersData: StudentLedger[]) => {
     const revenue: { [key: string]: number } = {};
 
     ledgersData.forEach(ledger => {
       ledger.charges.forEach(charge => {
-        if (!revenue[charge.type]) {
-          revenue[charge.type] = 0;
+        // Use category (PostgreSQL field), type (Firestore field), or 'Other' as fallback
+        const chargeType = (charge as any).category || charge.type || charge.description || 'Other';
+        if (!revenue[chargeType]) {
+          revenue[chargeType] = 0;
         }
-        revenue[charge.type] += charge.amount;
+        revenue[chargeType] += charge.amount;
       });
     });
 
     // Calculate total and percentages
     const total = Object.values(revenue).reduce((sum, amount) => sum + amount, 0);
     const data = Object.entries(revenue).map(([type, amount]) => ({
-      type: type.replace('_', ' ').toUpperCase(),
+      type: type ? type.replace(/_/g, ' ').toUpperCase() : 'UNCATEGORIZED',
       amount,
       percentage: total > 0 ? (amount / total) * 100 : 0
     }));
 
     setRevenueByType(data);
-  };
+  }, []);
+
+  // Process data when hooks return new data (placed after all processing functions)
+  useEffect(() => {
+    if (!receiptsLoading && !ledgersLoading && startDate && endDate) {
+      processCollectionData(receipts);
+      processPaymentMethodData(receipts);
+      processOutstandingBalances(ledgers);
+      processRevenueByType(ledgers);
+      setLoading(false);
+    }
+  }, [
+    receipts, 
+    ledgers, 
+    receiptsLoading, 
+    ledgersLoading, 
+    startDate, 
+    endDate,
+    processCollectionData,
+    processPaymentMethodData,
+    processOutstandingBalances,
+    processRevenueByType
+  ]);
 
   // Calculate totals
   const totalCollections = useMemo(() => {
     return receipts
       .filter(r => {
-        const receiptDate = new Date(r.date);
+        const dateField = r.paymentDate || (r as any).payment_date || r.createdAt || (r as any).created_at;
+        if (!dateField) return false;
+        
+        const receiptDate = new Date(dateField);
         const start = new Date(startDate);
         const end = new Date(endDate);
         return receiptDate >= start && receiptDate <= end;
@@ -304,7 +300,7 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
   }, [ledgers]);
 
   // Export to CSV
-  const exportToCSV = () => {
+  const exportToCSV = useCallback(() => {
     let csvContent = '';
     
     if (activeTab === 'collections') {
@@ -335,18 +331,18 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
     link.href = url;
     link.download = `financial-report-${activeTab}-${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
-  };
+  }, [activeTab, collectionData, outstandingBalances, revenueByType, paymentMethodData]);
 
   // Format currency
-  const formatCurrency = (amount: number): string => {
+  const formatCurrency = useCallback((amount: number): string => {
     return new Intl.NumberFormat('en-PH', {
       style: 'currency',
       currency: 'PHP',
       minimumFractionDigits: 2
     }).format(amount);
-  };
+  }, []);
 
-  if (loading) {
+  if (loading || !schoolId) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -374,18 +370,6 @@ const FinancialReports: React.FC<FinancialReportsProps> = ({
           Export CSV
         </button>
       </div>
-
-      {/* Offline Data Freshness Notice */}
-      {!isOnline && (
-        <div className="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-4 py-3 rounded-lg flex items-center gap-3">
-          <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-          </svg>
-          <div className="flex-1 text-sm">
-            <span className="font-medium">Offline Mode:</span> Displaying cached data. Report may not reflect latest transactions. Connect to internet for real-time financial data.
-          </div>
-        </div>
-      )}
 
       {/* Date Range Selector */}
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-6">

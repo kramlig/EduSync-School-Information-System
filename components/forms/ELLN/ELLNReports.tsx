@@ -3,24 +3,82 @@
  * 
  * Generate section-level, grade-level, and school-wide ELLN assessment reports.
  * Includes summary statistics, proficiency distribution, and Excel export.
+ * 
+ * ✅ MIGRATED TO POSTGRESQL (November 25, 2025)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ELLNAssessment, ProficiencyLevel } from '../shared/FormTypes';
-import { ELLNService } from '../../../services/formsService';
+import { ProficiencyLevel } from '../shared/FormTypes';
 import { getCurrentSchoolYear } from '../../../services/dateHelpers';
-import { useSchoolData } from '../../../hooks/useSchoolData.simplified';
+import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
+import { useELLNPostgreSQL, ELLNAssessment as PostgresELLNAssessment } from '../../../src/hooks/useELLNPostgreSQL';
 import { exportELLNToExcel } from '../../../services/ellnExportService';
 import StatisticalReports from './StatisticalReports';
 import { 
-  ArrowLeftIcon, 
   ArrowDownTrayIcon,
   ChartBarIcon,
   UserGroupIcon,
   HomeIcon,
   ChevronRightIcon
 } from '@heroicons/react/24/outline';
+
+/**
+ * Local type for component-level usage
+ */
+interface ELLNAssessment {
+  id: string;
+  studentId: string;
+  studentName: string;
+  gradeLevel: number;
+  schoolYear: string;
+  quarter: 'q1' | 'q2' | 'q3' | 'q4';
+  literacyScore: number;
+  numeracyScore: number;
+  overallScore: number;
+  proficiencyLevel: ProficiencyLevel;
+  assessedByName: string;
+  assessmentDate: string;
+  literacy: {
+    oralLanguage: number;
+    phonologicalAwareness: number;
+    bookAndPrintKnowledge: number;
+    alphabetKnowledge: number;
+    phonics: number;
+    comprehension: number;
+  };
+  numeracy: {
+    numberSense: number;
+    measurement: number;
+    geometry: number;
+    patterns: number;
+    dataAnalysis: number;
+  };
+}
+
+/**
+ * Convert PostgreSQL format to component format
+ */
+function mapPostgresToComponent(pgAssessment: PostgresELLNAssessment): ELLNAssessment {
+  return {
+    id: pgAssessment.id,
+    studentId: pgAssessment.student_id,
+    studentName: pgAssessment.student_name,
+    gradeLevel: pgAssessment.grade_level,
+    schoolYear: pgAssessment.school_year,
+    quarter: pgAssessment.quarter,
+    literacyScore: pgAssessment.literacy_score,
+    numeracyScore: pgAssessment.numeracy_score,
+    overallScore: pgAssessment.overall_score,
+    proficiencyLevel: pgAssessment.proficiency_level,
+    assessedByName: pgAssessment.assessed_by_name,
+    assessmentDate: pgAssessment.assessment_date,
+    literacy: pgAssessment.literacy_scores,
+    numeracy: pgAssessment.numeracy_scores
+  };
+}
 
 interface ReportSummary {
   totalAssessments: number;
@@ -94,83 +152,68 @@ const AVAILABLE_GRADES = [0, 1, 2, 3, 7, 8]; // K-3 and Grade 7-8 for demo
 export default function ELLNReports() {
   const navigate = useNavigate();
   const { schoolId } = useSchoolContext();
+  const schoolYear = getCurrentSchoolYear();
   
-  // Use PostgreSQL hooks
-  const { students } = useStudentsPostgreSQL({ schoolId });
-  const { sections } = useSectionsPostgreSQL({ schoolId });
-
   // State
   const [reportType, setReportType] = useState<'section' | 'grade' | 'school'>('section');
   const [selectedSection, setSelectedSection] = useState('');
-  const [selectedGrade, setSelectedGrade] = useState<number | ''>(''); // '' for "All Grades"
+  const [selectedGrade, setSelectedGrade] = useState<number | ''>('');
   const [quarter, setQuarter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>('all');
-  const [assessments, setAssessments] = useState<ELLNAssessment[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [summary, setSummary] = useState<ReportSummary | null>(null);
+
+  // PostgreSQL hooks
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ 
+    schoolId,
+    includeSection: true 
+  });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { assessments: pgAssessments, loading: assessmentsLoading } = useELLNPostgreSQL({ 
+    schoolId,
+    schoolYear,
+    gradeLevel: reportType === 'grade' && selectedGrade !== '' ? selectedGrade : undefined
+  });
+
+  // Convert assessments
+  const allAssessments = useMemo(() => 
+    pgAssessments.map(mapPostgresToComponent),
+    [pgAssessments]
+  );
 
   // Filter sections based on available grades
-  const filteredSections = sections.filter(s => AVAILABLE_GRADES.includes(s.gradeLevel));
+  const filteredSections = useMemo(() => 
+    sections.filter(s => AVAILABLE_GRADES.includes(s.grade_level)),
+    [sections]
+  );
 
-  /**
-   * Load assessments based on report type
-   */
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        let data: ELLNAssessment[] = [];
-        const schoolYear = getCurrentSchoolYear();
+  // Filter assessments based on report type and selections
+  const assessments = useMemo(() => {
+    let filtered = allAssessments;
 
-        if (reportType === 'section' && selectedSection) {
-          // Get students in the section
-          const sectionStudents = students.filter(s => s.sectionId === selectedSection);
-          const studentIds = sectionStudents.map(s => s.id);
-          
-          // Load assessments for all students in section
-          const promises = studentIds.map(id => ELLNService.getByStudentId(id));
-          const results = await Promise.all(promises);
-          data = results.flat();
-          
-        } else if (reportType === 'grade') {
-          // Load assessments for selected grade(s)
-          if (selectedGrade === '') {
-            // Load all grades
-            const promises = AVAILABLE_GRADES.map((grade: number) => 
-              ELLNService.getByGradeAndYear(grade, schoolYear)
-            );
-            const results = await Promise.all(promises);
-            data = results.flat();
-          } else {
-            // Load specific grade
-            data = await ELLNService.getByGradeAndYear(selectedGrade, schoolYear);
-          }
-          
-        } else if (reportType === 'school') {
-          // Load all available grades
-          const promises = AVAILABLE_GRADES.map((grade: number) => 
-            ELLNService.getByGradeAndYear(grade, schoolYear)
-          );
-          const results = await Promise.all(promises);
-          data = results.flat();
-        }
+    // Filter by report type
+    if (reportType === 'section' && selectedSection) {
+      const sectionStudentIds = students
+        .filter(s => s.section_id === selectedSection)
+        .map(s => s.id);
+      filtered = filtered.filter(a => sectionStudentIds.includes(a.studentId));
+    } else if (reportType === 'grade' && selectedGrade !== '') {
+      filtered = filtered.filter(a => a.gradeLevel === selectedGrade);
+    }
+    // 'school' type includes all assessments (no additional filter)
 
-        // Filter by quarter if not 'all'
-        if (quarter !== 'all') {
-          data = data.filter(a => a.quarter === quarter);
-        }
+    // Filter by quarter
+    if (quarter !== 'all') {
+      filtered = filtered.filter(a => a.quarter === quarter);
+    }
 
-        setAssessments(data);
-        setSummary(calculateSummary(data));
-        
-      } catch (err) {
-        console.error('Error loading report data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+    return filtered;
+  }, [allAssessments, reportType, selectedSection, selectedGrade, quarter, students]);
 
-    loadData();
-  }, [reportType, selectedSection, selectedGrade, quarter, students]);
+  // Calculate summary
+  const summary = useMemo(() => 
+    calculateSummary(assessments),
+    [assessments]
+  );
+
+  const loading = studentsLoading || sectionsLoading || assessmentsLoading;
 
   /**
    * Export to Excel
@@ -243,7 +286,7 @@ export default function ELLNReports() {
             <li className="flex items-center">
               <ChevronRightIcon className="h-5 w-5 text-gray-400" />
               <button
-                onClick={() => navigate('/forms/elln')}
+                onClick={() => navigate('/reports/elln')}
                 className="ml-2 text-gray-500 hover:text-gray-700"
               >
                 ELLN Assessment
@@ -313,7 +356,7 @@ export default function ELLNReports() {
                   <option value="">Choose a section...</option>
                   {filteredSections.map(s => (
                     <option key={s.id} value={s.id}>
-                      Grade {s.gradeLevel === 0 ? 'K' : s.gradeLevel} - {s.name}
+                      Grade {s.grade_level === 0 ? 'K' : s.grade_level} - {s.name}
                     </option>
                   ))}
                 </select>

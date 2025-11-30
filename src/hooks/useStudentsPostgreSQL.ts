@@ -115,7 +115,9 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
 
       let query = supabase.from('students').select(
         // Only select essential columns for better performance
-        'id, school_id, lrn, name, first_name, middle_name, last_name, suffix, gender, date_of_birth, grade_level, section_id, enrollment_status, contact_number, email',
+        includeSection 
+          ? 'id, school_id, lrn, name, first_name, middle_name, last_name, suffix, gender, date_of_birth, grade_level, section_id, enrollment_status, contact_number, email, sections(name)'
+          : 'id, school_id, lrn, name, first_name, middle_name, last_name, suffix, gender, date_of_birth, grade_level, section_id, enrollment_status, contact_number, email',
         { count: 'exact' } // Get count in same query
       );
 

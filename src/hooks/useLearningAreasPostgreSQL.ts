@@ -1,89 +1,195 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+/**
+ * Learning Areas Hook (PostgreSQL)
+ * 
+ * React hook for managing learning areas with PostgreSQL backend.
+ * Provides real-time updates via polling and CRUD operations.
+ * 
+ * IMPORTANT: Memoized to prevent infinite render loops
+ */
 
-// Query result cache
-const queryCache = new Map<string, { data: LearningArea[]; timestamp: number }>();
-const CACHE_TTL = 60000; // 60 seconds - learning areas change rarely
+import { useState, useEffect, useCallback } from 'react';
+import { useSchoolContext } from '../contexts/SchoolContext';
+import type { LearningArea } from '../../types';
+import {
+  fetchLearningAreas,
+  addLearningArea as addLearningAreaService,
+  updateLearningArea as updateLearningAreaService,
+  deleteLearningArea as deleteLearningAreaService,
+  bulkDeleteLearningAreas as bulkDeleteLearningAreasService,
+} from '../services/learningAreasServicePostgreSQL';
 
-interface LearningArea {
-  id: string;
-  schoolId: string;
-  name: string;
-  code: string;
-  gradeLevel?: number[];
-  isComposite?: boolean;
-  components?: string[];
-  subSubjects?: string[];
-  order?: number;
+interface UseLearningAreasOptions {
+  /**
+   * Enable/disable automatic polling for updates
+   * @default true
+   */
+  enablePolling?: boolean;
+  
+  /**
+   * Polling interval in milliseconds
+   * @default 30000 (30 seconds)
+   */
+  pollingInterval?: number;
+
+  /**
+   * Only show loading on initial fetch, not on polling updates
+   * @default true
+   */
+  conditionalLoading?: boolean;
 }
 
-export function useLearningAreasPostgreSQL(schoolId?: string) {
+const DEFAULT_OPTIONS: UseLearningAreasOptions = {
+  enablePolling: true,
+  pollingInterval: 30000, // 30 seconds - learning areas change rarely
+  conditionalLoading: true,
+};
+
+export function useLearningAreasPostgreSQL(options: UseLearningAreasOptions = {}) {
+  const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
+  const { schoolId } = useSchoolContext();
+  
   const [learningAreas, setLearningAreas] = useState<LearningArea[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  useEffect(() => {
-    const fetchLearningAreas = async () => {
-      try {
+  // ==================== Fetch Learning Areas ====================
+  
+  const loadLearningAreas = useCallback(async (showLoading = true) => {
+    if (!schoolId) return;
+
+    try {
+      if (showLoading) {
         setLoading(true);
-        setError(null);
+      }
+      setError(null);
 
-        // Check cache first
-        const cacheKey = schoolId || 'all';
-        const cached = queryCache.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-          setLearningAreas(cached.data);
-          setLoading(false);
-          return;
-        }
-
-        // Fetching learning areas
-
-        let query = supabase
-          .from('learning_areas')
-          .select('*');
-
-        // Only filter by schoolId if it's a valid UUID (not "default")
-        if (schoolId && schoolId !== 'default') {
-          query = query.eq('school_id', schoolId);
-        }
-        
-        // Order by name if 'order' column doesn't exist
-        query = query.order('name', { ascending: true });
-
-        const { data, error: fetchError } = await query;
-
-        // Query executed
-
-        if (fetchError) throw fetchError;
-
-        const transformed: LearningArea[] = (data || []).map(row => ({
-          id: row.id,
-          schoolId: row.school_id,
-          name: row.name,
-          code: row.code,
-          gradeLevel: row.grade_levels,
-          isComposite: row.is_composite,
-          components: row.components,
-          subSubjects: row.components, // Alias for compatibility
-          order: row.order
-        }));
-
-        setLearningAreas(transformed);
-        
-        // Update cache
-        queryCache.set(cacheKey, { data: transformed, timestamp: Date.now() });
-        
-      } catch (err) {
-        console.error('[useLearningAreasPostgreSQL] Error:', err);
-        setError(err as Error);
-      } finally {
+      const areas = await fetchLearningAreas(schoolId);
+      setLearningAreas(areas);
+      
+      if (isInitialLoad) {
+        setIsInitialLoad(false);
+      }
+    } catch (err) {
+      console.error('[useLearningAreasPostgreSQL] Error fetching learning areas:', err);
+      setError(err as Error);
+    } finally {
+      if (showLoading) {
         setLoading(false);
       }
-    };
+    }
+  }, [schoolId, isInitialLoad]);
 
-    fetchLearningAreas();
-  }, [schoolId]);
+  // ==================== Initial Load ====================
+  
+  useEffect(() => {
+    loadLearningAreas(true);
+  }, [loadLearningAreas]);
 
-  return { learningAreas, loading, error };
+  // ==================== Polling for Updates ====================
+  
+  useEffect(() => {
+    if (!mergedOptions.enablePolling || !schoolId) return;
+
+    const intervalId = setInterval(() => {
+      // Silent update on poll - don't show loading spinner
+      const showLoading = !mergedOptions.conditionalLoading;
+      loadLearningAreas(showLoading);
+    }, mergedOptions.pollingInterval);
+
+    return () => clearInterval(intervalId);
+  }, [mergedOptions.enablePolling, mergedOptions.pollingInterval, mergedOptions.conditionalLoading, schoolId, loadLearningAreas]);
+
+  // ==================== CRUD Operations ====================
+
+  /**
+   * Add a new learning area
+   */
+  const addLearningAreaHandler = useCallback(
+    async (areaData: Omit<LearningArea, 'id' | 'schoolId'>) => {
+      if (!schoolId) throw new Error('School ID is required');
+
+      try {
+        const newArea = await addLearningAreaService(schoolId, areaData);
+        setLearningAreas(prev => [...prev, newArea].sort((a, b) => (a.order || 0) - (b.order || 0)));
+        return newArea;
+      } catch (err) {
+        console.error('[useLearningAreasPostgreSQL] Error adding learning area:', err);
+        throw err;
+      }
+    },
+    [schoolId]
+  );
+
+  /**
+   * Update an existing learning area
+   */
+  const updateLearningAreaHandler = useCallback(
+    async (areaId: string, updates: Partial<LearningArea>) => {
+      try {
+        const updatedArea = await updateLearningAreaService(areaId, updates);
+        setLearningAreas(prev =>
+          prev.map(area => (area.id === areaId ? updatedArea : area))
+            .sort((a, b) => (a.order || 0) - (b.order || 0))
+        );
+        return updatedArea;
+      } catch (err) {
+        console.error('[useLearningAreasPostgreSQL] Error updating learning area:', err);
+        throw err;
+      }
+    },
+    []
+  );
+
+  /**
+   * Delete a learning area (soft delete)
+   */
+  const deleteLearningAreaHandler = useCallback(
+    async (areaId: string) => {
+      try {
+        await deleteLearningAreaService(areaId);
+        // Remove from local state after soft delete
+        setLearningAreas(prev => prev.filter(area => area.id !== areaId));
+      } catch (err) {
+        console.error('[useLearningAreasPostgreSQL] Error deleting learning area:', err);
+        throw err;
+      }
+    },
+    []
+  );
+
+  /**
+   * Bulk delete learning areas (soft delete)
+   */
+  const bulkDeleteLearningAreasHandler = useCallback(
+    async (areaIds: string[]) => {
+      try {
+        await bulkDeleteLearningAreasService(areaIds);
+        // Remove from local state after bulk soft delete
+        setLearningAreas(prev => prev.filter(area => !areaIds.includes(area.id)));
+      } catch (err) {
+        console.error('[useLearningAreasPostgreSQL] Error bulk deleting learning areas:', err);
+        throw err;
+      }
+    },
+    []
+  );
+
+  /**
+   * Manually refresh learning areas
+   */
+  const refresh = useCallback(() => {
+    loadLearningAreas(true);
+  }, [loadLearningAreas]);
+
+  return {
+    learningAreas,
+    loading,
+    error,
+    addLearningArea: addLearningAreaHandler,
+    updateLearningArea: updateLearningAreaHandler,
+    deleteLearningArea: deleteLearningAreaHandler,
+    bulkDeleteLearningAreas: bulkDeleteLearningAreasHandler,
+    refresh,
+  };
 }

@@ -1,27 +1,33 @@
 /**
- * PaymentRecording - Staff interface for recording student payments
+ * PaymentRecording - PostgreSQL-backed Payment Recording System
  * 
  * Features:
- * - Student search by name or LRN
- * - Current ledger display
- * - Payment form with multiple payment methods
- * - Receipt generation and preview
- * - Print functionality
+ * - Student search by name, LRN, or ID with section name display
+ * - Real-time ledger display with current balance
+ * - Multiple payment methods (cash, check, bank transfer, e-wallets)
+ * - BIR-compliant official receipt generation with auto-numbering
+ * - Receipt preview and print functionality (PDF generator)
+ * 
+ * Migration Status: ✅ Fully migrated to PostgreSQL (Nov 2025)
+ * Database: Supabase PostgreSQL with automatic receipt numbering
+ * 
+ * Performance Optimizations:
+ * - useCallback: loadLedger, resetForm, clearSelection, handleSubmitPayment, handlePrintReceipt, formatCurrency, formatDate
+ * - useMemo: currentSchoolYear, paymentMethods
+ * - Removed all Firestore dependencies and offline features
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
-import type { Student, StudentLedger, Receipt, AuthUser, PaymentProof } from '../types';
+import type { Student, StudentLedger, Receipt, AuthUser } from '../types';
 import { 
   getStudentLedger, 
   recordPayment
-} from '../src/services/billingService';
+} from '../src/services/billingServicePostgreSQL';
 import { printReceipt } from '../src/services/receiptPDFGenerator';
 import { PrinterIcon } from './icons';
-import { getFirestoreInstance } from '../src/services/firestoreService';
 import { useSchoolContext } from '../src/contexts/SchoolContext';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { useOnlineStatus, getOfflineMessage } from '../src/services/connectionService';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
 
 interface PaymentRecordingProps {
   schoolData: SchoolDataHook;
@@ -31,11 +37,9 @@ interface PaymentRecordingProps {
 type PaymentMethod = 'cash' | 'check' | 'bank_transfer' | 'gcash' | 'maya' | 'card' | 'online';
 
 const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session }) => {
-  const { students, settings, loading } = schoolData;
-  const { schoolId } = useSchoolContext(); // Get current school for filtering
-  
-  // Online status
-  const isOnline = useOnlineStatus();
+  const { settings, loading } = schoolData;
+  const { schoolId } = useSchoolContext();
+  const { students } = useStudentsPostgreSQL({ schoolId, includeSection: true });
   
   // Search state
   const [searchTerm, setSearchTerm] = useState('');
@@ -61,12 +65,35 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
   const [success, setSuccess] = useState<string | null>(null);
   const [generatedReceipt, setGeneratedReceipt] = useState<Receipt | null>(null);
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
-  
-  // Payment proofs state
-  const [paymentProofs, setPaymentProofs] = useState<PaymentProof[]>([]);
-  const [loadingProofs, setLoadingProofs] = useState(false);
 
-  const currentSchoolYear = settings.schoolYear || '2024-2025';
+  // Memoize to prevent unnecessary recalculations
+  const currentSchoolYear = useMemo(() => settings.schoolYear || '2024-2025', [settings.schoolYear]);
+
+  // Memoized payment method options
+  const paymentMethods = useMemo<{ value: PaymentMethod; label: string }[]>(() => [
+    { value: 'cash', label: 'Cash' },
+    { value: 'check', label: 'Check' },
+    { value: 'bank_transfer', label: 'Bank Transfer' },
+    { value: 'gcash', label: 'GCash' },
+    { value: 'maya', label: 'Maya (PayMaya)' },
+    { value: 'card', label: 'Credit/Debit Card' },
+    { value: 'online', label: 'Online Payment' }
+  ], []);
+
+  // Memoized helper functions
+  const formatCurrency = useCallback((amount: number | undefined) => {
+    if (amount === undefined || amount === null) return '₱0.00';
+    return `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }, []);
+
+  const formatDate = useCallback((dateString: string | undefined) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  }, []);
 
   // Search students
   useEffect(() => {
@@ -88,8 +115,8 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
     setSearchResults(results);
   }, [searchTerm, students]);
 
-  // Load student ledger
-  const loadLedger = async (student: Student) => {
+  // Load student ledger (optimized with useCallback)
+  const loadLedger = useCallback(async (student: Student) => {
     try {
       setLoadingLedger(true);
       setError(null);
@@ -105,172 +132,17 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
         // Pre-fill amount with current balance
         setAmount(studentLedger.balance);
       }
-      
-      // Load payment proofs for this student
-      await loadPaymentProofs(student.id);
     } catch (err) {
       console.error('Error loading ledger:', err);
       setError('Failed to load student ledger');
     } finally {
       setLoadingLedger(false);
     }
-  };
-  
-  // Load payment proofs for student
-  const loadPaymentProofs = async (studentId: string) => {
-    if (!schoolId) {
-      console.warn('[PaymentRecording] No schoolId - skipping payment proofs query');
-      setLoadingProofs(false);
-      return;
-    }
+  }, [currentSchoolYear]);
 
-    try {
-      setLoadingProofs(true);
-      const db = getFirestoreInstance();
-      
-      const proofsQuery = query(
-        collection(db, 'paymentProofs'),
-        where('schoolId', '==', schoolId),
-        where('studentId', '==', studentId)
-      );
-      
-      const proofsSnapshot = await getDocs(proofsQuery);
-      const proofsData = proofsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as PaymentProof[];
-      
-      // Sort by uploadedAt in memory (newest first)
-      proofsData.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-      
-      setPaymentProofs(proofsData);
-      console.log(`Loaded ${proofsData.length} payment proofs for student ${studentId}`, proofsData);
-    } catch (err) {
-      console.error('Error loading payment proofs:', err);
-    } finally {
-      setLoadingProofs(false);
-    }
-  };
-
-  // Verify payment proof
-  const handleVerifyProof = async (proof: PaymentProof) => {
-    if (!proof.amount || proof.amount <= 0) {
-      alert('Cannot verify: Payment proof has no amount specified.');
-      return;
-    }
-
-    const shouldRecordPayment = confirm(
-      `Verify payment proof for ${formatCurrency(proof.amount)}?\n\n` +
-      `This will:\n` +
-      `1. Mark the proof as VERIFIED\n` +
-      `2. Automatically RECORD the payment in the ledger\n` +
-      `3. Update the student's balance\n\n` +
-      `Payment Method: ${proof.paymentMethod || 'Not specified'}\n` +
-      `Reference: ${proof.referenceNumber || 'None'}\n\n` +
-      `Click OK to proceed, Cancel to abort.`
-    );
-
-    if (!shouldRecordPayment) {
-      return;
-    }
-
-    try {
-      setProcessing(true);
-      setError(null);
-      const db = getFirestoreInstance();
-      
-      // 1. Verify the proof
-      const proofRef = doc(db, 'paymentProofs', proof.id);
-      await updateDoc(proofRef, {
-        status: 'verified',
-        verifiedBy: session.user.id,
-        verifiedByName: session.user.name || 'Staff',
-        verifiedAt: new Date().toISOString()
-      });
-
-      // 2. Record the payment automatically
-      if (ledger && selectedStudent) {
-        // Build payment data according to Payment interface
-        // Only include fields with values (no undefined)
-        const paymentData: any = {
-          date: proof.paymentDate || new Date().toISOString().split('T')[0],
-          amount: proof.amount,
-          method: (proof.paymentMethod as any) || 'cash',
-          notes: `Auto-recorded from verified payment proof (${proof.fileName})`
-        };
-
-        // Only add optional fields if they have values
-        if (proof.referenceNumber) {
-          paymentData.referenceNumber = proof.referenceNumber;
-        }
-
-        await recordPayment(
-          selectedStudent.id,
-          currentSchoolYear,
-          paymentData,
-          session.user.id,
-          session.user.name || 'Staff'
-        );
-
-        // Reload ledger to show updated balance
-        await loadLedger(selectedStudent);
-      }
-
-      setSuccess(`Payment proof verified and ${formatCurrency(proof.amount)} payment recorded successfully!`);
-      
-      // Reload payment proofs
-      if (selectedStudent) {
-        await loadPaymentProofs(selectedStudent.id);
-      }
-      
-      // Clear success message after 5 seconds
-      setTimeout(() => setSuccess(null), 5000);
-    } catch (err) {
-      console.error('Error verifying payment proof:', err);
-      setError('Failed to verify payment proof and record payment: ' + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  // Reject payment proof
-  const handleRejectProof = async (proof: PaymentProof) => {
-    const reason = prompt('Enter reason for rejection:');
-    
-    if (!reason || reason.trim() === '') {
-      alert('Rejection reason is required');
-      return;
-    }
-
-    try {
-      const db = getFirestoreInstance();
-      const proofRef = doc(db, 'paymentProofs', proof.id);
-      
-      await updateDoc(proofRef, {
-        status: 'rejected',
-        verifiedBy: session.user.id,
-        verifiedByName: session.user.name || 'Staff',
-        verifiedAt: new Date().toISOString(),
-        rejectionReason: reason.trim()
-      });
-
-      setSuccess('Payment proof rejected');
-      
-      // Reload payment proofs
-      if (selectedStudent) {
-        await loadPaymentProofs(selectedStudent.id);
-      }
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      console.error('Error rejecting payment proof:', err);
-      setError('Failed to reject payment proof');
-    }
-  };
-
-  // Reset form
-  const resetForm = () => {
+  // Reset form (optimized with useCallback)
+  // Note: Does NOT clear generatedReceipt - that's cleared when closing success modal
+  const resetForm = useCallback(() => {
     setAmount(0);
     setPaymentMethod('cash');
     setCheckNumber('');
@@ -278,12 +150,13 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
     setReferenceNumber('');
     setNotes('');
     setShowPaymentForm(false);
-    setGeneratedReceipt(null);
+    // Don't clear generatedReceipt here - it's needed for the Print button
+    // It will be cleared when the success modal is closed
     setShowReceiptPreview(false);
-  };
+  }, []);
 
-  // Clear selection
-  const clearSelection = () => {
+  // Clear selection (optimized with useCallback)
+  const clearSelection = useCallback(() => {
     setSelectedStudent(null);
     setLedger(null);
     setSearchTerm('');
@@ -291,10 +164,10 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
     resetForm();
     setError(null);
     setSuccess(null);
-  };
+  }, [resetForm]);
 
-  // Handle payment submission
-  const handleSubmitPayment = async () => {
+  // Handle payment submission (optimized with useCallback)
+  const handleSubmitPayment = useCallback(async () => {
     if (!selectedStudent || !ledger) {
       setError('No student selected');
       return;
@@ -315,32 +188,27 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
       setError(null);
       setSuccess(null);
 
-      // Build payment data
-      const paymentData = {
-        amount,
-        method: paymentMethod,
-        date: new Date().toISOString(),
-        ...(checkNumber && { checkNumber }),
-        ...(bankName && { bankName }),
-        ...(referenceNumber && { referenceNumber }),
-        receivedBy: session.user.id,
-        receivedByName: session.user.name,
-        notes: notes || undefined,
-        description: `Payment for ${currentSchoolYear}${notes ? ` - ${notes}` : ''}`
-      };
-
       // Record payment and generate receipt
       const receipt = await recordPayment(
+        schoolId,
         selectedStudent.id,
         currentSchoolYear,
-        paymentData as any, // Type cast for now - will be fixed in service
+        amount,
+        paymentMethod,
         session.user.id,
-        session.user.name
+        {
+          checkNumber,
+          referenceNumber,
+          notes,
+          paymentDate: new Date().toISOString().split('T')[0]
+        }
       );
 
       setGeneratedReceipt(receipt);
       setShowReceiptPreview(true);
       setSuccess(`Payment recorded successfully! Receipt #${receipt.receiptNumber}`);
+      
+      console.log('[PaymentRecording] Receipt generated:', receipt);
       
       // Reload ledger
       const updatedLedger = await getStudentLedger(selectedStudent.id, currentSchoolYear);
@@ -357,30 +225,16 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
     } finally {
       setProcessing(false);
     }
-  };
+  }, [selectedStudent, ledger, amount, schoolId, currentSchoolYear, paymentMethod, session.user.id, checkNumber, referenceNumber, notes, resetForm]);
 
-  // Print receipt using PDF generator
-  const handlePrintReceipt = () => {
+  // Print receipt using PDF generator (optimized with useCallback)
+  const handlePrintReceipt = useCallback(() => {
     if (generatedReceipt && selectedStudent && schoolData.settings) {
       printReceipt(generatedReceipt, selectedStudent, schoolData.settings);
     }
-  };
+  }, [generatedReceipt, selectedStudent, schoolData.settings]);
 
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
-  };
-
-  // Format date
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  if (loading) {
+  if (loading || !schoolId) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -395,42 +249,92 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
         <p className="text-gray-600 mt-2">Record student payments and generate official receipts</p>
       </div>
 
-      {/* Success/Error Messages */}
+      {/* Success Modal - Improved UX: Non-dismissible backdrop, prominent Print button */}
       {success && (
-        <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded flex items-center justify-between">
-          <span>{success}</span>
-          {generatedReceipt && (
-            <button
-              onClick={handlePrintReceipt}
-              className="flex items-center gap-2 bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
-            >
-              <PrinterIcon /> Print Receipt
-            </button>
-          )}
-        </div>
-      )}
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 transform transition-all animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="p-8">
+              {/* Success Header */}
+              <div className="flex items-center justify-center mb-6">
+                <div className="rounded-full bg-green-100 p-3">
+                  <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Success Message */}
+              <div className="text-center mb-8">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Payment Recorded Successfully!</h3>
+                <p className="text-gray-600 text-lg">
+                  {success}
+                </p>
+                {generatedReceipt && (
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-sm text-gray-600 mb-1">Official Receipt Number</p>
+                    <p className="text-2xl font-bold text-blue-600">{generatedReceipt.receiptNumber}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons - Print is PRIMARY, Done is SECONDARY */}
+              <div className="flex flex-col gap-3">
+                {generatedReceipt && (
+                  <button
+                    onClick={handlePrintReceipt}
+                    className="flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 text-white text-lg font-semibold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all shadow-lg hover:shadow-xl"
+                  >
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Print/Download Receipt
+                  </button>
+                )}
+                <button
+                  onClick={() => { setSuccess(null); setGeneratedReceipt(null); }}
+                  className="px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors"
+                >
+                  {generatedReceipt ? 'Skip Print (Close)' : 'Close'}
+                </button>
+              </div>
+
+              {/* Helper Text */}
+              {generatedReceipt && (
+                <p className="mt-4 text-xs text-center text-gray-500">
+                  💡 Tip: In the print dialog, choose "Save as PDF" to download the receipt
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Offline Warning */}
-      {!isOnline && (
-        <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-yellow-700">
-                <strong className="font-medium">Offline Mode - View Only</strong>
-              </p>
-              <p className="mt-1 text-sm text-yellow-700">
-                {getOfflineMessage('PAYMENT')}
-              </p>
+      {/* Error Modal */}
+      {error && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setError(null)}>
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full mx-4 transform transition-all" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-medium text-gray-900">Error</h3>
+                  <div className="mt-2 text-sm text-gray-600">
+                    {error}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setError(null)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors"
+                >
+                  Got it
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -467,7 +371,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
                     {student.firstName} {student.lastName}
                   </div>
                   <div className="text-sm text-gray-600">
-                    LRN: {student.lrn} • Section: {student.sectionId}
+                    LRN: {student.lrn}{student.sectionName ? ` • Section: ${student.sectionName}` : ''}
                   </div>
                 </button>
               ))}
@@ -500,7 +404,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
                 </h2>
                 <div className="space-y-1 text-blue-100">
                   <p>LRN: {selectedStudent.lrn}</p>
-                  <p>Section: {selectedStudent.sectionId}</p>
+                  {selectedStudent.sectionName && <p>Section: {selectedStudent.sectionName}</p>}
                   <p>School Year: {currentSchoolYear}</p>
                 </div>
               </div>
@@ -572,7 +476,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
                       <div key={payment.id} className="flex justify-between items-center py-2 border-b border-gray-100">
                         <div>
                           <p className="font-medium text-gray-900">
-                            {payment.method.toUpperCase().replace('_', ' ')}
+                            {payment.method ? payment.method.toUpperCase().replace('_', ' ') : 'CASH'}
                           </p>
                           <p className="text-sm text-gray-500">{formatDate(payment.date)}</p>
                         </div>
@@ -586,131 +490,6 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
                   </div>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Payment Proofs Section */}
-          {selectedStudent && (
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-gray-900">Uploaded Payment Proofs</h3>
-                {loadingProofs && (
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                )}
-              </div>
-
-              {paymentProofs.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No payment proofs uploaded yet</p>
-              ) : (
-                <div className="space-y-4">
-                  {paymentProofs.map((proof) => (
-                    <div key={proof.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="font-medium text-gray-900">{proof.fileName}</span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                              proof.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                              proof.status === 'verified' ? 'bg-green-100 text-green-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {proof.status.toUpperCase()}
-                            </span>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
-                            <div>
-                              <p className="font-medium text-gray-700">Upload Date</p>
-                              <p>{new Date(proof.uploadedAt).toLocaleDateString('en-US', { 
-                                year: 'numeric', month: 'short', day: 'numeric', 
-                                hour: '2-digit', minute: '2-digit' 
-                              })}</p>
-                            </div>
-                            
-                            {proof.amount && (
-                              <div>
-                                <p className="font-medium text-gray-700">Amount</p>
-                                <p className="text-green-600 font-semibold">{formatCurrency(proof.amount)}</p>
-                              </div>
-                            )}
-                            
-                            {proof.paymentDate && (
-                              <div>
-                                <p className="font-medium text-gray-700">Payment Date</p>
-                                <p>{new Date(proof.paymentDate).toLocaleDateString()}</p>
-                              </div>
-                            )}
-                            
-                            {proof.paymentMethod && (
-                              <div>
-                                <p className="font-medium text-gray-700">Payment Method</p>
-                                <p className="capitalize">{proof.paymentMethod}</p>
-                              </div>
-                            )}
-                            
-                            {proof.referenceNumber && (
-                              <div>
-                                <p className="font-medium text-gray-700">Reference Number</p>
-                                <p className="font-mono text-xs">{proof.referenceNumber}</p>
-                              </div>
-                            )}
-                          </div>
-                          
-                          {proof.notes && (
-                            <div className="mt-3 p-3 bg-gray-50 rounded text-sm text-gray-700">
-                              <p className="font-medium text-gray-700 mb-1">Notes:</p>
-                              <p>{proof.notes}</p>
-                            </div>
-                          )}
-                          
-                          {proof.status === 'verified' && proof.verifiedByName && (
-                            <div className="mt-3 text-sm text-green-600">
-                              ✓ Verified by {proof.verifiedByName} on {new Date(proof.verifiedAt!).toLocaleDateString()}
-                            </div>
-                          )}
-                          
-                          {proof.status === 'rejected' && proof.rejectionReason && (
-                            <div className="mt-3 p-3 bg-red-50 rounded text-sm text-red-700">
-                              <p className="font-medium">Rejected:</p>
-                              <p>{proof.rejectionReason}</p>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="flex flex-col gap-2 ml-4">
-                          <a
-                            href={proof.fileURL}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors text-center"
-                          >
-                            View File
-                          </a>
-                          
-                          {proof.status === 'pending' && (
-                            <>
-                              <button
-                                disabled={!isOnline}
-                                className={`px-4 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition-colors ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                onClick={() => handleVerifyProof(proof)}
-                              >
-                                Verify
-                              </button>
-                              <button
-                                disabled={!isOnline}
-                                className={`px-4 py-2 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 transition-colors ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                onClick={() => handleRejectProof(proof)}
-                              >
-                                Reject
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
@@ -845,7 +624,7 @@ const PaymentRecording: React.FC<PaymentRecordingProps> = ({ schoolData, session
               <div className="mt-6 flex gap-4">
                 <button
                   onClick={handleSubmitPayment}
-                  disabled={!isOnline || processing || amount <= 0 || amount > ledger.balance}
+                  disabled={processing || amount <= 0 || amount > ledger.balance}
                   className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
                   {processing ? 'Processing...' : 'Record Payment & Generate Receipt'}

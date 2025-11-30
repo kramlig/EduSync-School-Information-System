@@ -346,8 +346,30 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                 const conflictInfo = conflict.conflictingSchedule!;
                 const conflictSection = sections.find(s => s.id === conflictInfo.sectionId);
                 const conflictTeacher = teachers.find(t => t.id === conflictInfo.teacherId);
-                const conflictResource = conflictSection?.name || conflictTeacher?.name || `Grade ${conflictInfo.gradeLevel}` || 'Unknown';
-                setNotification(`Cannot move here! This time slot is already occupied by "${conflictInfo.title}" for ${conflictResource}.`);
+                
+                // Build detailed conflict message
+                let conflictMessage = `Cannot move here! Time slot conflicts with "${conflictInfo.title}"`;
+                
+                // Add resource details
+                if (conflictSection) {
+                    conflictMessage += ` (${conflictSection.name})`;
+                } else if (conflictTeacher) {
+                    conflictMessage += ` (Teacher: ${conflictTeacher.name})`;
+                } else if (conflictInfo.gradeLevel) {
+                    conflictMessage += ` (Grade ${conflictInfo.gradeLevel})`;
+                }
+                
+                // Add time details
+                conflictMessage += ` at ${conflictInfo.dayOfWeek} ${conflictInfo.startTime}-${conflictInfo.endTime}`;
+                
+                // Add scope explanation for school-wide conflicts
+                if (updatedSchedule.scope === 'all' && conflictInfo.scope === 'section') {
+                    conflictMessage += '. School-wide events cannot overlap with any section classes.';
+                } else if (updatedSchedule.scope === 'section' && conflictInfo.scope === 'all') {
+                    conflictMessage += '. Section classes cannot overlap with school-wide events.';
+                }
+                
+                setNotification(conflictMessage);
                 setActiveInteraction(null);
                 setIndicator(null);
                 return;
@@ -434,6 +456,26 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
             
             // Check if they share the same resource (section, teacher, or grade level)
             let resourceConflict = false;
+            
+            // If BOTH are 'all' scope (school-wide events), they conflict with each other
+            if (scheduleToCheck.scope === 'all' && existing.scope === 'all') {
+                resourceConflict = true;
+            }
+            
+            // If one is 'all' and the other is 'gradeLevel', check if they share the same grade level
+            if (scheduleToCheck.scope === 'all' && existing.scope === 'gradeLevel' && existing.gradeLevel) {
+                // School-wide event conflicts with grade-level activities
+                resourceConflict = true;
+            }
+            if (existing.scope === 'all' && scheduleToCheck.scope === 'gradeLevel' && scheduleToCheck.gradeLevel) {
+                resourceConflict = true;
+            }
+            
+            // If one is 'all' and the other is 'section', they conflict (school-wide blocks all sections)
+            if ((scheduleToCheck.scope === 'all' && existing.scope === 'section') ||
+                (existing.scope === 'all' && scheduleToCheck.scope === 'section')) {
+                resourceConflict = true;
+            }
             
             // If both are for the same section
             if (scheduleToCheck.sectionId && existing.sectionId && scheduleToCheck.sectionId === existing.sectionId) {

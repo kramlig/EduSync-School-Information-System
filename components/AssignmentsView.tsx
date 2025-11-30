@@ -1,64 +1,276 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { Assignment, StudentAssignmentGrade, AuthUser, StudentUser, ParentUser, Student } from '../types';
+/**
+ * AssignmentsView - PostgreSQL-based Assignments Management
+ * 
+ * Optimized and cleaned: Nov 28, 2025
+ * - Extracted reusable components
+ * - Improved type safety
+ * - Removed console.log statements
+ * - Better memoization
+ * 
+ * PostgreSQL Migration: ✅ COMPLETE (Nov 27, 2025)
+ * - Uses useAssignmentsPostgreSQL hook
+ * - Uses useStudentsPostgreSQL for section students
+ * - No Firestore dependencies
+ */
+
+import React, { useState, useMemo, useEffect, memo } from 'react';
+import type { Assignment, StudentAssignmentGrade, AuthUser, StudentUser, ParentUser } from '../types';
 import Modal from './Modal';
 import { PencilIcon, TrashIcon, DocumentArrowDownIcon, DocumentArrowUpIcon } from './icons';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { getFirestoreInstance } from '../src/services/firestoreService';
 import { useSchoolContext } from '../src/contexts/SchoolContext';
+import { useAssignmentsPostgreSQL } from '../src/hooks/useAssignmentsPostgreSQL';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
 
-// Icon components for better UX
-const SearchIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-    </svg>
-);
+// ============================================================================
+// TYPES
+// ============================================================================
 
-const ClockIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-);
+interface AssignmentStatus {
+  text: 'Graded' | 'Submitted' | 'Late' | 'Not Submitted';
+  color: string;
+}
 
-const CheckCircleIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-);
+// ============================================================================
+// ICON COMPONENTS
+// ============================================================================
 
-const ExclamationIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-    </svg>
-);
+const SearchIcon = memo(() => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+  </svg>
+));
+SearchIcon.displayName = 'SearchIcon';
 
-const EmptyAssignmentsIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 text-slate-300">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-    </svg>
-);
+const ClockIcon = memo(() => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+));
+ClockIcon.displayName = 'ClockIcon';
 
-const getStatus = (assignment: Assignment, grade: StudentAssignmentGrade | undefined) => {
-    const today = new Date().toISOString().split('T')[0];
-    if (grade?.score !== null && grade?.score !== undefined) return { text: 'Graded', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' };
-    if (grade?.submissionDate) return { text: 'Submitted', color: 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200' };
-    if (today > assignment.dueDate) return { text: 'Late', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' };
-    return { text: 'Not Submitted', color: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-200' };
+const CheckCircleIcon = memo(() => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+));
+CheckCircleIcon.displayName = 'CheckCircleIcon';
+
+const ExclamationIcon = memo(() => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+  </svg>
+));
+ExclamationIcon.displayName = 'ExclamationIcon';
+
+const StarIcon = memo(() => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+  </svg>
+));
+StarIcon.displayName = 'StarIcon';
+
+const PlusIcon = memo(() => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+  </svg>
+));
+PlusIcon.displayName = 'PlusIcon';
+
+const EmptyAssignmentsIcon = memo(() => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 text-slate-300 mx-auto">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+  </svg>
+));
+EmptyAssignmentsIcon.displayName = 'EmptyAssignmentsIcon';
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+const getStatus = (assignment: Assignment, grade: StudentAssignmentGrade | undefined): AssignmentStatus => {
+  const today = new Date().toISOString().split('T')[0];
+  if (grade?.score !== null && grade?.score !== undefined) {
+    return { text: 'Graded', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' };
+  }
+  if (grade?.submissionDate) {
+    return { text: 'Submitted', color: 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200' };
+  }
+  if (today > assignment.dueDate) {
+    return { text: 'Late', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' };
+  }
+  return { text: 'Not Submitted', color: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-200' };
 };
+
+// ============================================================================
+// REUSABLE COMPONENTS
+// ============================================================================
+
+/** Styled input component for forms */
+const FormInput: React.FC<{
+  label: string;
+  type?: string;
+  value: string | number;
+  onChange: (value: string) => void;
+  required?: boolean;
+  placeholder?: string;
+}> = memo(({ label, type = 'text', value, onChange, required, placeholder }) => (
+  <div>
+    <label className="font-semibold block mb-1">{label}</label>
+    <input
+      type={type}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-transparent dark:text-white focus:ring-2 focus:ring-indigo-500"
+      required={required}
+      placeholder={placeholder}
+    />
+  </div>
+));
+FormInput.displayName = 'FormInput';
+
+/** Styled textarea component for forms */
+const FormTextarea: React.FC<{
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  rows?: number;
+  placeholder?: string;
+}> = memo(({ label, value, onChange, rows = 3, placeholder }) => (
+  <div>
+    <label className="font-semibold block mb-1">{label}</label>
+    <textarea
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-transparent dark:text-white focus:ring-2 focus:ring-indigo-500"
+      rows={rows}
+      placeholder={placeholder}
+      title={label}
+    />
+  </div>
+));
+FormTextarea.displayName = 'FormTextarea';
+
+/** Styled select component for forms */
+const FormSelect: React.FC<{
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+  disabled?: boolean;
+}> = memo(({ label, value, onChange, options, placeholder, disabled }) => (
+  <div>
+    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">{label}</label>
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-slate-100 dark:disabled:bg-slate-700 disabled:cursor-not-allowed"
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+    >
+      {placeholder && <option value="">{placeholder}</option>}
+      {options.map(opt => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+  </div>
+));
+FormSelect.displayName = 'FormSelect';
+
+/** Stat card component for assignment statistics */
+const StatCard: React.FC<{
+  value: number;
+  label: string;
+  variant?: 'default' | 'success' | 'info' | 'danger' | 'muted';
+  icon?: React.ReactNode;
+}> = memo(({ value, label, variant = 'default', icon }) => {
+  const variantClasses = {
+    default: 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white',
+    success: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400',
+    info: 'bg-sky-50 dark:bg-sky-900/20 border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-400',
+    danger: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400',
+    muted: 'bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300',
+  };
+
+  const labelClasses = {
+    default: 'text-slate-600 dark:text-slate-400',
+    success: 'text-green-600 dark:text-green-500',
+    info: 'text-sky-600 dark:text-sky-500',
+    danger: 'text-red-600 dark:text-red-500',
+    muted: 'text-slate-600 dark:text-slate-400',
+  };
+
+  return (
+    <div className={`rounded-lg p-3 border ${variantClasses[variant]}`}>
+      <div className="text-2xl font-bold">{value}</div>
+      <div className={`text-xs font-medium flex items-center gap-1 ${labelClasses[variant]}`}>
+        {icon}
+        {label}
+      </div>
+    </div>
+  );
+});
+StatCard.displayName = 'StatCard';
+
+/** Loading spinner component */
+const LoadingSpinner: React.FC<{ title: string }> = memo(({ title }) => (
+  <div>
+    <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
+    <div className="flex items-center justify-center p-12 bg-white dark:bg-slate-800 rounded-lg shadow-md">
+      <div className="text-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-sky-500 mb-4" />
+        <p className="text-slate-600 dark:text-slate-300">Loading assignments...</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+          {navigator.onLine ? 'Fetching data from server...' : 'Loading cached data...'}
+        </p>
+      </div>
+    </div>
+  </div>
+));
+LoadingSpinner.displayName = 'LoadingSpinner';
+
+/** Status badge component */
+const StatusBadge: React.FC<{ status: AssignmentStatus }> = memo(({ status }) => (
+  <span className={`px-2 py-1 text-xs font-bold rounded-full ${status.color}`}>
+    {status.text}
+  </span>
+));
+StatusBadge.displayName = 'StatusBadge';
 
 // Main Component
 const AssignmentsView: React.FC<{ 
-    schoolData: SchoolDataHook, 
     session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' },
     forceStudentId?: string,
-}> = ({ schoolData, session, forceStudentId }) => {
+}> = ({ session, forceStudentId }) => {
+    const { schoolId } = useSchoolContext();
+    const authUser = session.user as AuthUser;
+    const teacherId = session.type === 'staff' ? authUser.id : undefined;
+    
+    // Memoize hook options to prevent unnecessary re-renders
+    const studentOptions = useMemo(() => ({ schoolId: schoolId || undefined }), [schoolId]);
+    const sectionOptions = useMemo(() => ({ schoolId: schoolId || undefined }), [schoolId]);
+    
+    // Fetch data from PostgreSQL
     const {
-        assignments, studentAssignmentGrades, sections, learningAreas, students,
-        addAssignment, updateAssignment, deleteAssignment, updateAssignmentGrade, submitAssignment
-    } = schoolData;
+        assignments,
+        studentAssignmentGrades,
+        loading: assignmentsLoading,
+        addAssignment,
+        updateAssignment,
+        deleteAssignment,
+        updateAssignmentGrade,
+        submitAssignment
+    } = useAssignmentsPostgreSQL(teacherId);
+    
+    const { students, loading: studentsLoading } = useStudentsPostgreSQL(studentOptions);
+    const { sections, loading: sectionsLoading } = useSectionsPostgreSQL(sectionOptions);
+    const { learningAreas, loading: learningAreasLoading } = useLearningAreasPostgreSQL(schoolId || undefined);
     
     // Safety check for offline mode - ensure data is available
-    const isDataLoading = !assignments || !sections || !learningAreas || !students;
+    const isDataLoading = assignmentsLoading || studentsLoading || sectionsLoading || learningAreasLoading;
     
     // Determine user role and relevant student
     const isStaff = session.type === 'staff';
@@ -72,7 +284,6 @@ const AssignmentsView: React.FC<{
 
 
     // Teacher-specific state
-    const { schoolId } = useSchoolContext();
     const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
     const [selectedLearningAreaId, setSelectedLearningAreaId] = useState<string | null>(null);
     const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
@@ -88,12 +299,7 @@ const AssignmentsView: React.FC<{
     const [submissionModalOpen, setSubmissionModalOpen] = useState(false);
     const [assignmentToSubmit, setAssignmentToSubmit] = useState<Assignment | null>(null);
     const [fileName, setFileName] = useState('');
-    
-    // Students for the selected assignment's section
-    const [sectionStudents, setSectionStudents] = useState<Student[]>([]);
-    const [loadingStudents, setLoadingStudents] = useState(false);
 
-    const authUser = session.user as AuthUser;
     const isReadOnly = isStaff && authUser.role === 'principal';
     
     // Teacher View Logic - Filter sections by teacher's assignments
@@ -107,7 +313,7 @@ const AssignmentsView: React.FC<{
         if (teacherAssignments.length === 0) return [];
         
         // Get grade levels this teacher is assigned to
-        const assignedGradeLevels = new Set(teacherAssignments.map(a => a.gradeLevel));
+        const assignedGradeLevels = new Set<string | number>(teacherAssignments.map(a => a.gradeLevel));
         
         // Filter sections by grade levels the teacher teaches
         return sections.filter(s => assignedGradeLevels.has(s.gradeLevel));
@@ -133,8 +339,6 @@ const AssignmentsView: React.FC<{
         const learningAreaIds = teacherAssignments
             .filter(a => a.gradeLevel === section.gradeLevel)
             .map(a => a.learningAreaId);
-        
-        console.log(`[AssignmentsView] Teacher ${authUser.name} assigned to ${learningAreaIds.length} learning areas for Grade ${section.gradeLevel}`);
         
         return learningAreas.filter(la => learningAreaIds.includes(la.id));
     }, [learningAreas, selectedSectionId, sections, authUser, isStaff]);
@@ -183,6 +387,13 @@ const AssignmentsView: React.FC<{
         return result;
     }, [filteredAssignments, searchQuery, sortBy]);
     
+    // Compute section students from loaded students (no separate fetch needed)
+    // IMPORTANT: Define this BEFORE assignmentStats which depends on it
+    const sectionStudents = useMemo(() => {
+        if (!selectedAssignment || !isStaff) return [];
+        return students.filter(s => s.sectionId === selectedAssignment.sectionId);
+    }, [selectedAssignment, isStaff, students]);
+    
     // Assignment statistics for teacher view
     const assignmentStats = useMemo(() => {
         if (!isStaff || !selectedAssignment || sectionStudents.length === 0) {
@@ -192,7 +403,7 @@ const AssignmentsView: React.FC<{
         const today = new Date().toISOString().split('T')[0];
         let graded = 0, submitted = 0, late = 0, pending = 0;
         
-        sectionStudents.forEach((student: Student) => {
+        sectionStudents.forEach((student) => {
             const grade = studentAssignmentGrades.find((g: StudentAssignmentGrade) => 
                 g.assignmentId === selectedAssignment.id && g.studentId === student.id
             );
@@ -217,42 +428,8 @@ const AssignmentsView: React.FC<{
         }
     }, [filteredAssignments, selectedAssignment, isStaff]);
     
-    // Fetch students for the selected assignment's section
-    useEffect(() => {
-        if (!selectedAssignment || !isStaff) {
-            setSectionStudents([]);
-            return;
-        }
-        
-        const fetchSectionStudents = async () => {
-            if (!schoolId) {
-                console.warn('[AssignmentsView] No schoolId - skipping fetchSectionStudents');
-                return;
-            }
-            
-            setLoadingStudents(true);
-            try {
-                const db = getFirestoreInstance();
-                const studentsCol = collection(db, 'students');
-                const q = query(
-                    studentsCol, 
-                    where('schoolId', '==', schoolId),
-                    where('sectionId', '==', selectedAssignment.sectionId)
-                );
-                const snapshot = await getDocs(q);
-                const studentsData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Student[];
-                console.log(`[AssignmentsView] Fetched ${studentsData.length} students for section ${selectedAssignment.sectionId}`);
-                setSectionStudents(studentsData);
-            } catch (error) {
-                console.error('[AssignmentsView] Error fetching section students:', error);
-                setSectionStudents([]);
-            } finally {
-                setLoadingStudents(false);
-            }
-        };
-        
-        fetchSectionStudents();
-    }, [selectedAssignment, isStaff, schoolId]);
+    // Reset selected assignment when it no longer matches filters
+    // (Debug logging removed for production)
 
     // Portal (Student/Parent) Logic
     const studentAssignmentsByLA = useMemo(() => {
@@ -443,7 +620,7 @@ const AssignmentsView: React.FC<{
                             </h2>
                         </div>
                         
-                        <div className="space-y-2 overflow-y-auto" style={{ maxHeight: '500px' }}>
+                        <div className="space-y-2 overflow-y-auto max-h-[500px]">
                             {!selectedSectionId || !selectedLearningAreaId ? (
                                 <div className="text-center py-12">
                                     <EmptyAssignmentsIcon />
@@ -600,7 +777,7 @@ const AssignmentsView: React.FC<{
                                     </div>
                                 </div>
                             )}
-                             <div className="overflow-y-auto" style={{maxHeight: '60vh'}}>
+                             <div className="overflow-y-auto max-h-[60vh]">
                                 <table className="w-full text-sm">
                                     <thead className="sticky top-0 bg-slate-100 dark:bg-slate-900 z-10">
                                         <tr>
@@ -611,7 +788,7 @@ const AssignmentsView: React.FC<{
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {loadingStudents ? (
+                                        {studentsLoading ? (
                                             <tr><td colSpan={4} className="p-4 text-center text-slate-500">Loading students...</td></tr>
                                         ) : sectionStudents.length === 0 ? (
                                             <tr><td colSpan={4} className="p-4 text-center text-slate-500">No students found in this section</td></tr>
@@ -634,6 +811,9 @@ const AssignmentsView: React.FC<{
                                                                 onBlur={(e) => handleScoreChange(student.id, e.target.value === '' ? null : parseInt(e.target.value), grade?.feedback ?? null)}
                                                                 disabled={isReadOnly}
                                                                 className="w-20 p-1 text-center border rounded-md dark:bg-slate-700 dark:border-slate-600"
+                                                                title={`Score for ${student.name}`}
+                                                                placeholder="0"
+                                                                aria-label={`Score for ${student.name}`}
                                                             />
                                                             <span className="ml-2 text-slate-500">/ {selectedAssignment.totalPoints}</span>
                                                         </td>
@@ -656,11 +836,52 @@ const AssignmentsView: React.FC<{
             {/* Modals */}
             <Modal isOpen={isAssignmentModalOpen} onClose={() => setIsAssignmentModalOpen(false)} title={assignmentToEdit?.id ? 'Edit Assignment' : 'Create Assignment'}>
                 <form onSubmit={handleSaveAssignment} className="space-y-4">
-                    <div><label className="font-semibold block mb-1">Title</label><input type="text" value={assignmentToEdit?.title ?? ''} onChange={e => setAssignmentToEdit(p => ({...p, title: e.target.value}))} className="w-full input-style" required/></div>
-                    <div><label className="font-semibold block mb-1">Description</label><textarea value={assignmentToEdit?.description ?? ''} onChange={e => setAssignmentToEdit(p => ({...p, description: e.target.value}))} className="w-full input-style"/></div>
+                    <div>
+                        <label className="font-semibold block mb-1">Title</label>
+                        <input 
+                            type="text" 
+                            value={assignmentToEdit?.title ?? ''} 
+                            onChange={e => setAssignmentToEdit(p => ({...p, title: e.target.value}))} 
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-transparent dark:text-white" 
+                            required
+                            title="Assignment title"
+                            placeholder="Enter assignment title"
+                        />
+                    </div>
+                    <div>
+                        <label className="font-semibold block mb-1">Description</label>
+                        <textarea 
+                            value={assignmentToEdit?.description ?? ''} 
+                            onChange={e => setAssignmentToEdit(p => ({...p, description: e.target.value}))} 
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-transparent dark:text-white"
+                            title="Assignment description"
+                            placeholder="Enter assignment description (optional)"
+                        />
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
-                        <div><label className="font-semibold block mb-1">Total Points</label><input type="number" value={assignmentToEdit?.totalPoints ?? ''} onChange={e => setAssignmentToEdit(p => ({...p, totalPoints: parseInt(e.target.value)}))} className="w-full input-style" required/></div>
-                        <div><label className="font-semibold block mb-1">Due Date</label><input type="date" value={assignmentToEdit?.dueDate ?? ''} onChange={e => setAssignmentToEdit(p => ({...p, dueDate: e.target.value}))} className="w-full input-style" required/></div>
+                        <div>
+                            <label className="font-semibold block mb-1">Total Points</label>
+                            <input 
+                                type="number" 
+                                value={assignmentToEdit?.totalPoints ?? ''} 
+                                onChange={e => setAssignmentToEdit(p => ({...p, totalPoints: parseInt(e.target.value)}))} 
+                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-transparent dark:text-white" 
+                                required
+                                title="Total points"
+                                placeholder="100"
+                            />
+                        </div>
+                        <div>
+                            <label className="font-semibold block mb-1">Due Date</label>
+                            <input 
+                                type="date" 
+                                value={assignmentToEdit?.dueDate ?? ''} 
+                                onChange={e => setAssignmentToEdit(p => ({...p, dueDate: e.target.value}))} 
+                                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-transparent dark:text-white" 
+                                required
+                                title="Due date"
+                            />
+                        </div>
                     </div>
                     <div className="flex justify-end space-x-2 pt-4">
                         <button type="button" onClick={() => setIsAssignmentModalOpen(false)} className="bg-slate-200 dark:bg-slate-600 font-semibold py-2 px-4 rounded-lg">Cancel</button>
@@ -679,8 +900,10 @@ const AssignmentsView: React.FC<{
                 <textarea
                     value={feedbackToEdit?.feedback ?? ''}
                     onChange={(e) => setFeedbackToEdit(p => p ? {...p, feedback: e.target.value} : null)}
-                    className="w-full input-style"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-transparent dark:text-white"
                     rows={5}
+                    title="Feedback"
+                    placeholder="Enter feedback for the student..."
                 />
                 <div className="flex justify-end space-x-2 mt-4">
                     <button onClick={() => setFeedbackToEdit(null)} className="bg-slate-200 dark:bg-slate-600 font-semibold py-2 px-4 rounded-lg">Cancel</button>
@@ -693,7 +916,6 @@ const AssignmentsView: React.FC<{
                     }} className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg">Save Feedback</button>
                 </div>
             </Modal>
-            <style>{`.input-style { display: block; width: 100%; border-radius: 0.375rem; border: 1px solid; border-color: #d1d5db; background-color: transparent; padding: 0.5rem 0.75rem; } .dark .input-style { border-color: #4b5563; }`}</style>
         </div>
     );
     
@@ -745,8 +967,16 @@ const AssignmentsView: React.FC<{
                 <form onSubmit={handleFileSubmit} className="space-y-4">
                     <p className="text-sm text-slate-500">Simulate file upload by providing a filename.</p>
                     <div>
-                        <label className="font-semibold">Filename</label>
-                        <input type="text" value={fileName} onChange={e => setFileName(e.target.value)} placeholder="e.g., my_homework.pdf" className="w-full input-style" required/>
+                        <label className="font-semibold block mb-1">Filename</label>
+                        <input 
+                            type="text" 
+                            value={fileName} 
+                            onChange={e => setFileName(e.target.value)} 
+                            placeholder="e.g., my_homework.pdf" 
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-transparent dark:text-white" 
+                            required
+                            title="Filename"
+                        />
                     </div>
                      <div className="flex justify-end space-x-2 pt-4">
                         <button type="button" onClick={() => setSubmissionModalOpen(false)} className="bg-slate-200 dark:bg-slate-600 font-semibold py-2 px-4 rounded-lg">Cancel</button>
@@ -754,7 +984,6 @@ const AssignmentsView: React.FC<{
                     </div>
                 </form>
             </Modal>
-             <style>{`.input-style { display: block; width: 100%; border-radius: 0.375rem; border: 1px solid; border-color: #d1d5db; background-color: transparent; padding: 0.5rem 0.75rem; } .dark .input-style { border-color: #4b5563; }`}</style>
         </div>
     );
 };
