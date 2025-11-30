@@ -62,6 +62,8 @@ import { useTeachersPostgreSQL } from '../src/hooks/useTeachersPostgreSQL';
 import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
 import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
 import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
+import { useSchedulePostgreSQL } from '../src/hooks/useSchedulePostgreSQL';
+import { useSchoolSettingsPostgreSQL } from '../src/hooks/useSchoolSettingsPostgreSQL';
 
 // Re-export for external use
 export type { SchoolDataHook, SchoolDataState };
@@ -75,7 +77,7 @@ const MOCK_SETTINGS: SchoolSettings = {
     region: 'Region XI',
     division: 'Division of the City of Mati',
     district: 'Governor Generoso North District',
-    schoolYear: '2023-2024'
+    schoolYear: '2024-2025'
 };
 
 const DEFAULT_MONTHLY_SCHOOL_DAYS_CONFIG: Record<string, number> = {
@@ -166,6 +168,15 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     const postgresGrades = useGradesPostgreSQL(USE_POSTGRESQL && shouldFetch('grades'), schoolId);
     const postgresCoreValues = useCoreValuesPostgreSQL(USE_POSTGRESQL && (shouldFetch('coreValues') || shouldFetch('coreValueGrades')), schoolId);
     const postgresLearningAreas = useLearningAreasPostgreSQL(USE_POSTGRESQL && shouldFetch('learningAreas') ? schoolId : undefined);
+    const postgresSchedules = useSchedulePostgreSQL(
+        USE_POSTGRESQL && shouldFetch('classSchedules')
+            ? { schoolId: schoolId || undefined, enablePolling: true }
+            : {}
+    );
+    const postgresSettings = useSchoolSettingsPostgreSQL({
+        schoolId: USE_POSTGRESQL && shouldFetch('settings') ? (schoolId || undefined) : undefined,
+        enableRealtime: true
+    });
 
     // Use PostgreSQL data directly (no Firestore override needed)
     useEffect(() => {
@@ -185,6 +196,16 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         }
         if (!postgresLearningAreas.loading) setLearningAreas(postgresLearningAreas.learningAreas as any);
         
+        // Sync schedules in real-time (optimistic updates + polling)
+        if (!postgresSchedules.loading) {
+            setClassSchedules(postgresSchedules.schedules as any);
+        }
+        
+        // Load school settings from database instead of using mock
+        if (!postgresSettings.loading && postgresSettings.settings) {
+            setSettings(postgresSettings.settings);
+        }
+        
         // Calculate loading state
         const isPostgresLoading = 
             postgresStudents.loading ||
@@ -192,7 +213,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             postgresTeachers.loading ||
             postgresGrades.loading ||
             postgresCoreValues.loading ||
-            postgresLearningAreas.loading;
+            postgresLearningAreas.loading ||
+            postgresSchedules.loading ||
+            postgresSettings.loading;
         
         setLoading(isPostgresLoading);
         
@@ -204,11 +227,12 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 grades: postgresGrades.grades.length,
                 coreValues: postgresCoreValues.coreValues.length,
                 coreValueGrades: postgresCoreValues.coreValueGrades.length,
-                learningAreas: postgresLearningAreas.learningAreas.length
+                learningAreas: postgresLearningAreas.learningAreas.length,
+                classSchedules: postgresSchedules.schedules.length,
+                settings: postgresSettings.settings?.schoolYear || 'N/A'
             });
         }
-        // CRITICAL: Only depend on loading states, NOT data arrays!
-        // Data arrays change reference every render, causing infinite loops
+        // Include schedules in deps to enable real-time updates from optimistic updates
     }, [
         USE_POSTGRESQL,
         postgresStudents.loading,
@@ -216,7 +240,11 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         postgresTeachers.loading,
         postgresGrades.loading,
         postgresCoreValues.loading,
-        postgresLearningAreas.loading
+        postgresLearningAreas.loading,
+        postgresSchedules.loading,
+        postgresSchedules.schedules,
+        postgresSettings.loading,
+        postgresSettings.settings
     ]);
 
     // ===== FIRESTORE SUBSCRIPTIONS =====
@@ -2073,6 +2101,15 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     // ===== CLASS SCHEDULE CRUD =====
     const addSchedule = useCallback(async (sched: Omit<ClassSchedule, 'id'>): Promise<{ success: boolean; message?: string }> => {
         try {
+            // Use PostgreSQL if enabled
+            if (USE_POSTGRESQL && postgresSchedules) {
+                console.log('[useSchoolData] 🐘 PostgreSQL: Adding schedule');
+                await postgresSchedules.addSchedule(sched as any);
+                console.log('[useSchoolData] ✅ Schedule added via PostgreSQL');
+                return { success: true };
+            }
+
+            // Fallback to Firestore
             await waitForAuthReady();
             const db = getFirestoreInstance();
             
@@ -2096,6 +2133,15 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
 
     const updateSchedule = useCallback(async (sched: ClassSchedule): Promise<{ success: boolean; message?: string }> => {
         try {
+            // Use PostgreSQL if enabled
+            if (USE_POSTGRESQL && postgresSchedules) {
+                console.log('[useSchoolData] 🐘 PostgreSQL: Updating schedule', sched.id);
+                await postgresSchedules.updateSchedule(sched.id, sched as any);
+                console.log('[useSchoolData] ✅ Schedule updated via PostgreSQL');
+                return { success: true };
+            }
+
+            // Fallback to Firestore
             await waitForAuthReady();
             const db = getFirestoreInstance();
             
@@ -2113,10 +2159,19 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error updating schedule:', err);
             return { success: false, message: err.message };
         }
-    }, [schoolId]);
+    }, [schoolId, USE_POSTGRESQL, postgresSchedules]);
 
     const deleteSchedule = useCallback(async (scheduleId: string): Promise<void> => {
         try {
+            // Use PostgreSQL if enabled
+            if (USE_POSTGRESQL && postgresSchedules) {
+                console.log('[useSchoolData] 🐘 PostgreSQL: Deleting schedule', scheduleId);
+                await postgresSchedules.deleteSchedule(scheduleId);
+                console.log('[useSchoolData] ✅ Schedule deleted via PostgreSQL');
+                return;
+            }
+
+            // Fallback to Firestore
             await waitForAuthReady();
             const db = getFirestoreInstance();
             
@@ -2140,7 +2195,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             console.error('[useSchoolData] ❌ Error deleting schedule:', err);
             throw err;
         }
-    }, [schoolId]);
+    }, [schoolId, USE_POSTGRESQL, postgresSchedules]);
 
     // ===== ASSIGNMENT CRUD =====
     const addAssignment = useCallback(async (assignment: Omit<Assignment, 'id'>): Promise<void> => {

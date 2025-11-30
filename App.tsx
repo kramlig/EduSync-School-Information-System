@@ -20,7 +20,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const StudentList = lazy(() => import('./components/StudentList'));
 const TeacherList = lazy(() => import('./components/TeacherList'));
 const ParentsView = lazy(() => import('./components/ParentsView'));
-const SectionsView = lazy(() => import('./components/SectionsView'));
+const SectionsView = lazy(() => import('./components/SectionsViewOptimized'));
 const UnifiedAssessmentView = lazy(() => import('./components/UnifiedAssessmentView'));
 const GradesDashboard = lazy(() => import('./components/GradesDashboard'));
 const GradesView = lazy(() => import('./components/GradesView'));
@@ -33,6 +33,7 @@ const AssignmentsView = lazy(() => import('./components/AssignmentsView'));
 const LessonPlanView = lazy(() => import('./components/LessonPlanView'));
 const AnnouncementsView = lazy(() => import('./components/AnnouncementsView'));
 const SettingsView = lazy(() => import('./components/SettingsView'));
+const SchoolSettingsPostgreSQL = lazy(() => import('./components/SchoolSettingsPostgreSQL'));
 const CourseList = lazy(() => import('./components/CourseList'));
 const StudentDashboard = lazy(() => import('./components/StudentDashboard'));
 const ParentDashboard = lazy(() => import('./components/ParentDashboard'));
@@ -43,6 +44,7 @@ const ParentRegistration = lazy(() => import('./src/components/parent/ParentRegi
 const FeeStructureManager = lazy(() => import('./components/FeeStructureManager'));
 const PaymentRecording = lazy(() => import('./components/PaymentRecording'));
 const FinancialReports = lazy(() => import('./components/FinancialReports'));
+const ReceiptManagement = lazy(() => import('./components/ReceiptManagement'));
 // const FormsLibrary = lazy(() => import('./components/forms/FormsLibrary')); // Deprecated - using direct form routes now
 const Form137Dashboard = lazy(() => import('./components/forms/Form137/Form137Dashboard'));
 const Form137Manager = lazy(() => import('./components/forms/Form137/Form137Manager'));
@@ -188,10 +190,14 @@ const App: React.FC = () => {
   }, [session, devLog]);
   
   // Add timeout mechanism to prevent infinite loading
-  // TIER 1 FIX: Only run timeout when logged in AND loading data
-  // Skip for public routes, login screen, and /admin page
+  // DISABLED: Now using PostgreSQL, Firestore timeout is no longer needed
   const [loadTimeout, setLoadTimeout] = useState(false);
   useEffect(() => {
+    // PostgreSQL migration: Skip Firestore loading timeout
+    // Data is now loaded via PostgreSQL hooks, not Firestore subscriptions
+    return;
+    
+    /* LEGACY FIRESTORE CODE - DISABLED
     // Reset timeout when session changes
     setLoadTimeout(false);
     
@@ -206,6 +212,7 @@ const App: React.FC = () => {
     }, 30000); // 30 second timeout for mobile compatibility
     
     return () => clearTimeout(timer);
+    */
   }, [session, devWarn, isPublicRoute, isAdminLoginRoute]); // Re-run when session or route changes
   
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
@@ -231,7 +238,8 @@ const App: React.FC = () => {
     
     // Route-specific collections - ONLY load what's needed!
     if (path === '/' || path === '/dashboard') {
-      console.log('[App] 📊 Loading Dashboard collections');
+      console.log('[App] 📊 Loading Dashboard collections (optimized)');
+      // Dashboard uses students for statistics only (count, averages)
       return [...core, 'students', 'sections', 'grades', 'substituteAssignments', 'classSchedules', 'learningAreas'];
     }
     if (path.startsWith('/students')) {
@@ -239,7 +247,8 @@ const App: React.FC = () => {
       return [...core, 'students', 'sections', 'grades', 'coreValueGrades', 'attendanceRecords', 'learningAreas'];
     }
     if (path.startsWith('/teachers')) {
-      console.log('[App] 👨‍🏫 Loading Teachers collections (optimized)');
+      console.log('[App] 👨‍🏫 Loading Teachers collections (optimized - no students)');
+      // Teachers page doesn't display student list
       return [...core, 'teachers', 'learningAreas'];
     }
     if (path.startsWith('/sections')) {
@@ -254,8 +263,19 @@ const App: React.FC = () => {
       console.log('[App] 📝 Loading Grades collections');
       return [...core, 'students', 'sections', 'grades', 'learningAreas', 'coreValues', 'coreValueGrades'];
     }
+    if (path.startsWith('/reports/school-forms')) {
+      console.log('[App] 📊 Loading School Forms (PostgreSQL - minimal Firestore)');
+      // SF2, SF9, ELLN use PostgreSQL hooks - only need settings from Firestore
+      return ['settings'];
+    }
+    if (path.startsWith('/reports/elln')) {
+      console.log('[App] 📊 Loading ELLN (PostgreSQL - minimal Firestore)');
+      // ELLN uses PostgreSQL hooks exclusively
+      return ['settings'];
+    }
     if (path.startsWith('/reports')) {
       console.log('[App] 📊 Loading Reports collections');
+      // Form137, Form138 still use Firestore
       return [...core, 'students', 'sections', 'grades', 'learningAreas', 'coreValues', 'coreValueGrades', 'teachers', 'attendanceRecords'];
     }
     if (path.startsWith('/attendance')) {
@@ -275,21 +295,23 @@ const App: React.FC = () => {
       return [...core, 'students', 'sections', 'assignments', 'studentAssignmentGrades', 'learningAreas'];
     }
     if (path.startsWith('/lessons')) {
-      console.log('[App] 📖 Loading Lessons collections');
+      console.log('[App] 📖 Loading Lessons collections (no students needed)');
+      // Lesson plans don't require student data
       return [...core, 'sections', 'teachers', 'learningAreas', 'lessonPlans'];
     }
     if (path.startsWith('/announcements')) {
-      console.log('[App] 📢 Loading Announcements collections');
-      return [...core, 'announcements'];
+      console.log('[App] 📢 Loading Announcements (minimal - no students)');
+      // Announcements page doesn't need student data
+      return ['settings', 'announcements'];
     }
     if (path.startsWith('/billing') || path.startsWith('/financial')) {
       console.log('[App] 💰 Loading Billing collections');
       return [...core, 'students', 'parents'];
     }
     
-    // Default: Load minimal data
-    console.log('[App] ⚙️ Loading default collections');
-    return [...core, 'students', 'sections'];
+    // Default: Load minimal data (settings only)
+    console.log('[App] ⚙️ Loading default collections (minimal)');
+    return ['settings'];
   }, [shouldLoadData, location.pathname, emptyCollections]);
   
   const schoolData = useSchoolData(requiredCollections);
@@ -534,14 +556,10 @@ const App: React.FC = () => {
         <div className="flex h-screen bg-slate-100 dark:bg-slate-900">
         <Sidebar 
           session={session} 
-          schoolName={settings.schoolName}
-          schoolYear={settings.schoolYear}
           announcements={announcements}
         />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header
-            schoolYear={settings.schoolYear}
-            schoolName={settings.schoolName}
             session={session}
             onLogout={handleLogout}
             students={students}
@@ -563,7 +581,7 @@ const App: React.FC = () => {
                         <Route path="/students" element={<StudentList schoolData={schoolData} session={staffSession} />} />
                         <Route path="/teachers" element={<TeacherList schoolData={schoolData} session={staffSession} />} />
                         <Route path="/parents" element={<ParentsView schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/sections" element={<SectionsView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/sections" element={<SectionsView session={staffSession} />} />
                         {/* ========== GRADE ENTRY ========== */}
                         <Route path="/grades" element={<GradesDashboard session={staffSession} schoolData={schoolData} />} />
                         <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={staffSession} />} />
@@ -603,6 +621,9 @@ const App: React.FC = () => {
                         <Route path="/forms/138" element={<Navigate to="/reports/form138" replace />} />
                         <Route path="/forms/elln" element={<Navigate to="/reports/elln" replace />} />
                         <Route path="/forms/elln/assessment" element={<Navigate to="/reports/elln/assessment" replace />} />
+                        <Route path="/forms/elln/results" element={<Navigate to="/reports/elln/results" replace />} />
+                        <Route path="/forms/elln/reports" element={<Navigate to="/reports/elln/reports" replace />} />
+                        <Route path="/forms/elln/ilmp" element={<Navigate to="/reports/elln/ilmp" replace />} />
                         
                         {/* Old /grades/form* paths → /reports/* */}
                         <Route path="/grades/entry" element={<Navigate to="/grades" replace />} />
@@ -625,11 +646,16 @@ const App: React.FC = () => {
                         <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/substitute" element={<SubstituteView schoolData={schoolData} />} />
-                        <Route path="/assignments" element={<AssignmentsView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/assignments" element={<AssignmentsView session={staffSession} />} />
                         <Route path="/lesson-plan" element={<LessonPlanView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/announcements" element={<AnnouncementsView schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/learning-areas" element={<CourseList schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/settings" element={<SettingsView schoolData={schoolData} />} />
+                        <Route path="/learning-areas" element={<CourseList session={staffSession} />} />
+                        
+                        {/* School Settings - PostgreSQL */}
+                        <Route path="/settings" element={<SchoolSettingsPostgreSQL />} />
+                        
+                        {/* Old Firestore Settings (deprecated - for reference only) */}
+                        <Route path="/settings-legacy" element={<SettingsView schoolData={schoolData} />} />
                         
                         {/* Super Admin Routes - Route always rendered, component handles access control */}
                         <Route path="/school-management" element={
@@ -643,6 +669,7 @@ const App: React.FC = () => {
                           <>
                             <Route path="/fee-structures" element={<FeeStructureManager schoolData={schoolData} />} />
                             <Route path="/record-payment" element={<PaymentRecording schoolData={schoolData} session={staffSession} />} />
+                            <Route path="/receipts" element={<ReceiptManagement schoolData={schoolData} session={staffSession} />} />
                             <Route path="/financial-reports" element={<FinancialReports schoolData={schoolData} session={staffSession} />} />
                           </>
                         )}
@@ -670,7 +697,7 @@ const App: React.FC = () => {
         {session.type === 'student' && (
           <>
             <Route path="/dashboard" element={<StudentDashboard schoolData={schoolData} session={studentSession} />} />
-            <Route path="/assignments" element={<AssignmentsView schoolData={schoolData} session={studentSession} />} />
+            <Route path="/assignments" element={<AssignmentsView session={studentSession} />} />
             <Route path="/grades" element={<GradesDashboard schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades/academic" element={<GradebookView schoolData={schoolData} session={studentSession} />} />
@@ -689,7 +716,7 @@ const App: React.FC = () => {
             {/* <Route path="/verify-email" element={<EmailVerification />} /> */}
             {/* <Route path="/email-verification" element={<EmailVerification />} /> */}
             <Route path="/announcements" element={<AnnouncementsView schoolData={schoolData} session={parentSession} />} />
-            <Route path="/assignments" element={<AssignmentsView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
+            <Route path="/assignments" element={<AssignmentsView session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/grades" element={<GradesDashboard schoolData={schoolData} session={parentSession} />} />
             <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} defaultTab="deep-analytics" hideTabNavigation={true} />} />

@@ -109,7 +109,7 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
           .from('students')
           .select('section_id')
           .in('section_id', sectionIds)
-          .eq('status', 'active');
+          .is('deleted_at', null);
 
         if (!countError && countData) {
           studentCounts = countData.reduce((acc, student) => {
@@ -156,12 +156,6 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
     let channel: RealtimeChannel | null = null;
 
     const setupRealtimeSubscription = () => {
-      // Build filter based on options
-      const filter: Record<string, any> = {};
-      if (gradeLevel !== undefined) filter.grade_level = gradeLevel;
-      if (schoolId) filter.school_id = schoolId;
-      if (schoolYear) filter.school_year = schoolYear;
-
       channel = supabase
         .channel('sections-changes')
         .on(
@@ -169,13 +163,10 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
           {
             event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
             schema: 'public',
-            table: 'sections',
-            filter: Object.keys(filter).length > 0 
-              ? Object.entries(filter).map(([k, v]) => `${k}=eq.${v}`).join(',')
-              : undefined
+            table: 'sections'
+            // Don't filter here - we'll filter in fetchSections instead
           },
-          (payload) => {
-            
+          (payload: any) => {
             // Refetch to ensure data consistency
             fetchSections();
           }
@@ -190,7 +181,7 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
         supabase.removeChannel(channel);
       }
     };
-  }, [gradeLevel, schoolId, schoolYear, fetchSections]);
+  }, [fetchSections]); // Only depend on fetchSections, not gradeLevel/schoolId/schoolYear
 
   // Create section
   const createSection = useCallback(async (sectionData: Partial<Section>): Promise<Section> => {
@@ -245,18 +236,18 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
       if (updates.schoolId !== undefined) updateData.school_id = updates.schoolId;
       if (updates.name !== undefined) updateData.name = updates.name;
       if (updates.gradeLevel !== undefined) updateData.grade_level = updates.gradeLevel;
-      if (updates.adviserId !== undefined) updateData.adviser_id = updates.adviserId;
+      if (updates.adviserId !== undefined) updateData.adviser_id = updates.adviserId || null; // Handle empty string
       if (updates.schoolYear !== undefined) updateData.school_year = updates.schoolYear;
       if (updates.capacity !== undefined) updateData.capacity = updates.capacity;
-      if (updates.room !== undefined) updateData.room_number = updates.room;
+      if (updates.room !== undefined) updateData.room_number = updates.room || null; // Handle empty string
 
-      const { error: updateError } = await supabase
+      const { data, error: updateError } = await supabase
         .from('sections')
         .update(updateData)
-        .eq('id', id);
+        .eq('id', id)
+        .select();
 
       if (updateError) throw updateError;
-
 
     } catch (err) {
       console.error('[useSectionsPostgreSQL] Error updating section:', err);
@@ -272,7 +263,7 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
         .from('students')
         .select('id')
         .eq('section_id', id)
-        .eq('status', 'active')
+        .is('deleted_at', null)
         .limit(1);
 
       if (checkError) throw checkError;
