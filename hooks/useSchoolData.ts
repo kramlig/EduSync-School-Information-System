@@ -2487,70 +2487,85 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     // ===== ANNOUNCEMENT CRUD =====
     const addAnnouncement = useCallback(async (announcement: Omit<Announcement, 'id'>): Promise<void> => {
         try {
-            await waitForAuthReady();
-            const db = getFirestoreInstance();
-            
-            // MULTI-TENANT: Auto-inject schoolId
-            const finalSchoolId = announcement.schoolId || schoolId || 'default';
-            
-            const docRef = await addDoc(collection(db, 'announcements'), {
-                ...announcement,
-                schoolId: finalSchoolId,
-                createdAt: serverTimestamp()
-            });
-            console.log('[useSchoolData] ✅ Announcement added:', docRef.id, 'schoolId:', finalSchoolId);
+            if (USE_POSTGRESQL) {
+                await postgresAnnouncements.addAnnouncement(announcement);
+                console.log('[useSchoolData] ✅ Announcement added (PostgreSQL)');
+            } else {
+                await waitForAuthReady();
+                const db = getFirestoreInstance();
+                
+                // MULTI-TENANT: Auto-inject schoolId
+                const finalSchoolId = announcement.schoolId || schoolId || 'default';
+                
+                const docRef = await addDoc(collection(db, 'announcements'), {
+                    ...announcement,
+                    schoolId: finalSchoolId,
+                    createdAt: serverTimestamp()
+                });
+                console.log('[useSchoolData] ✅ Announcement added:', docRef.id, 'schoolId:', finalSchoolId);
+            }
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error adding announcement:', err);
             throw err;
         }
-    }, [schoolId]);
+    }, [USE_POSTGRESQL, postgresAnnouncements, schoolId]);
 
     const updateAnnouncement = useCallback(async (announcement: Announcement): Promise<void> => {
         try {
-            await waitForAuthReady();
-            const db = getFirestoreInstance();
-            
-            // MULTI-TENANT: Preserve schoolId
-            const finalSchoolId = announcement.schoolId || schoolId || 'default';
-            
-            await updateDoc(doc(db, 'announcements', announcement.id), {
-                ...announcement,
-                schoolId: finalSchoolId,
-                updatedAt: serverTimestamp()
-            });
-            console.log('[useSchoolData] ✅ Announcement updated:', announcement.id, 'schoolId:', finalSchoolId);
+            if (USE_POSTGRESQL) {
+                await postgresAnnouncements.updateAnnouncement(announcement.id, announcement);
+                console.log('[useSchoolData] ✅ Announcement updated (PostgreSQL):', announcement.id);
+            } else {
+                await waitForAuthReady();
+                const db = getFirestoreInstance();
+                
+                // MULTI-TENANT: Preserve schoolId
+                const finalSchoolId = announcement.schoolId || schoolId || 'default';
+                
+                await updateDoc(doc(db, 'announcements', announcement.id), {
+                    ...announcement,
+                    schoolId: finalSchoolId,
+                    updatedAt: serverTimestamp()
+                });
+                console.log('[useSchoolData] ✅ Announcement updated:', announcement.id, 'schoolId:', finalSchoolId);
+            }
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error updating announcement:', err);
             throw err;
         }
-    }, [schoolId]);
+    }, [USE_POSTGRESQL, postgresAnnouncements, schoolId]);
 
     const deleteAnnouncement = useCallback(async (announcementId: string): Promise<void> => {
         try {
-            await waitForAuthReady();
-            const db = getFirestoreInstance();
-            
-            // MULTI-TENANT: Verify schoolId before deletion
-            const announcementDoc = await getDoc(doc(db, 'announcements', announcementId));
-            if (!announcementDoc.exists()) {
-                throw new Error('Announcement not found');
+            if (USE_POSTGRESQL) {
+                await postgresAnnouncements.deleteAnnouncement(announcementId);
+                console.log('[useSchoolData] ✅ Announcement deleted (PostgreSQL):', announcementId);
+            } else {
+                await waitForAuthReady();
+                const db = getFirestoreInstance();
+                
+                // MULTI-TENANT: Verify schoolId before deletion
+                const announcementDoc = await getDoc(doc(db, 'announcements', announcementId));
+                if (!announcementDoc.exists()) {
+                    throw new Error('Announcement not found');
+                }
+                
+                const announcementData = announcementDoc.data();
+                const announcementSchoolId = announcementData.schoolId || 'default';
+                const currentSchoolId = schoolId || 'default';
+                
+                if (announcementSchoolId !== currentSchoolId) {
+                    throw new Error(`Cannot delete announcement from different school (announcement: ${announcementSchoolId}, current: ${currentSchoolId})`);
+                }
+                
+                await deleteDoc(doc(db, 'announcements', announcementId));
+                console.log('[useSchoolData] ✅ Announcement deleted:', announcementId, 'schoolId:', announcementSchoolId);
             }
-            
-            const announcementData = announcementDoc.data();
-            const announcementSchoolId = announcementData.schoolId || 'default';
-            const currentSchoolId = schoolId || 'default';
-            
-            if (announcementSchoolId !== currentSchoolId) {
-                throw new Error(`Cannot delete announcement from different school (announcement: ${announcementSchoolId}, current: ${currentSchoolId})`);
-            }
-            
-            await deleteDoc(doc(db, 'announcements', announcementId));
-            console.log('[useSchoolData] ✅ Announcement deleted:', announcementId, 'schoolId:', announcementSchoolId);
         } catch (err: any) {
             console.error('[useSchoolData] ❌ Error deleting announcement:', err);
             throw err;
         }
-    }, [schoolId])
+    }, [USE_POSTGRESQL, postgresAnnouncements, schoolId])
 
     // ===== RETURN HOOK INTERFACE =====
     return {
