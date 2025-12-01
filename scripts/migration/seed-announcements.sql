@@ -8,27 +8,18 @@ BEGIN;
 
 -- Delete existing demo announcements (idempotent)
 DELETE FROM announcements 
-WHERE school_id IN (
-    SELECT id FROM schools WHERE name = 'Demo School'
-);
+WHERE school_id = '4d3758e8-cd6b-434b-8663-30a3f675ab80';
 
 -- Get school_id and sample teacher IDs
 DO $$
 DECLARE
-    v_school_id UUID;
+    v_school_id UUID := '4d3758e8-cd6b-434b-8663-30a3f675ab80';
     v_principal_id UUID;
     v_teacher1_id UUID;
     v_teacher2_id UUID;
 BEGIN
-    -- Get school ID
-    SELECT id INTO v_school_id
-    FROM schools
-    WHERE name = 'Demo School'
-    LIMIT 1;
-    
-    IF v_school_id IS NULL THEN
-        RAISE EXCEPTION 'School not found. Run seed-schools.sql first.';
-    END IF;
+    -- Using hardcoded school_id from your app
+    -- No need to lookup, directly using: 4d3758e8-cd6b-434b-8663-30a3f675ab80
     
     -- Get principal and teachers for author attribution
     SELECT id INTO v_principal_id
