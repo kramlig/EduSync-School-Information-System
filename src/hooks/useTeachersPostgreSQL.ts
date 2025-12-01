@@ -17,7 +17,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // Type definitions (matching Firestore Teacher type)
 interface TeacherAssignment {
-  gradeLevel: number;
+  gradeLevel: string | number; // Can be 'grade_1' or 1 depending on source
   learningAreaId: string;
   learningAreaName?: string;
   sectionId?: string;

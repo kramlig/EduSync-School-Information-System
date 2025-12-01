@@ -21,20 +21,25 @@ export const GRADE_LEVELS = [
 
 /**
  * Formats a grade level value to a human-readable label
- * @param gradeLevel - The grade level value (e.g., 'grade_1')
+ * @param gradeLevel - The grade level value (e.g., 'grade_1' or 1)
  * @returns The formatted grade level (e.g., 'G1')
  */
-export function formatGradeLevel(gradeLevel: string): string {
+export function formatGradeLevel(gradeLevel: string | number): string {
+  if (typeof gradeLevel === 'number') {
+    return `G${gradeLevel}`;
+  }
   const gradeNumber = gradeLevel.replace('grade_', '');
   return `G${gradeNumber}`;
 }
 
 /**
  * Gets the full label for a grade level
- * @param gradeLevel - The grade level value (e.g., 'grade_1')
+ * @param gradeLevel - The grade level value (e.g., 'grade_1' or 1)
  * @returns The full label (e.g., 'Grade 1')
  */
-export function getGradeLevelLabel(gradeLevel: string): string {
-  const grade = GRADE_LEVELS.find(g => g.value === gradeLevel);
-  return grade?.label || gradeLevel;
+export function getGradeLevelLabel(gradeLevel: string | number): string {
+  // Normalize to string format 'grade_X'
+  const normalized = typeof gradeLevel === 'number' ? `grade_${gradeLevel}` : gradeLevel;
+  const grade = GRADE_LEVELS.find(g => g.value === normalized);
+  return grade?.label || String(gradeLevel);
 }
