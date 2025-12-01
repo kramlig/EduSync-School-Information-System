@@ -476,7 +476,7 @@ CREATE TABLE announcements (
     date DATE NOT NULL DEFAULT CURRENT_DATE,
     target announcement_target NOT NULL DEFAULT 'all',
     
-    author_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
+    author_id VARCHAR(255),
     author_name VARCHAR(255),
     
     created_at TIMESTAMPTZ DEFAULT NOW(),
