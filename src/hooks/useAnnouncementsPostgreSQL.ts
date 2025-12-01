@@ -48,6 +48,7 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
 
   const fetchAnnouncements = useCallback(async () => {
     if (!schoolId) {
+      console.log('[useAnnouncementsPostgreSQL] No schoolId provided, skipping fetch');
       setLoading(false);
       return;
     }
@@ -55,6 +56,8 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
     try {
       setLoading(true);
       setError(null);
+
+      console.log('[useAnnouncementsPostgreSQL] Fetching announcements for schoolId:', schoolId);
 
       // Build query
       let query = supabase
@@ -76,6 +79,8 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
 
       if (fetchError) throw fetchError;
 
+      console.log('[useAnnouncementsPostgreSQL] Raw data fetched:', data?.length, 'announcements');
+
       // Transform snake_case to camelCase
       const transformedData = (data || []).map((row: any) => ({
         id: row.id,
@@ -90,6 +95,9 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
         updatedAt: row.updated_at
       }));
 
+      console.log('[useAnnouncementsPostgreSQL] Transformed data:', transformedData.length, 'announcements');
+      console.log('[useAnnouncementsPostgreSQL] Sample announcement:', transformedData[0]);
+      
       setAnnouncements(transformedData);
     } catch (err) {
       console.error('[useAnnouncementsPostgreSQL] Error fetching announcements:', err);
