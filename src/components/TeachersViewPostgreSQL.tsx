@@ -32,6 +32,120 @@ interface TeachersViewPostgreSQLProps {
 
 const ITEMS_PER_PAGE = 25;
 
+// Memoized teacher row component for performance
+const TeacherRow = React.memo<{
+  teacher: any;
+  learningAreasMap: Map<string, any>;
+  authUserId: string;
+  getRoleBadgeColor: (role: string) => string;
+  onEdit: (teacher: any) => void;
+  onDelete: (teacher: any) => void;
+  onManageAssignments: (teacher: any) => void;
+}>(({ teacher, learningAreasMap, authUserId, getRoleBadgeColor, onEdit, onDelete, onManageAssignments }) => {
+  return (
+    <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all duration-150 group">
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-4">
+          <div className="flex-shrink-0 h-12 w-12 bg-gradient-to-br from-indigo-500 to-purple-600 dark:from-indigo-600 dark:to-purple-700 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
+            <span className="text-white font-bold text-lg">
+              {teacher.name.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-slate-900 dark:text-white">
+              {teacher.name}
+            </div>
+            {teacher.email && (
+              <div className="flex items-center gap-1 mt-1 text-xs text-slate-600 dark:text-slate-400">
+                <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <a href={`mailto:${teacher.email}`} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+                  {teacher.email}
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      </td>
+      <td className="px-6 py-4">
+        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getRoleBadgeColor(teacher.role)}`}>
+          {teacher.role.charAt(0).toUpperCase() + teacher.role.slice(1)}
+        </span>
+      </td>
+      <td className="px-6 py-4">
+        {teacher.contactNumber ? (
+          <div className="flex items-center gap-2 text-sm text-slate-900 dark:text-white">
+            <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            <a href={`tel:${teacher.contactNumber}`} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+              {teacher.contactNumber}
+            </a>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-400 dark:text-slate-500 italic">No contact</div>
+        )}
+      </td>
+      <td className="px-6 py-4">
+        <div className="flex flex-wrap gap-1.5">
+          {teacher.assignments && teacher.assignments.length > 0 ? (
+            teacher.assignments.slice(0, 3).map((assignment: any, idx: number) => {
+              const learningArea = learningAreasMap.get(assignment.learningAreaId);
+              return (
+                <span 
+                  key={idx}
+                  className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                  title={`${formatGradeLevel(assignment.gradeLevel)} - ${learningArea?.name || 'Unknown'}`}
+                >
+                  {formatGradeLevel(assignment.gradeLevel)} - {learningArea?.name || 'Unknown'}
+                </span>
+              );
+            })
+          ) : (
+            <span className="text-xs text-slate-400 dark:text-slate-500 italic">No assignments</span>
+          )}
+          {teacher.assignments && teacher.assignments.length > 3 && (
+            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
+              +{teacher.assignments.length - 3}
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-6 py-4 text-right">
+        <div className="flex items-center justify-end gap-2">
+          <button 
+            onClick={() => onManageAssignments(teacher)} 
+            className="px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all"
+            title="Manage assignments"
+          >
+            Manage
+          </button>
+          <button 
+            onClick={() => onEdit(teacher)} 
+            className="p-2 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/20 rounded-lg transition-all"
+            aria-label="Edit teacher"
+            title="Edit teacher"
+          >
+            <PencilIcon />
+          </button>
+          <button 
+            onClick={() => onDelete(teacher)} 
+            className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+            aria-label="Delete teacher"
+            title="Delete teacher"
+            disabled={teacher.id === authUserId}
+          >
+            <TrashIcon />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
+TeacherRow.displayName = 'TeacherRow';
+
 const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({ 
   schoolId, 
   learningAreas,
@@ -108,6 +222,13 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
 
   // Use teachers directly (already paginated from server)
   const paginatedTeachers = teachers;
+
+  // Memoize learning area lookup map for O(1) access
+  const learningAreasMap = useMemo(() => {
+    const map = new Map();
+    learningAreas.forEach(la => map.set(la.id, la));
+    return map;
+  }, [learningAreas]);
 
   // Filter learning areas for assignment dropdown
   const filteredLearningAreas = useMemo(() => {
@@ -475,107 +596,16 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
                 </thead>
                 <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
                   {paginatedTeachers.map((teacher) => (
-                    <tr 
-                      key={teacher.id} 
-                      className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all duration-150 group animate-fade-in"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-4">
-                          <div className="flex-shrink-0 h-12 w-12 bg-gradient-to-br from-indigo-500 to-purple-600 dark:from-indigo-600 dark:to-purple-700 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
-                            <span className="text-white font-bold text-lg">
-                              {teacher.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                          <div>
-                            <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                              {teacher.name}
-                            </div>
-                            {teacher.email && (
-                              <div className="flex items-center gap-1 mt-1 text-xs text-slate-600 dark:text-slate-400">
-                                <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                                <a href={`mailto:${teacher.email}`} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                                  {teacher.email}
-                                </a>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getRoleBadgeColor(teacher.role)}`}>
-                          {teacher.role.charAt(0).toUpperCase() + teacher.role.slice(1)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        {teacher.contactNumber ? (
-                          <div className="flex items-center gap-2 text-sm text-slate-900 dark:text-white">
-                            <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                            </svg>
-                            <a href={`tel:${teacher.contactNumber}`} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                              {teacher.contactNumber}
-                            </a>
-                          </div>
-                        ) : (
-                          <div className="text-sm text-slate-400 dark:text-slate-500 italic">No contact</div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-1.5">
-                          {teacher.assignments && teacher.assignments.length > 0 ? (
-                            teacher.assignments.slice(0, 3).map((assignment: any, idx: number) => {
-                              const learningArea = learningAreas.find(la => la.id === assignment.learningAreaId);
-                              return (
-                                <span 
-                                  key={idx}
-                                  className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                                  title={`${formatGradeLevel(assignment.gradeLevel)} - ${learningArea?.name || 'Unknown'}`}
-                                >
-                                  {formatGradeLevel(assignment.gradeLevel)} - {learningArea?.name || 'Unknown'}
-                                </span>
-                              );
-                            })
-                          ) : (
-                            <span className="text-xs text-slate-400 dark:text-slate-500 italic">No assignments</span>
-                          )}
-                          {teacher.assignments && teacher.assignments.length > 3 && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
-                              +{teacher.assignments.length - 3}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => handleManageAssignmentsClick(teacher)} 
-                            className="px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all"
-                            title="Manage assignments"
-                          >
-                            Manage
-                          </button>
-                          <button 
-                            onClick={() => handleEditClick(teacher)} 
-                            className="p-2 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-900/20 rounded-lg transition-all"
-                            aria-label="Edit teacher"
-                            title="Edit teacher"
-                          >
-                            <PencilIcon />
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteClick(teacher)} 
-                            className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                            aria-label="Delete teacher"
-                            title="Delete teacher"
-                            disabled={teacher.id === authUserId}
-                          >
-                            <TrashIcon />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    <TeacherRow
+                      key={teacher.id}
+                      teacher={teacher}
+                      learningAreasMap={learningAreasMap}
+                      authUserId={authUserId}
+                      getRoleBadgeColor={getRoleBadgeColor}
+                      onEdit={handleEditClick}
+                      onDelete={handleDeleteClick}
+                      onManageAssignments={handleManageAssignmentsClick}
+                    />
                   ))}
                 </tbody>
               </table>
