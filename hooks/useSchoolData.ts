@@ -64,6 +64,8 @@ import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
 import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
 import { useSchedulePostgreSQL } from '../src/hooks/useSchedulePostgreSQL';
 import { useSchoolSettingsPostgreSQL } from '../src/hooks/useSchoolSettingsPostgreSQL';
+import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
+import { useParentsPostgreSQL } from '../src/hooks/useParentsPostgreSQL';
 
 // Re-export for external use
 export type { SchoolDataHook, SchoolDataState };
@@ -177,6 +179,12 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         schoolId: USE_POSTGRESQL && shouldFetch('settings') ? (schoolId || undefined) : undefined,
         enableRealtime: true
     });
+    const postgresSubstitutes = useSubstituteAssignmentsPostgreSQL();
+    const postgresParents = useParentsPostgreSQL(
+        USE_POSTGRESQL && shouldFetch('parents')
+            ? { schoolId: schoolId || undefined }
+            : {}
+    );
 
     // Use PostgreSQL data directly (no Firestore override needed)
     useEffect(() => {
@@ -189,6 +197,7 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         if (!postgresStudents.loading) setStudents(postgresStudents.students as any);
         if (!postgresSections.loading) setSections(postgresSections.sections as any);
         if (!postgresTeachers.loading) setTeachers(postgresTeachers.teachers as any);
+        if (!postgresParents.loading) setParents(postgresParents.parents as any);
         if (!postgresGrades.loading) setGrades(postgresGrades.grades);
         if (!postgresCoreValues.loading) {
             setCoreValues(postgresCoreValues.coreValues);
@@ -206,16 +215,23 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             setSettings(postgresSettings.settings);
         }
         
+        // Sync substitute assignments from PostgreSQL
+        if (!postgresSubstitutes.loading) {
+            setSubstituteAssignments(postgresSubstitutes.assignments as any);
+        }
+        
         // Calculate loading state
         const isPostgresLoading = 
             postgresStudents.loading ||
             postgresSections.loading ||
             postgresTeachers.loading ||
+            postgresParents.loading ||
             postgresGrades.loading ||
             postgresCoreValues.loading ||
             postgresLearningAreas.loading ||
             postgresSchedules.loading ||
-            postgresSettings.loading;
+            postgresSettings.loading ||
+            postgresSubstitutes.loading;
         
         setLoading(isPostgresLoading);
         
@@ -224,15 +240,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 students: postgresStudents.students.length,
                 sections: postgresSections.sections.length,
                 teachers: postgresTeachers.teachers.length,
+                parents: postgresParents.parents.length,
                 grades: postgresGrades.grades.length,
                 coreValues: postgresCoreValues.coreValues.length,
                 coreValueGrades: postgresCoreValues.coreValueGrades.length,
                 learningAreas: postgresLearningAreas.learningAreas.length,
                 classSchedules: postgresSchedules.schedules.length,
-                settings: postgresSettings.settings?.schoolYear || 'N/A'
+                settings: postgresSettings.settings?.schoolYear || 'N/A',
+                substituteAssignments: postgresSubstitutes.assignments.length
             });
         }
-        // Include schedules in deps to enable real-time updates from optimistic updates
+        // Include schedules and substitutes in deps to enable real-time updates from optimistic updates
     }, [
         USE_POSTGRESQL,
         postgresStudents.loading,
@@ -244,7 +262,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         postgresSchedules.loading,
         postgresSchedules.schedules,
         postgresSettings.loading,
-        postgresSettings.settings
+        postgresSettings.settings,
+        postgresSubstitutes.loading,
+        postgresSubstitutes.assignments
     ]);
 
     // ===== FIRESTORE SUBSCRIPTIONS =====

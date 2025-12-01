@@ -63,6 +63,22 @@
   animation: slideInRight 0.3s ease-out;
 }
 
+/* Toast slide-up animation */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
 /* Print optimizations for report cards */
 @media print {
   /* Set page size explicitly - DepEd standard: Letter Portrait */

@@ -20,6 +20,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const StudentList = lazy(() => import('./components/StudentList'));
 const TeacherList = lazy(() => import('./components/TeacherList'));
 const ParentsView = lazy(() => import('./components/ParentsView'));
+const ParentsViewPostgreSQL = lazy(() => import('./src/components/ParentsViewPostgreSQL'));
 const SectionsView = lazy(() => import('./components/SectionsViewOptimized'));
 const UnifiedAssessmentView = lazy(() => import('./components/UnifiedAssessmentView'));
 const GradesDashboard = lazy(() => import('./components/GradesDashboard'));
@@ -580,7 +581,11 @@ const App: React.FC = () => {
                         <Route path="/dashboard" element={<Dashboard schoolData={schoolData} session={staffSession} />} />
                         <Route path="/students" element={<StudentList schoolData={schoolData} session={staffSession} />} />
                         <Route path="/teachers" element={<TeacherList schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/parents" element={<ParentsView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/parents" element={
+                          import.meta.env.VITE_USE_POSTGRESQL === 'true' 
+                            ? <ParentsViewPostgreSQL schoolId={session.user.schoolId || ''} />
+                            : <ParentsView schoolData={schoolData} session={staffSession} />
+                        } />
                         <Route path="/sections" element={<SectionsView session={staffSession} />} />
                         {/* ========== GRADE ENTRY ========== */}
                         <Route path="/grades" element={<GradesDashboard session={staffSession} schoolData={schoolData} />} />
