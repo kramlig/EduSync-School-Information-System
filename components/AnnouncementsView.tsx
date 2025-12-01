@@ -29,7 +29,7 @@ interface AnnouncementsViewProps {
 
 const ITEMS_PER_PAGE = 10;
 
-const AnnouncementsView: React.FC<AnnouncementsViewProps> = React.memo(({ schoolData, session }) => {
+const AnnouncementsViewComponent: React.FC<AnnouncementsViewProps> = ({ schoolData, session }) => {
     const { announcements, teachers, addAnnouncement, updateAnnouncement, deleteAnnouncement } = schoolData;
     
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -651,8 +651,9 @@ const AnnouncementsView: React.FC<AnnouncementsViewProps> = React.memo(({ school
             )}
         </div>
     );
-});
+};
 
+const AnnouncementsView = React.memo(AnnouncementsViewComponent);
 AnnouncementsView.displayName = 'AnnouncementsView';
 
 export default AnnouncementsView;
