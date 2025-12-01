@@ -10,6 +10,16 @@
 -- 3. Sections created
 
 -- ==========================================
+-- SAFETY: DELETE EXISTING DEMO TEACHERS FIRST
+-- ==========================================
+BEGIN;
+
+-- Delete existing demo teachers (emails ending in @demo.edu.ph)
+DELETE FROM teachers 
+WHERE school_id = (SELECT id FROM schools WHERE name = 'Demo School' LIMIT 1)
+  AND email LIKE '%@demo.edu.ph';
+
+-- ==========================================
 -- STEP 1: CREATE 120 DEMO TEACHERS (for pagination testing)
 -- ==========================================
 
@@ -130,3 +140,5 @@ LIMIT 10;
 -- SUCCESS MESSAGE
 -- ==========================================
 SELECT '✅ Successfully seeded 120 teachers (1 principal, 1 registrar, 118 teachers) with learning area assignments!' as message;
+
+COMMIT;
