@@ -462,6 +462,33 @@ CREATE INDEX idx_assignments_due_date ON assignments(due_date);
 CREATE INDEX idx_assignments_deleted_at ON assignments(deleted_at);
 
 -- ==========================================
+-- ANNOUNCEMENTS
+-- ==========================================
+
+CREATE TYPE announcement_target AS ENUM ('all', 'staff', 'students', 'parents');
+
+CREATE TABLE announcements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+    
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    target announcement_target NOT NULL DEFAULT 'all',
+    
+    author_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
+    author_name VARCHAR(255),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_announcements_school_id ON announcements(school_id);
+CREATE INDEX idx_announcements_date ON announcements(date);
+CREATE INDEX idx_announcements_target ON announcements(target);
+CREATE INDEX idx_announcements_author_id ON announcements(author_id);
+
+-- ==========================================
 -- AUDIT LOG (Optional but Recommended)
 -- ==========================================
 
