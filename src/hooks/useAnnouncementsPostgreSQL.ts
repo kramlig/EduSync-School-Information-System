@@ -109,6 +109,7 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
 
   // Initial fetch
   useEffect(() => {
+    console.log('[useAnnouncementsPostgreSQL] useEffect triggered - calling fetchAnnouncements', { schoolId });
     fetchAnnouncements();
   }, [fetchAnnouncements]);
 
