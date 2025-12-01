@@ -14,7 +14,7 @@
  * - Optimistic UI updates
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import type { Announcement, AuthUser, StudentUser, ParentUser } from '../types';
 import Modal from './Modal';
@@ -40,6 +40,20 @@ const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({ schoolData, sessi
     const [currentPage, setCurrentPage] = useState(1);
     
     const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+    // Toast notification state
+    const [toast, setToast] = useState<{
+        show: boolean;
+        type: 'success' | 'error';
+        message: string;
+        details?: string;
+    }>({ show: false, type: 'success', message: '' });
+
+    // Show toast helper
+    const showToast = useCallback((type: 'success' | 'error', message: string, details?: string) => {
+        setToast({ show: true, type, message, details });
+        setTimeout(() => setToast({ show: false, type: 'success', message: '' }), 5000);
+    }, []);
 
     const authUser = session.user as AuthUser;
     const canManage = session.type === 'staff' && ['admin', 'principal'].includes(authUser.role);
@@ -135,21 +149,23 @@ const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({ schoolData, sessi
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!announcementToEdit || !announcementToEdit.title || !announcementToEdit.content) {
-            alert("Title and Content are required.");
+            showToast('error', 'Title and Content are required');
             return;
         }
 
         try {
             if (announcementToEdit.id) {
                 await updateAnnouncement(announcementToEdit as Announcement);
+                showToast('success', `✅ Announcement "${announcementToEdit.title}" updated successfully!`);
             } else {
                 await addAnnouncement(announcementToEdit as Omit<Announcement, 'id'>);
+                showToast('success', `✅ Announcement "${announcementToEdit.title}" created successfully!`);
             }
             setIsModalOpen(false);
             setAnnouncementToEdit(null);
         } catch (error) {
             console.error('Error saving announcement:', error);
-            alert('Failed to save announcement. Please try again.');
+            showToast('error', 'Failed to save announcement', error instanceof Error ? error.message : 'Please try again');
         }
     };
 
@@ -162,11 +178,12 @@ const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({ schoolData, sessi
         if (announcementToDelete) {
             try {
                 await deleteAnnouncement(announcementToDelete.id);
+                showToast('success', `✅ Announcement "${announcementToDelete.title}" deleted successfully!`);
                 setIsDeleteModalOpen(false);
                 setAnnouncementToDelete(null);
             } catch (error) {
                 console.error('Error deleting announcement:', error);
-                alert('Failed to delete announcement. Please try again.');
+                showToast('error', 'Failed to delete announcement', error instanceof Error ? error.message : 'Please try again');
             }
         }
     };
@@ -560,6 +577,72 @@ const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({ schoolData, sessi
                     </div>
                 </div>
             </Modal>
+
+            {/* Toast Notification */}
+            {toast.show && (
+                <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
+                    <div className={`
+                        rounded-lg shadow-lg p-4 max-w-md
+                        ${toast.type === 'success' 
+                            ? 'bg-green-50 dark:bg-green-900/30 border-2 border-green-500' 
+                            : 'bg-red-50 dark:bg-red-900/30 border-2 border-red-500'
+                        }
+                    `}>
+                        <div className="flex items-start gap-3">
+                            <div className={`
+                                flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center
+                                ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'}
+                            `}>
+                                {toast.type === 'success' ? (
+                                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                ) : (
+                                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                )}
+                            </div>
+                            <div className="flex-1">
+                                <p className={`
+                                    font-semibold text-sm
+                                    ${toast.type === 'success' 
+                                        ? 'text-green-800 dark:text-green-200' 
+                                        : 'text-red-800 dark:text-red-200'
+                                    }
+                                `}>
+                                    {toast.message}
+                                </p>
+                                {toast.details && (
+                                    <p className={`
+                                        text-xs mt-1
+                                        ${toast.type === 'success' 
+                                            ? 'text-green-700 dark:text-green-300' 
+                                            : 'text-red-700 dark:text-red-300'
+                                        }
+                                    `}>
+                                        {toast.details}
+                                    </p>
+                                )}
+                            </div>
+                            <button
+                                onClick={() => setToast({ show: false, type: 'success', message: '' })}
+                                className={`
+                                    flex-shrink-0 ml-2
+                                    ${toast.type === 'success' 
+                                        ? 'text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200' 
+                                        : 'text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200'
+                                    }
+                                `}
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
