@@ -36,6 +36,12 @@ CREATE INDEX IF NOT EXISTS idx_announcements_author_id ON announcements(author_i
 -- Enable RLS (optional - for security)
 ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
 
+-- Create RLS policy to allow all operations (for now - tighten in production)
+CREATE POLICY announcements_all_access ON announcements
+    FOR ALL
+    USING (true)
+    WITH CHECK (true);
+
 -- Verification
 SELECT 'Announcements table created successfully!' as status;
 SELECT COUNT(*) as existing_announcements FROM announcements;
