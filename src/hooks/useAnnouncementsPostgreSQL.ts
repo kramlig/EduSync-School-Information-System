@@ -142,21 +142,32 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
   // CRUD operations
   const addAnnouncement = useCallback(async (announcement: Omit<Announcement, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
+      console.log('[useAnnouncementsPostgreSQL] Adding announcement:', announcement);
+      
+      const insertData = {
+        school_id: announcement.schoolId,
+        title: announcement.title,
+        content: announcement.content,
+        date: announcement.date,
+        target: announcement.target,
+        author_id: announcement.authorId,
+        author_name: announcement.authorName
+      };
+      
+      console.log('[useAnnouncementsPostgreSQL] Insert data:', insertData);
+      
       const { data, error } = await supabase
         .from('announcements')
-        .insert({
-          school_id: announcement.schoolId,
-          title: announcement.title,
-          content: announcement.content,
-          date: announcement.date,
-          target: announcement.target,
-          author_id: announcement.authorId,
-          author_name: announcement.authorName
-        })
+        .insert(insertData)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('[useAnnouncementsPostgreSQL] Supabase error:', error);
+        throw error;
+      }
+
+      console.log('[useAnnouncementsPostgreSQL] Insert successful:', data);
 
       const newAnnouncement: Announcement = {
         id: data.id,
