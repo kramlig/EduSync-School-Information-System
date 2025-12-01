@@ -48,7 +48,6 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
 
   const fetchAnnouncements = useCallback(async () => {
     if (!schoolId) {
-      console.log('[useAnnouncementsPostgreSQL] No schoolId provided, skipping fetch');
       setLoading(false);
       return;
     }
@@ -56,8 +55,6 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
     try {
       setLoading(true);
       setError(null);
-
-      console.log('[useAnnouncementsPostgreSQL] Fetching announcements for schoolId:', schoolId);
 
       // Build query
       let query = supabase
@@ -79,8 +76,6 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
 
       if (fetchError) throw fetchError;
 
-      console.log('[useAnnouncementsPostgreSQL] Raw data fetched:', data?.length, 'announcements');
-
       // Transform snake_case to camelCase
       const transformedData = (data || []).map((row: any) => ({
         id: row.id,
@@ -94,9 +89,6 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
         createdAt: row.created_at,
         updatedAt: row.updated_at
       }));
-
-      console.log('[useAnnouncementsPostgreSQL] Transformed data:', transformedData.length, 'announcements');
-      console.log('[useAnnouncementsPostgreSQL] Sample announcement:', transformedData[0]);
       
       setAnnouncements(transformedData);
     } catch (err) {
@@ -109,7 +101,6 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
 
   // Initial fetch
   useEffect(() => {
-    console.log('[useAnnouncementsPostgreSQL] useEffect triggered - calling fetchAnnouncements', { schoolId });
     fetchAnnouncements();
   }, [fetchAnnouncements]);
 
@@ -142,8 +133,6 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
   // CRUD operations
   const addAnnouncement = useCallback(async (announcement: Omit<Announcement, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
-      console.log('[useAnnouncementsPostgreSQL] Adding announcement:', announcement);
-      
       const insertData = {
         school_id: announcement.schoolId,
         title: announcement.title,
@@ -154,20 +143,13 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
         author_name: announcement.authorName
       };
       
-      console.log('[useAnnouncementsPostgreSQL] Insert data:', insertData);
-      
       const { data, error } = await supabase
         .from('announcements')
         .insert(insertData)
         .select()
         .single();
 
-      if (error) {
-        console.error('[useAnnouncementsPostgreSQL] Supabase error:', error);
-        throw error;
-      }
-
-      console.log('[useAnnouncementsPostgreSQL] Insert successful:', data);
+      if (error) throw error;
 
       const newAnnouncement: Announcement = {
         id: data.id,
