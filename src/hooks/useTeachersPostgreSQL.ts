@@ -42,6 +42,9 @@ interface Teacher {
 interface UseTeachersOptions {
   schoolId?: string;
   role?: string;
+  searchQuery?: string;
+  limit?: number;
+  offset?: number;
   enableRealtime?: boolean;
 }
 
@@ -54,6 +57,9 @@ interface UseTeachersReturn {
   updateTeacher: (id: string, updates: Partial<Teacher>) => Promise<void>;
   deleteTeacher: (id: string) => Promise<void>;
   searchTeachers: (query: string) => Promise<Teacher[]>;
+  assignLearningAreaToTeacher: (teacherId: string, assignment: { gradeLevel: string; learningAreaId: string }) => Promise<void>;
+  unassignLearningAreaFromTeacher: (teacherId: string, assignmentIndex: number) => Promise<void>;
+  totalCount: number;
 }
 
 // Query cache with TTL
@@ -64,28 +70,36 @@ export function useTeachersPostgreSQL(options: UseTeachersOptions = {}): UseTeac
   const { 
     schoolId, 
     role,
+    searchQuery,
+    limit,
+    offset,
     enableRealtime = false
   } = options;
   
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchTeachers = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Check cache first
-      const cacheKey = `teachers:${schoolId}:${role}`;
-      const cached = queryCache.get(cacheKey);
-      if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
-        setTeachers(cached.data);
-        setLoading(false);
-        return;
+      // Generate cache key from query parameters
+      const cacheKey = JSON.stringify({ schoolId, role, searchQuery, limit, offset });
+      
+      // Check cache first (only for non-paginated queries)
+      if (!limit && !offset) {
+        const cached = queryCache.get(cacheKey);
+        if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+          setTeachers(cached.data);
+          setLoading(false);
+          return;
+        }
       }
 
-      let query = supabase.from('teachers').select('*');
+      let query = supabase.from('teachers').select('*', { count: 'exact' }).is('deleted_at', null);
 
       // Apply filters
       if (schoolId && schoolId !== 'default') {
@@ -94,11 +108,23 @@ export function useTeachersPostgreSQL(options: UseTeachersOptions = {}): UseTeac
       if (role) {
         query = query.eq('role', role);
       }
+      if (searchQuery) {
+        // Search by name, email, or contact number (case-insensitive)
+        query = query.or(`name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,contact_number.ilike.%${searchQuery}%`);
+      }
 
       // Order by name
       query = query.order('name', { ascending: true });
 
-      const { data, error: fetchError } = await query;
+      // Apply pagination if specified
+      if (limit !== undefined) {
+        query = query.limit(limit);
+      }
+      if (offset !== undefined) {
+        query = query.range(offset, offset + (limit || 1000) - 1);
+      }
+
+      const { data, error: fetchError, count } = await query;
 
       if (fetchError) {
         console.error('[useTeachersPostgreSQL] Supabase query error:', fetchError);
@@ -118,17 +144,21 @@ export function useTeachersPostgreSQL(options: UseTeachersOptions = {}): UseTeac
         updatedAt: row.updated_at
       }));
 
-      // Update cache
-      queryCache.set(cacheKey, { data: transformedTeachers, timestamp: Date.now() });
-
       setTeachers(transformedTeachers);
+      setTotalCount(count || 0);
+
+      // Update cache (only for non-paginated queries)
+      if (!limit && !offset) {
+        queryCache.set(cacheKey, { data: transformedTeachers, timestamp: Date.now() });
+      }
+
       setLoading(false);
     } catch (err) {
       console.error('[useTeachersPostgreSQL] Error fetching teachers:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch teachers'));
       setLoading(false);
     }
-  }, [schoolId, role]);
+  }, [schoolId, role, searchQuery, limit, offset]);
 
   // Initial fetch
   useEffect(() => {
@@ -329,6 +359,96 @@ export function useTeachersPostgreSQL(options: UseTeachersOptions = {}): UseTeac
     }
   }, [teachers, schoolId]);
 
+  // Assign learning area to teacher
+  const assignLearningAreaToTeacher = useCallback(async (
+    teacherId: string, 
+    assignment: { gradeLevel: string; learningAreaId: string }
+  ) => {
+    try {
+      // First, fetch the current teacher data
+      const { data: currentTeacher, error: fetchError } = await supabase
+        .from('teachers')
+        .select('assignments')
+        .eq('id', teacherId)
+        .single();
+
+      if (fetchError) {
+        console.error('[useTeachersPostgreSQL] Fetch teacher error:', fetchError);
+        throw fetchError;
+      }
+
+      // Add new assignment to existing assignments
+      const currentAssignments = currentTeacher?.assignments || [];
+      const updatedAssignments = [...currentAssignments, assignment];
+
+      // Update teacher with new assignments array
+      const { error: updateError } = await supabase
+        .from('teachers')
+        .update({ 
+          assignments: updatedAssignments,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', teacherId);
+
+      if (updateError) {
+        console.error('[useTeachersPostgreSQL] Assign learning area error:', updateError);
+        throw updateError;
+      }
+
+      // Clear cache and refetch
+      queryCache.clear();
+      await fetchTeachers();
+    } catch (err) {
+      console.error('[useTeachersPostgreSQL] Assign learning area error:', err);
+      throw err;
+    }
+  }, [fetchTeachers]);
+
+  // Unassign learning area from teacher
+  const unassignLearningAreaFromTeacher = useCallback(async (
+    teacherId: string,
+    assignmentIndex: number
+  ) => {
+    try {
+      // First, fetch the current teacher data
+      const { data: currentTeacher, error: fetchError } = await supabase
+        .from('teachers')
+        .select('assignments')
+        .eq('id', teacherId)
+        .single();
+
+      if (fetchError) {
+        console.error('[useTeachersPostgreSQL] Fetch teacher error:', fetchError);
+        throw fetchError;
+      }
+
+      // Remove assignment at specified index
+      const currentAssignments = currentTeacher?.assignments || [];
+      const updatedAssignments = currentAssignments.filter((_: any, index: number) => index !== assignmentIndex);
+
+      // Update teacher with updated assignments array
+      const { error: updateError } = await supabase
+        .from('teachers')
+        .update({ 
+          assignments: updatedAssignments,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', teacherId);
+
+      if (updateError) {
+        console.error('[useTeachersPostgreSQL] Unassign learning area error:', updateError);
+        throw updateError;
+      }
+
+      // Clear cache and refetch
+      queryCache.clear();
+      await fetchTeachers();
+    } catch (err) {
+      console.error('[useTeachersPostgreSQL] Unassign learning area error:', err);
+      throw err;
+    }
+  }, [fetchTeachers]);
+
   return {
     teachers,
     loading,
@@ -337,6 +457,9 @@ export function useTeachersPostgreSQL(options: UseTeachersOptions = {}): UseTeac
     createTeacher,
     updateTeacher,
     deleteTeacher,
-    searchTeachers
+    searchTeachers,
+    assignLearningAreaToTeacher,
+    unassignLearningAreaFromTeacher,
+    totalCount
   };
 }
