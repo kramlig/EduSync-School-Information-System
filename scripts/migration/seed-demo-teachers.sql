@@ -10,7 +10,7 @@
 -- 3. Sections created
 
 -- ==========================================
--- STEP 1: CREATE 45 DEMO TEACHERS (for pagination testing)
+-- STEP 1: CREATE 120 DEMO TEACHERS (for pagination testing)
 -- ==========================================
 
 WITH school AS (SELECT id FROM schools WHERE name = 'Demo School' LIMIT 1),
@@ -21,61 +21,59 @@ WITH school AS (SELECT id FROM schools WHERE name = 'Demo School' LIMIT 1),
        WHERE school_id = (SELECT id FROM school)
        LIMIT 10 -- Get first 10 learning areas
      ),
+     -- Generate 120 teacher records programmatically
+     generated_numbers AS (
+       SELECT generate_series(1, 120) as rn
+     ),
+     first_names AS (
+       SELECT unnest(ARRAY[
+         'Roberto', 'Maria', 'Juan', 'Elena', 'Pedro', 'Carmen', 'Antonio', 'Rosa', 'Manuel', 'Teresa',
+         'Francisco', 'Luz', 'Miguel', 'Ana', 'Jose', 'Lourdes', 'Ricardo', 'Cristina', 'Ramon', 'Gloria',
+         'Fernando', 'Lucia', 'Carlos', 'Isabel', 'Rodrigo', 'Patricia', 'Eduardo', 'Angelica', 'Gabriel', 'Beatriz',
+         'Alfredo', 'Victoria', 'Rafael', 'Marcela', 'Leonardo', 'Rosario', 'Ernesto', 'Josefina', 'Enrique', 'Dolores',
+         'Arturo', 'Remedios', 'Salvador', 'Concepcion', 'Alberto', 'Milagros', 'Sergio', 'Esperanza', 'Jorge', 'Socorro',
+         'Raul', 'Corazon', 'Javier', 'Teresita', 'Oscar', 'Anita', 'Luis', 'Celia', 'Mario', 'Nilda'
+       ]) as first_name, 
+       ROW_NUMBER() OVER () as fn_num
+     ),
+     last_names AS (
+       SELECT unnest(ARRAY[
+         'Santos', 'Cruz', 'Reyes', 'Garcia', 'Villanueva', 'Mendoza', 'Lopez', 'Aquino', 'Ramos', 'Fernandez',
+         'Torres', 'Flores', 'Domingo', 'Rivera', 'Martinez', 'Gonzales', 'Perez', 'Bautista', 'De Leon', 'Santiago',
+         'Castro', 'Navarro', 'Morales', 'Gutierrez', 'Alvarez', 'Jimenez', 'Salazar', 'Molina', 'Valdez', 'Romero',
+         'Ortiz', 'Herrera', 'Silva', 'Aguilar', 'Miranda', 'Pascual', 'Vargas', 'Campos', 'Cortez', 'Luna',
+         'Pena', 'Rios', 'Mejia', 'Suarez', 'Diaz', 'Roque', 'Tan', 'Lim', 'Uy', 'Sy',
+         'Go', 'Ng', 'Chua', 'Chan', 'Lee', 'Ang', 'Ong', 'Wong', 'Yu', 'Chiu'
+       ]) as last_name,
+       ROW_NUMBER() OVER () as ln_num
+     ),
      teacher_data AS (
        SELECT 
-         rn,
-         first_name,
-         last_name,
-         role,
-         contact_number,
-         email
-       FROM (VALUES 
-         (1, 'Roberto', 'Santos', 'principal', '+63 917 123 4501', 'roberto.santos@demo.edu.ph'),
-         (2, 'Maria', 'Cruz', 'registrar', '+63 917 123 4502', 'maria.cruz@demo.edu.ph'),
-         (3, 'Juan', 'Reyes', 'teacher', '+63 917 123 4503', 'juan.reyes@demo.edu.ph'),
-         (4, 'Elena', 'Garcia', 'teacher', '+63 917 123 4504', 'elena.garcia@demo.edu.ph'),
-         (5, 'Pedro', 'Villanueva', 'teacher', '+63 917 123 4505', 'pedro.villanueva@demo.edu.ph'),
-         (6, 'Carmen', 'Mendoza', 'teacher', '+63 917 123 4506', 'carmen.mendoza@demo.edu.ph'),
-         (7, 'Antonio', 'Lopez', 'teacher', '+63 917 123 4507', 'antonio.lopez@demo.edu.ph'),
-         (8, 'Rosa', 'Aquino', 'teacher', '+63 917 123 4508', 'rosa.aquino@demo.edu.ph'),
-         (9, 'Manuel', 'Ramos', 'teacher', '+63 917 123 4509', 'manuel.ramos@demo.edu.ph'),
-         (10, 'Teresa', 'Fernandez', 'teacher', '+63 917 123 4510', 'teresa.fernandez@demo.edu.ph'),
-         (11, 'Francisco', 'Torres', 'teacher', '+63 917 123 4511', 'francisco.torres@demo.edu.ph'),
-         (12, 'Luz', 'Flores', 'teacher', '+63 917 123 4512', 'luz.flores@demo.edu.ph'),
-         (13, 'Miguel', 'Domingo', 'teacher', '+63 917 123 4513', 'miguel.domingo@demo.edu.ph'),
-         (14, 'Ana', 'Rivera', 'teacher', '+63 917 123 4514', 'ana.rivera@demo.edu.ph'),
-         (15, 'Jose', 'Martinez', 'teacher', '+63 917 123 4515', 'jose.martinez@demo.edu.ph'),
-         (16, 'Lourdes', 'Gonzales', 'teacher', '+63 917 123 4516', 'lourdes.gonzales@demo.edu.ph'),
-         (17, 'Ricardo', 'Perez', 'teacher', '+63 917 123 4517', 'ricardo.perez@demo.edu.ph'),
-         (18, 'Cristina', 'Bautista', 'teacher', '+63 917 123 4518', 'cristina.bautista@demo.edu.ph'),
-         (19, 'Ramon', 'De Leon', 'teacher', '+63 917 123 4519', 'ramon.deleon@demo.edu.ph'),
-         (20, 'Gloria', 'Santiago', 'teacher', '+63 917 123 4520', 'gloria.santiago@demo.edu.ph'),
-         (21, 'Fernando', 'Castro', 'teacher', '+63 917 123 4521', 'fernando.castro@demo.edu.ph'),
-         (22, 'Lucia', 'Navarro', 'teacher', '+63 917 123 4522', 'lucia.navarro@demo.edu.ph'),
-         (23, 'Carlos', 'Morales', 'teacher', '+63 917 123 4523', 'carlos.morales@demo.edu.ph'),
-         (24, 'Isabel', 'Gutierrez', 'teacher', '+63 917 123 4524', 'isabel.gutierrez@demo.edu.ph'),
-         (25, 'Rodrigo', 'Alvarez', 'teacher', '+63 917 123 4525', 'rodrigo.alvarez@demo.edu.ph'),
-         (26, 'Patricia', 'Jimenez', 'teacher', '+63 917 123 4526', 'patricia.jimenez@demo.edu.ph'),
-         (27, 'Eduardo', 'Salazar', 'teacher', '+63 917 123 4527', 'eduardo.salazar@demo.edu.ph'),
-         (28, 'Angelica', 'Molina', 'teacher', '+63 917 123 4528', 'angelica.molina@demo.edu.ph'),
-         (29, 'Gabriel', 'Valdez', 'teacher', '+63 917 123 4529', 'gabriel.valdez@demo.edu.ph'),
-         (30, 'Beatriz', 'Romero', 'teacher', '+63 917 123 4530', 'beatriz.romero@demo.edu.ph'),
-         (31, 'Alfredo', 'Ortiz', 'teacher', '+63 917 123 4531', 'alfredo.ortiz@demo.edu.ph'),
-         (32, 'Victoria', 'Herrera', 'teacher', '+63 917 123 4532', 'victoria.herrera@demo.edu.ph'),
-         (33, 'Rafael', 'Silva', 'teacher', '+63 917 123 4533', 'rafael.silva@demo.edu.ph'),
-         (34, 'Marcela', 'Aguilar', 'teacher', '+63 917 123 4534', 'marcela.aguilar@demo.edu.ph'),
-         (35, 'Leonardo', 'Miranda', 'teacher', '+63 917 123 4535', 'leonardo.miranda@demo.edu.ph'),
-         (36, 'Rosario', 'Pascual', 'teacher', '+63 917 123 4536', 'rosario.pascual@demo.edu.ph'),
-         (37, 'Ernesto', 'Vargas', 'teacher', '+63 917 123 4537', 'ernesto.vargas@demo.edu.ph'),
-         (38, 'Josefina', 'Campos', 'teacher', '+63 917 123 4538', 'josefina.campos@demo.edu.ph'),
-         (39, 'Enrique', 'Cortez', 'teacher', '+63 917 123 4539', 'enrique.cortez@demo.edu.ph'),
-         (40, 'Dolores', 'Luna', 'teacher', '+63 917 123 4540', 'dolores.luna@demo.edu.ph'),
-         (41, 'Arturo', 'Pena', 'teacher', '+63 917 123 4541', 'arturo.pena@demo.edu.ph'),
-         (42, 'Remedios', 'Rios', 'teacher', '+63 917 123 4542', 'remedios.rios@demo.edu.ph'),
-         (43, 'Salvador', 'Mejia', 'teacher', '+63 917 123 4543', 'salvador.mejia@demo.edu.ph'),
-         (44, 'Concepcion', 'Suarez', 'teacher', '+63 917 123 4544', 'concepcion.suarez@demo.edu.ph'),
-         (45, 'Alberto', 'Diaz', 'teacher', '+63 917 123 4545', 'alberto.diaz@demo.edu.ph')
-       ) AS t(rn, first_name, last_name, role, contact_number, email)
+         gn.rn,
+         CASE 
+           WHEN gn.rn = 1 THEN 'Roberto'
+           WHEN gn.rn = 2 THEN 'Maria'
+           ELSE fn.first_name
+         END as first_name,
+         CASE 
+           WHEN gn.rn = 1 THEN 'Santos'
+           WHEN gn.rn = 2 THEN 'Cruz'
+           ELSE ln.last_name
+         END as last_name,
+         CASE 
+           WHEN gn.rn = 1 THEN 'principal'
+           WHEN gn.rn = 2 THEN 'registrar'
+           ELSE 'teacher'
+         END as role,
+         '+63 917 123 ' || LPAD(gn.rn::text, 4, '0') as contact_number,
+         CASE 
+           WHEN gn.rn = 1 THEN 'roberto.santos@demo.edu.ph'
+           WHEN gn.rn = 2 THEN 'maria.cruz@demo.edu.ph'
+           ELSE LOWER(fn.first_name) || '.' || LOWER(REPLACE(ln.last_name, ' ', '')) || '@demo.edu.ph'
+         END as email
+       FROM generated_numbers gn
+       LEFT JOIN first_names fn ON ((gn.rn - 3) % 60) + 1 = fn.fn_num
+       LEFT JOIN last_names ln ON ((gn.rn - 3) / 2 % 60) + 1 = ln.ln_num
      )
 INSERT INTO teachers (school_id, name, email, contact_number, role, assignments)
 SELECT 
@@ -131,4 +129,4 @@ LIMIT 10;
 -- ==========================================
 -- SUCCESS MESSAGE
 -- ==========================================
-SELECT '✅ Successfully seeded 45 teachers (1 principal, 1 registrar, 43 teachers) with learning area assignments!' as message;
+SELECT '✅ Successfully seeded 120 teachers (1 principal, 1 registrar, 118 teachers) with learning area assignments!' as message;
