@@ -53,12 +53,12 @@ WITH school AS (SELECT id FROM schools WHERE name = 'Demo School' LIMIT 1),
          CASE 
            WHEN gn.rn = 1 THEN 'Roberto'
            WHEN gn.rn = 2 THEN 'Maria'
-           ELSE fn.first_name
+           ELSE COALESCE(fn.first_name, 'Teacher')
          END as first_name,
          CASE 
            WHEN gn.rn = 1 THEN 'Santos'
            WHEN gn.rn = 2 THEN 'Cruz'
-           ELSE ln.last_name
+           ELSE COALESCE(ln.last_name, '#' || gn.rn::text)
          END as last_name,
          CASE 
            WHEN gn.rn = 1 THEN 'principal'
@@ -69,11 +69,11 @@ WITH school AS (SELECT id FROM schools WHERE name = 'Demo School' LIMIT 1),
          CASE 
            WHEN gn.rn = 1 THEN 'roberto.santos@demo.edu.ph'
            WHEN gn.rn = 2 THEN 'maria.cruz@demo.edu.ph'
-           ELSE LOWER(fn.first_name) || '.' || LOWER(REPLACE(ln.last_name, ' ', '')) || '@demo.edu.ph'
+           ELSE 'teacher' || gn.rn::text || '@demo.edu.ph'
          END as email
        FROM generated_numbers gn
-       LEFT JOIN first_names fn ON ((gn.rn - 3) % 60) + 1 = fn.fn_num
-       LEFT JOIN last_names ln ON ((gn.rn - 3) / 2 % 60) + 1 = ln.ln_num
+       LEFT JOIN first_names fn ON (((gn.rn - 3) % 60) + 1) = fn.fn_num
+       LEFT JOIN last_names ln ON (((gn.rn - 3) % 60) + 1) = ln.ln_num
      )
 INSERT INTO teachers (school_id, name, email, contact_number, role, assignments)
 SELECT 
