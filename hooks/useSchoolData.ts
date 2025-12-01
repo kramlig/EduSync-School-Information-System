@@ -66,6 +66,8 @@ import { useSchedulePostgreSQL } from '../src/hooks/useSchedulePostgreSQL';
 import { useSchoolSettingsPostgreSQL } from '../src/hooks/useSchoolSettingsPostgreSQL';
 import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
 import { useParentsPostgreSQL } from '../src/hooks/useParentsPostgreSQL';
+import { useAttendancePostgreSQL } from '../src/hooks/useAttendancePostgreSQL';
+import { useAnnouncementsPostgreSQL } from '../src/hooks/useAnnouncementsPostgreSQL';
 
 // Re-export for external use
 export type { SchoolDataHook, SchoolDataState };
@@ -185,6 +187,16 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             ? { schoolId: schoolId || undefined }
             : {}
     );
+    const postgresAttendance = useAttendancePostgreSQL(
+        USE_POSTGRESQL && shouldFetch('attendanceRecords') && schoolId
+            ? { schoolId }
+            : { schoolId: '' }
+    );
+    const postgresAnnouncements = useAnnouncementsPostgreSQL(
+        USE_POSTGRESQL && shouldFetch('announcements') && schoolId
+            ? { schoolId }
+            : {}
+    );
 
     // Use PostgreSQL data directly (no Firestore override needed)
     useEffect(() => {
@@ -220,6 +232,16 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             setSubstituteAssignments(postgresSubstitutes.assignments as any);
         }
         
+        // Sync attendance records from PostgreSQL
+        if (!postgresAttendance.loading) {
+            setAttendanceRecords(postgresAttendance.attendanceRecords as any);
+        }
+        
+        // Sync announcements from PostgreSQL
+        if (!postgresAnnouncements.loading) {
+            setAnnouncements(postgresAnnouncements.announcements as any);
+        }
+        
         // Calculate loading state
         const isPostgresLoading = 
             postgresStudents.loading ||
@@ -231,7 +253,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             postgresLearningAreas.loading ||
             postgresSchedules.loading ||
             postgresSettings.loading ||
-            postgresSubstitutes.loading;
+            postgresSubstitutes.loading ||
+            postgresAttendance.loading ||
+            postgresAnnouncements.loading;
         
         setLoading(isPostgresLoading);
         
@@ -247,7 +271,9 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                 learningAreas: postgresLearningAreas.learningAreas.length,
                 classSchedules: postgresSchedules.schedules.length,
                 settings: postgresSettings.settings?.schoolYear || 'N/A',
-                substituteAssignments: postgresSubstitutes.assignments.length
+                substituteAssignments: postgresSubstitutes.assignments.length,
+                attendanceRecords: postgresAttendance.attendanceRecords.length,
+                announcements: postgresAnnouncements.announcements.length
             });
         }
         // Include schedules and substitutes in deps to enable real-time updates from optimistic updates
@@ -264,7 +290,11 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         postgresSettings.loading,
         postgresSettings.settings,
         postgresSubstitutes.loading,
-        postgresSubstitutes.assignments
+        postgresSubstitutes.assignments,
+        postgresAttendance.loading,
+        postgresAttendance.attendanceRecords,
+        postgresAnnouncements.loading,
+        postgresAnnouncements.announcements
     ]);
 
     // ===== FIRESTORE SUBSCRIPTIONS =====
