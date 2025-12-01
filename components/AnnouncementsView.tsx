@@ -10,8 +10,9 @@
  * - Target audience filtering (All, Staff, Students, Parents)
  * - Pagination for large datasets
  * - Responsive design with dark mode
- * - Loading states and error handling
+ * - Toast notifications
  * - Optimistic UI updates
+ * - Performance optimizations with React.memo and useMemo
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
@@ -28,7 +29,7 @@ interface AnnouncementsViewProps {
 
 const ITEMS_PER_PAGE = 10;
 
-const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({ schoolData, session }) => {
+const AnnouncementsView: React.FC<AnnouncementsViewProps> = React.memo(({ schoolData, session }) => {
     const { announcements, teachers, addAnnouncement, updateAnnouncement, deleteAnnouncement } = schoolData;
     
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -188,11 +189,16 @@ const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({ schoolData, sessi
         }
     };
     
-    const getAuthorName = (authorId?: string, authorName?: string) => {
+    // Memoize teachers map for faster lookups
+    const teachersMap = useMemo(() => {
+        return new Map(teachers.map(t => [t.id, t.name]));
+    }, [teachers]);
+
+    const getAuthorName = useCallback((authorId?: string, authorName?: string) => {
         if (authorName) return authorName;
         if (!authorId) return 'School Admin';
-        return teachers.find(t => t.id === authorId)?.name || 'School Admin';
-    };
+        return teachersMap.get(authorId) || 'School Admin';
+    }, [teachersMap]);
     
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -645,6 +651,8 @@ const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({ schoolData, sessi
             )}
         </div>
     );
-};
+});
+
+AnnouncementsView.displayName = 'AnnouncementsView';
 
 export default AnnouncementsView;

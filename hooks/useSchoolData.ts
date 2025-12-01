@@ -197,14 +197,6 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             ? { schoolId }
             : {}
     );
-    
-    // Debug: Log announcements hook initialization
-    console.log('[useSchoolData] Announcements hook init:', {
-        USE_POSTGRESQL,
-        shouldFetch: shouldFetch('announcements'),
-        schoolId,
-        passedOptions: USE_POSTGRESQL && shouldFetch('announcements') && schoolId ? { schoolId } : {}
-    });
 
     // Use PostgreSQL data directly (no Firestore override needed)
     useEffect(() => {
@@ -2498,7 +2490,6 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
                     ...announcement,
                     schoolId: finalSchoolId
                 });
-                console.log('[useSchoolData] ✅ Announcement added (PostgreSQL), schoolId:', finalSchoolId);
             } else {
                 await waitForAuthReady();
                 const db = getFirestoreInstance();
@@ -2523,7 +2514,6 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         try {
             if (USE_POSTGRESQL) {
                 await postgresAnnouncements.updateAnnouncement(announcement.id, announcement);
-                console.log('[useSchoolData] ✅ Announcement updated (PostgreSQL):', announcement.id);
             } else {
                 await waitForAuthReady();
                 const db = getFirestoreInstance();
@@ -2548,7 +2538,6 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
         try {
             if (USE_POSTGRESQL) {
                 await postgresAnnouncements.deleteAnnouncement(announcementId);
-                console.log('[useSchoolData] ✅ Announcement deleted (PostgreSQL):', announcementId);
             } else {
                 await waitForAuthReady();
                 const db = getFirestoreInstance();
