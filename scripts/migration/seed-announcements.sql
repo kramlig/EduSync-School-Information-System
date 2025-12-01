@@ -9,7 +9,7 @@ BEGIN;
 -- Delete existing demo announcements (idempotent)
 DELETE FROM announcements 
 WHERE school_id IN (
-    SELECT id FROM schools WHERE name = 'ENRIQUE URENCIA ELEMENTARY SCHOOL'
+    SELECT id FROM schools WHERE name = 'Demo School'
 );
 
 -- Get school_id and sample teacher IDs
@@ -23,7 +23,7 @@ BEGIN
     -- Get school ID
     SELECT id INTO v_school_id
     FROM schools
-    WHERE name = 'ENRIQUE URENCIA ELEMENTARY SCHOOL'
+    WHERE name = 'Demo School'
     LIMIT 1;
     
     IF v_school_id IS NULL THEN
@@ -217,13 +217,13 @@ SELECT
     COUNT(*) as count
 FROM announcements
 WHERE school_id IN (
-    SELECT id FROM schools WHERE name = 'ENRIQUE URENCIA ELEMENTARY SCHOOL'
+    SELECT id FROM schools WHERE name = 'Demo School'
 )
 GROUP BY target
 ORDER BY target;
 
 SELECT 
-    '✅ Announcements seeded:',
+    '✅ Announcements seeded:' as status,
     COUNT(*) as total,
     COUNT(CASE WHEN target = 'all' THEN 1 END) as for_all,
     COUNT(CASE WHEN target = 'staff' THEN 1 END) as for_staff,
@@ -231,5 +231,5 @@ SELECT
     COUNT(CASE WHEN target = 'parents' THEN 1 END) as for_parents
 FROM announcements
 WHERE school_id IN (
-    SELECT id FROM schools WHERE name = 'ENRIQUE URENCIA ELEMENTARY SCHOOL'
+    SELECT id FROM schools WHERE name = 'Demo School'
 );
