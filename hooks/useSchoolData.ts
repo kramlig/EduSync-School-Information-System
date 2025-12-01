@@ -2488,8 +2488,17 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     const addAnnouncement = useCallback(async (announcement: Omit<Announcement, 'id'>): Promise<void> => {
         try {
             if (USE_POSTGRESQL) {
-                await postgresAnnouncements.addAnnouncement(announcement);
-                console.log('[useSchoolData] ✅ Announcement added (PostgreSQL)');
+                // MULTI-TENANT: Auto-inject schoolId for PostgreSQL
+                const finalSchoolId = announcement.schoolId || schoolId;
+                if (!finalSchoolId) {
+                    throw new Error('schoolId is required to add announcement');
+                }
+                
+                await postgresAnnouncements.addAnnouncement({
+                    ...announcement,
+                    schoolId: finalSchoolId
+                });
+                console.log('[useSchoolData] ✅ Announcement added (PostgreSQL), schoolId:', finalSchoolId);
             } else {
                 await waitForAuthReady();
                 const db = getFirestoreInstance();
