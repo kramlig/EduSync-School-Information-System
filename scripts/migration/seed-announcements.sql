@@ -207,9 +207,7 @@ SELECT
     target,
     COUNT(*) as count
 FROM announcements
-WHERE school_id IN (
-    SELECT id FROM schools WHERE name = 'Demo School'
-)
+WHERE school_id = '4d3758e8-cd6b-434b-8663-30a3f675ab80'
 GROUP BY target
 ORDER BY target;
 
@@ -221,6 +219,4 @@ SELECT
     COUNT(CASE WHEN target = 'students' THEN 1 END) as for_students,
     COUNT(CASE WHEN target = 'parents' THEN 1 END) as for_parents
 FROM announcements
-WHERE school_id IN (
-    SELECT id FROM schools WHERE name = 'Demo School'
-);
+WHERE school_id = '4d3758e8-cd6b-434b-8663-30a3f675ab80';
