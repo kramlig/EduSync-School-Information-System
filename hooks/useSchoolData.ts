@@ -197,6 +197,14 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             ? { schoolId }
             : {}
     );
+    
+    // Debug: Log announcements hook initialization
+    console.log('[useSchoolData] Announcements hook init:', {
+        USE_POSTGRESQL,
+        shouldFetch: shouldFetch('announcements'),
+        schoolId,
+        passedOptions: USE_POSTGRESQL && shouldFetch('announcements') && schoolId ? { schoolId } : {}
+    });
 
     // Use PostgreSQL data directly (no Firestore override needed)
     useEffect(() => {
