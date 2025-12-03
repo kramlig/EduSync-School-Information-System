@@ -84,13 +84,15 @@ const LandingPage: React.FC = () => {
                 <ArrowRightIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
 
-              <button
-                onClick={() => document.getElementById('demo-video')?.scrollIntoView({ behavior: 'smooth' })}
+              <a
+                href="https://www.canva.com/design/DAG4o-xNzcg/Yc6nsXXFxzmCZufPv8xvPg/watch?utm_content=DAG4o-xNzcg&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h9cd0b5af63"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white rounded-xl font-bold text-lg hover:bg-white/20 transition-all flex items-center justify-center gap-2"
               >
                 <PlayIcon className="w-5 h-5" />
                 Watch Demo
-              </button>
+              </a>
             </div>
 
             <div className="flex items-center gap-8 text-sm">
