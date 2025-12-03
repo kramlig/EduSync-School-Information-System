@@ -22,6 +22,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { PencilIcon, TrashIcon, CloseIcon, SearchIcon } from '../../components/icons';
 import { GRADE_LEVELS, formatGradeLevel } from '../utils/gradeUtils';
 import Modal from '../../components/Modal';
+import { getAuth, updateEmail } from 'firebase/auth';
 
 interface TeachersViewPostgreSQLProps {
   schoolId: string;
@@ -308,15 +309,17 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
     // Store original data for comparison
     const originalTeacher = teachers.find(t => t.id === selectedTeacher.id);
     const changes: string[] = [];
+    const emailChanged = originalTeacher && originalTeacher.email !== selectedTeacher.email;
     
     if (originalTeacher) {
       if (originalTeacher.name !== selectedTeacher.name) changes.push(`Name: "${originalTeacher.name}" → "${selectedTeacher.name}"`);
-      if (originalTeacher.email !== selectedTeacher.email) changes.push(`Email: "${originalTeacher.email}" → "${selectedTeacher.email}"`);
+      if (emailChanged) changes.push(`Email: "${originalTeacher.email}" → "${selectedTeacher.email}"`);
       if (originalTeacher.role !== selectedTeacher.role) changes.push(`Role: "${originalTeacher.role}" → "${selectedTeacher.role}"`);
       if (originalTeacher.contactNumber !== selectedTeacher.contactNumber) changes.push(`Contact: "${originalTeacher.contactNumber || 'N/A'}" → "${selectedTeacher.contactNumber || 'N/A'}"`);
     }
 
     try {
+      // Update PostgreSQL
       await updateTeacher(selectedTeacher.id, {
         name: selectedTeacher.name,
         email: selectedTeacher.email,
@@ -324,8 +327,32 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
         contactNumber: selectedTeacher.contactNumber,
       });
 
+      // If email changed, update Firebase Auth as well
+      if (emailChanged && selectedTeacher.firebaseUid) {
+        try {
+          const auth = getAuth();
+          const user = auth.currentUser;
+          // Only allow updating own email or if admin
+          if (user && (user.uid === selectedTeacher.firebaseUid || authUserRole === 'admin')) {
+            // Note: This only works for the current user in client-side
+            // For other users, you need Admin SDK (server-side)
+            if (user.uid === selectedTeacher.firebaseUid) {
+              await updateEmail(user, selectedTeacher.email);
+              showToast('success', '✅ Email updated in both database and authentication');
+            } else {
+              showToast('error', '⚠️ Database updated, but Firebase Auth email requires server-side update', 'Please use Firebase Console or Admin SDK to update authentication email.');
+            }
+          }
+        } catch (authError) {
+          console.error('Failed to update Firebase Auth email:', authError);
+          showToast('error', '⚠️ Database updated successfully, but authentication email update failed', 'The teacher may need to re-verify their email or contact support.');
+        }
+      }
+
       const changesText = changes.length > 0 ? changes.join('; ') : 'No changes detected';
-      showToast('success', `✅ Teacher "${selectedTeacher.name}" updated successfully!`, changesText);
+      if (!emailChanged) {
+        showToast('success', `✅ Teacher "${selectedTeacher.name}" updated successfully!`, changesText);
+      }
 
       setIsEditModalOpen(false);
       setSelectedTeacher(null);
@@ -333,7 +360,7 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
       console.error('Failed to update teacher:', err);
       showToast('error', 'Failed to update teacher', err instanceof Error ? err.message : 'Please try again.');
     }
-  }, [selectedTeacher, updateTeacher, teachers, showToast]);
+  }, [selectedTeacher, updateTeacher, teachers, showToast, authUserRole]);
 
   // Handle delete teacher
   const handleDeleteClick = useCallback((teacher: any) => {

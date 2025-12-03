@@ -1,0 +1,27 @@
+# CRITICAL COMPONENTS TO FIX (Used in App.tsx routes)
+
+Priority 1 - Main Navigation Pages:
+1. ✅ Dashboard - FIXED
+2. ✅ StudentList - FIXED  
+3. GradesDashboard - /grades route
+4. GradesView - Used in grades section
+5. GradebookView - /gradebook route
+6. AttendanceView - /attendance route
+7. TeacherList - /teachers route
+8. SchedulerView - /scheduler route
+9. SectionsView - Already using mock data
+
+Priority 2 - Reports & Features:
+10. PrintableReport - Used for reports
+11. GradesReportsDashboard
+12. UnifiedAssessmentView
+13. CoreValuesGradebookView
+14. FinancialReports
+15. ParentDashboard
+16. StudentDashboard
+
+PATTERN TO APPLY:
+1. Add PostgreSQL hook imports
+2. Load data with hooks at component start
+3. Remove data extraction from schoolData prop
+4. Keep CRUD methods from schoolData if needed

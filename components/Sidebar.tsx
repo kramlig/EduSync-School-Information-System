@@ -33,7 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, announcements = [] }) => {
     {
       title: 'School Management',
       items: [
-        { path: '/announcements', label: 'Announcements', icon: <MegaphoneIcon />, roles: ['admin', 'principal'], badge: null },
+        { path: '/announcements', label: 'Announcements', icon: <MegaphoneIcon />, roles: ['admin', 'principal', 'teacher'], badge: null },
         { path: '/admin/enrollment', label: 'Enrollment', icon: <ClipboardDocumentListIcon />, roles: ['admin'], badge: null },
         { path: '/students', label: 'Students', icon: <AcademicCapIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
         { path: '/teachers', label: 'Teachers', icon: <BriefcaseIcon />, roles: ['admin', 'registrar'], badge: null },
@@ -77,7 +77,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, announcements = [] }) => {
         { path: '/school-management', label: 'School Management', icon: <BuildingOfficeIcon />, roles: ['superadmin'], badge: null },
         { path: '/settings', label: 'Settings', icon: <CogIcon />, roles: ['admin'], badge: null },
         { path: '/validation-results', label: 'Validation Results', icon: <ClipboardDocumentCheckIcon />, roles: ['admin'], badge: null },
-        { path: '/teacher-validation', label: 'Account Validation', icon: <CheckBadgeIcon />, roles: ['teacher'], badge: null },
+        // { path: '/teacher-validation', label: 'Account Validation', icon: <CheckBadgeIcon />, roles: ['teacher'], badge: null }, // HIDDEN: Outdated
       ]
     }
   ];

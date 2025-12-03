@@ -573,3 +573,10 @@ exports.getUserRoleHistory = autoOnboarding.getUserRoleHistory;
 // ========================================
 const trialSignup = require('./src/trialSignup');
 exports.processTrialSignup = trialSignup.processTrialSignup;
+
+// ========================================
+// PostgreSQL ↔ Auth Sync
+// ========================================
+const syncPostgresToAuth = require('./src/syncPostgresToAuth');
+exports.syncPostgresToAuth = syncPostgresToAuth.syncPostgresToAuth;
+exports.createAuthUser = syncPostgresToAuth.createAuthUser;

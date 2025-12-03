@@ -39,6 +39,7 @@ interface UseGradesOptions {
   learningAreaId?: string;
   sectionId?: string;
   schoolId?: string;
+  skip?: boolean; // Skip fetching if true (lazy loading)
 }
 
 interface UseGradesReturn {
@@ -56,7 +57,7 @@ interface UseGradesReturn {
 }
 
 export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesReturn {
-  const { studentId, learningAreaId, sectionId, schoolId } = options;
+  const { studentId, learningAreaId, sectionId, schoolId, skip = false } = options;
   
   const [grades, setGrades] = useState<Grade[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,20 +68,36 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
       setLoading(true);
       setError(null);
 
-      let query = supabase
-        .from('grades')
-        .select('*');
+      let data;
+      let fetchError;
 
-      // Apply filters - no joins for now since IDs don't match
-      if (studentId) {
-        query = query.eq('student_id', studentId);
-      }
-      if (learningAreaId) {
-        query = query.eq('learning_area_id', learningAreaId);
-      }
-      // Skip sectionId filter since it requires a join
+      // Optimize: Filter by section via join to reduce data transfer
+      if (sectionId) {
+        // Join with students table to filter by section
+        const result = await supabase
+          .from('grades')
+          .select('*, students!inner(section_id)')
+          .eq('students.section_id', sectionId);
+        
+        data = result.data;
+        fetchError = result.error;
+      } else {
+        // No section filter - fetch with other filters
+        let query = supabase
+          .from('grades')
+          .select('*');
 
-      const { data, error: fetchError } = await query;
+        if (studentId) {
+          query = query.eq('student_id', studentId);
+        }
+        if (learningAreaId) {
+          query = query.eq('learning_area_id', learningAreaId);
+        }
+
+        const result = await query;
+        data = result.data;
+        fetchError = result.error;
+      }
 
       if (fetchError) throw fetchError;
 
@@ -108,10 +125,12 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
     }
   }, [studentId, learningAreaId, sectionId, schoolId]);
 
-  // Initial fetch
+  // Initial fetch (skip if skip=true for lazy loading)
   useEffect(() => {
-    fetchGrades();
-  }, [fetchGrades]);
+    if (!skip) {
+      fetchGrades();
+    }
+  }, [fetchGrades, skip]);
 
   // Real-time subscription
   useEffect(() => {

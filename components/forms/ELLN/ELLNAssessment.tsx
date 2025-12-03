@@ -80,16 +80,25 @@ function getProficiencyColor(level: ProficiencyLevel): string {
     case 'Proficient': return 'text-green-600 bg-green-50 border-green-200';
     case 'Approaching': return 'text-blue-600 bg-blue-50 border-blue-200';
     case 'Developing': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-    case 'Beginning': return 'text-orange-600 bg-orange-50 border-orange-200';
+    default: return 'text-red-600 bg-red-50 border-red-200';
   }
 }
 
-export default function ELLNAssessmentComponent() {
+interface ELLNAssessmentProps {
+  session: { user: any; type: 'staff' };
+}
+
+export default function ELLNAssessmentComponent({ session }: ELLNAssessmentProps) {
   const navigate = useNavigate();
   const { schoolId } = useSchoolContext();
   const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
   const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
   const { createAssessment } = useELLNPostgreSQL({ schoolId });
+  
+  // Get teacher ID from session (same pattern as Form138Dashboard)
+  const authUser = session.user;
+  const teacherId = (authUser as any).postgresqlId || authUser.id;
+  const isStaff = ['admin', 'principal', 'registrar'].includes(authUser.role);
 
   // Form state
   const [selectedStudent, setSelectedStudent] = useState('');
@@ -112,8 +121,25 @@ export default function ELLNAssessmentComponent() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // TEACHER FILTER: Get teacher's sections first
+  const teacherSections = useMemo(() => {
+    if (isStaff) return sections; // Admins see all
+    return sections.filter(s => s.adviserId === teacherId);
+  }, [sections, teacherId, isStaff]);
+  
+  const teacherSectionIds = useMemo(() => 
+    teacherSections.map(s => s.id),
+    [teacherSections]
+  );
+  
+  // Filter students to teacher's sections only
+  const teacherStudents = useMemo(() => {
+    if (isStaff) return students; // Admins see all
+    return students.filter(s => teacherSectionIds.includes(s.sectionId));
+  }, [students, teacherSectionIds, isStaff]);
+  
   // Create student-section mapping for grade levels
-  const studentsWithGrade = students.map(s => {
+  const studentsWithGrade = teacherStudents.map(s => {
     const section = sections.find(sec => sec.id === s.sectionId);
     return {
       ...s,

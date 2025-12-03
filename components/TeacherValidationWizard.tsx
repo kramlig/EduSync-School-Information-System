@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSchoolData } from '../hooks/useSchoolData';
+// import { useSchoolData } from '../hooks/useSchoolData'; // REMOVED: Production PostgreSQL
 import type { AuthUser } from '../types';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getFirestoreInstance } from '../src/services/firestoreService';
@@ -55,8 +55,11 @@ interface ValidationStep {
 }
 
 const TeacherValidationWizard: React.FC<TeacherValidationWizardProps> = ({ session }) => {
-  const schoolData = useSchoolData();
-  const { students = [], sections = [], learningAreas = [] } = schoolData;
+  // const schoolData = useSchoolData(); // REMOVED: Production PostgreSQL
+  // const { students = [], sections = [], learningAreas = [] } = schoolData;
+  const students: any[] = []; // TEMPORARY: Load from PostgreSQL
+  const sections: any[] = [];
+  const learningAreas: any[] = [];
   const { schoolId } = useSchoolContext();
   
   const [currentStep, setCurrentStep] = useState(-1); // Start at -1 for tester info screen

@@ -2,9 +2,8 @@ import DepEdLogo from './DepEdLogo';
 import EdusyncLogo from './EdusyncLogo';
 import React, { useState } from 'react';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
-import { getFirestoreInstance } from '../src/services/firestoreService';
-import { doc, getDoc } from 'firebase/firestore';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { supabase } from '../src/lib/supabase';
 
 interface LoginScreenProps {
   onLogin: (user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => void;
@@ -39,39 +38,104 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
 
     try {
       console.log('[LoginScreen] Step 1: Authenticating with Firebase Auth...');
-      // Step 1: Authenticate with Firebase Auth (for security rules)
+      // Step 1: Authenticate with Firebase Auth
       const auth = getAuth();
       const userCredential = await signInWithEmailAndPassword(auth, email.toLowerCase(), password);
       const firebaseUser = userCredential.user;
       console.log('[LoginScreen] ✅ Firebase Auth successful, UID:', firebaseUser.uid);
       
-      console.log('[LoginScreen] Step 2: Fetching user data (optimized parallel queries)...');
-      // Step 2: OPTIMIZED - Fetch users collection (PRIMARY source, denormalized)
-      const db = getFirestoreInstance();
-      const userDocRef = doc(db, 'users', firebaseUser.uid);
-      const userDocSnap = await getDoc(userDocRef);
-      
-      if (!userDocSnap.exists()) {
-        console.error('[LoginScreen] No users document found for UID:', firebaseUser.uid);
+      console.log('[LoginScreen] Step 2: Fetching user data from PostgreSQL...');
+      // Step 2: Fetch from PostgreSQL based on firebase_uid
+      let userData: AuthUser | StudentUser | ParentUser | null = null;
+      let userRole: string | null = null;
+
+      // Try teachers table
+      const { data: teacher, error: teacherError } = await supabase
+        .from('teachers')
+        .select('*')
+        .eq('firebase_uid', firebaseUser.uid)
+        .single();
+
+      if (teacher && !teacherError) {
+        console.log('[LoginScreen] ✅ Found teacher:', teacher.email);
+        userData = {
+          id: teacher.id,
+          postgresqlId: teacher.id,
+          firebaseUid: teacher.firebase_uid,
+          email: teacher.email,
+          name: teacher.name,
+          role: teacher.role || 'teacher',
+          schoolId: teacher.school_id,
+          contactNumber: teacher.contact_number
+        } as AuthUser;
+        userRole = teacher.role || 'teacher';
+      }
+
+      // Try students table if not teacher
+      if (!userData) {
+        const { data: student, error: studentError } = await supabase
+          .from('students')
+          .select('*')
+          .eq('firebase_uid', firebaseUser.uid)
+          .single();
+
+        if (student && !studentError) {
+          console.log('[LoginScreen] ✅ Found student:', student.email);
+          userData = {
+            id: student.id,
+            postgresqlId: student.id,
+            firebaseUid: student.firebase_uid,
+            email: student.email,
+            firstName: student.first_name,
+            lastName: student.last_name,
+            name: `${student.first_name} ${student.last_name}`.trim(),
+            role: 'student',
+            schoolId: student.school_id,
+            gradeLevel: student.grade_level,
+            sectionId: student.section_id
+          } as StudentUser;
+          userRole = 'student';
+        }
+      }
+
+      // Try parents table if not teacher or student
+      if (!userData) {
+        const { data: parent, error: parentError } = await supabase
+          .from('parents')
+          .select('*')
+          .eq('firebase_uid', firebaseUser.uid)
+          .single();
+
+        if (parent && !parentError) {
+          console.log('[LoginScreen] ✅ Found parent:', parent.email);
+          userData = {
+            id: parent.id,
+            postgresqlId: parent.id,
+            firebaseUid: parent.firebase_uid,
+            email: parent.email,
+            name: parent.name,
+            role: 'parent',
+            schoolId: parent.school_id,
+            contactNumber: parent.contact_number,
+            children: parent.children || []
+          } as ParentUser;
+          userRole = 'parent';
+        }
+      }
+
+      if (!userData || !userRole) {
+        console.error('[LoginScreen] No user found in PostgreSQL for UID:', firebaseUser.uid);
         setError(`No ${loginType} account found. Please contact your administrator.`);
         setIsLoading(false);
         return;
       }
       
-      const usersData = userDocSnap.data();
-      console.log('[LoginScreen] ✅ Found users document:', {
-        id: userDocSnap.id,
-        email: usersData.email,
-        role: usersData.role,
-        schoolId: usersData.schoolId
-      });
-      
       // Verify the role matches the login type
       const expectedRole = loginType === 'staff' ? ['admin', 'principal', 'registrar', 'teacher', 'superadmin'] : [loginType];
-      if (!expectedRole.includes(usersData.role)) {
-        console.error('[LoginScreen] Role mismatch. Expected:', expectedRole, 'Got:', usersData.role);
+      if (!expectedRole.includes(userRole)) {
+        console.error('[LoginScreen] Role mismatch. Expected:', expectedRole, 'Got:', userRole);
         
-        // User-friendly error message (map internal roles to public-facing tabs)
+        // User-friendly error message
         const roleToTabMap: { [key: string]: string } = {
           'admin': 'Staff',
           'principal': 'Staff',
@@ -81,19 +145,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
           'student': 'Student',
           'parent': 'Parent'
         };
-        const correctTab = roleToTabMap[usersData.role] || usersData.role;
+        const correctTab = roleToTabMap[userRole] || userRole;
         setError(`Please use the ${correctTab} login tab.`);
         setIsLoading(false);
         return;
       }
       
-      // Build userData from users collection (already denormalized with all needed data)
-      const userData = {
-        id: userDocSnap.id,
-        ...usersData
-      } as AuthUser | StudentUser | ParentUser;
-      
-      console.log('[LoginScreen] ✅ Login optimized: Using denormalized users collection (no role-specific fetch needed)');
+      console.log('[LoginScreen] ✅ Login successful with PostgreSQL data');
       
       // Cache user for offline login
       localStorage.setItem('edusync_cached_user', JSON.stringify({
@@ -103,16 +161,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
         cachedAt: Date.now()
       }));
       
-      console.log('[LoginScreen] ✅ Calling onLogin callback with userData:', {
-        id: (userData as any).id,
-        email: (userData as any).email,
-        schoolId: (userData as any).schoolId,
-        role: (userData as any).role
-      });
+      console.log('[LoginScreen] ✅ Calling onLogin callback');
       onLogin(userData, loginType);
-      console.log('[LoginScreen] ✅ onLogin callback completed');
     } catch (err) {
-      // CRITICAL: Always log errors, even in production (for debugging)
       console.error('[LoginScreen] ❌ Login error:', err);
       console.error('[LoginScreen] Error details:', {
         message: err instanceof Error ? err.message : String(err),

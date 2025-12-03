@@ -73,4 +73,4 @@ export const AcademicHistoryStep: React.FC<AcademicHistoryStepProps> = ({ data, 
       </div>
     </div>
   );
-});
+};

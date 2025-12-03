@@ -171,7 +171,11 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             : {}
     );
     const postgresGrades = useGradesPostgreSQL(USE_POSTGRESQL && shouldFetch('grades'), schoolId);
-    const postgresCoreValues = useCoreValuesPostgreSQL(USE_POSTGRESQL && (shouldFetch('coreValues') || shouldFetch('coreValueGrades')), schoolId);
+    const postgresCoreValues = useCoreValuesPostgreSQL(
+        USE_POSTGRESQL && (shouldFetch('coreValues') || shouldFetch('coreValueGrades')), 
+        schoolId,
+        false  // Load grades (needed for display)
+    );
     const postgresLearningAreas = useLearningAreasPostgreSQL(USE_POSTGRESQL && shouldFetch('learningAreas') ? schoolId : undefined);
     const postgresSchedules = useSchedulePostgreSQL(
         USE_POSTGRESQL && shouldFetch('classSchedules')
@@ -2005,7 +2009,8 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     }, [schoolId]);
 
     // ===== ATTENDANCE CRUD =====
-    const updateAttendance = useCallback(async (
+    // Firestore-only version (legacy)
+    const updateAttendanceFirestore = useCallback(async (
         studentId: string,
         date: string,
         status: AttendanceStatus
@@ -2053,6 +2058,12 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             throw err;
         }
     }, [schoolId]);
+
+    // Smart wrapper: Use PostgreSQL in PostgreSQL mode, Firestore otherwise
+    const updateAttendance = USE_POSTGRESQL 
+        ? postgresAttendance.updateAttendance 
+        : updateAttendanceFirestore;
+
 
     // ===== SETTINGS CRUD =====
     const updateSettings = useCallback(async (settings: SchoolSettings): Promise<void> => {

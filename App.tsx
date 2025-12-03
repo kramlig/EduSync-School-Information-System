@@ -2,7 +2,7 @@ import React, { useState, useEffect, lazy, Suspense, useCallback, useMemo } from
 import { onAuthStateChanged, signInAnonymously, signOut } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
-import { useSchoolData } from './hooks/useSchoolData';
+import { useSchoolDataPostgreSQL } from './src/hooks/useSchoolDataPostgreSQL';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useFirestoreSyncStatus } from './hooks/useFirestoreSyncStatus';
 import type { AuthUser, StudentUser, ParentUser } from './types';
@@ -64,7 +64,7 @@ const ELLNResults = lazy(() => import('./components/forms/ELLN/ELLNResults'));
 const ELLNReports = lazy(() => import('./components/forms/ELLN/ELLNReports'));
 const ILMPTemplate = lazy(() => import('./components/forms/ELLN/ILMPTemplate'));
 const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDashboard'));
-const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard'));
+// const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard')); // HIDDEN: Outdated
 const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
 
 // PostgreSQL Migration Test Components
@@ -317,10 +317,51 @@ const App: React.FC = () => {
     return ['settings'];
   }, [shouldLoadData, location.pathname, emptyCollections]);
   
-  const schoolData = useSchoolData(requiredCollections);
+  // Load school settings from PostgreSQL
+  const { settings: pgSettings, loading: settingsLoading } = useSchoolDataPostgreSQL({
+    schoolId: session?.user.schoolId || null,
+    enableRealtime: true
+  });
+  
+  // PRODUCTION: PostgreSQL migration complete - components load their own data
+  // Create minimal schoolData to satisfy legacy components
+  const schoolData = useMemo(() => ({
+    settings: pgSettings || { 
+      schoolName: 'Demo School',
+      region: 'Region XI', 
+      division: 'Division of the City of Mati',
+      district: 'Governor Generoso North District',
+      schoolYear: '2024-2025'
+    },
+    loading: settingsLoading,
+    error: null,
+    students: [],
+    teachers: [],
+    parents: [],
+    grades: [],
+    coreValues: [],
+    coreValueGrades: [],
+    attendanceRecords: [],
+    sections: [],
+    learningAreas: [],
+    substituteAssignments: [],
+    classSchedules: [],
+    assignments: [],
+    studentAssignmentGrades: [],
+    lessonPlans: [],
+    announcements: [],
+    monthlySchoolDaysConfig: {},
+    refresh: async () => {},
+    addStudent: async () => ({ id: '', lrn: '', firstName: '', lastName: '', middleName: '', gradeLevel: '', sectionId: '', schoolId: '', enrollmentDate: new Date(), status: 'active' as const }),
+    updateStudent: async () => {},
+    deleteStudent: async () => {},
+    addTeacher: async () => ({ id: '', email: '', name: '', role: 'teacher' as const, schoolId: '' }),
+    updateTeacher: async () => {},
+    deleteTeacher: async () => {}
+  }), [pgSettings, settingsLoading]);
   
   const { 
-    loading, error, settings, students, teachers, parents,
+    settings, students, teachers, parents,
     grades, coreValues, coreValueGrades, attendanceRecords,
     sections, learningAreas, substituteAssignments, classSchedules,
     assignments, studentAssignmentGrades, lessonPlans,
@@ -396,9 +437,9 @@ const App: React.FC = () => {
   // Show login screen as soon as auth is ready
   // Only wait for data loading AFTER user is logged in AND only on initial mount
   // Once we've loaded at least SOME data (1+ collection), allow navigation
-  const hasAnyData = students.length > 0 || teachers.length > 0 || learningAreas.length > 0 || 
-                      sections.length > 0 || settings.schoolName !== '';
-  const isInitializing = !authReady || (session && loading && !loadTimeout && !hasAnyData);
+  const hasAnyData = schoolData.students.length > 0 || schoolData.teachers.length > 0 || schoolData.learningAreas.length > 0 || 
+                      schoolData.sections.length > 0 || (schoolData.settings?.schoolName !== '' && schoolData.settings !== null);
+  const isInitializing = !authReady || (session && schoolData.loading && !loadTimeout && !hasAnyData);
   
   if (isInitializing) {
     return <FullScreenLoader message="Loading school data..." />;
@@ -454,7 +495,7 @@ const App: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (schoolData.error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-red-50 dark:bg-slate-900 text-red-800 dark:text-red-200">
         <div className="text-center p-8 max-w-2xl">
@@ -463,7 +504,7 @@ const App: React.FC = () => {
           <p className="mb-4">There was a critical error fetching data from the server.</p>
           <details className="mb-6">
             <summary className="cursor-pointer text-sm font-semibold mb-2">Technical Details</summary>
-            <pre className="bg-red-100 dark:bg-red-900/30 p-4 rounded-md text-left text-sm overflow-auto">{error}</pre>
+            <pre className="bg-red-100 dark:bg-red-900/30 p-4 rounded-md text-left text-sm overflow-auto">{String(schoolData.error)}</pre>
           </details>
           <button
             onClick={() => window.location.reload()}
@@ -537,7 +578,7 @@ const App: React.FC = () => {
   
   // TIER 1 OPTIMIZATION: Show loading state while data loads after login
   // This prevents confusion when transitioning from login to dashboard
-  if (loading) {
+  if (schoolData.loading) {
     return <FullScreenLoader message="Loading your data..." />;
   }
   
@@ -612,7 +653,7 @@ const App: React.FC = () => {
                         <Route path="/reports/form137/new" element={<Form137CreateWrapper schoolYear={settings.schoolYear} />} />
                         
                         {/* Form 138 - Report Card */}
-                        <Route path="/reports/form138" element={<Form138Dashboard />} />
+                        <Route path="/reports/form138" element={<Form138Dashboard session={staffSession} />} />
                         <Route path="/reports/form138/view/:studentId" element={<Form138View />} />
                         <Route path="/reports/form138/print" element={<Form138Print />} />
                         
@@ -624,8 +665,8 @@ const App: React.FC = () => {
                         
                         {/* ELLN Assessment */}
                         <Route path="/reports/elln" element={<ELLNDashboard />} />
-                        <Route path="/reports/elln/assessment" element={<ELLNAssessment />} />
-                        <Route path="/reports/elln/results" element={<ELLNResults />} />
+                        <Route path="/reports/elln/assessment" element={<ELLNAssessment session={staffSession} />} />
+                        <Route path="/reports/elln/results" element={<ELLNResults session={staffSession} />} />
                         <Route path="/reports/elln/reports" element={<ELLNReports />} />
                         <Route path="/reports/elln/ilmp" element={<ILMPTemplate />} />
                         
@@ -659,12 +700,12 @@ const App: React.FC = () => {
                         <Route path="/gradebook-pg-test" element={<GradebookViewPostgreSQL schoolData={schoolData} session={staffSession} />} />
                         <Route path="/core-values" element={<Navigate to="/grades/core-values" replace />} />
                         <Route path="/core-values-gradebook" element={<Navigate to="/grades/core-values" replace />} />
-                        <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/attendance" element={<AttendanceView session={staffSession} />} />
                         <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/substitute" element={<SubstituteView schoolData={schoolData} />} />
+                        <Route path="/substitute" element={<SubstituteView />} />
                         <Route path="/assignments" element={<AssignmentsView session={staffSession} />} />
-                        <Route path="/lesson-plan" element={<LessonPlanView schoolData={schoolData} session={staffSession} />} />
-                        <Route path="/announcements" element={<AnnouncementsView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/lesson-plan" element={<LessonPlanView session={staffSession} />} />
+                        <Route path="/announcements" element={<AnnouncementsView session={staffSession} />} />
                         <Route path="/learning-areas" element={<CourseList session={staffSession} />} />
                         
                         {/* School Settings - PostgreSQL */}
@@ -702,9 +743,10 @@ const App: React.FC = () => {
                           </>
                         )}
                         
-                        {staffSession.user.role === 'teacher' && (
+                        {/* HIDDEN: Teacher Validation (Outdated) */}
+                        {/* {staffSession.user.role === 'teacher' && (
                           <Route path="/teacher-validation" element={<TeacherValidationWizard session={staffSession} />} />
-                        )}
+                        )} */}
                         {staffSession.user.role === 'admin' && (
                           <Route path="/validation-results" element={<ValidationResultsDashboard />} />
                         )}
@@ -720,7 +762,7 @@ const App: React.FC = () => {
             <Route path="/grades/core-values" element={<CoreValuesGradebookView schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={studentSession} defaultTab="deep-analytics" hideTabNavigation={true} />} />
             <Route path="/core-values" element={<Navigate to="/grades/core-values" replace />} />
-            <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={studentSession} />} />
+            <Route path="/attendance" element={<AttendanceView session={studentSession} />} />
             <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={studentSession} />} />
           </>
         )}
@@ -731,13 +773,13 @@ const App: React.FC = () => {
             <Route path="/billing" element={<ParentBilling schoolData={schoolData} session={parentSession} selectedChildId={parentSelectedChildId} />} />
             {/* <Route path="/verify-email" element={<EmailVerification />} /> */}
             {/* <Route path="/email-verification" element={<EmailVerification />} /> */}
-            <Route path="/announcements" element={<AnnouncementsView schoolData={schoolData} session={parentSession} />} />
+            <Route path="/announcements" element={<AnnouncementsView session={parentSession} />} />
             <Route path="/assignments" element={<AssignmentsView session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/grades" element={<GradesDashboard schoolData={schoolData} session={parentSession} />} />
             <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} defaultTab="deep-analytics" hideTabNavigation={true} />} />
             <Route path="/core-values" element={<Navigate to="/grades/overview" replace />} />
-            <Route path="/attendance" element={<AttendanceView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
+            <Route path="/attendance" element={<AttendanceView session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
           </>
         )}

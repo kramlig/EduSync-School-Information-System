@@ -56,21 +56,16 @@ const LessonPlanView: React.FC<LessonPlanViewProps> = ({ session }) => {
     
     const authUser = session.user as AuthUser;
     const isStaff = ['admin', 'principal', 'registrar'].includes(authUser.role);
+    const teacherId = (authUser as any).postgresqlId || authUser.id;
     
-    // Only show sections for grade levels the teacher is assigned to
+    // MIGRATED TO POSTGRESQL: Show sections where teacher is adviser
+    // Teachers can create lesson plans for any subject in their adviser sections
     const visibleSections = useMemo(() => {
         if (isStaff) return sections;
         
-        const teacherAssignments = authUser.assignments || [];
-        if (teacherAssignments.length === 0) {
-            return [];
-        }
-        
-        // Get unique grade levels this teacher is assigned to
-        const assignedGradeLevels = new Set(teacherAssignments.map(a => a.gradeLevel));
-        
-        return sections.filter(s => assignedGradeLevels.has(s.gradeLevel));
-    }, [sections, authUser, isStaff]);
+        // Filter sections where this teacher is the adviser
+        return sections.filter(s => s.adviserId === teacherId);
+    }, [sections, teacherId, isStaff]);
 
     useEffect(() => {
         if (!selectedSectionId && visibleSections.length > 0) {
@@ -78,7 +73,8 @@ const LessonPlanView: React.FC<LessonPlanViewProps> = ({ session }) => {
         }
     }, [visibleSections, selectedSectionId]);
 
-    // Filter learning areas based on teacher assignments for the selected section's grade level
+    // MIGRATED TO POSTGRESQL: Show all learning areas for the selected section's grade level
+    // Teachers who advise a section can teach any subject in that grade
     const learningAreasForSection = useMemo(() => {
         if (!selectedSectionId) return [];
         if (isStaff) return learningAreas;
@@ -86,13 +82,12 @@ const LessonPlanView: React.FC<LessonPlanViewProps> = ({ session }) => {
         const section = sections.find(s => s.id === selectedSectionId);
         if (!section) return [];
         
-        const teacherAssignments = authUser.assignments || [];
-        const learningAreaIds = teacherAssignments
-            .filter(a => a.gradeLevel === section.gradeLevel)
-            .map(a => a.learningAreaId);
-        
-        return learningAreas.filter(la => learningAreaIds.includes(la.id));
-    }, [learningAreas, selectedSectionId, sections, authUser, isStaff]);
+        // Show all learning areas that include this grade level
+        // gradeLevel is an array like [1,2,3,4,5,6] from grade_levels column
+        return learningAreas.filter(la => 
+            Array.isArray(la.gradeLevel) && la.gradeLevel.includes(section.gradeLevel)
+        );
+    }, [learningAreas, selectedSectionId, sections, isStaff]);
     
     useEffect(() => {
         if (selectedSectionId && !learningAreasForSection.some(la => la.id === selectedLearningAreaId)) {
@@ -465,13 +460,16 @@ const LessonPlanView: React.FC<LessonPlanViewProps> = ({ session }) => {
                     </div>
                     
                     <div className="flex gap-2">
-                        <button
-                            onClick={() => setIsAIGeneratorOpen(true)}
-                            disabled={!selectedSectionId || !selectedLearningAreaId}
-                            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold px-4 py-2.5 rounded-lg flex items-center gap-2 hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md disabled:from-slate-400 disabled:to-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
-                            title={!selectedSectionId || !selectedLearningAreaId ? "Select a class and learning area first" : "Generate lesson plan with AI"}>
-                            <SparklesIcon className="h-5 w-5"/> AI Generate
-                        </button>
+                        {/* AI Generate disabled in local development - requires Firebase Functions with Gemini API key */}
+                        {process.env.NODE_ENV === 'production' && (
+                            <button
+                                onClick={() => setIsAIGeneratorOpen(true)}
+                                disabled={!selectedSectionId || !selectedLearningAreaId}
+                                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold px-4 py-2.5 rounded-lg flex items-center gap-2 hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md disabled:from-slate-400 disabled:to-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                title={!selectedSectionId || !selectedLearningAreaId ? "Select a class and learning area first" : "Generate lesson plan with AI"}>
+                                <SparklesIcon className="h-5 w-5"/> AI Generate
+                            </button>
+                        )}
                         <button
                             onClick={() => setViewMode('calendar')}
                             className={`px-4 py-2.5 rounded-lg font-medium transition-all ${
