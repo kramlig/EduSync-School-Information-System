@@ -31,6 +31,7 @@ interface Teacher {
   name: string;
   email: string;
   contactNumber?: string;
+  firebaseUid?: string; // Firebase Auth UID for matching logged-in users
   assignments?: TeacherAssignment[];
   role: 'admin' | 'teacher' | 'principal' | 'registrar' | 'superadmin';
   
@@ -138,6 +139,7 @@ export function useTeachersPostgreSQL(options: UseTeachersOptions = {}): UseTeac
         name: row.name || '',
         email: row.email || '',
         contactNumber: row.contact_number,
+        firebaseUid: row.firebase_uid, // Add Firebase UID for auth matching
         assignments: row.assignments || [],
         role: row.role || 'teacher',
         createdAt: row.created_at,

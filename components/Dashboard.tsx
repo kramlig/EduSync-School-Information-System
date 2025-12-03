@@ -1,6 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SchoolDataHook } from '../hooks/useSchoolData';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
 import {
   AcademicCapIcon,
   BookOpenIcon,
@@ -15,7 +18,6 @@ import {
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import type { AuthUser, StudentUser } from '../types';
-import SupabaseTest from './SupabaseTest';
 
 interface DashboardProps {
   schoolData: SchoolDataHook;
@@ -23,11 +25,16 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
+  const authUser = session.user as AuthUser;
+  const schoolId = authUser.schoolId || '';
+
+  // Load real data from PostgreSQL
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+  const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
+  
   const {
-    students,
     learningAreas,
-    grades = [],
-    sections = [],
     substituteAssignments = [],
     classSchedules = [],
     settings,
@@ -35,7 +42,6 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
 
-  const authUser = session.user as AuthUser;
   const currentDate = new Date();
   const greeting = useMemo(() => {
     const hour = currentDate.getHours();
@@ -51,16 +57,19 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
     
     const authorizedSectionIds = new Set<string>();
 
+    // CRITICAL: Use postgresqlId for PostgreSQL queries, not Firebase UID
+    const teacherId = (authUser as any).postgresqlId || authUser.id;
+
     // 1. Sections where the user is the adviser
-    const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
-    if (teacherAdviserSection) {
-        authorizedSectionIds.add(teacherAdviserSection.id);
-    }
+    const teacherAdviserSections = sections.filter(s => s.adviserId === teacherId);
+    teacherAdviserSections.forEach(section => {
+        authorizedSectionIds.add(section.id);
+    });
     
     // 2. Sections where the user is a substitute
     const today = new Date().toISOString().split('T')[0];
     const activeSubAssignments = substituteAssignments.filter(sub => 
-      sub.teacherId === authUser.id &&
+      sub.teacherId === teacherId &&
       today >= sub.startDate &&
       today <= sub.endDate
     );
@@ -85,7 +94,7 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
 
     // 3. Sections where the user is assigned as a subject teacher
     classSchedules.forEach(schedule => {
-      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+      if (schedule.teacherId === teacherId && schedule.sectionId) {
         authorizedSectionIds.add(schedule.sectionId);
       }
     });
@@ -211,9 +220,6 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
           <h1 className="text-4xl font-bold text-slate-800 dark:text-white mb-2">
             {greeting}, {authUser.name}! 👋
           </h1>
-          <p className="text-slate-600 dark:text-slate-400 text-lg">
-            {settings.schoolName} • {settings.schoolYear}
-          </p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -428,36 +434,6 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
               and record grades. The system works offline—any changes sync automatically when you reconnect.
             </p>
           </div>
-        </div>
-      </div>
-
-      {/* Supabase Migration Test - TEMPORARY */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-6 border-2 border-blue-200 dark:border-blue-800">
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100">
-            🚀 PostgreSQL Migration Test
-          </h3>
-          <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-            Testing Supabase connection alongside Firestore. This will be removed after migration is complete.
-          </p>
-        </div>
-        <SupabaseTest />
-        
-        {/* PostgreSQL Gradebook Test Link */}
-        <div className="mt-6 pt-6 border-t border-blue-200 dark:border-blue-800">
-          <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">
-            📊 Test Components
-          </h4>
-          <button
-            onClick={() => navigate('/gradebook-pg-test')}
-            className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            <ChartBarIcon className="w-5 h-5 mr-2" />
-            Test PostgreSQL Gradebook
-          </button>
-          <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-            View grades from PostgreSQL database
-          </p>
         </div>
       </div>
     </div>

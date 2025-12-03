@@ -8,6 +8,12 @@ import { useDebounce } from '../hooks/useDebounce';
 import { uploadStudentPhoto, deleteStudentPhoto, getPlaceholderAvatar } from '../src/services/studentPhotoService';
 import WebcamCapture from './WebcamCapture';
 import ImageCropModal from './ImageCropModal';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
+import { useAttendancePostgreSQL } from '../src/hooks/useAttendancePostgreSQL';
+import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
+import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
 
 interface StudentListProps {
   schoolData: SchoolDataState & { 
@@ -27,7 +33,27 @@ interface StudentListProps {
 }
 
 const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
-  const { students, teachers, sections, addStudent, settings, updateStudent, deleteStudent, grades, attendanceRecords, coreValueGrades, substituteAssignments, classSchedules, parents, fetchMoreStudents, hasMoreStudents, isFetchingStudents, searchStudents, isSearching } = schoolData;
+  const authUser = session.user as AuthUser;
+  const schoolId = authUser.schoolId || '';
+  
+  // Load real data from PostgreSQL
+  const { students: pgStudents, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
+  const { sections: pgSections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+  const { grades: pgGrades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
+  const { attendanceRecords: pgAttendance } = useAttendancePostgreSQL({ schoolId });
+  const { coreValueGrades: pgCoreValues } = useCoreValuesPostgreSQL({ schoolId });
+  const { assignments: pgSubstituteAssignments } = useSubstituteAssignmentsPostgreSQL({ schoolId });
+  
+  // Use PostgreSQL data, fallback to empty arrays
+  const students = pgStudents || [];
+  const sections = pgSections || [];
+  const grades = pgGrades || [];
+  const attendanceRecords = pgAttendance || [];
+  const coreValueGrades = pgCoreValues || [];
+  const substituteAssignments = pgSubstituteAssignments || [];
+  
+  // Get remaining data from schoolData prop
+  const { teachers, settings, parents, classSchedules, addStudent, updateStudent, deleteStudent, fetchMoreStudents, hasMoreStudents, isFetchingStudents, searchStudents, isSearching } = schoolData;
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -56,8 +82,6 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [gradeFilter, setGradeFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'lrn' | 'grade'>('name');
-  
-  const authUser = session.user as AuthUser;
 
   // Feature flag: Server-side pagination is now ENABLED
   const USE_SERVER_PAGINATION = true;
@@ -70,16 +94,19 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
 
     const sectionIds = new Set<string>();
     
+    // CRITICAL: Use postgresqlId for PostgreSQL queries, not Firebase UID
+    const teacherId = (authUser as any).postgresqlId || authUser.id;
+    
     // 1. Sections where the user is the adviser
-    const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
-    if (teacherAdviserSection) {
-      sectionIds.add(teacherAdviserSection.id);
-    }
+    const teacherAdviserSections = sections.filter(s => s.adviserId === teacherId);
+    teacherAdviserSections.forEach(section => {
+      sectionIds.add(section.id);
+    });
     
     // 2. Sections where the user is a substitute
     const today = new Date().toISOString().split('T')[0];
     const activeSubAssignments = substituteAssignments.filter(sub => 
-      sub.teacherId === authUser.id &&
+      sub.teacherId === teacherId &&
       today >= sub.startDate &&
       today <= sub.endDate
     );
@@ -100,7 +127,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
 
     // 3. Sections where the user is assigned as a subject teacher
     classSchedules.forEach(schedule => {
-      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+      if (schedule.teacherId === teacherId && schedule.sectionId) {
         sectionIds.add(schedule.sectionId);
       }
     });

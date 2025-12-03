@@ -16,21 +16,22 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { SchoolDataHook } from '../hooks/useSchoolData';
-import type { Announcement, AuthUser, StudentUser, ParentUser } from '../types';
+import type { AuthUser, StudentUser, ParentUser } from '../types';
 import Modal from './Modal';
 import { PencilIcon, TrashIcon, SearchIcon } from './icons';
 import { useDebounce } from '../hooks/useDebounce';
+import { useAnnouncementsPostgreSQL, Announcement } from '../src/hooks/useAnnouncementsPostgreSQL';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
 
 interface AnnouncementsViewProps {
-  schoolData: SchoolDataHook;
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
 }
 
 const ITEMS_PER_PAGE = 10;
 
-const AnnouncementsViewComponent: React.FC<AnnouncementsViewProps> = ({ schoolData, session }) => {
-    const { announcements, teachers, addAnnouncement, updateAnnouncement, deleteAnnouncement } = schoolData;
+const AnnouncementsViewComponent: React.FC<AnnouncementsViewProps> = ({ session }) => {
+    const { schoolId } = useSchoolContext();
+    const { announcements, loading, addAnnouncement, updateAnnouncement, deleteAnnouncement } = useAnnouncementsPostgreSQL({ schoolId });
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -189,16 +190,23 @@ const AnnouncementsViewComponent: React.FC<AnnouncementsViewProps> = ({ schoolDa
         }
     };
     
-    // Memoize teachers map for faster lookups
-    const teachersMap = useMemo(() => {
-        return new Map(teachers.map(t => [t.id, t.name]));
-    }, [teachers]);
-
+    // Get author name from announcement data directly
     const getAuthorName = useCallback((authorId?: string, authorName?: string) => {
         if (authorName) return authorName;
-        if (!authorId) return 'School Admin';
-        return teachersMap.get(authorId) || 'School Admin';
-    }, [teachersMap]);
+        return 'School Admin';
+    }, []);
+    
+    // Show loading state
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                    <p className="text-slate-600 dark:text-slate-400 text-lg">Loading announcements...</p>
+                </div>
+            </div>
+        );
+    }
     
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

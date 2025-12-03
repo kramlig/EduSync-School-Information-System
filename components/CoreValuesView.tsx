@@ -136,13 +136,16 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, session, fo
     if (['admin', 'principal', 'registrar'].includes(authUser.role)) return students;
     
     const authorizedSectionIds = new Set<string>();
+    const teacherId = (authUser as any).postgresqlId || authUser.id;
 
-    const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
-    if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
+    const teacherAdviserSections = sections.filter(s => s.adviserId === teacherId);
+    teacherAdviserSections.forEach(section => {
+      authorizedSectionIds.add(section.id);
+    });
     
     const today = new Date().toISOString().split('T')[0];
     const activeSubAssignments = substituteAssignments.filter(sub => 
-      sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate
+      sub.teacherId === teacherId && today >= sub.startDate && today <= sub.endDate
     );
 
     if (activeSubAssignments.length > 0) {
@@ -160,7 +163,7 @@ const CoreValuesView: React.FC<CoreValuesViewProps> = ({ schoolData, session, fo
     }
 
     classSchedules.forEach(schedule => {
-      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+      if (schedule.teacherId === teacherId && schedule.sectionId) {
         authorizedSectionIds.add(schedule.sectionId);
       }
     });

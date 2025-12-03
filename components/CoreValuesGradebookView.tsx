@@ -2,6 +2,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import type { CoreValueGrade, CoreValueMarking, AuthUser, StudentUser } from '../types';
 import { SchoolDataHook } from '../hooks/useSchoolData';
 import { useDebounce } from '../hooks/useDebounce';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
+import { useSchedulePostgreSQL } from '../src/hooks/useSchedulePostgreSQL';
 
 // Helper: Convert gradeLevel string to numeric value
 const normalizeGradeLevel = (gradeLevel: string | number): number => {
@@ -50,7 +55,22 @@ const CoreValuesGradebookView: React.FC<{
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
 }> = ({ schoolData, session, selectedSectionId: propSectionId, onSectionChange, selectedQuarter: propQuarter, onQuarterChange, searchQuery: propSearchQuery, onSearchChange }) => {
-    const { students, coreValues, coreValueGrades, sections, substituteAssignments, classSchedules, updateCoreValueGrade } = schoolData;
+    const authUser = session.user as AuthUser;
+    const schoolId = authUser.schoolId || '';
+    
+    // Load real data from PostgreSQL
+    const { students: pgStudents } = useStudentsPostgreSQL({ schoolId });
+    const { coreValues: pgCoreValues, coreValueGrades: pgCoreValueGrades, updateCoreValueGrade } = useCoreValuesPostgreSQL(true, schoolId);
+    const { sections: pgSections } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+    const { assignments: pgSubstituteAssignments } = useSubstituteAssignmentsPostgreSQL({ schoolId });
+    const { schedules: pgClassSchedules } = useSchedulePostgreSQL({ schoolId });
+    
+    const students = pgStudents || [];
+    const coreValues = pgCoreValues || [];
+    const coreValueGrades = pgCoreValueGrades || [];
+    const sections = pgSections || [];
+    const substituteAssignments = pgSubstituteAssignments || [];
+    const classSchedules = pgClassSchedules || [];
     
     // Use props if provided (unified mode), otherwise use local state (standalone mode)
     const [localSectionId, setLocalSectionId] = useState<string | 'all'>('all');
@@ -67,7 +87,6 @@ const CoreValuesGradebookView: React.FC<{
     
     const debouncedSearchQuery = useDebounce(searchQuery, 500);
     
-    const authUser = session.user as AuthUser;
     const isReadOnly = authUser.role === 'principal';
     const [page, setPage] = useState(1);
     const pageSize = 25;
@@ -86,13 +105,16 @@ const CoreValuesGradebookView: React.FC<{
         if (['admin', 'principal', 'registrar'].includes(authUser.role)) return sections;
 
         const authorizedSectionIds = new Set<string>();
+        const teacherId = (authUser as any).postgresqlId || authUser.id;
 
-        const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
-        if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
+        const teacherAdviserSections = sections.filter(s => s.adviserId === teacherId);
+        teacherAdviserSections.forEach(section => {
+          authorizedSectionIds.add(section.id);
+        });
 
         const today = new Date().toISOString().split('T')[0];
         const activeSubAssignments = substituteAssignments.filter(sub => 
-          sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate
+          sub.teacherId === teacherId && today >= sub.startDate && today <= sub.endDate
         );
 
         if (activeSubAssignments.length > 0) {
@@ -110,7 +132,7 @@ const CoreValuesGradebookView: React.FC<{
         }
 
         classSchedules.forEach(schedule => {
-          if (schedule.teacherId === authUser.id && schedule.sectionId) {
+          if (schedule.teacherId === teacherId && schedule.sectionId) {
             authorizedSectionIds.add(schedule.sectionId);
           }
         });

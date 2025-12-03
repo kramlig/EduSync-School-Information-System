@@ -32,18 +32,20 @@ const GradesReportsDashboard: React.FC<GradesReportsDashboardProps> = ({ session
     }
 
     // Teacher: filter by assigned sections
+    // CRITICAL: Use postgresqlId for PostgreSQL queries, not Firebase UID
+    const teacherId = (authUser as any).postgresqlId || authUser.id;
     const authorizedSectionIds = new Set<string>();
 
     // 1. Sections where teacher is assigned via classSchedules
     classSchedules.forEach(schedule => {
-      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+      if (schedule.teacherId === teacherId && schedule.sectionId) {
         authorizedSectionIds.add(schedule.sectionId);
       }
     });
 
     // 2. Sections where teacher is the adviser
     sections.forEach(section => {
-      if (section.adviserId === authUser.id) {
+      if (section.adviserId === teacherId) {
         authorizedSectionIds.add(section.id);
       }
     });

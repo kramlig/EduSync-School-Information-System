@@ -127,9 +127,18 @@ const numeracyDomains = [
   { key: 'dataAnalysis', label: 'Data Analysis' }
 ];
 
-export default function ELLNResults() {
+interface ELLNResultsProps {
+  session: { user: any; type: 'staff' };
+}
+
+export default function ELLNResults({ session }: ELLNResultsProps) {
   const navigate = useNavigate();
   const { schoolId } = useSchoolContext();
+  
+  // Get teacher ID from session
+  const authUser = session.user;
+  const teacherId = (authUser as any).postgresqlId || authUser.id;
+  const isStaff = ['admin', 'principal', 'registrar'].includes(authUser.role);
 
   // State
   const [selectedStudent, setSelectedStudent] = useState('');
@@ -153,11 +162,28 @@ export default function ELLNResults() {
     schoolId,
     studentId: selectedStudent || undefined
   });
+  
+  // TEACHER FILTER: Get teacher's sections
+  const teacherSections = useMemo(() => {
+    if (isStaff) return pgSections; // Admins see all
+    return pgSections.filter(s => s.adviserId === teacherId);
+  }, [pgSections, teacherId, isStaff]);
+  
+  const teacherSectionIds = useMemo(() => 
+    teacherSections.map(s => s.id),
+    [teacherSections]
+  );
+  
+  // Filter students to teacher's sections
+  const teacherStudents = useMemo(() => {
+    if (isStaff) return pgStudents; // Admins see all
+    return pgStudents.filter(s => teacherSectionIds.includes(s.sectionId));
+  }, [pgStudents, teacherSectionIds, isStaff]);
 
   // Memoize student-section mapping
   const studentsWithGrade = useMemo(() => {
-    return pgStudents.map(s => {
-      const section = pgSections.find(sec => sec.id === s.section_id);
+    return teacherStudents.map(s => {
+      const section = pgSections.find(sec => sec.id === s.sectionId);
       return {
         id: s.id,
         name: s.name || `${s.first_name} ${s.middle_name || ''} ${s.last_name}`.trim(),
@@ -166,7 +192,7 @@ export default function ELLNResults() {
         sectionName: section?.name || 'N/A'
       };
     });
-  }, [pgStudents, pgSections]);
+  }, [teacherStudents, pgSections]);
 
   // Filter students based on search query
   const filteredStudents = useMemo(() => {

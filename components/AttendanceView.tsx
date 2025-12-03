@@ -1,10 +1,14 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { SchoolDataHook } from '../hooks/useSchoolData';
 import type { AttendanceStatus, AuthUser, StudentUser, ParentUser } from '../types';
 import { useDebounce } from '../hooks/useDebounce';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useAttendancePostgreSQL } from '../src/hooks/useAttendancePostgreSQL';
+import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
+import { useSchedulePostgreSQL } from '../src/hooks/useSchedulePostgreSQL';
 
 interface AttendanceViewProps {
-  schoolData: SchoolDataHook;
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
   forceStudentId?: string;
 }
@@ -30,8 +34,19 @@ const formatDateLocal = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, forceStudentId }) => {
-  const { students, attendanceRecords, updateAttendance, sections, substituteAssignments, classSchedules } = schoolData;
+const AttendanceView: React.FC<AttendanceViewProps> = ({ session, forceStudentId }) => {
+  const { schoolId } = useSchoolContext();
+  
+  // Direct PostgreSQL hooks - only load what we need
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId: schoolId || undefined });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId: schoolId || undefined });
+  const { attendanceRecords, updateAttendance, loading: attendanceLoading } = useAttendancePostgreSQL({ schoolId: schoolId || '' });
+  const { assignments: substituteAssignments, loading: substituteLoading } = useSubstituteAssignmentsPostgreSQL();
+  const { schedules: classSchedules, loading: schedulesLoading } = useSchedulePostgreSQL({ schoolId: schoolId || undefined });
+  
+  // Combined loading state
+  const loading = studentsLoading || sectionsLoading || attendanceLoading || substituteLoading || schedulesLoading;
+  
   const isStudentView = session.type === 'student';
   const isParentView = session.type === 'parent';
   
@@ -117,6 +132,9 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
   }, [currentDate]);
 
   const visibleStudents = useMemo(() => {
+    // Guard against undefined data during initial load
+    if (!students || !sections || !substituteAssignments || !classSchedules) return [];
+    
     if (isStudentView) return students.filter(s => s.id === session.user.id);
     if (isParentView) return students.filter(s => s.id === forceStudentId);
 
@@ -124,38 +142,41 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
     if (['admin', 'principal', 'registrar'].includes(authUser.role)) return students;
     
     const authorizedSectionIds = new Set<string>();
+    const teacherId = (authUser as any).postgresqlId || authUser.id;
 
-    const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
-    if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
+    const teacherAdviserSections = sections.filter(s => s.adviserId === teacherId);
+    teacherAdviserSections.forEach(section => {
+      authorizedSectionIds.add(section.id);
+    });
     
     const today = formatDateLocal(new Date());
-    const activeSubAssignments = substituteAssignments.filter(sub => 
-      sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate
+    const activeSubAssignments = substituteAssignments.filter((sub: any) => 
+      sub.teacherId === teacherId && today >= sub.startDate && today <= sub.endDate
     );
 
     if (activeSubAssignments.length > 0) {
-        const originalTeacherIds = activeSubAssignments.map(sub => sub.originalTeacherId);
+        const originalTeacherIds = activeSubAssignments.map((sub: any) => sub.originalTeacherId);
         sections.forEach(s => {
             if (s.adviserId && originalTeacherIds.includes(s.adviserId)) {
                 authorizedSectionIds.add(s.id);
             }
         });
-        classSchedules.forEach(schedule => {
+        classSchedules.forEach((schedule: any) => {
             if (schedule.teacherId && schedule.sectionId && originalTeacherIds.includes(schedule.teacherId)) {
                 authorizedSectionIds.add(schedule.sectionId);
             }
         });
     }
 
-    classSchedules.forEach(schedule => {
-      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+    classSchedules.forEach((schedule: any) => {
+      if (schedule.teacherId === teacherId && schedule.sectionId) {
         authorizedSectionIds.add(schedule.sectionId);
       }
     });
 
     if (authorizedSectionIds.size === 0) return [];
     return students.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
-  }, [students, sections, substituteAssignments, classSchedules, session, forceStudentId]);
+  }, [students, sections, substituteAssignments, classSchedules, session, forceStudentId, isStudentView, isParentView]);
 
   const visibleSections = useMemo(() => {
     const ids = new Set<string>();
@@ -371,6 +392,34 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
       setToast({ message: 'Failed to mark some students present', type: 'error' });
     }
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400 mb-4"></div>
+          <p className="text-slate-600 dark:text-slate-400 text-lg">Loading attendance data...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Show empty state if no students after loading
+  if (!loading && visibleStudents.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <p className="text-slate-600 dark:text-slate-400 text-lg mb-2">No students found</p>
+          <p className="text-slate-500 dark:text-slate-500 text-sm">
+            {session.type === 'staff' && (session.user as AuthUser).role === 'teacher' 
+              ? 'You are not assigned to any sections yet.' 
+              : 'Try adjusting your filters or contact your administrator.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

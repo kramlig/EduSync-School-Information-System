@@ -109,6 +109,7 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
           .from('students')
           .select('section_id')
           .in('section_id', sectionIds)
+          .eq('status', 'enrolled')
           .is('deleted_at', null);
 
         if (!countError && countData) {

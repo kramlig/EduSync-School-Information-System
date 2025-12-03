@@ -14,7 +14,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { useSchoolData } from '../hooks/useSchoolData';
+// import { useSchoolData } from '../hooks/useSchoolData'; // REMOVED: Production PostgreSQL
 import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
 import type { Section, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
@@ -26,8 +26,10 @@ interface SectionsViewOptimizedProps {
 
 const SectionsViewOptimized: React.FC<SectionsViewOptimizedProps> = ({ session }) => {
   // Memoize dataKeys array to prevent infinite render loops
-  const dataKeys = useMemo(() => ['teachers', 'settings'], []);
-  const { teachers, settings } = useSchoolData(dataKeys);
+  // const dataKeys = useMemo(() => ['teachers', 'settings'], []); // REMOVED
+  // const { teachers, settings } = useSchoolData(dataKeys); // REMOVED: Production PostgreSQL
+  const teachers: any[] = []; // TEMPORARY: Load from PostgreSQL
+  const settings = { schoolYear: '2024-2025' }; // TEMPORARY: Load from PostgreSQL
   
   // Get school ID from user session and school year from settings (memoized to prevent loops)
   const schoolId = useMemo(() => session.user.schoolId || '', [session.user.schoolId]);

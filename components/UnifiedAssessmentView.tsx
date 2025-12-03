@@ -12,6 +12,11 @@ import GradeDistributionChart from './GradeDistributionChart';
 import BehaviorDistributionChart from './BehaviorDistributionChart';
 import CorrelationScatterPlot from './CorrelationScatterPlot';
 import PrintableReport from './PrintableReport';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
+import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
+import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
 
 // Helper: Convert gradeLevel string to numeric value (for filtering)
 const normalizeGradeLevel = (gradeLevel: string | number): number | null => {
@@ -39,6 +44,23 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
   defaultTab = 'overview',
   hideTabNavigation = false
 }) => {
+  const authUser = session.user as AuthUser;
+  const schoolId = authUser.schoolId || '';
+  
+  // Load real data from PostgreSQL
+  const { students: pgStudents } = useStudentsPostgreSQL({ schoolId });
+  const { grades: pgGrades } = useGradesPostgreSQL({ schoolId });
+  const { learningAreas: pgLearningAreas } = useLearningAreasPostgreSQL({ schoolId });
+  const { coreValues: pgCoreValues, coreValueGrades: pgCoreValueGrades } = useCoreValuesPostgreSQL(true, schoolId);
+  const { sections: pgSections } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+  
+  const students = pgStudents || [];
+  const grades = pgGrades || [];
+  const learningAreas = pgLearningAreas || [];
+  const coreValues = pgCoreValues || [];
+  const coreValueGrades = pgCoreValueGrades || [];
+  const sections = pgSections || [];
+  
   const [activeTab, setActiveTab] = useState<TabType>(defaultTab);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [currentPrintStudents, setCurrentPrintStudents] = useState<string[]>([]);
@@ -50,28 +72,31 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedQuarter, setSelectedQuarter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>('all');
   
-  const { students = [], grades = [], learningAreas = [], coreValues = [], coreValueGrades = [], sections = [] } = schoolData;
-  
   const isStudentView = session.type === 'student';
   const isParentView = session.type === 'parent';
   const isTeacherView = session.type === 'staff' && (session.user as AuthUser).role === 'teacher';
 
-  // Get teacher's assignments if they are a teacher
-  const teacherAssignments = isTeacherView ? (session.user as AuthUser).assignments || [] : [];
-  const teacherGradeLevels = teacherAssignments.map(a => a.gradeLevel);
-  const teacherLearningAreaIds = teacherAssignments.map(a => a.learningAreaId);
-  const teacherSectionIds = teacherAssignments.map(a => a.sectionId).filter(Boolean); // Extract specific section IDs
+  // Get teacher's sections from PostgreSQL (sections where they are the adviser)
+  const teacherId = isTeacherView ? ((session.user as any).postgresqlId || session.user.id) : '';
+  const teacherSections = isTeacherView 
+    ? sections.filter(s => s.adviserId === teacherId)
+    : [];
+  const teacherSectionIds = teacherSections.map(s => s.id);
+  const teacherGradeLevels = [...new Set(teacherSections.map(s => s.gradeLevel))]; // Unique grade levels
 
-  // Filter sections based on teacher's specific section assignments
+  // Filter sections based on teacher's adviser sections (PostgreSQL)
   const availableSections = isTeacherView
-    ? (teacherSectionIds.length > 0 
-        ? sections.filter(s => teacherSectionIds.includes(s.id)) // Use specific sections if available
-        : sections.filter(s => teacherGradeLevels.includes(s.gradeLevel))) // Fallback to grade levels
+    ? teacherSections // Use sections where teacher is adviser
     : sections;
 
-  // Filter learning areas based on teacher's assignments or student's enrolled subjects
+  // Filter learning areas based on teacher's grade levels or student's enrolled subjects
   const availableLearningAreas = isTeacherView
-    ? learningAreas.filter(la => teacherLearningAreaIds.includes(la.id))
+    ? learningAreas.filter(la => {
+        // Show learning areas applicable to teacher's grade levels
+        return Array.isArray(la.gradeLevel) 
+          ? la.gradeLevel.some(g => teacherGradeLevels.includes(g))
+          : teacherGradeLevels.includes(la.gradeLevel);
+      })
     : isStudentView && grades && grades.length > 0
     ? learningAreas.filter(la => {
         // Only show learning areas where the student has at least one grade

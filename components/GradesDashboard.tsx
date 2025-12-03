@@ -2,6 +2,10 @@ import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
+import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
 
 interface GradesDashboardProps {
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
@@ -10,8 +14,20 @@ interface GradesDashboardProps {
 
 const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData }) => {
   const navigate = useNavigate();
-  const { students = [], grades = [], coreValueGrades = [], sections = [], classSchedules = [] } = schoolData;
   const authUser = session.user as AuthUser;
+  const schoolId = authUser.schoolId || '';
+  
+  // Load real data from PostgreSQL
+  const { students: pgStudents } = useStudentsPostgreSQL({ schoolId });
+  const { grades: pgGrades } = useGradesPostgreSQL({ schoolId });
+  const { coreValueGrades: pgCoreValueGrades } = useCoreValuesPostgreSQL(true, schoolId);
+  const { sections: pgSections } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+  
+  const students = pgStudents || [];
+  const grades = pgGrades || [];
+  const coreValueGrades = pgCoreValueGrades || [];
+  const sections = pgSections || [];
+  const classSchedules: any[] = [];
   const isTeacherView = session.type === 'staff' && authUser.role === 'teacher';
   const isStudentView = session.type === 'student';
   const isParentView = session.type === 'parent';
@@ -32,30 +48,23 @@ const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData }
     }
 
     // Teacher: filter by assigned sections
+    // MIGRATED TO POSTGRESQL: Use adviser sections
+    const teacherId = (authUser as any).postgresqlId || authUser.id;
     const authorizedSectionIds = new Set<string>();
 
     // Check class schedules
     classSchedules.forEach(schedule => {
-      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+      if (schedule.teacherId === teacherId && schedule.sectionId) {
         authorizedSectionIds.add(schedule.sectionId);
       }
     });
 
     // Check adviser status
     sections.forEach(section => {
-      if (section.adviserId === authUser.id) {
+      if (section.adviserId === teacherId) {
         authorizedSectionIds.add(section.id);
       }
     });
-
-    // Check assignments
-    if (authUser.assignments && authUser.assignments.length > 0) {
-      authUser.assignments.forEach(assignment => {
-        if (assignment.sectionId) {
-          authorizedSectionIds.add(assignment.sectionId);
-        }
-      });
-    }
 
     if (authorizedSectionIds.size === 0) return [];
 
@@ -66,6 +75,12 @@ const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData }
   const stats = useMemo(() => {
     const totalStudents = visibleStudents.length;
     const studentIds = new Set(visibleStudents.map(s => s.id));
+    
+    console.log('[GradesDashboard] Debug:', {
+      totalStudents,
+      totalGrades: grades.length,
+      studentIds: Array.from(studentIds).slice(0, 3)
+    });
     
     // Filter grades for visible students
     const visibleGrades = grades.filter(g => studentIds.has(g.studentId));

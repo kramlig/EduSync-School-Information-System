@@ -10,7 +10,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
-import { useSchoolData } from '../hooks/useSchoolData';
+// import { useSchoolData } from '../hooks/useSchoolData'; // REMOVED: Production PostgreSQL
 import type { SubstituteAssignmentExtended } from '../src/services/substituteServicePostgreSQL';
 import type { Teacher } from '../types';
 
@@ -92,9 +92,10 @@ const SubstituteView: React.FC = () => {
     deleteAssignment,
   } = useSubstituteAssignmentsPostgreSQL();
 
-  // Get teachers from school data (still from Firestore for now)
-  // Using constant array to prevent infinite re-renders
-  const { teachers, loading: teachersLoading } = useSchoolData(SCHOOL_DATA_KEYS);
+  // Get teachers from school data (REMOVED: Production PostgreSQL)
+  // const { teachers, loading: teachersLoading } = useSchoolData(SCHOOL_DATA_KEYS);
+  const teachers: Teacher[] = []; // TEMPORARY: Load from useTeachersPostgreSQL
+  const teachersLoading = false;
   
   // Combined loading state
   const loading = assignmentsLoading || teachersLoading;

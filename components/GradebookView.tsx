@@ -8,6 +8,9 @@ import { useDebounce } from '../hooks/useDebounce';
 import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
 import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
 import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
+import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
+import { useSchedulePostgreSQL } from '../src/hooks/useSchedulePostgreSQL';
 
 // Feature flag for PostgreSQL migration
 const USE_POSTGRESQL = import.meta.env.VITE_USE_POSTGRESQL === 'true';
@@ -135,20 +138,30 @@ const GradebookView: React.FC<{
 }> = ({ schoolData, session, selectedSectionId: propSectionId, onSectionChange, selectedQuarter: propQuarter, onQuarterChange, searchQuery: propSearchQuery, onSearchChange }) => {
   const { students: firestoreStudents, grades, learningAreas, sections: firestoreSections, substituteAssignments, classSchedules, updateGrade } = schoolData;
   
+  // Compute local section state first (needed for PostgreSQL hooks)
+  const [localSectionId, setLocalSectionId] = useState<string | null>(null);
+  const [localQuarterFilter, setLocalQuarterFilter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>(getCurrentQuarter());
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+  
+  // Determine the actual selectedSectionId early (for PostgreSQL filtering)
+  const activeSectionIdForHook = propSectionId !== undefined ? propSectionId : (localSectionId || undefined);
+  
   // PostgreSQL data hooks (if enabled via feature flag)
+  // Skip fetching grades when no section selected for performance
   const { 
     grades: pgGrades, 
     loading: pgGradesLoading, 
     updateGrade: updatePgGrade 
   } = useGradesPostgreSQL({
-    sectionId: propSectionId || undefined
+    sectionId: activeSectionIdForHook,
+    skip: !activeSectionIdForHook || activeSectionIdForHook === 'all' // Don't fetch all grades at once
   });
   
   const {
     students: pgStudents,
     loading: pgStudentsLoading
   } = useStudentsPostgreSQL({
-    sectionId: propSectionId || undefined,
+    sectionId: activeSectionIdForHook && activeSectionIdForHook !== 'all' ? activeSectionIdForHook : undefined,
     includeSection: true,
     status: 'enrolled' // Only show enrolled students
   });
@@ -161,21 +174,21 @@ const GradebookView: React.FC<{
     includeStudentCount: true
   });
   
+  const { learningAreas: pgLearningAreas } = useLearningAreasPostgreSQL();
+  const { assignments: pgSubstituteAssignments } = useSubstituteAssignmentsPostgreSQL();
+  const { schedules: pgClassSchedules } = useSchedulePostgreSQL();
+  
   // Use PostgreSQL data if feature flag is enabled, otherwise use Firestore
   const activeGrades = USE_POSTGRESQL ? pgGrades : grades;
   const activeUpdateGrade = USE_POSTGRESQL ? updatePgGrade : updateGrade;
   const activeStudents = USE_POSTGRESQL ? pgStudents : firestoreStudents;
   const activeSections = USE_POSTGRESQL ? pgSections : firestoreSections;
+  const activeLearningAreas = USE_POSTGRESQL ? (pgLearningAreas || []) : learningAreas;
+  const activeSubstituteAssignments = USE_POSTGRESQL ? (pgSubstituteAssignments || []) : substituteAssignments;
+  const activeClassSchedules = USE_POSTGRESQL ? (pgClassSchedules || []) : classSchedules;
   const isLoading = USE_POSTGRESQL 
     ? (pgGradesLoading || pgStudentsLoading || pgSectionsLoading)
     : false;
-  
-  
-  // Use props if provided (unified mode), otherwise use local state (standalone mode)
-  const [localSectionId, setLocalSectionId] = useState<string | null>(null);
-  const [localQuarterFilter, setLocalQuarterFilter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>(getCurrentQuarter());
-  const [localSearchQuery, setLocalSearchQuery] = useState('');
-  
   
   // CRITICAL FIX: Validate that selectedSectionId exists in activeSections
   // If the stored ID doesn't exist (e.g., after re-seeding database), reset to null
@@ -241,13 +254,18 @@ const GradebookView: React.FC<{
     }
 
     // PRIORITY 2: Check adviser status
-    const teacherAdviserSection = activeSections.find(s => s.adviserId === authUser.id);
-    if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
+    const teacherId = (authUser as any).postgresqlId || authUser.id;
+    
+    // 1. Sections where the user is the adviser
+    const teacherAdviserSections = activeSections.filter(s => s.adviserId === teacherId);
+    teacherAdviserSections.forEach(section => {
+      authorizedSectionIds.add(section.id);
+    });
 
     // PRIORITY 3: Check substitute assignments
     const today = new Date().toISOString().split('T')[0];
-    const activeSubAssignments = substituteAssignments.filter(sub => 
-      sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate
+    const activeSubAssignments = activeSubstituteAssignments.filter(sub => 
+      sub.teacherId === teacherId && today >= sub.startDate && today <= sub.endDate
     );
 
     if (activeSubAssignments.length > 0) {
@@ -257,7 +275,7 @@ const GradebookView: React.FC<{
                 authorizedSectionIds.add(s.id);
             }
         });
-        classSchedules.forEach(schedule => {
+        activeClassSchedules.forEach(schedule => {
             if (schedule.teacherId && schedule.sectionId && originalTeacherIds.includes(schedule.teacherId)) {
                 authorizedSectionIds.add(schedule.sectionId);
             }
@@ -265,14 +283,14 @@ const GradebookView: React.FC<{
     }
 
     // PRIORITY 4: Check class schedules (fallback)
-    classSchedules.forEach(schedule => {
-      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+    activeClassSchedules.forEach(schedule => {
+      if (schedule.teacherId === teacherId && schedule.sectionId) {
         authorizedSectionIds.add(schedule.sectionId);
       }
     });
 
     return activeSections.filter(s => authorizedSectionIds.has(s.id));
-  }, [activeSections, substituteAssignments, classSchedules, authUser]);
+  }, [activeSections, activeSubstituteAssignments, activeClassSchedules, authUser]);
 
   useEffect(() => {
     // Only auto-select first section if no section is selected AND we're not in "all" mode
@@ -365,14 +383,14 @@ const GradebookView: React.FC<{
   const applicableLearningAreas = useMemo(() => {
     const selectedSection = activeSections.find(s => s.id === selectedSectionId);
     if (!selectedSection) {
-      return learningAreas;
+      return activeLearningAreas;
     }
     
     const sectionGradeLevel = selectedSection.gradeLevel;
     const numericGradeLevel = normalizeGradeLevel(sectionGradeLevel);
     
     // Filter learning areas that are applicable to this grade level
-    const filtered = learningAreas.filter(la => {
+    const filtered = activeLearningAreas.filter(la => {
       // If no gradeLevel metadata, show it (backward compatibility)
       if (!la.gradeLevel || !Array.isArray(la.gradeLevel)) {
         return true;
@@ -384,7 +402,7 @@ const GradebookView: React.FC<{
     
     // Sort by order field (DepEd-compliant subject ordering)
     return filtered.sort((a, b) => (a.order || 999) - (b.order || 999));
-  }, [learningAreas, selectedSectionId, activeSections]);
+  }, [activeLearningAreas, selectedSectionId, activeSections]);
 
   const studentsInSection = useMemo(() => {
     // Support "all" sections or null/undefined
@@ -722,6 +740,18 @@ const GradebookView: React.FC<{
       missingGrades: missingGrades.slice(0, 10), // Show first 10
     };
   }, [selectedSectionId, studentsInSection, applicableLearningAreas, gradeMap, quarterFilter]);
+
+  // Show loading state while data is being fetched
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-slate-600 dark:text-slate-400">Loading gradebook...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

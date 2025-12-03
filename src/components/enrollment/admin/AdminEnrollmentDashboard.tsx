@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEnrollmentApplicationsPostgreSQL } from '../../../hooks/useEnrollmentApplicationsPostgreSQL';
-import { useSchoolData } from '../../../../hooks/useSchoolData';
+// import { useSchoolData } from '../../../../hooks/useSchoolData'; // REMOVED: Production uses PostgreSQL only
 import type { EnrollmentApplication } from '../../../../types';
 
 type FilterStatus = 'all' | 'submitted' | 'under_review' | 'approved' | 'rejected';
@@ -20,8 +20,8 @@ type FilterStatus = 'all' | 'submitted' | 'under_review' | 'approved' | 'rejecte
  */
 const AdminEnrollmentDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { settings } = useSchoolData(['settings']);
-  const schoolId = settings?.id || '';
+  // const { settings } = useSchoolData(['settings']); // REMOVED: Production PostgreSQL
+  const schoolId = ''; // TEMPORARY: Will be loaded from PostgreSQL context
   
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');

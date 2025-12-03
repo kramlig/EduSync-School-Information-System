@@ -24,7 +24,6 @@ import { useCoreValuesPostgreSQL } from '../../../src/hooks/useCoreValuesPostgre
 import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
 import { useLearningAreasPostgreSQL } from '../../../src/hooks/useLearningAreasPostgreSQL';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
-import { auth } from '../../../src/services/firestoreService';
 import { supabase } from '../../../src/lib/supabase';
 import PrintableReport from '../../PrintableReport';
 import {
@@ -97,13 +96,17 @@ const getFinalGrade = (grade: any): number | undefined => {
   return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
 };
 
-const Form138Dashboard: React.FC = () => {
+interface Form138DashboardProps {
+  session: { user: any; type: 'staff' };
+}
+
+const Form138Dashboard: React.FC<Form138DashboardProps> = ({ session }) => {
   const navigate = useNavigate();
   const { schoolId } = useSchoolContext();
   
-  // Get current logged-in user
-  const currentUser = auth.currentUser;
-  const userEmail = currentUser?.email || '';
+  // Get teacher ID from session (same as LessonPlanView and AssignmentsView)
+  const authUser = session.user;
+  const teacherId = (authUser as any).postgresqlId || authUser.id;
   
   // Filter states - MUST be declared before hooks that use them
   const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
@@ -146,9 +149,6 @@ const Form138Dashboard: React.FC = () => {
   
   const loading = studentsLoading || gradesLoading || sectionsLoading || learningAreasLoading || coreValuesLoading || attendanceLoading || additionalDataLoading;
   const error = null;
-  
-  // Memoize empty teachers array to prevent infinite loops
-  const teachers = useMemo(() => [], []); // TODO: Load teachers if needed for filtering
   
   // Fetch school settings from PostgreSQL
   const fetchAdditionalData = useCallback(async () => {
@@ -193,7 +193,7 @@ const Form138Dashboard: React.FC = () => {
     students,
     grades,
     sections,
-    teachers,
+    teachers: [], // Not needed for filtering
     settings,
     learningAreas,
     coreValues,
@@ -202,12 +202,7 @@ const Form138Dashboard: React.FC = () => {
     monthlySchoolDaysConfig: [], // TODO: Load from settings if needed
     loading,
     error
-  }), [students, grades, sections, teachers, settings, learningAreas, coreValues, coreValueGrades, attendanceRecords, loading, error]);
-  
-  // Find current teacher record
-  const currentTeacher = useMemo(() => {
-    return teachers.find(t => t.email === userEmail);
-  }, [teachers, userEmail]);
+  }), [students, grades, sections, settings, learningAreas, coreValues, coreValueGrades, attendanceRecords, loading, error]);
 
   // Selection state for bulk operations
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
@@ -224,24 +219,13 @@ const Form138Dashboard: React.FC = () => {
   const filteredStudents = useMemo(() => {
     let filtered = [...students];
 
-    // TEACHER FILTER: If logged in as teacher, only show their students
-    // Detect teacher accounts by email pattern (teacher-*, *@teach*, etc.)
-    const isTeacher = currentUser?.email?.includes('teacher') || currentUser?.email?.includes('@teach');
+    // TEACHER FILTER: Use teacherId from useSchoolData session
+    const teacherSections = sections.filter(s => s.adviserId === teacherId);
     
-    if (currentTeacher && currentTeacher.id) {
-      // Teacher has record in teachers collection - filter by advised sections
-      filtered = filtered.filter(student => {
-        // Find the section this student belongs to
-        const studentSection = sections.find(s => s.id === student.sectionId);
-        if (!studentSection) return false;
-        
-        // Check if current teacher is the adviser of this section
-        return studentSection.adviserId === currentTeacher.id;
-      });
-    } else if (isTeacher && !currentTeacher) {
-      // Teacher account exists but no teacher record in Firestore
-      // Default to showing NO students (safe default until teacher profile is created)
-      filtered = [];
+    if (teacherSections.length > 0) {
+      // Filter students to only those in teacher's sections
+      const teacherSectionIds = teacherSections.map(s => s.id);
+      filtered = filtered.filter(student => teacherSectionIds.includes(student.sectionId));
     }
 
     // Filter by search query (name and LRN)
@@ -267,7 +251,9 @@ const Form138Dashboard: React.FC = () => {
     }
 
     return filtered;
-  }, [students, searchQuery, selectedGradeLevel, selectedSectionId, sections, currentTeacher]);
+  }, [students, searchQuery, selectedGradeLevel, selectedSectionId, sections, teacherId]);
+
+  console.log('=== FINAL FILTERED STUDENTS ===', filteredStudents.length);
   
   // Paginated students for rendering
   const paginatedStudents = useMemo(() => {
@@ -284,24 +270,29 @@ const Form138Dashboard: React.FC = () => {
     setCurrentPage(1);
   }, [searchQuery, selectedGradeLevel, selectedSectionId, performanceFilter, selectedQuarter]);
 
-  // Get available grade levels
+  // Get available grade levels (only from teacher's sections)
   const availableGradeLevels = useMemo(() => {
-    const grades = new Set(sections.map(s => s.gradeLevel.toString()));
+    // Filter to teacher's sections first
+    const teacherSections = sections.filter(s => s.adviserId === teacherId);
+    const sectionsToUse = teacherSections.length > 0 ? teacherSections : sections;
+    
+    const grades = new Set(sectionsToUse.map(s => s.gradeLevel.toString()));
     return Array.from(grades).sort((a, b) => parseInt(a) - parseInt(b));
-  }, [sections]);
+  }, [sections, teacherId]);
 
   // Get sections for selected grade (filtered by teacher if applicable)
   const availableSections = useMemo(() => {
     let sectionsToShow = sections;
     
-    // TEACHER FILTER: If logged in as teacher, only show their sections
-    if (currentTeacher && currentTeacher.id) {
-      sectionsToShow = sections.filter(s => s.adviserId === currentTeacher.id);
+    // TEACHER FILTER: Only show teacher's advised sections
+    const teacherSections = sections.filter(s => s.adviserId === teacherId);
+    if (teacherSections.length > 0) {
+      sectionsToShow = teacherSections;
     }
     
     if (selectedGradeLevel === 'all') return sectionsToShow;
     return sectionsToShow.filter(s => s.gradeLevel.toString() === selectedGradeLevel);
-  }, [sections, selectedGradeLevel, currentTeacher]);
+  }, [sections, selectedGradeLevel, teacherId]);
 
   // Bulk operations - Memoized to prevent unnecessary re-renders
   const handleSelectAll = useCallback(() => {
@@ -403,17 +394,12 @@ const Form138Dashboard: React.FC = () => {
             </p>
             <div className="mt-4 flex items-center gap-4 text-sm text-blue-200">
               <span>📊 {statistics.totalStudents} Students Available</span>
-              {currentTeacher && (
-                <span className="bg-blue-500/30 px-3 py-1 rounded-full">
-                  👨‍🏫 Viewing your students only
-                </span>
-              )}
             </div>
           </div>
           <div className="text-right">
             <div className="text-6xl font-bold opacity-90">{statistics.totalStudents}</div>
             <div className="text-blue-200 text-sm">
-              {currentTeacher ? 'Your Students' : 'Students Available'}
+              Students Available
             </div>
           </div>
         </div>
@@ -590,30 +576,10 @@ const Form138Dashboard: React.FC = () => {
 
         {/* Student List */}
         {filteredStudents.length === 0 ? (
-          currentUser?.email?.includes('teacher') && !currentTeacher ? (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
-              <div className="text-6xl mb-4">⚠️</div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Teacher Profile Not Set Up</h3>
-              <p className="text-gray-700 mb-4">
-                Your teacher account has been created, but your profile hasn't been added to the system yet.
-              </p>
-              <p className="text-sm text-gray-600">
-                Please contact your administrator to:
-              </p>
-              <ul className="text-sm text-gray-600 mt-2 space-y-1">
-                <li>• Create your teacher profile in the system</li>
-                <li>• Assign you as an adviser to a section</li>
-              </ul>
-              <p className="text-xs text-gray-500 mt-4">
-                Once set up, you'll be able to view and manage report cards for your students.
-              </p>
-            </div>
-          ) : (
-            <EmptyState 
-              title="No Students Found"
-              message="No students match your current filters. Try adjusting your search criteria."
-            />
-          )
+          <EmptyState 
+            title="No Students Found"
+            message="No students match your current filters. Try adjusting your search criteria."
+          />
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

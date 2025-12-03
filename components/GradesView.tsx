@@ -7,6 +7,12 @@ import Spinner from './Spinner';
 import { ChevronDownIcon, ChevronRightIcon, PrinterIcon } from './icons';
 import { useDebounce } from '../hooks/useDebounce';
 import Toast from './Toast';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
+import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
+import { useSchedulePostgreSQL } from '../src/hooks/useSchedulePostgreSQL';
 
 interface GradesViewProps {
   schoolData: SchoolDataHook;
@@ -422,7 +428,25 @@ const GradesView: React.FC<GradesViewProps> = ({
   searchQuery: externalSearchQuery,
   onSearchChange
 }) => {
-  const { students, grades, learningAreas, sections, substituteAssignments, classSchedules } = schoolData;
+  const authUser = session.user as AuthUser;
+  const schoolId = authUser.schoolId || '';
+  
+  // Load real data from PostgreSQL
+  const { students: pgStudents, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
+  const { grades: pgGrades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
+  const { learningAreas: pgLearningAreas, loading: areasLoading } = useLearningAreasPostgreSQL({ schoolId });
+  const { sections: pgSections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+  const { assignments: pgSubstituteAssignments } = useSubstituteAssignmentsPostgreSQL({ schoolId });
+  const { schedules: pgClassSchedules } = useSchedulePostgreSQL({ schoolId });
+  
+  const students = pgStudents || [];
+  const grades = pgGrades || [];
+  const learningAreas = pgLearningAreas || [];
+  const sections = pgSections || [];
+  const substituteAssignments = pgSubstituteAssignments || [];
+  const classSchedules = pgClassSchedules || [];
+  
+  const loading = studentsLoading || gradesLoading || areasLoading || sectionsLoading;
   
   // DEBUG: Single check for data structure
   useEffect(() => {
@@ -480,7 +504,7 @@ const GradesView: React.FC<GradesViewProps> = ({
   // Priority 1 & 4: Toast notifications
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   
-  const isReadOnly = isStudentView || isParentView || (session.user as AuthUser).role === 'principal';
+  const isReadOnly = isStudentView || isParentView || (session.user as AuthUser).role === 'principal' || true; // Force read-only for overview page
 
   const visibleStudents = useMemo(() => {
     if (isStudentView) return students.filter(s => s.id === session.user.id);
@@ -490,13 +514,16 @@ const GradesView: React.FC<GradesViewProps> = ({
     if (['admin', 'principal', 'registrar'].includes(authUser.role)) return students;
     
     const authorizedSectionIds = new Set<string>();
+    const teacherId = (authUser as any).postgresqlId || authUser.id;
 
-    const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
-    if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
+    const teacherAdviserSections = sections.filter(s => s.adviserId === teacherId);
+    teacherAdviserSections.forEach(section => {
+      authorizedSectionIds.add(section.id);
+    });
     
     const today = new Date().toISOString().split('T')[0];
     const activeSubAssignments = substituteAssignments.filter(sub => 
-      sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate
+      sub.teacherId === teacherId && today >= sub.startDate && today <= sub.endDate
     );
 
     if (activeSubAssignments.length > 0) {
@@ -514,7 +541,7 @@ const GradesView: React.FC<GradesViewProps> = ({
     }
 
     classSchedules.forEach(schedule => {
-      if (schedule.teacherId === authUser.id && schedule.sectionId) {
+      if (schedule.teacherId === teacherId && schedule.sectionId) {
         authorizedSectionIds.add(schedule.sectionId);
       }
     });
@@ -993,6 +1020,15 @@ const GradesView: React.FC<GradesViewProps> = ({
   
   const title = isStudentView ? 'My Grades' : (isParentView ? `Grades for ${filteredStudents[0]?.name}` : 'Manage Grades');
 
+  // Show loading state while data is being fetched
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Spinner />
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* Priority 1 & 4: Toast Notifications */}
@@ -1034,6 +1070,34 @@ const GradesView: React.FC<GradesViewProps> = ({
       {/* Priority 2 & 3: Enhanced Filters and Controls (only show when not controlled) */}
       {!(isStudentView || isParentView) && !isControlled && (
         <div className="mb-4 space-y-4">
+          {/* Info Banner: Grade Editing */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                  📝 This is an Overview Page (Read-Only)
+                </h3>
+                <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
+                  To enter or edit grades, use the dedicated Academic Gradebook which provides a full spreadsheet-style interface with quarter-by-quarter grade entry.
+                </p>
+                <a
+                  href="/grades/academic"
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors text-sm"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Open Academic Gradebook →
+                </a>
+              </div>
+            </div>
+          </div>
+          
           {/* Filter Chips */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Filter:</span>
