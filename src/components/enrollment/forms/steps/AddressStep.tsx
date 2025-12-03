@@ -7,7 +7,7 @@ interface AddressStepProps {
   errors: Record<string, string>;
 }
 
-export const AddressStep: React.FC<AddressStepProps> = ({ data, updateData }) => {
+export const AddressStep = React.memo<AddressStepProps>(({ data, updateData }) => {
   const currentAddress = data.currentAddress || {
     barangay: '',
     city: '',
@@ -127,4 +127,4 @@ export const AddressStep: React.FC<AddressStepProps> = ({ data, updateData }) =>
       </div>
     </div>
   );
-};
+});

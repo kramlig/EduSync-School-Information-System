@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../../../services/firestoreService';
-import { collection, addDoc, updateDoc, doc, serverTimestamp, getDoc } from 'firebase/firestore';
-import { getFirestoreInstance } from '../../../services/firestoreService';
-import { useSchoolContext } from '../../../contexts/SchoolContext';
+import { useEnrollmentApplicationsPostgreSQL } from '../../../hooks/useEnrollmentApplicationsPostgreSQL';
 import type { EnrollmentApplication } from '../../../../types';
 import EdusyncLogo from '../../../../components/EdusyncLogo';
 
@@ -89,12 +87,14 @@ const STEPS: StepConfig[] = [
  * - Auto-save to localStorage
  * - Form validation per step
  * - Navigation between steps
- * - Final submission to Firestore
+ * - Final submission to PostgreSQL
+ * 
+ * MIGRATION: Now uses useEnrollmentApplicationsPostgreSQL hook
  */
 const ApplicationForm: React.FC = () => {
   const navigate = useNavigate();
   const currentUser = auth.currentUser;
-  const { schoolId } = useSchoolContext(); // Get current school
+  const { createApplication } = useEnrollmentApplicationsPostgreSQL();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -145,19 +145,13 @@ const ApplicationForm: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       localStorage.setItem('enrollment-draft', JSON.stringify(applicationData));
-      console.log('[ApplicationForm] Auto-saved to localStorage');
-    }, 1000); // Debounce for 1 second
+    }, 1000); // Debounce 1 second
 
     return () => clearTimeout(timer);
   }, [applicationData]);
 
-  // Check authentication
-  useEffect(() => {
-    if (!currentUser) {
-      console.log('[ApplicationForm] No user logged in, redirecting to login');
-      navigate('/login?returnTo=/enrollment/apply');
-    }
-  }, [currentUser, navigate]);
+  // Note: Enrollment is PUBLIC - no authentication required
+  // Parents can submit applications anonymously
 
   const updateData = (updates: Partial<EnrollmentApplication>) => {
     setApplicationData(prev => ({ ...prev, ...updates }));
@@ -270,13 +264,6 @@ const ApplicationForm: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      const db = getFirestoreInstance();
-      
-      // Generate unique application number (ENR-YYYY-XXX format)
-      const year = new Date().getFullYear();
-      const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const applicationNumber = `ENR-${year}-${randomSuffix}`;
-      
       // Use the schoolId selected by the user in Step 1
       const applicationSchoolId = applicationData.selectedSchoolId || 'default';
       console.log('[ApplicationForm] Submitting with schoolId:', applicationSchoolId, '(from user selection)');
@@ -289,27 +276,36 @@ const ApplicationForm: React.FC = () => {
       const finalApplication: Partial<EnrollmentApplication> = {
         ...applicationData,
         schoolId: applicationSchoolId, // CRITICAL: Use user-selected school for multi-tenant filtering
-        applicationNumber,
         submittedBy: currentUser.email || '',
         status: 'submitted',
         submittedAt: new Date().toISOString(),
-        createdAt: serverTimestamp() as any,
-        updatedAt: serverTimestamp() as any
       };
 
-      // Save to Firestore
-      const docRef = await addDoc(collection(db, 'enrollmentApplications'), finalApplication);
-      
-      console.log('[ApplicationForm] ✅ Application submitted:', docRef.id, 'Application Number:', applicationNumber);
+      // Save to PostgreSQL using hook
+      const result = await createApplication(finalApplication);
 
       // Clear localStorage draft
       localStorage.removeItem('enrollment-draft');
 
       // Show success message with application number
-      alert(`🎉 Application submitted successfully!\n\nYour Application Number: ${applicationNumber}\n\nPlease save this number to track your application status.\n\nYou will receive an email notification once your application has been reviewed.`);
+      const applicationNumber = result.applicationNumber || 'Unknown';
+      
+      // Store in sessionStorage so status page can display it
+      sessionStorage.setItem('lastSubmittedApplication', applicationNumber);
+      
+      alert(
+        `🎉 APPLICATION SUBMITTED SUCCESSFULLY!\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📋 Application Number: ${applicationNumber}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `✓ Your application has been received and is under review.\n` +
+        `✓ Please save this application number for tracking.\n` +
+        `✓ You will receive updates via email.\n\n` +
+        `You will now be redirected to track your application status.`
+      );
 
-      // Redirect to enrollment portal or status page
-      navigate('/enrollment/status');
+      // Redirect to status page with application number pre-filled
+      navigate(`/enrollment/status?app=${applicationNumber}`);
     } catch (error) {
       console.error('[ApplicationForm] ❌ Error submitting application:', error);
       alert('Failed to submit application. Please try again.');

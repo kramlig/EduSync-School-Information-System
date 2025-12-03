@@ -26,7 +26,7 @@ const MOCK_SETTINGS: SchoolSettings = {
 };
 
 interface UseSchoolDataPostgreSQLOptions {
-    schoolId: string;
+    schoolId: string | null; // null = fetch first/default school
     enableRealtime?: boolean; // Enable real-time subscriptions
 }
 
@@ -61,11 +61,18 @@ export function useSchoolDataPostgreSQL(
             setError(null);
 
             // Query schools table
-            const { data, error: fetchError } = await supabase
+            let query = supabase
                 .from('schools')
-                .select('id, name, school_id_number, division, region, current_school_year, settings')
-                .eq('id', schoolId)
-                .single();
+                .select('id, name, school_id_number, division, region, current_school_year, settings');
+            
+            // If schoolId provided, filter by it; otherwise get first school
+            if (schoolId) {
+                query = query.eq('id', schoolId);
+            } else {
+                query = query.limit(1);
+            }
+            
+            const { data, error: fetchError } = await query.single();
 
             if (fetchError) {
                 throw fetchError;

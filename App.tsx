@@ -14,6 +14,7 @@ import FullScreenLoader from './components/FullScreenLoader';
 import OfflineBanner from './components/OfflineBanner';
 import UpdateNotification from './components/UpdateNotification';
 import './src/diagnostics'; // Run Firestore diagnostics in development
+import './src/utils/logger'; // Initialize logger (disables console in production)
 
 // Lazy load heavy components for better code splitting
 const Dashboard = lazy(() => import('./components/Dashboard'));

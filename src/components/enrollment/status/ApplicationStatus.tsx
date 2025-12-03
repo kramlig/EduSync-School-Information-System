@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { getFirestoreInstance } from '../../../services/firestoreService';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { supabase } from '../../../lib/supabase';
 import type { EnrollmentApplication } from '../../../../types';
 import EdusyncLogo from '../../../../components/EdusyncLogo';
 
@@ -10,24 +9,43 @@ import EdusyncLogo from '../../../../components/EdusyncLogo';
  * 
  * Features:
  * - Search by application number
+ * - Auto-load from URL parameter (?app=APP-2025-XXX)
+ * - Auto-load from sessionStorage (after submission)
  * - Display application status with timeline
  * - Show student info and submission date
  * - Visual status indicators
  * 
  * NOTE: This is a PUBLIC page (no authentication required).
- * SchoolId filtering is NOT needed here because:
- * 1. Application numbers are globally unique across all schools
- * 2. The query already filters by applicationNumber which is unique
- * 3. Each application document already contains schoolId from submission
+ * Application numbers are globally unique across all schools.
  * 
- * IMPORTANT: Uses useMemo pattern to prevent infinite loops (see INFINITE_LOOP_PREVENTION.md)
+ * MIGRATION: Now uses Supabase/PostgreSQL directly
  */
 const ApplicationStatus: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [applicationNumber, setApplicationNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [application, setApplication] = useState<EnrollmentApplication | null>(null);
   const [error, setError] = useState('');
+
+  // Auto-load application from URL or sessionStorage
+  useEffect(() => {
+    const urlAppNumber = searchParams.get('app');
+    const sessionAppNumber = sessionStorage.getItem('lastSubmittedApplication');
+    
+    if (urlAppNumber) {
+      setApplicationNumber(urlAppNumber);
+      // Auto-search if application number is in URL
+      setTimeout(() => {
+        const searchBtn = document.querySelector<HTMLButtonElement>('[data-search-btn]');
+        searchBtn?.click();
+      }, 100);
+    } else if (sessionAppNumber) {
+      setApplicationNumber(sessionAppNumber);
+      // Clear after use
+      sessionStorage.removeItem('lastSubmittedApplication');
+    }
+  }, [searchParams]);
 
   const handleSearch = async () => {
     if (!applicationNumber.trim()) {
@@ -40,21 +58,44 @@ const ApplicationStatus: React.FC = () => {
     setApplication(null);
 
     try {
-      const db = getFirestoreInstance();
-      const q = query(
-        collection(db, 'enrollmentApplications'),
-        where('applicationNumber', '==', applicationNumber.trim())
-      );
-      
-      const snapshot = await getDocs(q);
-      
-      if (snapshot.empty) {
+      const { data, error: fetchError } = await supabase
+        .from('enrollment_applications')
+        .select('*')
+        .eq('application_number', applicationNumber.trim())
+        .single();
+
+      if (fetchError || !data) {
         setError('Application not found. Please check your application number and try again.');
         return;
       }
 
-      const doc = snapshot.docs[0];
-      setApplication({ id: doc.id, ...doc.data() } as EnrollmentApplication);
+      // Transform database row to EnrollmentApplication
+      setApplication({
+        id: data.id,
+        schoolId: data.school_id,
+        applicationNumber: data.application_number,
+        studentInfo: data.student_info,
+        guardian1: data.guardian1,
+        guardian2: data.guardian2,
+        currentAddress: data.current_address,
+        permanentAddress: data.permanent_address,
+        sameAsCurrent: data.same_as_current,
+        academicInfo: data.academic_info,
+        healthInfo: data.health_info,
+        documents: data.documents,
+        status: data.status,
+        submittedAt: data.submitted_at,
+        submittedBy: data.submitted_by,
+        reviewedBy: data.reviewed_by,
+        reviewedAt: data.reviewed_at,
+        reviewNotes: data.review_notes,
+        rejectionReason: data.rejection_reason,
+        enrolledStudentId: data.enrolled_student_id,
+        sectionId: data.section_id,
+        enrollmentDate: data.enrollment_date,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      });
     } catch (err) {
       console.error('[ApplicationStatus] Error fetching application:', err);
       setError('An error occurred while searching. Please try again.');
@@ -165,6 +206,7 @@ const ApplicationStatus: React.FC = () => {
               />
               <button
                 onClick={handleSearch}
+                data-search-btn
                 disabled={loading}
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium"
               >

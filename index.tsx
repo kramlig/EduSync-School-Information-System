@@ -10,14 +10,14 @@ import { SchoolContextProvider } from './src/contexts/SchoolContext';
 
 // Global error handler for uncaught errors
 window.addEventListener('error', (event) => {
-  console.error('🚨 Global error caught:', event.error);
-  console.error('Error message:', event.message);
-  console.error('Error stack:', event.error?.stack);
+  // console.error('🚨 Global error caught:', event.error);
+  // console.error('Error message:', event.message);
+  // console.error('Error stack:', event.error?.stack);
 });
 
 // Global promise rejection handler
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('🚨 Unhandled promise rejection:', event.reason);
+  // console.error('🚨 Unhandled promise rejection:', event.reason);
 });
 
 const rootElement = document.getElementById('root');
@@ -40,8 +40,8 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('🚨 React Error Boundary caught error:', error);
-    console.error('Error info:', errorInfo);
+    // console.error('🚨 React Error Boundary caught error:', error);
+    // console.error('Error info:', errorInfo);
   }
 
   render() {

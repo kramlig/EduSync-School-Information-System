@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { DocumentViewer } from './DocumentViewer';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { getFirestoreInstance } from '../../../services/firestoreService';
 import { auth } from '../../../services/firestoreService';
-import { useSchoolContext } from '../../../contexts/SchoolContext';
+import { useEnrollmentApplicationsPostgreSQL } from '../../../hooks/useEnrollmentApplicationsPostgreSQL';
+import { useStudentsPostgreSQL } from '../../../hooks/useStudentsPostgreSQL';
 import type { EnrollmentApplication, Student } from '../../../../types';
 
 /**
@@ -15,13 +14,23 @@ import type { EnrollmentApplication, Student } from '../../../../types';
  * - Approve or reject application
  * - Add review notes
  * - Auto-create student record on approval
+ * 
+ * MIGRATION: Optimized - removed useSchoolData, uses PostgreSQL directly
  */
 const ApplicationReview: React.FC = () => {
   const { applicationId } = useParams<{ applicationId: string }>();
   const navigate = useNavigate();
-  const { schoolId } = useSchoolContext(); // Get current school
-  const [application, setApplication] = useState<EnrollmentApplication | null>(null);
-  const [loading, setLoading] = useState(true);
+  
+  // Fetch all applications (no school filter) - multi-school support
+  const { applications, loading: appsLoading, approveApplication, rejectApplication, updateApplication, refetch } = useEnrollmentApplicationsPostgreSQL();
+  
+  // Find application and extract schoolId for student creation
+  const application = applications.find(app => app.id === applicationId) || null;
+  const applicationSchoolId = application?.schoolId || '';
+  
+  // Create student hook with application's schoolId
+  const { createStudent } = useStudentsPostgreSQL({ schoolId: applicationSchoolId });
+  
   const [isProcessing, setIsProcessing] = useState(false);
   const [reviewNotes, setReviewNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
@@ -29,29 +38,7 @@ const ApplicationReview: React.FC = () => {
   useEffect(() => {
     if (!applicationId) {
       navigate('/admin/enrollment');
-      return;
     }
-
-    const loadApplication = async () => {
-      try {
-        const db = getFirestoreInstance();
-        const appDoc = await getDoc(doc(db, 'enrollmentApplications', applicationId));
-        
-        if (appDoc.exists()) {
-          setApplication({ id: appDoc.id, ...appDoc.data() } as EnrollmentApplication);
-        } else {
-          alert('Application not found');
-          navigate('/admin/enrollment');
-        }
-      } catch (error) {
-        console.error('[ApplicationReview] Error loading application:', error);
-        alert('Failed to load application');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadApplication();
   }, [applicationId, navigate]);
 
   const handleApprove = async () => {
@@ -64,7 +51,6 @@ const ApplicationReview: React.FC = () => {
     setIsProcessing(true);
 
     try {
-      const db = getFirestoreInstance();
       const currentUser = auth.currentUser;
 
       // Create student record from application data
@@ -77,11 +63,10 @@ const ApplicationReview: React.FC = () => {
 
       // Transfer enrollment photo to student profile photo
       const photoDocument = application.documents?.photoId;
-      if (photoDocument?.fileURL) {
-        console.log('[ApplicationReview] 📸 Transferring photo from enrollment to student profile:', photoDocument.fileURL);
-      } else {
-        console.log('[ApplicationReview] ⚠️ No photo uploaded in enrollment application');
-      }
+      
+      // Generate LRN if not provided
+      // Format: TMP-XXXXXXXX (8 random digits, total 12 chars to fit VARCHAR(12))
+      const lrnValue = studentInfo.lrn || `TMP${String(Date.now()).slice(-8)}`;
       
       // Build student object with only defined values (Firestore doesn't accept undefined)
       const newStudent: Partial<Student> = {
@@ -92,7 +77,8 @@ const ApplicationReview: React.FC = () => {
         lastName: studentInfo.lastName,
         sex: studentInfo.sex,
         dateOfBirth: studentInfo.dateOfBirth,
-        lrn: studentInfo.lrn || '',
+        lrn: lrnValue, // Use generated or provided LRN
+        gradeLevel: academicInfo.gradeLevel?.toString() || '1', // Required field in PostgreSQL
         ...(studentInfo.nationality && { nationality: studentInfo.nationality }),
         ...(studentInfo.religion && { religion: studentInfo.religion }),
         ...(studentInfo.motherTongue && { motherTongue: studentInfo.motherTongue }),
@@ -143,20 +129,19 @@ const ApplicationReview: React.FC = () => {
         newStudent.healthNotes = healthNotesParts.join('; ');
       }
 
-      const studentRef = await addDoc(collection(db, 'students'), newStudent);
-      console.log('[ApplicationReview] ✅ Student created:', studentRef.id);
+      const newStudentRecord = await createStudent(newStudent);
 
-      // Update application status
-      await updateDoc(doc(db, 'enrollmentApplications', applicationId), {
+      // Approve application and link to student record
+      // Status: approved (not enrolled - student still needs to complete enrollment, pay fees, etc.)
+      await updateApplication(applicationId, {
         status: 'approved',
-        reviewedBy: currentUser?.email || 'admin',
-        reviewedAt: new Date().toISOString(),
-        reviewNotes,
-        enrolledStudentId: studentRef.id,
-        updatedAt: serverTimestamp()
+        enrolledStudentId: newStudentRecord.id,
+        reviewNotes: reviewNotes || undefined
       });
+      
+      await refetch(); // Refresh the data
 
-      alert('✅ Application approved! Student record created successfully.');
+      alert('✅ Application approved! Student record created successfully. Student can now complete enrollment process.');
       navigate('/admin/enrollment');
     } catch (error) {
       console.error('[ApplicationReview] ❌ Error approving application:', error);
@@ -181,17 +166,7 @@ const ApplicationReview: React.FC = () => {
     setIsProcessing(true);
 
     try {
-      const db = getFirestoreInstance();
-      const currentUser = auth.currentUser;
-
-      await updateDoc(doc(db, 'enrollmentApplications', applicationId), {
-        status: 'rejected',
-        reviewedBy: currentUser?.email || 'admin',
-        reviewedAt: new Date().toISOString(),
-        rejectionReason,
-        reviewNotes,
-        updatedAt: serverTimestamp()
-      });
+      await rejectApplication(applicationId, rejectionReason);
 
       alert('❌ Application rejected.');
       navigate('/admin/enrollment');
@@ -207,25 +182,47 @@ const ApplicationReview: React.FC = () => {
     if (!applicationId) return;
 
     try {
-      const db = getFirestoreInstance();
-      await updateDoc(doc(db, 'enrollmentApplications', applicationId), {
-        status: 'under_review',
-        updatedAt: serverTimestamp()
+      await updateApplication(applicationId, {
+        status: 'under_review'
       });
       
-      setApplication(prev => prev ? { ...prev, status: 'under_review' } : null);
+      // Manually refetch to update UI
+      await refetch();
+      
       alert('✓ Application marked as under review');
     } catch (error) {
       console.error('[ApplicationReview] Error updating status:', error);
+      alert('Failed to update status: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
-  if (loading) {
+  if (appsLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading application...</p>
+          <p className="text-xs text-gray-500 mt-2">Loaded {applications.length} application(s)</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!application) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+          <p className="text-red-700">Application not found: {applicationId}</p>
+          <p className="text-sm text-red-600 mt-2">
+            Loaded {applications.length} application(s). 
+            {applications.length > 0 && ` IDs: ${applications.map(a => a.id).slice(0, 3).join(', ')}`}
+          </p>
+          <button
+            onClick={() => navigate('/admin/enrollment')}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Back to Dashboard
+          </button>
         </div>
       </div>
     );

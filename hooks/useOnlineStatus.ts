@@ -23,7 +23,7 @@ export const useOnlineStatus = () => {
 
   useEffect(() => {
     const handleOnline = () => {
-      console.log('[Network] 🟢 Back online');
+      // console.log('[Network] 🟢 Back online');
       setIsOnline(true);
       setWasOffline(true);
       // Auto-clear "wasOffline" flag after 5 seconds
@@ -33,7 +33,7 @@ export const useOnlineStatus = () => {
     };
 
     const handleOffline = () => {
-      console.log('[Network] 🔴 Gone offline');
+      // console.log('[Network] 🔴 Gone offline');
       setIsOnline(false);
       setWasOffline(false); // Reset when going offline
     };
@@ -47,7 +47,7 @@ export const useOnlineStatus = () => {
     const pollInterval = setInterval(() => {
       const currentOnlineStatus = navigator.onLine;
       if (currentOnlineStatus !== isOnlineRef.current) {
-        console.log('[Network] 🔄 Detected status change via polling:', currentOnlineStatus);
+        // console.log('[Network] 🔄 Detected status change via polling:', currentOnlineStatus);
         if (currentOnlineStatus) {
           handleOnline();
         } else {

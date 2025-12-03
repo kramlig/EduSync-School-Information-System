@@ -1,15 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { getFirestoreInstance } from '../../../../services/firestoreService';
-
-interface School {
-  id: string;
-  name: string;
-  address?: string;
-  principalName?: string;
-  contactEmail?: string;
-  contactPhone?: string;
-}
+import React from 'react';
+import { useSchoolsPostgreSQL } from '../../../../hooks/useSchoolsPostgreSQL';
 
 interface SchoolSelectionStepProps {
   data: {
@@ -23,41 +13,10 @@ interface SchoolSelectionStepProps {
  * SchoolSelectionStep - First step in enrollment to choose which school
  * 
  * Allows parents to select which school they're enrolling their child to.
- * Loads available schools from Firestore and displays them as cards.
+ * Now uses PostgreSQL via useSchoolsPostgreSQL hook
  */
-export const SchoolSelectionStep: React.FC<SchoolSelectionStepProps> = ({ data, updateData, errors }) => {
-  const [schools, setSchools] = useState<School[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadSchools = async () => {
-      try {
-        const db = getFirestoreInstance();
-        const schoolsQuery = query(collection(db, 'schools'), orderBy('name'));
-        const snapshot = await getDocs(schoolsQuery);
-        
-        const schoolList = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as School[];
-        
-        setSchools(schoolList);
-        console.log('[SchoolSelectionStep] Loaded', schoolList.length, 'schools');
-      } catch (error) {
-        console.error('[SchoolSelectionStep] Error loading schools:', error);
-        // Fallback to default school if query fails
-        setSchools([{
-          id: 'default',
-          name: 'Main School',
-          address: 'Select this option if you are enrolling to the main campus'
-        }]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadSchools();
-  }, []);
+export const SchoolSelectionStep = React.memo<SchoolSelectionStepProps>(({ data, updateData, errors }) => {
+  const { schools, loading, error } = useSchoolsPostgreSQL();
 
   const handleSchoolSelect = (schoolId: string) => {
     updateData({ selectedSchoolId: schoolId });
@@ -69,6 +28,25 @@ export const SchoolSelectionStep: React.FC<SchoolSelectionStepProps> = ({ data, 
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading available schools...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <svg className="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="ml-3">
+            <p className="text-sm text-red-700">
+              <strong>Error loading schools:</strong> {error}. Please refresh the page or contact support.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -181,4 +159,4 @@ export const SchoolSelectionStep: React.FC<SchoolSelectionStepProps> = ({ data, 
       )}
     </div>
   );
-};
+});

@@ -7,7 +7,7 @@ interface StudentInfoStepProps {
   errors: Record<string, string>;
 }
 
-export const StudentInfoStep: React.FC<StudentInfoStepProps> = ({ data, updateData, errors }) => {
+export const StudentInfoStep = React.memo<StudentInfoStepProps>(({ data, updateData, errors }) => {
   const studentInfo = data.studentInfo || {
     firstName: '',
     lastName: '',
@@ -174,4 +174,4 @@ export const StudentInfoStep: React.FC<StudentInfoStepProps> = ({ data, updateDa
       </div>
     </div>
   );
-};
+});
