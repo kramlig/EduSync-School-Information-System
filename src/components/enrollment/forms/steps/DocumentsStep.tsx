@@ -21,7 +21,7 @@ interface UploadState {
   error: string | null;
 }
 
-export const DocumentsStep: React.FC<DocumentsStepProps> = ({ data, updateData }) => {
+export const DocumentsStep = React.memo<DocumentsStepProps>(({ data, updateData }) => {
   const [uploadStates, setUploadStates] = useState<Record<DocumentType, UploadState>>({
     birthCertificate: { uploading: false, progress: 0, error: null },
     form137: { uploading: false, progress: 0, error: null },
@@ -207,4 +207,4 @@ export const DocumentsStep: React.FC<DocumentsStepProps> = ({ data, updateData }
       </div>
     </div>
   );
-};
+});

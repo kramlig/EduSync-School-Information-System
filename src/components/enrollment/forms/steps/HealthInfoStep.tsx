@@ -7,7 +7,7 @@ interface HealthInfoStepProps {
   errors: Record<string, string>;
 }
 
-export const HealthInfoStep: React.FC<HealthInfoStepProps> = ({ data, updateData }) => {
+export const HealthInfoStep = React.memo<HealthInfoStepProps>(({ data, updateData }) => {
   const healthInfo = data.healthInfo || {};
 
   const handleChange = (field: string, value: string) => {
@@ -89,4 +89,4 @@ export const HealthInfoStep: React.FC<HealthInfoStepProps> = ({ data, updateData
       </div>
     </div>
   );
-};
+});

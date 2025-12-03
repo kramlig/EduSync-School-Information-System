@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
-import { getFirestoreInstance } from '../../../services/firestoreService';
-import { useSchoolContext } from '../../../contexts/SchoolContext';
+import { useEnrollmentApplicationsPostgreSQL } from '../../../hooks/useEnrollmentApplicationsPostgreSQL';
+import { useSchoolData } from '../../../../hooks/useSchoolData';
 import type { EnrollmentApplication } from '../../../../types';
 
 type FilterStatus = 'all' | 'submitted' | 'under_review' | 'approved' | 'rejected';
@@ -16,76 +15,45 @@ type FilterStatus = 'all' | 'submitted' | 'under_review' | 'approved' | 'rejecte
  * - Search by student name or application number
  * - Click to view detailed application
  * - Statistics cards
+ * 
+ * MIGRATION: Now uses useEnrollmentApplicationsPostgreSQL hook
  */
 const AdminEnrollmentDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { schoolId } = useSchoolContext(); // Get current school for filtering
-  const [applications, setApplications] = useState<EnrollmentApplication[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { settings } = useSchoolData(['settings']);
+  const schoolId = settings?.id || '';
+  
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Subscribe to applications in real-time
-  useEffect(() => {
-    if (!schoolId) {
-      console.warn('[AdminEnrollmentDashboard] No schoolId - skipping query');
-      setLoading(false);
-      return;
-    }
-
-    const db = getFirestoreInstance();
-    let q = query(
-      collection(db, 'enrollmentApplications'),
-      where('schoolId', '==', schoolId), // Filter by school
-      orderBy('submittedAt', 'desc')
-    );
-
-    // Apply status filter if not 'all'
-    if (filterStatus !== 'all') {
-      q = query(
-        collection(db, 'enrollmentApplications'),
-        where('schoolId', '==', schoolId), // Filter by school
-        where('status', '==', filterStatus),
-        orderBy('submittedAt', 'desc')
-      );
-    }
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const apps = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as EnrollmentApplication[];
-      
-      setApplications(apps);
-      setLoading(false);
-      console.log('[AdminEnrollmentDashboard] Loaded', apps.length, 'applications for school:', schoolId);
-    }, (error) => {
-      console.error('[AdminEnrollmentDashboard] Error loading applications:', error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [filterStatus, schoolId]); // Add schoolId to dependencies
-
-  // Filter applications by search query
-  const filteredApplications = applications.filter(app => {
-    if (!searchQuery.trim()) return true;
-    
-    const query = searchQuery.toLowerCase();
-    const studentName = `${app.studentInfo?.firstName} ${app.studentInfo?.lastName}`.toLowerCase();
-    const appNumber = app.applicationNumber?.toLowerCase() || '';
-    
-    return studentName.includes(query) || appNumber.includes(query);
+  // Fetch applications using PostgreSQL hook
+  const { applications, loading } = useEnrollmentApplicationsPostgreSQL({
+    schoolId,
+    status: filterStatus === 'all' ? undefined : filterStatus,
+    enableRealtime: true,
   });
 
-  // Calculate statistics
-  const stats = {
+  // Filter applications by search query (memoized to prevent re-calculations)
+  const filteredApplications = useMemo(() => {
+    return applications.filter(app => {
+      if (!searchQuery.trim()) return true;
+      
+      const query = searchQuery.toLowerCase();
+      const studentName = `${app.studentInfo?.firstName} ${app.studentInfo?.lastName}`.toLowerCase();
+      const appNumber = app.applicationNumber?.toLowerCase() || '';
+      
+      return studentName.includes(query) || appNumber.includes(query);
+    });
+  }, [applications, searchQuery]);
+
+  // Calculate statistics (memoized)
+  const stats = useMemo(() => ({
     total: applications.length,
     submitted: applications.filter(a => a.status === 'submitted').length,
     underReview: applications.filter(a => a.status === 'under_review').length,
     approved: applications.filter(a => a.status === 'approved').length,
     rejected: applications.filter(a => a.status === 'rejected').length
-  };
+  }), [applications]);
 
   const getStatusBadge = (status: string) => {
     const badges = {

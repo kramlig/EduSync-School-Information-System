@@ -7,7 +7,7 @@ interface ReviewStepProps {
   errors: Record<string, string>;
 }
 
-export const ReviewStep: React.FC<ReviewStepProps> = ({ data, errors }) => {
+export const ReviewStep = React.memo<ReviewStepProps>(({ data, errors }) => {
   const studentInfo = data.studentInfo;
   const guardian1 = data.guardian1;
   const currentAddress = data.currentAddress;
@@ -87,4 +87,4 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({ data, errors }) => {
       </div>
     </div>
   );
-};
+});

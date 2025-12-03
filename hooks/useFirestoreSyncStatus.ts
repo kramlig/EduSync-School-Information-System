@@ -75,17 +75,17 @@ export const useFirestoreSyncStatus = (skip: boolean = false) => {
             setHasPendingWrites(count > 0);
             
             if (count > 0) {
-              console.log(`[SyncStatus] 📝 ${count} pending write(s)`);
+              // console.log(`[SyncStatus] 📝 ${count} pending write(s)`);
             }
           },
           (error) => {
-            console.error(`[SyncStatus] ❌ Error monitoring ${collectionName}:`, error);
+            // console.error(`[SyncStatus] ❌ Error monitoring ${collectionName}:`, error);
           }
         );
         
         unsubscribes.push(unsubscribe);
       } catch (error) {
-        console.error(`[SyncStatus] ❌ Failed to monitor ${collectionName}:`, error);
+        // console.error(`[SyncStatus] ❌ Failed to monitor ${collectionName}:`, error);
       }
     });
 

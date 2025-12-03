@@ -10,9 +10,9 @@ import './index.css';
 // if ('serviceWorker' in navigator) {
 //   window.addEventListener('load', () => {
 //     navigator.serviceWorker.register('/sw.js').then(registration => {
-//       console.log('ServiceWorker registration successful with scope: ', registration.scope);
+//       // console.log('ServiceWorker registration successful with scope: ', registration.scope);
 //     }).catch(registrationError => {
-//       console.log('ServiceWorker registration failed: ', registrationError);
+//       // console.log('ServiceWorker registration failed: ', registrationError);
 //     });
 //   });
 // }
@@ -28,7 +28,7 @@ if ('serviceWorker' in navigator) {
         if (regs && regs.length) {
           regs.forEach((reg) => reg.unregister().catch(() => {}));
           // eslint-disable-next-line no-console
-          console.log(`[SW] Unregistered ${regs.length} service worker(s) for dev/emulator.`);
+          // console.log(`[SW] Unregistered ${regs.length} service worker(s) for dev/emulator.`);
         }
       }).catch(() => {});
     } catch {}

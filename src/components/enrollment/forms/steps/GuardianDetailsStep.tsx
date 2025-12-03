@@ -7,7 +7,7 @@ interface GuardianDetailsStepProps {
   errors: Record<string, string>;
 }
 
-export const GuardianDetailsStep: React.FC<GuardianDetailsStepProps> = ({ data, updateData, errors }) => {
+export const GuardianDetailsStep = React.memo<GuardianDetailsStepProps>(({ data, updateData, errors }) => {
   const guardian1 = data.guardian1 || {
     fullName: '',
     relationship: 'Father',
@@ -202,4 +202,4 @@ export const GuardianDetailsStep: React.FC<GuardianDetailsStepProps> = ({ data, 
       </div>
     </div>
   );
-};
+});

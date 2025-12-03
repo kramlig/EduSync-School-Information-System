@@ -20,7 +20,15 @@ const STATUS_MAP: Record<AttendanceStatus, { label: string; color: string; bgCol
 const getStatusColor = (status?: AttendanceStatus) => {
     if (!status) return 'bg-white dark:bg-slate-800';
     return STATUS_MAP[status].bgColor;
-}
+};
+
+// Helper function to format date as YYYY-MM-DD in local timezone (avoids UTC conversion)
+const formatDateLocal = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, forceStudentId }) => {
   const { students, attendanceRecords, updateAttendance, sections, substituteAssignments, classSchedules } = schoolData;
@@ -61,6 +69,36 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
     }
   }, [toast]);
   
+  // Clear optimistic updates once server data is synced
+  useEffect(() => {
+    if (localAttendance.size === 0) return;
+    
+    // Check if all optimistic updates are now in server data
+    const keysToRemove: string[] = [];
+    localAttendance.forEach((optimisticStatus, key) => {
+      // Key format: "studentId-YYYY-MM-DD" where studentId is UUID (contains hyphens)
+      // Extract the last 10 characters which is the date "YYYY-MM-DD"
+      const dateStr = key.slice(-10); // "2025-12-01"
+      const studentId = key.slice(0, -11); // Everything before "-YYYY-MM-DD"
+      
+      const studentRecord = attendanceRecords.find(r => r.studentId === studentId);
+      const serverStatus = studentRecord?.dailyStatus?.[dateStr];
+      
+      // If server has this data, remove from optimistic
+      if (serverStatus === optimisticStatus) {
+        keysToRemove.push(key);
+      }
+    });
+    
+    if (keysToRemove.length > 0) {
+      setLocalAttendance(prev => {
+        const newMap = new Map(prev);
+        keysToRemove.forEach(key => newMap.delete(key));
+        return newMap;
+      });
+    }
+  }, [attendanceRecords, localAttendance]);
+  
   // const selectedMonth = useMemo(() => currentDate.toLocaleString('default', { month: 'short' }), [currentDate]);
   
   const daysInMonth = useMemo(() => {
@@ -68,6 +106,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
     const month = currentDate.getMonth();
     const date = new Date(year, month, 1);
     const days: Date[] = [];
+    
     while (date.getMonth() === month) {
       if (date.getDay() >= 1 && date.getDay() <= 5) { // Only include weekdays
         days.push(new Date(date));
@@ -89,7 +128,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
     const teacherAdviserSection = sections.find(s => s.adviserId === authUser.id);
     if (teacherAdviserSection) authorizedSectionIds.add(teacherAdviserSection.id);
     
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatDateLocal(new Date());
     const activeSubAssignments = substituteAssignments.filter(sub => 
       sub.teacherId === authUser.id && today >= sub.startDate && today <= sub.endDate
     );
@@ -158,7 +197,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
     const now = new Date();
     const sameMonth = now.getFullYear() === currentDate.getFullYear() && now.getMonth() === currentDate.getMonth();
     if (!sameMonth) return;
-    const key = now.toISOString().split('T')[0];
+    const key = formatDateLocal(now);
     const cell = headerCellRefs.current[key];
     const scroller = tableScrollRef.current;
     if (cell && scroller) {
@@ -181,29 +220,22 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
       // Build a merged map of all attendance (server + optimistic)
       const mergedStatus: Record<string, AttendanceStatus> = {};
       
-      // First, add all server data from individual attendance records
+      // First, add all server data from dailyStatus object
       studentRecords.forEach(record => {
-        const recordData = record as any; // Cast to handle new attendance structure
-        if (recordData.date && recordData.status) {
-          // Map new status format to old AttendanceStatus codes
-          const statusCode = recordData.status === 'present' ? 'P' : 
-                           recordData.status === 'absent' ? 'A' : 
-                           recordData.status === 'late' ? 'L' : 
-                           recordData.status === 'excused' ? 'E' : 'P';
-          mergedStatus[recordData.date] = statusCode as AttendanceStatus;
+        if (record.dailyStatus) {
+          // dailyStatus is already in format { "2025-12-01": "P", "2025-12-02": "A", ... }
+          Object.entries(record.dailyStatus).forEach(([date, status]) => {
+            mergedStatus[date] = status as AttendanceStatus;
+          });
         }
       });
       
       // Then, overlay optimistic updates for this student
       // Key format: "studentId-YYYY-MM-DD"
       localAttendance.forEach((status, key) => {
-        // The key is in format: studentId-dateStr, where dateStr is YYYY-MM-DD
-        // Since studentId might not contain hyphens, we can use indexOf to split correctly
-        const firstHyphenIndex = key.indexOf('-');
-        if (firstHyphenIndex === -1) return;
-        
-        const studentId = key.substring(0, firstHyphenIndex);
-        const dateStr = key.substring(firstHyphenIndex + 1);
+        // Extract the last 10 characters which is the date "YYYY-MM-DD"
+        const dateStr = key.slice(-10);
+        const studentId = key.slice(0, -11);
         
         if (studentId === student.id) {
           mergedStatus[dateStr] = status;
@@ -239,11 +271,11 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
     });
     
     return cache;
-  }, [pagedStudents, attendanceRecords, currentDate, localAttendance]);
+  }, [pagedStudents, attendanceRecords, currentDate, localAttendance.size, [...localAttendance.entries()].map(([k, v]) => `${k}:${v}`).join('|')]);
   
   const handleAttendanceChange = useCallback(async (studentId: string, date: Date, currentStatus?: AttendanceStatus) => {
     if(isReadOnly) return;
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatDateLocal(date);
     const key = `${studentId}-${dateStr}`;
     
     // Determine next status
@@ -282,7 +314,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
   
   const handleMarkAllPresent = useCallback((day: Date) => {
     if (isReadOnly) return;
-    const dateStr = day.toISOString().split('T')[0];
+    const dateStr = formatDateLocal(day);
     // Apply to current page for performance and clarity
     pagedStudents.forEach(student => updateAttendance(student.id, dateStr, 'P'));
   }, [pagedStudents, updateAttendance, isReadOnly]);
@@ -309,7 +341,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
       return;
     }
     
-    const dateStr = now.toISOString().split('T')[0];
+    const dateStr = formatDateLocal(now);
     const studentCount = pagedStudents.length;
     
     // Show loading toast
@@ -515,7 +547,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
             <tr className="bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-900 dark:to-slate-800 shadow-md">
               <th className="sticky left-0 z-30 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-900 dark:to-slate-800 backdrop-blur-sm px-3 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider w-1/4 shadow-md">Student Name</th>
               {daysInMonth.map(day => {
-                const key = day.toISOString().split('T')[0];
+                const key = formatDateLocal(day);
                 return (
                   <th
                     key={key}
@@ -568,17 +600,12 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ schoolData, session, fo
                   </div>
                 </td>
                 {daysInMonth.map(day => {
-                    const dateStr = day.toISOString().split('T')[0];
+                    const dateStr = formatDateLocal(day);
                     const key = `${student.id}-${dateStr}`;
                     
-                    // Find attendance record for this date
-                    const dateRecord = studentRecords.find((r: any) => r.date === dateStr);
-                    const serverStatus = dateRecord ? (
-                      (dateRecord as any).status === 'present' ? 'P' :
-                      (dateRecord as any).status === 'absent' ? 'A' :
-                      (dateRecord as any).status === 'late' ? 'L' :
-                      (dateRecord as any).status === 'excused' ? 'E' : undefined
-                    ) : undefined;
+                    // Get attendance from the student's dailyStatus object
+                    const attendanceRecord = studentRecords.find(r => r.studentId === student.id);
+                    const serverStatus = attendanceRecord?.dailyStatus?.[dateStr] as AttendanceStatus | undefined;
                     
                     // Use optimistic local state if available, otherwise use server state
                     const status = localAttendance.get(key) || serverStatus;

@@ -68,7 +68,7 @@ export function usePaginatedStudents(
       );
       setTotalCount(count);
     } catch (err) {
-      console.warn('[usePaginatedStudents] Failed to load count:', err);
+      // console.warn('[usePaginatedStudents] Failed to load count:', err);
       setTotalCount(0);
     }
   }, [enabled, searchQuery]); // All dependencies included
@@ -125,7 +125,7 @@ export function usePaginatedStudents(
       }
 
     } catch (err: any) {
-      console.error('[usePaginatedStudents] Error loading students:', err);
+      // console.error('[usePaginatedStudents] Error loading students:', err);
       setError(err.message || 'Failed to load students');
       setStudents([]);
     } finally {

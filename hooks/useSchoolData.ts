@@ -68,6 +68,7 @@ import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAs
 import { useParentsPostgreSQL } from '../src/hooks/useParentsPostgreSQL';
 import { useAttendancePostgreSQL } from '../src/hooks/useAttendancePostgreSQL';
 import { useAnnouncementsPostgreSQL } from '../src/hooks/useAnnouncementsPostgreSQL';
+import { useEnrollmentApplicationsPostgreSQL } from '../src/hooks/useEnrollmentApplicationsPostgreSQL';
 
 // Re-export for external use
 export type { SchoolDataHook, SchoolDataState };
@@ -195,6 +196,11 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
     const postgresAnnouncements = useAnnouncementsPostgreSQL(
         USE_POSTGRESQL && shouldFetch('announcements') && schoolId
             ? { schoolId }
+            : {}
+    );
+    const postgresEnrollmentApplications = useEnrollmentApplicationsPostgreSQL(
+        USE_POSTGRESQL && schoolId
+            ? { schoolId, enableRealtime: true }
             : {}
     );
 
