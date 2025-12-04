@@ -259,6 +259,7 @@ export interface AttendanceRecord {
 
 export interface SchoolSettings {
     schoolName: string;
+    schoolIdNumber?: string;
     region: string;
     division: string;
     district: string;
