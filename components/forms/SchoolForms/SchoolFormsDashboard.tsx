@@ -111,6 +111,70 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
       priority: 'high'
     },
     {
+      id: 'sf3-books',
+      title: 'SF3 - School Register of Books',
+      description: 'Track textbooks and instructional materials inventory, issuances, and returns.',
+      icon: DocumentTextIcon,
+      route: '/reports/sf3',
+      gradient: 'from-amber-600 via-yellow-600 to-orange-600',
+      shadowColor: 'shadow-amber-500/25',
+      roles: ['admin', 'librarian', 'registrar', 'principal'],
+      stats: {
+        label: 'Books Tracked',
+        value: 0 // TODO: Get from PostgreSQL
+      },
+      deadline: 'Due: End of school year',
+      priority: 'medium'
+    },
+    {
+      id: 'sf4-movement',
+      title: 'SF4 - Monthly Movement Report',
+      description: 'Track student enrollment changes, transfers, dropouts, and monthly statistics.',
+      icon: TrendingUpIcon,
+      route: '/reports/sf4',
+      gradient: 'from-cyan-600 via-sky-600 to-blue-600',
+      shadowColor: 'shadow-cyan-500/25',
+      roles: ['admin', 'registrar', 'principal'],
+      stats: {
+        label: 'Active Students',
+        value: stats.totalEnrolled
+      },
+      deadline: 'Due: Monthly',
+      priority: 'high'
+    },
+    {
+      id: 'sf5-promotion',
+      title: 'SF5 - Promotion & Proficiency Report',
+      description: 'End-of-year promotion report for Elementary and Junior High School students.',
+      icon: TrendingUpIcon,
+      route: '/reports/sf5',
+      gradient: 'from-purple-600 via-violet-600 to-indigo-600',
+      shadowColor: 'shadow-purple-500/25',
+      roles: ['admin', 'registrar', 'principal', 'teacher'],
+      stats: {
+        label: 'Promotion Rate',
+        value: `${stats.promotionRate}%`
+      },
+      deadline: 'Due: End of school year',
+      priority: 'high'
+    },
+    {
+      id: 'sf5k-kindergarten',
+      title: 'SF5-K - Kindergarten Proficiency',
+      description: 'Developmental proficiency assessment for Kindergarten learners across 4 domains.',
+      icon: DocumentTextIcon,
+      route: '/reports/sf5k',
+      gradient: 'from-pink-600 via-rose-600 to-red-600',
+      shadowColor: 'shadow-pink-500/25',
+      roles: ['admin', 'registrar', 'principal', 'teacher'],
+      stats: {
+        label: 'K Students',
+        value: students.filter(s => s.grade_level === 0 && (s.status === 'active' || !s.status)).length
+      },
+      deadline: 'Due: End of school year',
+      priority: 'high'
+    },
+    {
       id: 'sf9-promotion',
       title: 'SF9 - Promotion/Retention Report',
       description: 'End-of-year promotion status and retention statistics for performance tracking.',
@@ -271,7 +335,12 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
         </div>
 
         {/* School Forms Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className={`
+          grid gap-8
+          ${accessibleForms.length === 1 ? 'grid-cols-1 max-w-md mx-auto' : ''}
+          ${accessibleForms.length === 2 ? 'grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto' : ''}
+          ${accessibleForms.length >= 3 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : ''}
+        `}>
           {accessibleForms.map((form) => {
             const IconComponent = form.icon;
             const isHovered = hoveredCard === form.id;
@@ -330,10 +399,10 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
 
                   {/* Content */}
                   <div className="relative z-10">
-                    <h3 className="text-xl font-bold text-slate-900 mb-3 group-hover:text-slate-700 transition-colors">
+                    <h3 className="text-xl font-bold text-slate-900 mb-3 group-hover:text-slate-700 transition-colors min-h-[3.5rem] flex items-start">
                       {form.title}
                     </h3>
-                    <p className="text-slate-600 mb-6 leading-relaxed">
+                    <p className="text-slate-600 mb-6 leading-relaxed min-h-[4.5rem]">
                       {form.description}
                     </p>
 

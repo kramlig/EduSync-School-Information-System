@@ -47,6 +47,7 @@
     "seed:attendance": "node scripts/seed-attendance.cjs",
     "seed:assignments": "node scripts/seed-assignments.cjs",
     "seed:lessonplans": "node scripts/seed-lessonplans.cjs",
+    "seed:sf3": "node scripts/seed-sf3-books.cjs",
     "dev:emu": "npm run env:emu && npm run emu:up && node scripts/emu-wait.cjs 127.0.0.1 8086 --timeout=60000 && node scripts/emu-wait.cjs 127.0.0.1 9100 --timeout=60000 && npm run emu:seed:comprehensive && node scripts/print-cache-warning.cjs && node scripts/kill-port.cjs 5173 && npx vite --host 127.0.0.1 --port 5173 --strictPort",
     "dev:emu:serve": "npm run env:emu && node scripts/kill-port.cjs 5173 && npx vite --host 127.0.0.1 --port 5173 --strictPort",
     "dev:serve": "node scripts/kill-port.cjs 5173 && npx vite --host 127.0.0.1 --port 5173 --strictPort",

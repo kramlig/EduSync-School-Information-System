@@ -63,6 +63,10 @@ const ELLNAssessment = lazy(() => import('./components/forms/ELLN/ELLNAssessment
 const ELLNResults = lazy(() => import('./components/forms/ELLN/ELLNResults'));
 const ELLNReports = lazy(() => import('./components/forms/ELLN/ELLNReports'));
 const ILMPTemplate = lazy(() => import('./components/forms/ELLN/ILMPTemplate'));
+const SF3Dashboard = lazy(() => import('./src/components/deped-forms/SF3Dashboard'));
+const SF4Dashboard = lazy(() => import('./src/components/deped-forms/SF4Dashboard'));
+const SF5Dashboard = lazy(() => import('./src/components/deped-forms/SF5Dashboard'));
+const SF5KDashboard = lazy(() => import('./src/components/deped-forms/SF5KDashboard'));
 const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDashboard'));
 // const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard')); // HIDDEN: Outdated
 const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
@@ -669,6 +673,12 @@ const App: React.FC = () => {
                         <Route path="/reports/elln/results" element={<ELLNResults session={staffSession} />} />
                         <Route path="/reports/elln/reports" element={<ELLNReports />} />
                         <Route path="/reports/elln/ilmp" element={<ILMPTemplate />} />
+                        
+                        {/* SF4, SF5 & SF5-K - Movement & Promotion Reports */}
+                        <Route path="/reports/sf3" element={<SF3Dashboard />} />
+                        <Route path="/reports/sf4" element={<SF4Dashboard schoolYear={schoolData.settings.schoolYear} session={staffSession} />} />
+                        <Route path="/reports/sf5" element={<SF5Dashboard schoolYear={schoolData.settings.schoolYear} gradingPeriod="final" />} />
+                        <Route path="/reports/sf5k" element={<SF5KDashboard schoolYear={schoolData.settings.schoolYear} gradingPeriod="final" />} />
                         
                         {/* ========== BACKWARD COMPATIBILITY REDIRECTS ========== */}
                         {/* Old /forms/* paths → /reports/* */}

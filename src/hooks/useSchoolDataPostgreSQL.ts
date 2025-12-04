@@ -92,6 +92,7 @@ export function useSchoolDataPostgreSQL(
                 division: data.division || MOCK_SETTINGS.division,
                 district: (data.settings as any)?.district || MOCK_SETTINGS.district,
                 schoolYear: data.current_school_year || MOCK_SETTINGS.schoolYear,
+                schoolIdNumber: data.school_id_number, // Add school ID number
                 
                 // Optional fields from JSONB settings
                 schoolType: (data.settings as any)?.schoolType,
