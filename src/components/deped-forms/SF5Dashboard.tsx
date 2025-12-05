@@ -55,6 +55,10 @@ const SF5Dashboard: React.FC<SF5DashboardProps> = ({ schoolYear, gradingPeriod, 
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+
   // Filters
   const [selectedGradeLevel, setSelectedGradeLevel] = useState<number | undefined>(undefined);
   const [selectedSection, setSelectedSection] = useState<string | undefined>(undefined);
@@ -203,7 +207,9 @@ const SF5Dashboard: React.FC<SF5DashboardProps> = ({ schoolYear, gradingPeriod, 
         gradeLevel: selectedGradeLevel,
         section: selectedSectionInfo ? {
           name: selectedSectionInfo.name,
-          grade_level: selectedSectionInfo.gradeLevel
+          grade_level: typeof selectedSectionInfo.gradeLevel === 'number' 
+            ? selectedSectionInfo.gradeLevel 
+            : parseInt(selectedSectionInfo.gradeLevel as string)
         } : undefined,
         records: promotionRecords,
         preparedBy: session?.user.email || 'Unknown',
@@ -238,6 +244,23 @@ const SF5Dashboard: React.FC<SF5DashboardProps> = ({ schoolYear, gradingPeriod, 
       retentionRate: total > 0 ? ((retained / total) * 100).toFixed(1) : '0.0',
     };
   }, [promotionRecords]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(promotionRecords.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedRecords = promotionRecords.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedGradeLevel, selectedSection, selectedStatus, schoolYear, gradingPeriod]);
+
+  // Go to specific page
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   if (sectionsLoading) {
     return (
@@ -411,6 +434,7 @@ const SF5Dashboard: React.FC<SF5DashboardProps> = ({ schoolYear, gradingPeriod, 
               value={selectedGradeLevel || ''}
               onChange={(e) => setSelectedGradeLevel(e.target.value ? parseInt(e.target.value) : undefined)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              aria-label="Filter by grade level"
             >
               <option value="">All Grades</option>
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(grade => (
@@ -442,6 +466,7 @@ const SF5Dashboard: React.FC<SF5DashboardProps> = ({ schoolYear, gradingPeriod, 
               value={selectedStatus || ''}
               onChange={(e) => setSelectedStatus(e.target.value || undefined)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              aria-label="Filter by promotion status"
             >
               <option value="">All Statuses</option>
               <option value="promoted">Promoted</option>
@@ -489,9 +514,32 @@ const SF5Dashboard: React.FC<SF5DashboardProps> = ({ schoolYear, gradingPeriod, 
 
       {/* Records Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Promotion Records</h2>
-          <p className="text-sm text-gray-600 mt-1">{promotionRecords.length} record(s)</p>
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Promotion Records</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Showing {startIndex + 1} to {Math.min(endIndex, promotionRecords.length)} of {promotionRecords.length} record(s)
+            </p>
+          </div>
+          {promotionRecords.length > 25 && (
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600">Per page:</label>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                aria-label="Items per page"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </div>
+          )}
         </div>
         
         {loading ? (
@@ -505,49 +553,117 @@ const SF5Dashboard: React.FC<SF5DashboardProps> = ({ schoolYear, gradingPeriod, 
             <p className="mt-1 text-sm text-gray-500">Click "Auto-Generate" to create promotion records from grades.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">LRN</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grade</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Section</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">General Average</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Next Grade</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {promotionRecords.map(record => (
-                  <tr key={record.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-900">{record.student.lrn}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {record.student.first_name} {record.student.middle_name} {record.student.last_name}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{record.current_grade_level}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{record.section?.name || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                      {record.general_average?.toFixed(2) || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        record.promotion_status === 'promoted' ? 'bg-green-100 text-green-800' :
-                        record.promotion_status === 'retained' ? 'bg-red-100 text-red-800' :
-                        record.promotion_status === 'graduated' ? 'bg-blue-100 text-blue-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {record.promotion_status.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {record.next_grade_level ? `Grade ${record.next_grade_level}` : '-'}
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">LRN</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grade</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Section</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">General Average</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Next Grade</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {paginatedRecords.map(record => (
+                    <tr key={record.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-900">{record.student.lrn}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {record.student.first_name} {record.student.middle_name} {record.student.last_name}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{record.current_grade_level}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{record.section?.name || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                        {record.general_average?.toFixed(2) || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                          record.promotion_status === 'promoted' ? 'bg-green-100 text-green-800' :
+                          record.promotion_status === 'retained' ? 'bg-red-100 text-red-800' :
+                          record.promotion_status === 'graduated' ? 'bg-blue-100 text-blue-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {record.promotion_status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {record.next_grade_level ? `Grade ${record.next_grade_level}` : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                
+                <div className="flex items-center gap-2">
+                  {/* First page */}
+                  {currentPage > 3 && (
+                    <>
+                      <button
+                        onClick={() => goToPage(1)}
+                        className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                      >
+                        1
+                      </button>
+                      <span className="text-gray-500">...</span>
+                    </>
+                  )}
+                  
+                  {/* Page numbers around current page */}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(page => page === currentPage || Math.abs(page - currentPage) <= 1)
+                    .map(page => (
+                      <button
+                        key={page}
+                        onClick={() => goToPage(page)}
+                        className={`px-3 py-1 text-sm font-medium rounded ${
+                          currentPage === page
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  
+                  {/* Last page */}
+                  {currentPage < totalPages - 2 && (
+                    <>
+                      <span className="text-gray-500">...</span>
+                      <button
+                        onClick={() => goToPage(totalPages)}
+                        className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                      >
+                        {totalPages}
+                      </button>
+                    </>
+                  )}
+                </div>
+                
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
