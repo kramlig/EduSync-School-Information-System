@@ -67,6 +67,7 @@ const SF3Dashboard = lazy(() => import('./src/components/deped-forms/SF3Dashboar
 const SF4Dashboard = lazy(() => import('./src/components/deped-forms/SF4Dashboard'));
 const SF5Dashboard = lazy(() => import('./src/components/deped-forms/SF5Dashboard'));
 const SF5KDashboard = lazy(() => import('./src/components/deped-forms/SF5KDashboard'));
+const SF6Dashboard = lazy(() => import('./src/components/deped-forms/SF6Dashboard'));
 const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDashboard'));
 // const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard')); // HIDDEN: Outdated
 const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
@@ -679,6 +680,7 @@ const App: React.FC = () => {
                         <Route path="/reports/sf4" element={<SF4Dashboard schoolYear={schoolData.settings.schoolYear} session={staffSession} />} />
                         <Route path="/reports/sf5" element={<SF5Dashboard schoolYear={schoolData.settings.schoolYear} gradingPeriod="final" />} />
                         <Route path="/reports/sf5k" element={<SF5KDashboard schoolYear={schoolData.settings.schoolYear} gradingPeriod="final" />} />
+                        <Route path="/reports/sf6" element={<SF6Dashboard />} />
                         
                         {/* ========== BACKWARD COMPATIBILITY REDIRECTS ========== */}
                         {/* Old /forms/* paths → /reports/* */}

@@ -175,6 +175,22 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
       priority: 'high'
     },
     {
+      id: 'sf6-textbook',
+      title: 'SF6 - Textbook Ledger',
+      description: 'Track textbook distribution, returns, accountability and financial records.',
+      icon: DocumentTextIcon,
+      route: '/reports/sf6',
+      gradient: 'from-emerald-600 via-green-600 to-teal-600',
+      shadowColor: 'shadow-emerald-500/25',
+      roles: ['admin', 'librarian', 'registrar', 'principal'],
+      stats: {
+        label: 'Distributions',
+        value: 0 // TODO: Get from PostgreSQL
+      },
+      deadline: 'Due: End of school year',
+      priority: 'medium'
+    },
+    {
       id: 'sf9-promotion',
       title: 'SF9 - Promotion/Retention Report',
       description: 'End-of-year promotion status and retention statistics for performance tracking.',
