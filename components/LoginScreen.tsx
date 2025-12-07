@@ -2,19 +2,30 @@ import DepEdLogo from './DepEdLogo';
 import EdusyncLogo from './EdusyncLogo';
 import React, { useState } from 'react';
 import type { AuthUser, StudentUser, ParentUser } from '../types';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { supabase } from '../src/lib/supabase';
+import { login, type LoginType, type DivisionAuthUser } from '../src/services/authService';
 
 interface LoginScreenProps {
-  onLogin: (user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => void;
+  onLogin: (user: AuthUser | StudentUser | ParentUser | DivisionAuthUser, type: 'staff' | 'student' | 'parent' | 'division') => void;
   loginType: 'staff' | 'student' | 'parent';
   setLoginType: (type: 'staff' | 'student' | 'parent') => void;
 }
 
+/**
+ * LoginScreen - Enterprise-grade authentication UI
+ * 
+ * Features:
+ * - Rate limiting protection (5 attempts / 15 min window)
+ * - Audit logging for security compliance
+ * - Optimized single-query user lookup
+ * - Offline support with secure session caching
+ * - Device fingerprint validation
+ */
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginType }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
+  const [blockedUntil, setBlockedUntil] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
   // 🔒 SECURITY: Environment-based feature flags
@@ -34,187 +45,39 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
     e.preventDefault();
     console.log('[LoginScreen] 🔵 Login attempt started:', { email, loginType });
     setError('');
+    setAttemptsRemaining(null);
+    setBlockedUntil(null);
     setIsLoading(true);
 
     try {
-      console.log('[LoginScreen] Step 1: Authenticating with Firebase Auth...');
-      // Step 1: Authenticate with Firebase Auth
-      const auth = getAuth();
-      const userCredential = await signInWithEmailAndPassword(auth, email.toLowerCase(), password);
-      const firebaseUser = userCredential.user;
-      console.log('[LoginScreen] ✅ Firebase Auth successful, UID:', firebaseUser.uid);
+      // Use the new enterprise-grade auth service
+      const result = await login(email, password, loginType as LoginType);
       
-      console.log('[LoginScreen] Step 2: Fetching user data from PostgreSQL...');
-      // Step 2: Fetch from PostgreSQL based on firebase_uid
-      let userData: AuthUser | StudentUser | ParentUser | null = null;
-      let userRole: string | null = null;
-
-      // Try teachers table
-      const { data: teacher, error: teacherError } = await supabase
-        .from('teachers')
-        .select('*')
-        .eq('firebase_uid', firebaseUser.uid)
-        .single();
-
-      if (teacher && !teacherError) {
-        console.log('[LoginScreen] ✅ Found teacher:', teacher.email);
-        userData = {
-          id: teacher.id,
-          postgresqlId: teacher.id,
-          firebaseUid: teacher.firebase_uid,
-          email: teacher.email,
-          name: teacher.name,
-          role: teacher.role || 'teacher',
-          schoolId: teacher.school_id,
-          contactNumber: teacher.contact_number
-        } as AuthUser;
-        userRole = teacher.role || 'teacher';
-      }
-
-      // Try students table if not teacher
-      if (!userData) {
-        const { data: student, error: studentError } = await supabase
-          .from('students')
-          .select('*')
-          .eq('firebase_uid', firebaseUser.uid)
-          .single();
-
-        if (student && !studentError) {
-          console.log('[LoginScreen] ✅ Found student:', student.email);
-          userData = {
-            id: student.id,
-            postgresqlId: student.id,
-            firebaseUid: student.firebase_uid,
-            email: student.email,
-            firstName: student.first_name,
-            lastName: student.last_name,
-            name: `${student.first_name} ${student.last_name}`.trim(),
-            role: 'student',
-            schoolId: student.school_id,
-            gradeLevel: student.grade_level,
-            sectionId: student.section_id
-          } as StudentUser;
-          userRole = 'student';
-        }
-      }
-
-      // Try parents table if not teacher or student
-      if (!userData) {
-        const { data: parent, error: parentError } = await supabase
-          .from('parents')
-          .select('*')
-          .eq('firebase_uid', firebaseUser.uid)
-          .single();
-
-        if (parent && !parentError) {
-          console.log('[LoginScreen] ✅ Found parent:', parent.email);
-          userData = {
-            id: parent.id,
-            postgresqlId: parent.id,
-            firebaseUid: parent.firebase_uid,
-            email: parent.email,
-            name: parent.name,
-            role: 'parent',
-            schoolId: parent.school_id,
-            contactNumber: parent.contact_number,
-            children: parent.children || []
-          } as ParentUser;
-          userRole = 'parent';
-        }
-      }
-
-      if (!userData || !userRole) {
-        console.error('[LoginScreen] No user found in PostgreSQL for UID:', firebaseUser.uid);
-        setError(`No ${loginType} account found. Please contact your administrator.`);
-        setIsLoading(false);
-        return;
-      }
-      
-      // Verify the role matches the login type
-      const expectedRole = loginType === 'staff' ? ['admin', 'principal', 'registrar', 'teacher', 'superadmin'] : [loginType];
-      if (!expectedRole.includes(userRole)) {
-        console.error('[LoginScreen] Role mismatch. Expected:', expectedRole, 'Got:', userRole);
+      if (result.success && result.user) {
+        console.log('[LoginScreen] ✅ Login successful, userType:', result.userType);
         
-        // User-friendly error message
-        const roleToTabMap: { [key: string]: string } = {
-          'admin': 'Staff',
-          'principal': 'Staff',
-          'registrar': 'Staff',
-          'teacher': 'Staff',
-          'superadmin': 'Staff',
-          'student': 'Student',
-          'parent': 'Parent'
-        };
-        const correctTab = roleToTabMap[userRole] || userRole;
-        setError(`Please use the ${correctTab} login tab.`);
-        setIsLoading(false);
-        return;
-      }
-      
-      console.log('[LoginScreen] ✅ Login successful with PostgreSQL data');
-      
-      // Cache user for offline login
-      localStorage.setItem('edusync_cached_user', JSON.stringify({
-        email: email.toLowerCase(),
-        type: loginType,
-        userData: userData,
-        cachedAt: Date.now()
-      }));
-      
-      console.log('[LoginScreen] ✅ Calling onLogin callback');
-      onLogin(userData, loginType);
-    } catch (err) {
-      console.error('[LoginScreen] ❌ Login error:', err);
-      console.error('[LoginScreen] Error details:', {
-        message: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack : undefined
-      });
-      
-      // Offline fallback with first-login detection
-      if (!navigator.onLine) {
-        const cachedStr = localStorage.getItem('edusync_cached_user');
+        // Division users get a special login type for proper routing
+        const effectiveType = result.userType === 'division' ? 'division' : loginType;
+        onLogin(result.user, effectiveType);
+      } else {
+        // Handle login failure
+        const err = result.error;
         
-        if (cachedStr) {
-          try {
-            const cached = JSON.parse(cachedStr);
-            const CACHE_EXPIRY_DAYS = 7;
-            const cacheAge = Date.now() - cached.cachedAt;
-            const cacheExpired = cacheAge > (CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-            
-            if (cacheExpired) {
-              setError('Cached credentials expired. Please connect to internet to login.');
-              setIsLoading(false);
-              return;
-            }
-            
-            if (cached.email === email.toLowerCase() && cached.type === loginType) {
-              onLogin(cached.userData, loginType);
-              setIsLoading(false);
-              return;
-            } else {
-              setError(
-                `No cached credentials for ${email} as ${loginType}. ` +
-                `Last login was ${cached.email} as ${cached.type}.`
-              );
-              setIsLoading(false);
-              return;
-            }
-          } catch (parseErr) {
-            if (isDevelopment) {
-              console.error('[LoginScreen] Error parsing cached user:', parseErr);
-            }
+        if (err?.isRateLimited && err?.blockedUntil) {
+          setBlockedUntil(err.blockedUntil);
+          const minutesLeft = Math.ceil((err.blockedUntil.getTime() - Date.now()) / 60000);
+          setError(`⛔ Too many failed attempts. Please try again in ${minutesLeft} minutes.`);
+        } else {
+          setError(err?.message || 'Unable to login. Please check your credentials.');
+          if (err?.attemptsRemaining !== undefined) {
+            setAttemptsRemaining(err.attemptsRemaining);
           }
         }
-        
-        setError(
-          '⚠️ First login requires internet connection. ' +
-          'Please connect to WiFi to set up your account. ' +
-          'After first login, you can work offline anytime.'
-        );
-      } else {
-        setError('Unable to login. Please check your credentials and try again.');
       }
-      
+    } catch (err) {
+      console.error('[LoginScreen] ❌ Unexpected error:', err);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
       setIsLoading(false);
     }
   };
@@ -286,15 +149,29 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
                 />
             </div>
 
-            {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+            {error && (
+              <div className="text-center">
+                <p className="text-sm text-red-600">{error}</p>
+                {attemptsRemaining !== null && attemptsRemaining > 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    ⚠️ {attemptsRemaining} attempt{attemptsRemaining !== 1 ? 's' : ''} remaining before lockout
+                  </p>
+                )}
+                {blockedUntil && (
+                  <p className="text-xs text-red-500 mt-1">
+                    🔒 Account temporarily locked
+                  </p>
+                )}
+              </div>
+            )}
             
             <div className="space-y-2">
                 <button
                     type="submit" 
-                    disabled={isLoading}
+                    disabled={isLoading || !!blockedUntil}
                     className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
                 >
-                    {isLoading ? 'Signing in...' : 'Sign in'}
+                    {isLoading ? 'Signing in...' : blockedUntil ? '🔒 Locked' : 'Sign in'}
                 </button>
                 {enableQuickLogin && (
                   <button
@@ -326,15 +203,29 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
                 />
             </div>
 
-            {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+            {error && (
+              <div className="text-center">
+                <p className="text-sm text-red-600">{error}</p>
+                {attemptsRemaining !== null && attemptsRemaining > 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    ⚠️ {attemptsRemaining} attempt{attemptsRemaining !== 1 ? 's' : ''} remaining before lockout
+                  </p>
+                )}
+                {blockedUntil && (
+                  <p className="text-xs text-red-500 mt-1">
+                    🔒 Account temporarily locked
+                  </p>
+                )}
+              </div>
+            )}
             
             <div className="space-y-2">
                 <button
                     type="submit" 
-                    disabled={isLoading}
+                    disabled={isLoading || !!blockedUntil}
                     className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
                 >
-                    {isLoading ? 'Signing in...' : 'Sign in'}
+                    {isLoading ? 'Signing in...' : blockedUntil ? '🔒 Locked' : 'Sign in'}
                 </button>
                 {enableQuickLogin && (
                   <button
@@ -366,15 +257,29 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, loginType, setLoginT
                 />
             </div>
 
-            {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+            {error && (
+              <div className="text-center">
+                <p className="text-sm text-red-600">{error}</p>
+                {attemptsRemaining !== null && attemptsRemaining > 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    ⚠️ {attemptsRemaining} attempt{attemptsRemaining !== 1 ? 's' : ''} remaining before lockout
+                  </p>
+                )}
+                {blockedUntil && (
+                  <p className="text-xs text-red-500 mt-1">
+                    🔒 Account temporarily locked
+                  </p>
+                )}
+              </div>
+            )}
             
             <div className="space-y-2">
                 <button
                     type="submit" 
-                    disabled={isLoading}
+                    disabled={isLoading || !!blockedUntil}
                     className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
                 >
-                    {isLoading ? 'Signing in...' : 'Sign in'}
+                    {isLoading ? 'Signing in...' : blockedUntil ? '🔒 Locked' : 'Sign in'}
                 </button>
                 {enableQuickLogin && (
                   <button

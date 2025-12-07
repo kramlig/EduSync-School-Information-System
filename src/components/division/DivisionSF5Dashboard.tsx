@@ -1,0 +1,518 @@
+/**
+ * DivisionSF5Dashboard - Division-level view of SF5 Promotion Report
+ * 
+ * Displays aggregated promotion data across all schools in a division.
+ * Features:
+ * - Overview summary cards
+ * - Promotion by grade level
+ * - Promotion by district
+ * - School-by-school breakdown
+ * - Export to CSV
+ * 
+ * @see docs/features/DIVISION_LEVEL_ACCESS.md
+ */
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useDivisionContext } from '../../contexts/DivisionContext';
+import {
+  getDivisionPromotionSummary,
+  exportPromotionToCSV,
+  type DivisionPromotionAggregate,
+} from '../../services/divisionReportService';
+import {
+  ChartBarIcon,
+  ArrowDownTrayIcon,
+  AcademicCapIcon,
+  UserGroupIcon,
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  BuildingOfficeIcon,
+} from '@heroicons/react/24/outline';
+
+const DivisionSF5Dashboard: React.FC = () => {
+  const {
+    division,
+    accessibleSchools,
+    selectedSchoolId,
+    hasPermission,
+    loading: contextLoading,
+  } = useDivisionContext();
+
+  const [data, setData] = useState<DivisionPromotionAggregate | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedGrade, setSelectedGrade] = useState<number | ''>('');
+  const [viewMode, setViewMode] = useState<'grade' | 'district' | 'school'>('grade');
+
+  const canExport = hasPermission('reports', 'export');
+
+  // Available school years (current and previous 2 years)
+  const availableSchoolYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    // In Dec 2025, current SY is 2025-2026, but promotion data is for completed years
+    return [
+      `${currentYear - 1}-${currentYear}`,     // 2024-2025 (most recent completed)
+      `${currentYear - 2}-${currentYear - 1}`, // 2023-2024
+      `${currentYear}-${currentYear + 1}`,     // 2025-2026 (current, may have no data)
+    ];
+  }, []);
+
+  // Default to previous school year (completed year with promotion data)
+  const [schoolYear, setSchoolYear] = useState(() => {
+    const currentYear = new Date().getFullYear();
+    return `${currentYear - 1}-${currentYear}`; // 2024-2025
+  });
+
+  // Fetch data
+  useEffect(() => {
+    if (!division?.id || contextLoading) return;
+
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const schoolIds = selectedSchoolId ? [selectedSchoolId] : undefined;
+
+        const result = await getDivisionPromotionSummary({
+          division_id: division.id,
+          school_ids: schoolIds,
+          school_year: schoolYear,
+          grading_period: 'final',
+        });
+
+        setData(result);
+      } catch (err) {
+        console.error('[DivisionSF5] Error fetching data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load promotion data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [division?.id, selectedSchoolId, schoolYear, contextLoading]);
+
+  // Filter schools by selected grade
+  const filteredSchools = useMemo(() => {
+    if (!data?.schools) return [];
+    if (selectedGrade === '') return data.schools;
+    return data.schools.filter(s => s.by_grade[selectedGrade as number]);
+  }, [data?.schools, selectedGrade]);
+
+  // Handle CSV export
+  const handleExport = useCallback(() => {
+    if (!data) return;
+
+    const csv = exportPromotionToCSV(data);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `division-sf5-${schoolYear}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [data, schoolYear]);
+
+  // Grade level options
+  const gradeOptions = useMemo(() => {
+    if (!data?.by_grade) return [];
+    return Object.keys(data.by_grade)
+      .map(Number)
+      .sort((a, b) => a - b);
+  }, [data?.by_grade]);
+
+  if (contextLoading || loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
+          <p className="text-slate-600 dark:text-slate-400">Loading promotion data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <ExclamationCircleIcon className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-red-800 dark:text-red-200">Error Loading Data</h3>
+              <p className="text-sm text-red-600 dark:text-red-400 mt-1">{error}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            SF5 - Promotion and Proficiency Report
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
+            {selectedSchoolId
+              ? `Viewing: ${accessibleSchools.find(s => s.id === selectedSchoolId)?.name}`
+              : `Consolidated report for ${data?.total_schools || 0} schools`}
+            {' · '} School Year {schoolYear}
+          </p>
+        </div>
+
+        {canExport && data && (
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <ArrowDownTrayIcon className="w-4 h-4" />
+            Export CSV
+          </button>
+        )}
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <SummaryCard
+          title="Total Students"
+          value={data?.total_students.toLocaleString() || '0'}
+          subtitle={`${data?.total_schools || 0} schools`}
+          icon={<UserGroupIcon className="w-6 h-6 text-blue-600" />}
+          bgColor="bg-blue-50 dark:bg-blue-900/20"
+        />
+        <SummaryCard
+          title="Promoted"
+          value={data?.total_promoted.toLocaleString() || '0'}
+          subtitle={`${data?.overall_promotion_rate || 0}% rate`}
+          icon={<CheckCircleIcon className="w-6 h-6 text-green-600" />}
+          bgColor="bg-green-50 dark:bg-green-900/20"
+          valueColor="text-green-600 dark:text-green-400"
+        />
+        <SummaryCard
+          title="Retained"
+          value={data?.total_retained.toLocaleString() || '0'}
+          subtitle={`${data?.total_students ? Math.round((data.total_retained / data.total_students) * 100) : 0}%`}
+          icon={<ExclamationCircleIcon className="w-6 h-6 text-amber-600" />}
+          bgColor="bg-amber-50 dark:bg-amber-900/20"
+          valueColor="text-amber-600 dark:text-amber-400"
+        />
+        <SummaryCard
+          title="Cond. Promoted"
+          value={data?.total_conditionally_promoted.toLocaleString() || '0'}
+          subtitle={`${data?.total_students ? Math.round((data.total_conditionally_promoted / data.total_students) * 100) : 0}%`}
+          icon={<AcademicCapIcon className="w-6 h-6 text-purple-600" />}
+          bgColor="bg-purple-50 dark:bg-purple-900/20"
+          valueColor="text-purple-600 dark:text-purple-400"
+        />
+      </div>
+
+      {/* Filters and View Mode */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+            School Year
+          </label>
+          <select
+            value={schoolYear}
+            onChange={(e) => setSchoolYear(e.target.value)}
+            className="w-full sm:w-40 px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {availableSchoolYears.map(sy => (
+              <option key={sy} value={sy}>{sy}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+            Filter by Grade
+          </label>
+          <select
+            value={selectedGrade}
+            onChange={(e) => setSelectedGrade(e.target.value === '' ? '' : Number(e.target.value))}
+            className="w-full sm:w-48 px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Grades</option>
+            {gradeOptions.map(grade => (
+              <option key={grade} value={grade}>Grade {grade}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+            View By
+          </label>
+          <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
+            {(['grade', 'district', 'school'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  viewMode === mode
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+                }`}
+              >
+                {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Data Tables */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        {viewMode === 'grade' && (
+          <>
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                <AcademicCapIcon className="w-5 h-5 text-blue-600" />
+                Promotion by Grade Level
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-900/50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-slate-600 dark:text-slate-400 font-medium">Grade</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Total</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Promoted</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Retained</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Cond. Promoted</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {data?.by_grade && Object.entries(data.by_grade)
+                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .filter(([grade]) => selectedGrade === '' || Number(grade) === selectedGrade)
+                    .map(([grade, counts]) => (
+                      <tr key={grade} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                        <td className="px-4 py-3 text-slate-900 dark:text-white font-medium">
+                          Grade {grade}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-400">
+                          {counts.total.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-green-600 dark:text-green-400">
+                          {counts.promoted.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-amber-600 dark:text-amber-400">
+                          {counts.retained.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-purple-600 dark:text-purple-400">
+                          {counts.conditionally_promoted.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                            counts.promotion_rate >= 90
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                              : counts.promotion_rate >= 75
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                          }`}>
+                            {counts.promotion_rate}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+                {data && (
+                  <tfoot className="bg-slate-100 dark:bg-slate-900 font-medium">
+                    <tr>
+                      <td className="px-4 py-3 text-slate-900 dark:text-white">Total</td>
+                      <td className="px-4 py-3 text-right text-slate-900 dark:text-white">
+                        {data.total_students.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-green-600 dark:text-green-400">
+                        {data.total_promoted.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-amber-600 dark:text-amber-400">
+                        {data.total_retained.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-purple-600 dark:text-purple-400">
+                        {data.total_conditionally_promoted.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                          {data.overall_promotion_rate}%
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </>
+        )}
+
+        {viewMode === 'district' && (
+          <>
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                <BuildingOfficeIcon className="w-5 h-5 text-blue-600" />
+                Promotion by District
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-900/50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-slate-600 dark:text-slate-400 font-medium">District</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Schools</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Students</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Promoted</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {data?.by_district && Object.entries(data.by_district)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([district, counts]) => (
+                      <tr key={district} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                        <td className="px-4 py-3 text-slate-900 dark:text-white font-medium">
+                          {district}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-400">
+                          {counts.schools}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-400">
+                          {counts.students.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-green-600 dark:text-green-400">
+                          {counts.promoted.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                            counts.promotion_rate >= 90
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                              : counts.promotion_rate >= 75
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                          }`}>
+                            {counts.promotion_rate}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {viewMode === 'school' && (
+          <>
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                <ChartBarIcon className="w-5 h-5 text-blue-600" />
+                Promotion by School ({filteredSchools.length} schools)
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-900/50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-slate-600 dark:text-slate-400 font-medium">School</th>
+                    <th className="px-4 py-3 text-left text-slate-600 dark:text-slate-400 font-medium">District</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Total</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Promoted</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Retained</th>
+                    <th className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-medium">Rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {filteredSchools
+                    .sort((a, b) => a.school_name.localeCompare(b.school_name))
+                    .map(school => (
+                      <tr key={school.school_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                        <td className="px-4 py-3 text-slate-900 dark:text-white font-medium">
+                          {school.school_name}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
+                          {school.district || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-400">
+                          {school.total_students.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-green-600 dark:text-green-400">
+                          {school.promoted.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-amber-600 dark:text-amber-400">
+                          {school.retained.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                            school.promotion_rate >= 90
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                              : school.promotion_rate >= 75
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                          }`}>
+                            {school.promotion_rate}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {(!data || data.total_students === 0) && (
+          <div className="p-8 text-center text-slate-500 dark:text-slate-400">
+            <AcademicCapIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p className="font-medium">No promotion data available</p>
+            <p className="text-sm mt-1">
+              Promotion records will appear here once they are generated at school level.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Summary Card Component
+interface SummaryCardProps {
+  title: string;
+  value: string;
+  subtitle?: string;
+  icon: React.ReactNode;
+  bgColor?: string;
+  valueColor?: string;
+}
+
+const SummaryCard: React.FC<SummaryCardProps> = ({
+  title,
+  value,
+  subtitle,
+  icon,
+  bgColor = 'bg-slate-50 dark:bg-slate-700/50',
+  valueColor = 'text-slate-900 dark:text-white',
+}) => (
+  <div className={`${bgColor} rounded-xl p-5 border border-slate-200 dark:border-slate-700`}>
+    <div className="flex items-start justify-between">
+      <div>
+        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
+        <p className={`text-2xl font-bold ${valueColor} mt-1`}>{value}</p>
+        {subtitle && (
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{subtitle}</p>
+        )}
+      </div>
+      <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+        {icon}
+      </div>
+    </div>
+  </div>
+);
+
+export default DivisionSF5Dashboard;

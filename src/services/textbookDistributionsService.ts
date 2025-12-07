@@ -42,53 +42,58 @@ export async function getTextbookDistributions(
           id, name, grade_level
         )
       `)
-      .eq('school_id', filter.schoolId)
-      .eq('school_year', filter.schoolYear)
+      .eq('school_id', filter.school_id)
+      .eq('school_year', filter.school_year)
       .order('distributed_date', { ascending: false });
 
-    if (filter.gradeLevel !== undefined) {
+    if (filter.grade_level !== undefined) {
       // Filter will be applied client-side since we can't easily filter on joined tables
     }
-  }
 
-  if (filter.sectionId) {
-    query = query.eq('section_id', filter.sectionId);
-  }
+    if (filter.section_id) {
+      query = query.eq('section_id', filter.section_id);
+    }
 
-  if (filter.studentId) {
-    query = query.eq('student_id', filter.studentId);
-  }
+    if (filter.student_id) {
+      query = query.eq('student_id', filter.student_id);
+    }
 
-  if (filter.bookId) {
-    query = query.eq('book_id', filter.bookId);
-  }
+    if (filter.book_id) {
+      query = query.eq('book_id', filter.book_id);
+    }
 
-  if (filter.status) {
-    query = query.eq('distribution_status', filter.status);
-  }
+    if (filter.distribution_status) {
+      query = query.eq('distribution_status', filter.distribution_status);
+    }
 
-  const { data, error } = await query;
+    const { data, error } = await query;
 
-  if (error) {
-    console.error('Error fetching textbook distributions:', error);
-    throw error;
-  }
+    if (error) {
+      console.error('Error fetching textbook distributions:', error);
+      throw error;
+    }
 
-  // Client-side search filtering
-  let results = data as TextbookDistributionWithDetails[];
-  
-  if (filter.search && filter.search.trim()) {
-    const searchLower = filter.search.toLowerCase();
-    results = results.filter(d => 
-      d.student.lrn.toLowerCase().includes(searchLower) ||
-      d.student.first_name.toLowerCase().includes(searchLower) ||
-      d.student.last_name.toLowerCase().includes(searchLower) ||
-      d.book.title.toLowerCase().includes(searchLower) ||
-      d.book.book_number.toLowerCase().includes(searchLower)
-    );
-  }
+    // Client-side filtering
+    let results = data as TextbookDistributionWithDetails[];
+    
+    // Filter by grade level (from student's grade_level)
+    if (filter.grade_level !== undefined) {
+      results = results.filter(d => d.student.grade_level === filter.grade_level);
+    }
+    
+    // Filter by search term
+    if (filter.search && filter.search.trim()) {
+      const searchLower = filter.search.toLowerCase();
+      results = results.filter(d => 
+        d.student.lrn.toLowerCase().includes(searchLower) ||
+        d.student.first_name.toLowerCase().includes(searchLower) ||
+        d.student.last_name.toLowerCase().includes(searchLower) ||
+        d.book.title.toLowerCase().includes(searchLower) ||
+        d.book.book_number.toLowerCase().includes(searchLower)
+      );
+    }
 
-  return results;
+    return results;
   } catch (error) {
     console.error('Error in getTextbookDistributions:', error);
     return [];

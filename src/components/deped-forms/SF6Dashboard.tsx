@@ -1,262 +1,138 @@
 /**
- * SF6Dashboard - Textbook Ledger
+ * SF6Dashboard - Summarized Report on Promotion and Level of Proficiency
+ * Official DepEd Form
  * 
- * IMPORTANT: Feature flag hooks are memoized to prevent infinite render loops
- * caused by settings object reference changes from useSchoolData
+ * This is the CORRECT SF6 as per official DepEd documentation.
+ * Displays promotion status and proficiency levels summary.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSchoolContext } from '../../contexts/SchoolContext';
 import { useSchoolDataPostgreSQL } from '../../hooks/useSchoolDataPostgreSQL';
 import {
-  getTextbookDistributions,
-  getSF6Summary,
-  distributeTextbook,
-  returnTextbook,
-  markTextbookLost,
-  markTextbookDamaged,
-  recordPayment,
-} from '../../services/textbookDistributionsService';
-import { getBooks } from '../../services/bookManagementService';
+  getSF6SchoolSummary,
+  getSF6ByGrade,
+  getSF6BySection,
+} from '../../services/sf6PromotionService';
+import { downloadSF6PDF } from '../../utils/pdf/sf6PromotionGenerator';
 import type {
-  TextbookDistributionWithDetails,
-  DistributeTextbookInput,
-  ReturnTextbookInput,
-  MarkTextbookLostInput,
-  SF6Summary,
-  DistributionStatus,
-} from '../../types/textbookDistributions';
-import type { Book } from '../../types/bookManagement';
-import { downloadSF6PDF } from '../../utils/pdf/sf6Generator';
+  SF6SchoolSummary,
+  SF6GradeSummary,
+  SF6SectionSummary,
+} from '../../types/sf6Promotion';
+import {
+  ChartBarIcon,
+  DocumentArrowDownIcon,
+  AcademicCapIcon,
+  UserGroupIcon,
+  ChevronRightIcon,
+} from '@heroicons/react/24/outline';
 
 const SF6Dashboard: React.FC = () => {
   const { schoolId } = useSchoolContext();
-  const { students, sections, settings, loading: schoolDataLoading } = useSchoolDataPostgreSQL({
-    schoolId,
-  });
+  const { settings, loading: schoolDataLoading } = useSchoolDataPostgreSQL({ schoolId });
 
-  const [distributions, setDistributions] = useState<TextbookDistributionWithDetails[]>([]);
-  const [books, setBooks] = useState<Book[]>([]);
-  const [summary, setSummary] = useState<SF6Summary | null>(null);
+  const [summary, setSummary] = useState<SF6SchoolSummary | null>(null);
+  const [byGrade, setByGrade] = useState<SF6GradeSummary[]>([]);
+  const [bySection, setBySection] = useState<SF6SectionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [schoolYear, setSchoolYear] = useState<string>('');
-  const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
-  const [selectedSection, setSelectedSection] = useState<string>('');
-  const [selectedStudent, setSelectedStudent] = useState<string>('');
-  const [selectedBook, setSelectedBook] = useState<string>('');
-  const [selectedStatus, setSelectedStatus] = useState<DistributionStatus | ''>('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedGrade, setSelectedGrade] = useState<number | ''>('');
+  const [viewMode, setViewMode] = useState<'grade' | 'section'>('grade');
 
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const schoolYear = settings?.schoolYear || new Date().getFullYear().toString();
+  const gradingPeriod = 'final'; // Could be made dynamic for SHS (sem1, sem2)
 
-  // Modal states
-  const [showDistributeModal, setShowDistributeModal] = useState(false);
-  const [showReturnModal, setShowReturnModal] = useState(false);
-  const [showLostModal, setShowLostModal] = useState(false);
-  const [selectedDistribution, setSelectedDistribution] = useState<TextbookDistributionWithDetails | null>(null);
-
-  // Initialize school year from settings
   useEffect(() => {
-    if (settings?.academic?.currentYear) {
-      setSchoolYear(settings.academic.currentYear);
+    if (!schoolId || schoolDataLoading) {
+      console.log('[SF6] Waiting for data:', { schoolId, schoolDataLoading });
+      return;
     }
-  }, [settings]);
-
-  // Load data
-  useEffect(() => {
-    if (!schoolId || !schoolYear || schoolDataLoading) return;
 
     const loadData = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        // Try to load data, but don't fail if tables don't exist yet
-        try {
-          const [distributionsData, booksData, summaryData] = await Promise.all([
-            getTextbookDistributions({
-              schoolId,
-              schoolYear,
-              gradeLevel: selectedGrade || undefined,
-              sectionId: selectedSection || undefined,
-              studentId: selectedStudent || undefined,
-              bookId: selectedBook || undefined,
-              status: selectedStatus || undefined,
-              search: searchTerm || undefined,
-            }).catch(() => []),
-            getBooks({ schoolId }).catch(() => []),
-            getSF6Summary({ schoolId, schoolYear }).catch(() => ({
-              total_distributions: 0,
-              total_books_issued: 0,
-              total_books_returned: 0,
-              total_books_damaged: 0,
-              by_grade: [],
-              by_subject: [],
-              condition_summary: {
-                excellent: 0,
-                good: 0,
-                fair: 0,
-                poor: 0,
-                damaged: 0,
-              },
-            })),
-          ]);
+        console.log('[SF6] Loading summary for:', { schoolId, schoolYear, gradingPeriod });
 
-          setDistributions(distributionsData);
-          setBooks(booksData);
-          setSummary(summaryData);
-        } catch (innerErr) {
-          console.warn('Some data failed to load:', innerErr);
-          // Set empty defaults
-          setDistributions([]);
-          setBooks([]);
-          setSummary({
-            total_distributions: 0,
-            total_books_issued: 0,
-            total_books_returned: 0,
-            total_books_damaged: 0,
-            by_grade: [],
-            by_subject: [],
-            condition_summary: {
-              excellent: 0,
-              good: 0,
-              fair: 0,
-              poor: 0,
-              damaged: 0,
-            },
-          });
-        }
+        const [summaryData, gradeData, sectionData] = await Promise.all([
+          getSF6SchoolSummary({ school_id: schoolId, school_year: schoolYear, grading_period: gradingPeriod }),
+          getSF6ByGrade({ school_id: schoolId, school_year: schoolYear, grading_period: gradingPeriod }),
+          getSF6BySection({ school_id: schoolId, school_year: schoolYear, grading_period: gradingPeriod }),
+        ]);
+
+        setSummary(summaryData);
+        setByGrade(gradeData);
+        setBySection(sectionData);
+
+        console.log('[SF6] Data loaded:', {
+          totalLearners: summaryData.total_learners,
+          promotionRate: summaryData.overall_promotion_rate,
+          grades: gradeData.length,
+          sections: sectionData.length,
+        });
       } catch (err) {
-        console.error('Error loading SF6 data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load data');
+        console.error('[SF6] Error loading data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load promotion summary');
       } finally {
         setLoading(false);
       }
     };
 
     loadData();
-  }, [
-    schoolId,
-    schoolYear,
-    selectedGrade,
-    selectedSection,
-    selectedStudent,
-    selectedBook,
-    selectedStatus,
-    searchTerm,
-    schoolDataLoading,
-  ]);
+  }, [schoolId, schoolYear, gradingPeriod, schoolDataLoading]);
 
-  // Pagination calculations
-  const totalPages = Math.ceil(distributions.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedDistributions = distributions.slice(startIndex, endIndex);
+  // Filter data based on selected grade
+  const filteredByGrade = useMemo(() => {
+    if (selectedGrade === '') return byGrade;
+    return byGrade.filter(g => g.grade_level === selectedGrade);
+  }, [byGrade, selectedGrade]);
 
-  // Reset to page 1 when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedGrade, selectedSection, selectedStudent, selectedBook, selectedStatus, searchTerm]);
+  const filteredBySection = useMemo(() => {
+    if (selectedGrade === '') return bySection;
+    return bySection.filter(s => s.grade_level === selectedGrade);
+  }, [bySection, selectedGrade]);
 
-  // Handle distribute
-  const handleDistribute = async (input: DistributeTextbookInput) => {
-    if (!schoolId) return;
-
-    try {
-      await distributeTextbook({
-        ...input,
-        distributedBy: schoolId, // TODO: Use actual user ID
-        receivedBy: schoolId, // TODO: Use actual user ID
-      });
-      setShowDistributeModal(false);
-      // Reload data
-      window.location.reload();
-    } catch (err) {
-      console.error('Error distributing textbook:', err);
-      alert(err instanceof Error ? err.message : 'Failed to distribute textbook');
-    }
-  };
-
-  // Handle return
-  const handleReturn = async (input: ReturnTextbookInput) => {
-    if (!selectedDistribution) return;
-
-    try {
-      await returnTextbook(selectedDistribution.id, input);
-      setShowReturnModal(false);
-      setSelectedDistribution(null);
-      window.location.reload();
-    } catch (err) {
-      console.error('Error returning textbook:', err);
-      alert(err instanceof Error ? err.message : 'Failed to return textbook');
-    }
-  };
-
-  // Handle mark lost
-  const handleMarkLost = async (input: MarkTextbookLostInput) => {
-    if (!selectedDistribution) return;
-
-    try {
-      await markTextbookLost(selectedDistribution.id, input);
-      setShowLostModal(false);
-      setSelectedDistribution(null);
-      window.location.reload();
-    } catch (err) {
-      console.error('Error marking textbook as lost:', err);
-      alert(err instanceof Error ? err.message : 'Failed to mark textbook as lost');
-    }
-  };
-
-  // Handle download PDF
   const handleDownloadPDF = async () => {
-    if (!schoolId || !settings || !summary) return;
+    if (!summary || !settings) return;
 
     try {
-      const section = selectedSection
-        ? sections.find((s) => s.id === selectedSection)
-        : undefined;
-
       await downloadSF6PDF({
-        schoolInfo: {
-          name: (settings as any)?.schoolName || '',
-          schoolId: (settings as any)?.schoolIdNumber || '',
-          division: (settings as any)?.division || '',
-          region: (settings as any)?.region || '',
-          district: (settings as any)?.district || '',
-        },
-        schoolYear,
-        gradeLevel: selectedGrade || undefined,
-        section,
-        distributions: paginatedDistributions,
-        summary,
-        preparedBy: (settings as any)?.schoolName || 'Librarian', // TODO: Use actual user name
+        school_id: schoolId,
+        school_name: settings.schoolName || 'School',
+        school_year: schoolYear,
+        grading_period: gradingPeriod,
+        region: settings.region,
+        division: settings.division,
+        district: settings.district,
+        summary: summary,
+        principal_name: settings.principalName,
+        registrar_name: undefined, // TODO: Add to settings
       });
     } catch (err) {
-      console.error('Error generating PDF:', err);
-      alert('Failed to generate PDF');
+      console.error('[SF6] Error generating PDF:', err);
+      alert('Failed to generate PDF. Please try again.');
     }
   };
 
-  if (schoolDataLoading || loading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading textbook distributions...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading promotion summary...</p>
         </div>
       </div>
     );
   }
-  
+
   if (error) {
     return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center max-w-md bg-red-50 border border-red-200 rounded-lg p-6">
           <p className="text-red-800">{error}</p>
         </div>
       </div>
@@ -264,427 +140,316 @@ const SF6Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">SF6 - Textbook Ledger</h1>
-        <p className="mt-2 text-gray-600">
-          Track textbook distribution, returns, and accountability
-        </p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Breadcrumb */}
+        <nav className="flex items-center space-x-2 text-sm">
+          <a href="/dashboard" className="text-gray-500 hover:text-gray-700">Dashboard</a>
+          <ChevronRightIcon className="w-4 h-4 text-gray-400" />
+          <a href="/reports/school-forms" className="text-gray-500 hover:text-gray-700">School Forms</a>
+          <ChevronRightIcon className="w-4 h-4 text-gray-400" />
+          <span className="font-medium text-gray-900">SF6 - Promotion Summary</span>
+        </nav>
 
-      {/* Setup Notice */}
-      {distributions.length === 0 && books.length === 0 && (
-        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
+        {/* Header */}
+        <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/50 p-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-2xl blur-xl opacity-20"></div>
+                <div className="relative p-4 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl shadow-lg">
+                  <ChartBarIcon className="w-10 h-10 text-white" />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  SF6 - Summarized Report on Promotion and Level of Proficiency
+                </h1>
+                <p className="text-gray-600 mt-1">Official DepEd Form - End of {gradingPeriod === 'final' ? 'School Year' : 'Semester'}</p>
+              </div>
             </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">Setup Required</h3>
-              <div className="mt-2 text-sm text-blue-700">
-                <p>The SF6 Textbook Ledger requires database setup:</p>
-                <ol className="list-decimal list-inside mt-2 space-y-1">
-                  <li>Run the migration: <code className="bg-blue-100 px-1 rounded">supabase/migrations/create_textbook_distributions_table.sql</code></li>
-                  <li>Ensure books exist in the system (SF3 - School Register of Books)</li>
-                  <li>Run the seeding script: <code className="bg-blue-100 px-1 rounded">scripts/sf6-seed.ts</code></li>
-                </ol>
+            <button
+              onClick={handleDownloadPDF}
+              disabled={!summary}
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <DocumentArrowDownIcon className="w-5 h-5" />
+              Download PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white rounded-xl p-6 shadow-lg border border-blue-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Learners</p>
+                <p className="text-3xl font-bold text-gray-900">{summary?.total_learners || 0}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  M: {summary?.total_male || 0} / F: {summary?.total_female || 0}
+                </p>
+              </div>
+              <UserGroupIcon className="w-12 h-12 text-blue-500" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl p-6 shadow-lg border border-green-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Promoted</p>
+                <p className="text-3xl font-bold text-green-600">{summary?.total_promoted || 0}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {summary?.overall_promotion_rate.toFixed(1)}% rate
+                </p>
+              </div>
+              <AcademicCapIcon className="w-12 h-12 text-green-500" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl p-6 shadow-lg border border-red-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Retained</p>
+                <p className="text-3xl font-bold text-red-600">{summary?.total_retained || 0}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {summary && summary.total_learners > 0
+                    ? ((summary.total_retained / summary.total_learners) * 100).toFixed(1)
+                    : 0}% rate
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <span className="text-2xl">⚠️</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl p-6 shadow-lg border border-amber-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Incomplete</p>
+                <p className="text-3xl font-bold text-amber-600">{summary?.total_incomplete || 0}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {summary && summary.total_learners > 0
+                    ? ((summary.total_incomplete / summary.total_learners) * 100).toFixed(1)
+                    : 0}% rate
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
+                <span className="text-2xl">📋</span>
               </div>
             </div>
           </div>
         </div>
-      )}
 
-      {/* Summary Cards */}
-      {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="text-sm font-medium text-blue-600">Total Issued</div>
-            <div className="mt-1 text-2xl font-bold text-blue-900">
-              {summary.by_grade.reduce((sum, g) => sum + g.total_issued, 0)}
+        {/* Proficiency Levels Summary */}
+        <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-200">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Proficiency Levels Distribution</h2>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="text-center p-4 bg-purple-50 rounded-lg">
+              <p className="text-sm text-gray-600">Advanced</p>
+              <p className="text-2xl font-bold text-purple-600">{summary?.total_advanced || 0}</p>
+              <p className="text-xs text-gray-500">90-100</p>
             </div>
-          </div>
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="text-sm font-medium text-green-600">Total Returned</div>
-            <div className="mt-1 text-2xl font-bold text-green-900">
-              {summary.by_grade.reduce((sum, g) => sum + g.total_returned, 0)}
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-gray-600">Proficient</p>
+              <p className="text-2xl font-bold text-blue-600">{summary?.total_proficient || 0}</p>
+              <p className="text-xs text-gray-500">85-89</p>
             </div>
-          </div>
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-            <div className="text-sm font-medium text-orange-600">Outstanding</div>
-            <div className="mt-1 text-2xl font-bold text-orange-900">
-              {summary.by_grade.reduce((sum, g) => sum + g.outstanding, 0)}
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <p className="text-sm text-gray-600">Approaching</p>
+              <p className="text-2xl font-bold text-green-600">{summary?.total_approaching_proficiency || 0}</p>
+              <p className="text-xs text-gray-500">80-84</p>
             </div>
-          </div>
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="text-sm font-medium text-red-600">Lost/Damaged</div>
-            <div className="mt-1 text-2xl font-bold text-red-900">
-              {summary.condition_summary.damaged}
+            <div className="text-center p-4 bg-yellow-50 rounded-lg">
+              <p className="text-sm text-gray-600">Developing</p>
+              <p className="text-2xl font-bold text-yellow-600">{summary?.total_developing || 0}</p>
+              <p className="text-xs text-gray-500">75-79</p>
+            </div>
+            <div className="text-center p-4 bg-orange-50 rounded-lg">
+              <p className="text-sm text-gray-600">Beginning</p>
+              <p className="text-2xl font-bold text-orange-600">{summary?.total_beginning || 0}</p>
+              <p className="text-xs text-gray-500">Below 75</p>
             </div>
           </div>
         </div>
-      )}
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow mb-6 p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {/* School Year */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              School Year
-            </label>
-            <input
-              type="text"
-              value={schoolYear}
-              onChange={(e) => setSchoolYear(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500"
-              placeholder="2024-2025"
-              aria-label="School year"
-            />
-          </div>
-
-          {/* Grade Level */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Grade Level
-            </label>
-            <select
-              value={selectedGrade || ''}
-              onChange={(e) => setSelectedGrade(e.target.value ? Number(e.target.value) : null)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500"
-              aria-label="Filter by grade level"
-            >
-              <option value="">All Grades</option>
-              {[7, 8, 9, 10].map((grade) => (
-                <option key={grade} value={grade}>
-                  Grade {grade}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Section */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Section
-            </label>
-            <select
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500"
-              aria-label="Filter by section"
-            >
-              <option value="">All Sections</option>
-              {sections
-                .filter((s: any) => !selectedGrade || s.grade_level === selectedGrade)
-                .map((section: any) => (
-                  <option key={section.id} value={section.id}>
-                    {section.name}
-                  </option>
+        {/* Filters and View Mode */}
+        <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-200">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium text-gray-700">Grade Level:</label>
+              <select
+                value={selectedGrade}
+                onChange={(e) => setSelectedGrade(e.target.value === '' ? '' : Number(e.target.value))}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Grades</option>
+                {Array.from(new Set(byGrade.map(g => g.grade_level))).sort((a, b) => a - b).map(level => (
+                  <option key={level} value={level}>Grade {level}</option>
                 ))}
-            </select>
-          </div>
+              </select>
+            </div>
 
-          {/* Student */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Student
-            </label>
-            <select
-              value={selectedStudent}
-              onChange={(e) => setSelectedStudent(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500"
-              aria-label="Filter by student"
-            >
-              <option value="">All Students</option>
-              {students
-                .filter(
-                  (st: any) =>
-                    (!selectedGrade || st.grade_level === selectedGrade) &&
-                    (!selectedSection || st.section_id === selectedSection)
-                )
-                .map((student: any) => (
-                  <option key={student.id} value={student.id}>
-                    {student.first_name} {student.last_name} ({student.lrn})
-                  </option>
-                ))}
-            </select>
-          </div>
-
-          {/* Book */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Book
-            </label>
-            <select
-              value={selectedBook}
-              onChange={(e) => setSelectedBook(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500"
-              aria-label="Filter by book"
-            >
-              <option value="">All Books</option>
-              {books.map((book) => (
-                <option key={book.id} value={book.id}>
-                  {book.title}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Status
-            </label>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value as DistributionStatus | '')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500"
-              aria-label="Filter by status"
-            >
-              <option value="">All Statuses</option>
-              <option value="issued">Issued</option>
-              <option value="returned">Returned</option>
-              <option value="lost">Lost</option>
-              <option value="damaged">Damaged</option>
-              <option value="replaced">Replaced</option>
-            </select>
+            <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('grade')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'grade'
+                    ? 'bg-white text-blue-600 shadow'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                By Grade
+              </button>
+              <button
+                onClick={() => setViewMode('section')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'section'
+                    ? 'bg-white text-blue-600 shadow'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                By Section
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Search */}
-        <div className="mt-4">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by student name, LRN, or book title..."
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500"
-            aria-label="Search distributions"
-          />
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex justify-between items-center mb-4">
-        <button
-          onClick={() => setShowDistributeModal(true)}
-          className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        >
-          Distribute Textbook
-        </button>
-        <button
-          onClick={handleDownloadPDF}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          disabled={distributions.length === 0}
-        >
-          Download PDF
-        </button>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden mb-4">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  LRN
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Student
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Grade/Section
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Book
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Issued
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Returned
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Condition
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedDistributions.length === 0 ? (
+        {/* Data Table */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
-                    No distributions found. Start by distributing textbooks to students.
-                  </td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {viewMode === 'grade' ? 'Grade Level' : 'Section'}
+                  </th>
+                  {viewMode === 'section' && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Adviser
+                    </th>
+                  )}
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Male
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Female
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Promoted
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Retained
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Incomplete
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Rate %
+                  </th>
                 </tr>
-              ) : (
-                paginatedDistributions.map((dist) => (
-                  <tr key={dist.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {dist.student.lrn}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {dist.student.first_name} {dist.student.last_name}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {dist.section
-                        ? `${dist.student.grade_level}-${dist.section.name}`
-                        : `Grade ${dist.student.grade_level}`}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {dist.book.title}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {new Date(dist.distributed_date).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {dist.actual_return_date
-                        ? new Date(dist.actual_return_date).toLocaleDateString()
-                        : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          dist.distribution_status === 'issued'
-                            ? 'bg-blue-100 text-blue-800'
-                            : dist.distribution_status === 'returned'
-                            ? 'bg-green-100 text-green-800'
-                            : dist.distribution_status === 'lost'
-                            ? 'bg-red-100 text-red-800'
-                            : dist.distribution_status === 'damaged'
-                            ? 'bg-orange-100 text-orange-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {dist.distribution_status.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {(dist.condition_returned || dist.condition_issued).toUpperCase()}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {dist.amount_charged > 0 ? `₱${dist.amount_charged.toFixed(2)}` : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      {dist.distribution_status === 'issued' && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setSelectedDistribution(dist);
-                              setShowReturnModal(true);
-                            }}
-                            className="text-green-600 hover:text-green-900"
-                          >
-                            Return
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedDistribution(dist);
-                              setShowLostModal(true);
-                            }}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            Mark Lost
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {viewMode === 'grade' ? (
+                  filteredByGrade.length > 0 ? (
+                    filteredByGrade.map((row) => (
+                      <tr key={row.grade_level} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          Grade {row.grade_level}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-900">
+                          {row.total_learners}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600">
+                          {row.male_count}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600">
+                          {row.female_count}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                            {row.promoted}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full">
+                            {row.retained}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded-full">
+                            {row.incomplete}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-medium text-blue-600">
+                          {row.promotion_rate.toFixed(1)}%
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
+                        No data available
+                      </td>
+                    </tr>
+                  )
+                ) : (
+                  filteredBySection.length > 0 ? (
+                    filteredBySection.map((row) => (
+                      <tr key={row.section_id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {row.section_name}
+                          <span className="ml-2 text-xs text-gray-500">(Grade {row.grade_level})</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {row.adviser_name || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-900">
+                          {row.total_learners}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600">
+                          {row.male_count}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600">
+                          {row.female_count}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full">
+                            {row.promoted}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full">
+                            {row.retained}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded-full">
+                            {row.incomplete}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-medium text-blue-600">
+                          {row.promotion_rate.toFixed(1)}%
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={10} className="px-6 py-12 text-center text-gray-500">
+                        No data available
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-
-      {/* Pagination Controls */}
-      {distributions.length > 0 && (
-        <div className="flex items-center justify-between bg-white px-4 py-3 rounded-lg shadow">
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-700">
-              Showing {startIndex + 1} to {Math.min(endIndex, distributions.length)} of{' '}
-              {distributions.length} distributions
-            </span>
-            <select
-              value={itemsPerPage}
-              onChange={(e) => {
-                setItemsPerPage(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:ring-emerald-500 focus:border-emerald-500"
-              aria-label="Items per page"
-            >
-              <option value={25}>25 per page</option>
-              <option value={50}>50 per page</option>
-              <option value={100}>100 per page</option>
-              <option value={200}>200 per page</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-
-            {/* Page numbers with ellipsis */}
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-              if (
-                page === 1 ||
-                page === totalPages ||
-                (page >= currentPage - 1 && page <= currentPage + 1)
-              ) {
-                return (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-1 rounded-md text-sm font-medium ${
-                      currentPage === page
-                        ? 'bg-emerald-600 text-white'
-                        : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                );
-              } else if (page === currentPage - 2 || page === currentPage + 2) {
-                return (
-                  <span key={page} className="px-2 text-gray-500">
-                    ...
-                  </span>
-                );
-              }
-              return null;
-            })}
-
-            <button
-              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Modals would go here - simplified for now */}
-      {/* TODO: Implement DistributeModal, ReturnModal, LostModal components */}
     </div>
   );
 };

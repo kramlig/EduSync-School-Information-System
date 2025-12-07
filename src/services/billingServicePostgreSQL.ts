@@ -651,16 +651,17 @@ export async function voidReceipt(
   voidReason: string
 ): Promise<void> {
   try {
-    // First, look up the PostgreSQL user UUID from Firebase UID
-    const { data: user, error: userError } = await supabase
-      .from('users')
+    // Option A Architecture: Look up teacher directly by firebase_uid (no users table)
+    const { data: teacher, error: teacherError } = await supabase
+      .from('teachers')
       .select('id')
       .eq('firebase_uid', firebaseUid)
+      .is('deleted_at', null)
       .single();
 
-    if (userError || !user) {
-      console.warn('[billingServicePostgreSQL] User not found for firebase_uid:', firebaseUid);
-      // Proceed without user reference (voided_by can be NULL)
+    if (teacherError || !teacher) {
+      console.warn('[billingServicePostgreSQL] Teacher not found for firebase_uid:', firebaseUid);
+      // Proceed without teacher reference (voided_by can be NULL)
     }
 
     const { error } = await supabase
@@ -668,14 +669,14 @@ export async function voidReceipt(
       .update({
         status: 'voided',
         voided_at: new Date().toISOString(),
-        voided_by: user?.id || null, // Use PostgreSQL user UUID, or NULL if not found
+        voided_by: teacher?.id || null, // Use teacher ID, or NULL if not found
         void_reason: voidReason
       })
       .eq('id', receiptId);
 
     if (error) throw error;
 
-    console.log('[billingServicePostgreSQL] Receipt voided:', receiptId, 'by user:', user?.id || 'unknown');
+    console.log('[billingServicePostgreSQL] Receipt voided:', receiptId, 'by teacher:', teacher?.id || 'unknown');
   } catch (err) {
     console.error('[billingServicePostgreSQL] Void receipt error:', err);
     throw err;
