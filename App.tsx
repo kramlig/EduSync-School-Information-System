@@ -6,6 +6,7 @@ import { useSchoolDataPostgreSQL } from './src/hooks/useSchoolDataPostgreSQL';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useFirestoreSyncStatus } from './hooks/useFirestoreSyncStatus';
 import type { AuthUser, StudentUser, ParentUser } from './types';
+import type { DivisionAuthUser } from './src/services/authService';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Breadcrumb from './components/Breadcrumb';
@@ -68,6 +69,9 @@ const SF4Dashboard = lazy(() => import('./src/components/deped-forms/SF4Dashboar
 const SF5Dashboard = lazy(() => import('./src/components/deped-forms/SF5Dashboard'));
 const SF5KDashboard = lazy(() => import('./src/components/deped-forms/SF5KDashboard'));
 const SF6Dashboard = lazy(() => import('./src/components/deped-forms/SF6Dashboard'));
+const SF7Dashboard = lazy(() => import('./src/components/deped-forms/SF7Dashboard'));
+const TextbookManagementDashboard = lazy(() => import('./src/components/deped-forms/TextbookManagementDashboard'));
+const FacilitiesManagementDashboard = lazy(() => import('./src/components/deped-forms/FacilitiesManagementDashboard'));
 const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDashboard'));
 // const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard')); // HIDDEN: Outdated
 const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
@@ -89,6 +93,20 @@ const ApplicationReview = lazy(() => import('./src/components/enrollment/admin/A
 const LandingPage = lazy(() => import('./src/components/marketing/LandingPage'));
 const PrivacyPolicy = lazy(() => import('./src/components/marketing/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('./src/components/marketing/TermsOfService'));
+
+// Division-level components
+const DivisionLayout = lazy(() => import('./src/components/division/DivisionLayout'));
+const DivisionDashboard = lazy(() => import('./src/components/division/DivisionDashboard'));
+const DivisionSchools = lazy(() => import('./src/components/division/DivisionSchools'));
+const DivisionPersonnel = lazy(() => import('./src/components/division/DivisionPersonnel'));
+const DivisionEnrollment = lazy(() => import('./src/components/division/DivisionEnrollment'));
+const DivisionReports = lazy(() => import('./src/components/division/DivisionReports'));
+const DivisionSettings = lazy(() => import('./src/components/division/DivisionSettings'));
+const DivisionSF5Dashboard = lazy(() => import('./src/components/division/DivisionSF5Dashboard'));
+const DivisionSF6Dashboard = lazy(() => import('./src/components/division/DivisionSF6Dashboard'));
+const DivisionSF7Dashboard = lazy(() => import('./src/components/division/DivisionSF7Dashboard'));
+import { DivisionContextProvider, useDivisionContext } from './src/contexts/DivisionContext';
+import DivisionGuard from './src/components/division/DivisionGuard';
 
 // Wrapper components to extract URL params
 const Form137ManagerWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear }) => {
@@ -332,10 +350,10 @@ const App: React.FC = () => {
   // Create minimal schoolData to satisfy legacy components
   const schoolData = useMemo(() => ({
     settings: pgSettings || { 
-      schoolName: 'Demo School',
-      region: 'Region XI', 
-      division: 'Division of the City of Mati',
-      district: 'Governor Generoso North District',
+      schoolName: 'Zamboanga City National High School',
+      region: 'Region IX - Zamboanga Peninsula', 
+      division: 'Division of Zamboanga City',
+      district: 'Zamboanga City West District',
       schoolYear: '2024-2025'
     },
     loading: settingsLoading,
@@ -391,11 +409,14 @@ const App: React.FC = () => {
     }
   }, [session, students, parentSelectedChildId]);
 
-  const handleLogin = useCallback((user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent') => {
-    devLog('[App] 🔐 Login successful for:', user.email, 'Type:', type, 'SchoolID:', (user as AuthUser).schoolId);
+  const handleLogin = useCallback((user: AuthUser | StudentUser | ParentUser | DivisionAuthUser, type: 'staff' | 'student' | 'parent' | 'division') => {
+    // Check if this is a division user
+    const isDivisionUser = type === 'division' || ('division_id' in user && 'permissions' in user);
+    
+    devLog('[App] 🔐 Login successful for:', user.email, 'Type:', type, isDivisionUser ? '(Division User)' : '', 'SchoolID:', (user as AuthUser).schoolId);
     
     // CRITICAL: Save session to localStorage AND React state
-    const sessionData = { user, type };
+    const sessionData = { user, type: isDivisionUser ? 'division' : type };
     localStorage.setItem('edusync_session', JSON.stringify(sessionData));
     devLog('[App] 💾 Session saved to localStorage:', sessionData);
     
@@ -406,10 +427,17 @@ const App: React.FC = () => {
     setSession(sessionData);
     devLog('[App] ✅ Session state updated');
     
-    // Navigate away from /admin login page to dashboard using pushState (no page reload!)
+    // Navigate based on user type
     if (window.location.pathname === '/admin') {
-      devLog('[App] 🔄 Navigating from /admin to dashboard');
-      window.history.pushState({}, '', '/');
+      if (isDivisionUser) {
+        // Division users go to /division dashboard
+        devLog('[App] 🔄 Navigating from /admin to /division (Division User)');
+        window.history.pushState({}, '', '/division');
+      } else {
+        // Regular users go to / dashboard
+        devLog('[App] 🔄 Navigating from /admin to dashboard');
+        window.history.pushState({}, '', '/');
+      }
       // Force a re-render by dispatching a popstate event
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
@@ -591,8 +619,53 @@ const App: React.FC = () => {
   const studentSession = session as { user: StudentUser, type: 'student' };
   const parentSession = session as { user: ParentUser, type: 'parent' };
 
+  // Check if this is a division user - they get a completely different layout
+  const isDivisionSession = session.type === 'division';
+
+  // Division users get their own separate layout
+  if (isDivisionSession) {
+    return (
+      <Router key={session?.user.id || 'no-session'}>
+        <DivisionContextProvider>
+          {/* PWA Update Notification */}
+          <UpdateNotification />
+          
+          {/* Offline status indicator */}
+          <OfflineBanner 
+            isOnline={isOnline} 
+            wasOffline={wasOffline}
+            pendingWrites={pendingCount}
+          />
+          
+          <Suspense fallback={<FullScreenLoader message="Loading division portal..." />}>
+            <Routes>
+              <Route path="/division" element={
+                <DivisionGuard>
+                  <DivisionLayout onLogout={handleLogout} />
+                </DivisionGuard>
+              }>
+                <Route index element={<DivisionDashboard />} />
+                <Route path="schools" element={<DivisionSchools />} />
+                <Route path="personnel" element={<DivisionPersonnel />} />
+                <Route path="enrollment" element={<DivisionEnrollment />} />
+                <Route path="reports" element={<DivisionReports />} />
+                <Route path="reports/sf5" element={<DivisionSF5Dashboard />} />
+                <Route path="reports/sf6" element={<DivisionSF6Dashboard />} />
+                <Route path="reports/sf7" element={<DivisionSF7Dashboard />} />
+                <Route path="settings" element={<DivisionSettings />} />
+              </Route>
+              {/* Redirect all other routes to division dashboard */}
+              <Route path="*" element={<Navigate to="/division" replace />} />
+            </Routes>
+          </Suspense>
+        </DivisionContextProvider>
+      </Router>
+    );
+  }
+
   return (
     <Router key={session?.user.id || 'no-session'}>
+      <DivisionContextProvider>
       {/* PWA Update Notification */}
       <UpdateNotification />
       
@@ -681,6 +754,9 @@ const App: React.FC = () => {
                         <Route path="/reports/sf5" element={<SF5Dashboard schoolYear={schoolData.settings.schoolYear} gradingPeriod="final" />} />
                         <Route path="/reports/sf5k" element={<SF5KDashboard schoolYear={schoolData.settings.schoolYear} gradingPeriod="final" />} />
                         <Route path="/reports/sf6" element={<SF6Dashboard />} />
+                        <Route path="/reports/sf7" element={<SF7Dashboard />} />
+                        <Route path="/management/textbook-ledger" element={<TextbookManagementDashboard />} />
+                        <Route path="/management/facilities-inventory" element={<FacilitiesManagementDashboard />} />
                         
                         {/* ========== BACKWARD COMPATIBILITY REDIRECTS ========== */}
                         {/* Old /forms/* paths → /reports/* */}
@@ -801,6 +877,7 @@ const App: React.FC = () => {
           </main>
         </div>
       </div>
+      </DivisionContextProvider>
     </Router>
   );
 };

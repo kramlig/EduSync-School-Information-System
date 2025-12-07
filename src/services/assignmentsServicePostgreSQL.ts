@@ -104,12 +104,13 @@ export async function addAssignment(
   teacherFirebaseUid: string,
   assignment: Omit<Assignment, 'id' | 'schoolId'>
 ): Promise<Assignment> {
-  // Try to find teacher record first
+  // Option A Architecture: Query teachers directly by firebase_uid (no users table)
   const { data: teachers } = await supabase
     .from('teachers')
-    .select('id, user_id, users!inner(firebase_uid)')
-    .eq('users.firebase_uid', teacherFirebaseUid)
+    .select('id')
+    .eq('firebase_uid', teacherFirebaseUid)
     .eq('school_id', schoolId)
+    .is('deleted_at', null)
     .limit(1);
 
   let teacherId: string;

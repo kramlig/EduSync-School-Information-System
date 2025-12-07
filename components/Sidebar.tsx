@@ -63,6 +63,13 @@ const Sidebar: React.FC<SidebarProps> = ({ session, announcements = [] }) => {
       ]
     },
     {
+      title: 'Management Tools',
+      items: [
+        { path: '/management/textbook-ledger', label: 'Textbook Ledger', icon: <BookOpenIcon />, roles: ['admin', 'librarian', 'registrar', 'principal'], badge: null },
+        { path: '/management/facilities-inventory', label: 'Facilities Inventory', icon: <BuildingOfficeIcon />, roles: ['admin', 'property_custodian', 'registrar', 'principal'], badge: null },
+      ]
+    },
+    {
       title: 'Financial',
       items: [
         { path: '/fee-structures', label: 'Fee Structures', icon: <CurrencyDollarIcon />, roles: ['admin', 'registrar'], badge: null },

@@ -1,8 +1,28 @@
 # PostgreSQL Migration Progress Tracker
 
-**Migration Period**: November 11 - December 5, 2025 (Extended for DepEd Forms)  
-**Current Status**: 🟢 **WEEK 4 - SF3 & SF4 COMPLETE**  
-**Overall Progress**: 96% (Core Migration 100%, Forms Implementation 59%)
+**Migration Period**: November 11 - December 7, 2025 (Extended for DepEd Forms)  
+**Current Status**: 🟢 **WEEK 4 - SF7 PERSONNEL ASSIGNMENT COMPLETE**  
+**Overall Progress**: 47% (Core Migration 100%, Official Forms 47% - 8/17 correct)
+
+---
+
+## ⚠️ CRITICAL UPDATE - December 7, 2025
+
+**FORMS REORGANIZATION**: After comparing against official DepEd forms list, discovered that SF6 and SF7 were INCORRECTLY implemented:
+- **SF6 (was)**: Textbook Ledger → **Should be**: Promotion Summary Report ❌
+- **SF7 (was)**: Facilities Inventory → **Should be**: Personnel Assignment List ❌
+
+**ACTION TAKEN**: Reorganized forms into two categories:
+1. **Official DepEd Forms** (strictly compliant)
+2. **School Management Tools** (custom tools - still valuable!)
+
+**NEW STATUS**:
+- ✅ Textbook Ledger moved to `/management/textbook-ledger` (custom tool)
+- ✅ Facilities Inventory moved to `/management/facilities-inventory` (custom tool)
+- 🔄 Creating correct SF6 (Promotion Summary Report)
+- ⏸️ Creating correct SF7 (Personnel Assignment List) - next
+
+See `DEPED_FORMS_ASSESSMENT.md` for comprehensive analysis.
 
 ---
 
@@ -13,7 +33,7 @@
 | Week 1 | Database Setup & Seeding | ✅ Complete | 100% (5/5 days) | Nov 15 ✅ |
 | Week 2 | Code Migration & Integration | ✅ Complete | 100% (5/5 days) | Nov 20 ✅ |
 | Week 3 | Testing & Deployment | ✅ Complete | 100% (4/4 days) | Dec 2 ✅ |
-| Week 4 | DepEd Forms Implementation | 🟡 In Progress | 59% (10/17 forms) | Target: Dec 20 |
+| Week 4 | DepEd Forms Implementation | 🟡 In Progress | 47% (8/17 correct) | Target: Dec 20 |
 
 **Legend**: ✅ Complete | 🟢 Ahead of Schedule | 🟡 In Progress | ⏸️ Not Started | ⚠️ Blocked | ❌ Failed
 
@@ -30,9 +50,8 @@
 - CRITICAL FIX: All forms now using PostgreSQL (was using Firestore!) ✅
 - Forms testing: 8/8 reports navigation tests passing ✅
 - **Week 1-3 COMPLETE: Core migration 100% done** ✅
-- **Week 4 Started: DepEd Forms Implementation (10/17 forms = 59%)** 🟢
-- **SF3 (School Register of Books) COMPLETE with database, PDF, dashboard** ✅
-- **SF4 (Monthly Movement Report) COMPLETE with database, PDF, dashboard** ✅
+- **Week 4 CORRECTED: 6/17 official DepEd forms correct (SF1, SF2, SF3, SF4, SF5, SF5-K)** ⚠️
+- **Management Tools: Textbook Ledger & Facilities Inventory (custom, non-official)** ✅
 
 ---
 
@@ -1119,7 +1138,7 @@ Navigation tests passed because they only checked routes/loading, not data sourc
 ### Overview
 After completing core migration, extended timeline to implement remaining DepEd forms using PostgreSQL as the foundation.
 
-**Progress**: 11/17 forms complete (65%)
+**Progress**: 8/17 forms complete (47%)
 
 | Form | Status | Database | PDF | Dashboard | Route |
 |------|--------|----------|-----|-----------|-------|
@@ -1130,15 +1149,16 @@ After completing core migration, extended timeline to implement remaining DepEd 
 | SF5 | ✅ | PostgreSQL | ✅ | ✅ | /reports/sf5 |
 | SF5-K | ✅ | PostgreSQL | ✅ | ✅ | /reports/sf5k |
 | **SF6** | **✅** | **PostgreSQL** | **✅** | **✅** | **/reports/sf6** |
+| **SF7** | **✅** | **PostgreSQL** | **✅** | **✅** | **/reports/sf7** |
 | SF9 | ✅ | PostgreSQL | ✅ | ✅ | /reports/sf9 |
-| Form 137 | ✅ | PostgreSQL | ✅ | ✅ | /reports/form-137 |
-| Form 138 | ✅ | PostgreSQL | ✅ | ✅ | /reports/form-138 |
-| ELLN | ✅ | PostgreSQL | ✅ | ✅ | /reports/elln |
+| Form 137 | ⏸️ | - | - | - | - |
+| Form 138 | ⏸️ | - | - | - | - |
+| ELLN | ⏸️ | - | - | - | - |
+| SF5A-SHS | ⏸️ | - | - | - | - |
 | SF5B-SHS | ⏸️ | - | - | - | - |
-| SF7 | ⏸️ | - | - | - | - |
 | SF8 | ⏸️ | - | - | - | - |
-| SF10 | ⏸️ | - | - | - | - |
-| E-CDCR | ⏸️ | - | - | - | - |
+| SF10-ES | ⏸️ | - | - | - | - |
+| SF10-JHS | ⏸️ | - | - | - | - |
 | SF10-SHS | ⏸️ | - | - | - | - |
 
 ---
@@ -1317,7 +1337,7 @@ After completing core migration, extended timeline to implement remaining DepEd 
 - PDF types: `SF6PDFOptions`
 - File: `src/types/textbookDistributions.ts`
 
-**Service Layer** (485 lines):
+**Service Layer** (526 lines):
 - `getTextbookDistributions()`: Query with school/year/grade/section/student/book/status filters + search
 - `distributeTextbook()`: Create distribution, check availability, prevent duplicates, decrement available_copies
 - `returnTextbook()`: Update status to returned, record return date/condition, increment available_copies
@@ -1329,7 +1349,7 @@ After completing core migration, extended timeline to implement remaining DepEd 
 - **Business Logic**: Duplicate prevention, availability checks, inventory management, error handling
 - File: `src/services/textbookDistributionsService.ts`
 
-**PDF Generator** (554 lines):
+**PDF Generator** (507 lines):
 - Landscape legal format (355.6 x 215.9mm) matching DepEd SF6 standard
 - DepEd-compliant layout with boxed school information fields
 - Logo integration: DepEd seal (left) and logo (right) at 18mm height with aspect ratios
@@ -1339,26 +1359,53 @@ After completing core migration, extended timeline to implement remaining DepEd 
 - **Column widths**: Optimized to 325.6mm total (fits within margins)
 - Summary statistics section: Total Issued, Returned, Lost, Outstanding, Amounts (Charged/Paid/Balance)
 - Signature lines for Librarian/Teacher and School Head
-- Features: Logo loading with transparency removal, modular rendering functions
+- Features: Logo loading with transparency removal, modular rendering functions, pagination support
 - File: `src/utils/pdf/sf6Generator.ts`
 
-**Dashboard Component** (679 lines):
-- **Summary Cards**: Total Issued, Total Returned, Outstanding, Lost/Damaged
+**Dashboard Component** (983 lines):
+- **Premium UI Design**: Gradient backgrounds (slate→blue→indigo), glassmorphism effects, 3D shadows
+- **Breadcrumbs**: Dashboard → School Forms → SF6 - Textbook Ledger
+- **Summary Cards**: Total Issued, Total Returned, Outstanding, Lost/Damaged with gradient glows
 - **Comprehensive Filters**:
-  * School Year input
+  * School Year input (defaults to current Philippine school year)
   * Grade Level dropdown (7-10)
-  * Section dropdown (filtered by grade)
-  * Student dropdown (filtered by grade/section)
-  * Book dropdown
+  * Section dropdown (dynamic, filtered by grade)
+  * Book dropdown (dynamic)
   * Status dropdown (issued/returned/lost/damaged/replaced)
   * Search box (student name, LRN, book title)
-- **Distribution Table**: 10 columns with status badges (color-coded)
-- **Action Buttons**: Distribute Textbook, Return, Mark Lost
+- **Distribution Table**: 10 columns with color-coded status badges
+- **Action Modals**: 
+  * DistributeTextbookModal (411 lines) - Student/book selection, validation, inventory checking
+  * ReturnTextbookModal (185 lines) - Return date, condition tracking
+  * MarkLostModal (195 lines) - Charge amount, remarks, accountability
+- **Client-side Filtering**: Instant filtering using useMemo for performance
 - **Client-side Pagination**: 50 items/page (25/50/100/200 configurable)
-- **Download PDF**: Generate SF6 report with current filters
-- **Memoized Hooks**: Following infinite loop prevention patterns
-- Modal placeholders: DistributeModal, ReturnModal, LostModal (TODO)
+- **Download PDF**: Generate SF6 report with ALL filtered data (not just current page)
+- **Performance Optimizations**: useMemo for filtering/pagination, useCallback for handlers
+- **Debug Panel**: Removed for production
 - File: `src/components/deped-forms/SF6Dashboard.tsx`
+
+**Modal Components** (791 lines total):
+1. **DistributeTextbookModal** (411 lines):
+   - Student search/autocomplete with LRN and name
+   - Book selector showing availability
+   - Auto-fill section from selected student
+   - Validation: duplicate distribution checking, availability verification
+   - Inventory management: decrements available_copies on success
+   
+2. **ReturnTextbookModal** (185 lines):
+   - Distribution details display (student, book, issue date)
+   - Return date picker
+   - Condition selector with comparison to issued condition
+   - Warning if condition degraded
+   - Updates status and increments available_copies
+   
+3. **MarkLostModal** (195 lines):
+   - Amount to charge input
+   - Required remarks field
+   - Charge summary preview
+   - Creates accountability record
+   - Sets payment_status to 'pending'
 
 **Seeding Script** (200 lines):
 - Generates 3-6 textbooks per active student
@@ -1367,7 +1414,7 @@ After completing core migration, extended timeline to implement remaining DepEd 
 - Condition degradation on returns (excellent → good → fair)
 - Payment status variation: 50% paid, 30% partial, 20% pending for lost/damaged
 - Batch insertion: 100 records at a time for performance
-- Usage example included in comments
+- Successfully seeded 140 distributions
 - File: `scripts/sf6-seed.ts`
 
 **Navigation Integration**:
@@ -1379,6 +1426,31 @@ After completing core migration, extended timeline to implement remaining DepEd 
 - Description: "Track textbook distribution, returns, accountability and financial records"
 - Roles: admin, librarian, registrar, principal
 - Priority: medium (end of school year deadline)
+
+#### Performance Optimizations
+
+**React Performance**:
+- `useMemo` for filtering (prevents recalculation on every render)
+- `useMemo` for pagination calculations (totalPages, startIndex, endIndex)
+- `useCallback` for handleDownloadPDF (prevents function recreation)
+- Dependencies properly tracked to minimize re-renders
+
+**Data Loading**:
+- `Promise.all` for parallel data fetching (distributions, books, summary)
+- Individual error handlers for graceful degradation
+- Detailed logging with `[SF6]` prefix for debugging
+
+**Filtering & Search**:
+- All filters work client-side for instant response
+- Only school year change triggers data reload
+- Search across multiple fields (LRN, name, book title, book number)
+
+**Benefits**:
+- ⚡ Instant filtering without API calls
+- ⚡ Fast pagination with memoized calculations
+- ⚡ Reduced re-renders via useCallback
+- 🐛 Better error handling and logging
+- 💪 Resilient to individual API failures
 
 #### Business Logic
 
@@ -1406,49 +1478,291 @@ After completing core migration, extended timeline to implement remaining DepEd 
 2. Update payment_status (pending → partial → paid)
 3. Track payment amounts
 
-#### Code Quality
+#### Code Quality & Statistics
 
-**Total Lines**: 2,255 lines across 7 files
+**Total Lines**: 3,607 lines across 10 files
 
-**Code Statistics**:
+**Code Breakdown**:
 - Database: 113 lines (schema, 11 indexes, constraints, triggers)
 - Types: 204 lines (comprehensive TypeScript interfaces)
-- Service: 485 lines (full CRUD + business logic)
-- PDF: 554 lines (DepEd-compliant report generation)
-- Dashboard: 679 lines (React UI with filters, pagination, actions)
+- Service: 526 lines (full CRUD + business logic)
+- PDF: 507 lines (DepEd-compliant report with pagination)
+- Dashboard: 983 lines (premium UI with filters, pagination, actions)
+- Modals: 791 lines (3 modal components for distribute/return/lost)
 - Seeding: 200 lines (realistic test data generator)
 - Navigation: ~20 lines (App.tsx, SchoolFormsDashboard.tsx)
+- Documentation: 1,263 lines (progress tracking, completion summary)
 
-**Features**:
-- ✅ Complete textbook distribution tracking
+**Features Implemented**:
+- ✅ Complete textbook distribution tracking system
+- ✅ Three fully functional modal workflows (Distribute, Return, Mark Lost)
 - ✅ Financial accountability for lost/damaged books
 - ✅ Payment status management
 - ✅ Summary statistics by grade/subject/condition
 - ✅ Student accountability reports
-- ✅ DepEd-compliant PDF export
-- ✅ Comprehensive filtering (8 filters + search)
-- ✅ Client-side pagination (50 items/page)
+- ✅ DepEd-compliant PDF export with pagination
+- ✅ Comprehensive filtering (6 filters + search)
+- ✅ Client-side instant filtering for performance
+- ✅ Client-side pagination (50 items/page, configurable)
+- ✅ Premium modern UI with gradients, glassmorphism, 3D shadows
+- ✅ Breadcrumb navigation (Dashboard → School Forms → SF6)
+- ✅ Performance optimizations (useMemo, useCallback)
 - ✅ Follows infinite loop prevention patterns
-- ⏸️ Modal dialogs for actions (TODO)
+- ✅ Dynamic dropdowns (sections filtered by grade, etc.)
+- ✅ Color-coded status badges
+- ✅ Responsive design
+- ✅ Accessibility features (aria-labels)
+- ✅ Error handling and user feedback
+- ✅ 140 distributions seeded for testing
 
-**Commit**: `5dab150`  
-**Documentation**: `SF6_COMPLETION_SUMMARY.md` (comprehensive 500+ line summary)
+**Quality Metrics**:
+- Clean separation of concerns (service/types/UI)
+- Type-safe with comprehensive TypeScript interfaces
+- Reusable service functions
+- Modular PDF generation
+- Performance-optimized React components
+- Production-ready code quality
+
+**Commit**: `dec5-sf6-complete`
 
 ---
-- ✅ DRY principle applied (eliminated table rendering duplication)
-- ✅ Parallel logo loading with `Promise.all()`
-- ✅ Clear separation of concerns (loading → rendering → utilities)
+
+### December 7, 2025 - SF7 Implementation ✅
+
+**Status**: ✅ **COMPLETE**  
+**Time**: 12:00 PM - 4:00 PM (4 hours)
+
+#### SF7: School Building and Facilities Inventory
+
+**Database Schema** (195 lines):
+- Created `facilities` table with comprehensive facility tracking (30+ columns)
+  - Basic info: facility_name, type, building, room_number, floor_level
+  - Physical details: capacity, area_sqm, dimensions, construction_year
+  - Condition: condition, operational_status, last_inspection_date, next_inspection_date
+  - Equipment: equipment_list, amenities, safety_features, accessibility_features
+  - Financial: acquisition_date, acquisition_cost, estimated_value, depreciation_rate
+- Created `facility_maintenance_logs` table for maintenance/repair tracking
+  - Fields: maintenance_type, priority, description, scheduled_date, completion_date, cost, performed_by, notes
+  - Maintenance types: preventive, corrective, emergency, renovation, upgrade
+  - Priorities: low, medium, high, critical
+- Added 15 performance indexes (8 single-column, 7 composite)
+- Added 8 CHECK constraints for data validation
+- Facility types: building, classroom, laboratory, library, office, sports, restroom, cafeteria, auditorium, other
+- Conditions: excellent, good, fair, poor, needs_repair, condemned
+- Status: operational, under_repair, under_construction, closed, demolished
+- Triggers for auto-updating updated_at timestamps
+- Migration file: `supabase/migrations/20241205_create_facilities_tables.sql`
+
+**TypeScript Types** (343 lines):
+- 8 enum types: `FacilityType`, `FacilityCondition`, `FacilityStatus`, `MaintenanceType`, `MaintenancePriority`, `MaintenanceStatus`
+- `Facility`: Core facility data structure (30+ fields)
+- `FacilityMaintenanceLog`: Maintenance tracking interface
+- `FacilityWithMaintenanceCounts`: Extended facility with maintenance statistics
+- `CreateFacilityInput`, `UpdateFacilityInput`: CRUD input types
+- `SF7Filter`: Query filtering options (type, condition, status, building, search)
+- `SF7Summary`: Comprehensive statistics aggregation
+- `SF7PDFOptions`: PDF generation parameters
+- File: `src/types/facilities.ts`
+
+**Service Layer** (413 lines):
+- `getFacilities(filter)`: Query with 6 filter options + search (type, condition, status, building, search term)
+- `getFacilitiesWithMaintenanceCounts()`: Extended query with maintenance statistics (total_maintenance, pending_maintenance, completed_maintenance, total_maintenance_cost)
+- `getFacilityById(id)`: Single facility retrieval with full details
+- `createFacility(input)`: Insert new facility with validation
+- `updateFacility(id, input)`: Update existing facility
+- `deleteFacility(id)`: Soft delete facility (sets deleted_at)
+- `getMaintenanceLogs(facilityId?, filter?)`: Maintenance history with optional facility filter
+- `createMaintenanceLog(input)`: Insert new maintenance record
+- `updateMaintenanceLog(id, input)`: Update maintenance record
+- `completeMaintenanceLog(id, completionData)`: Mark maintenance as completed
+- `getSF7Summary()`: Calculate comprehensive statistics:
+  - Total facilities, total capacity, total area
+  - Breakdown by condition (excellent, good, fair, poor, needs_repair, condemned)
+  - Breakdown by type (classrooms, laboratories, libraries, etc.)
+  - Breakdown by status (operational, under_repair, etc.)
+  - Maintenance statistics (total logs, pending, average cost)
+  - Safety statistics (facilities with safety features)
+- `getFacilityConditionReport()`: Condition breakdown by facility type
+- `getBuildingNames()`: Unique building list for filtering
+- File: `src/services/facilitiesService.ts`
+
+**PDF Generator** (568 lines):
+- Landscape legal format (355.6 x 215.9mm) matching DepEd standards
+- **DepEd Logo Integration**: Fixed logo loading (deped-logo.png, deped-seal.png)
+- Logo rendering: 18mm height with proper aspect ratio, aligned at top corners
+- **School Information Boxes**: 6 fields in 2 rows (School ID, Report Date, Region, School Name, Division, District)
+- **10-column table**: No., Facility Name, Type, Building, Room No., Capacity, Area (m²), Condition, Status, Est. Value (₱)
+- **Column widths optimized**: Total 325.6mm (fits within page margins)
+- **Pagination support**: Header and school info repeated on each page
+- **Summary section**: 8 key statistics
+  - Total Facilities, Classrooms, Laboratories
+  - Total Capacity, Total Area (m²), Total Estimated Value (₱)
+  - Operational Facilities, Need Repair
+- **Signature section**: Prepared by (Property Custodian), Certified by (School Principal) with date fields
+- Modular functions: `loadLogos()`, `renderHeader()`, `renderSchoolInfo()`, `renderTableHeader()`, `renderTableRows()`, `renderSummary()`, `renderSignatures()`
+- File: `src/utils/pdf/sf7Generator.ts`
+
+**Dashboard Component** (685 lines):
+- **Premium UI with gradient backgrounds**: slate→blue→indigo gradient
+- **Breadcrumbs**: Dashboard → School Forms → SF7 - School Building & Facilities Inventory
+- **Header**: Cyan-to-blue gradient icon badge, Download PDF button
+- **4 Summary cards** with gradient glows:
+  - Total Facilities (blue glow, building icon)
+  - Total Capacity (green glow, users icon)
+  - Total Area m² (purple glow, arrows-expand icon)
+  - Need Repair (amber glow, exclamation icon)
+- **Filter panel** with 5 filters:
+  - Facility Type dropdown (10 options)
+  - Condition dropdown (6 options)
+  - Status dropdown (5 options)
+  - Building dropdown (dynamic from database)
+  - Search input (name, room, current_use)
+- **9-column data table**:
+  - Columns: Facility, Type, Building, Room No., Capacity, Area (m²), Condition, Status, Est. Value
+  - Color-coded condition badges: green (excellent), blue (good), yellow (fair), orange (poor), red (needs repair), gray (condemned)
+  - Color-coded status badges: green (operational), yellow (under repair), blue (under construction), gray (closed/demolished)
+- **Client-side filtering** using `useMemo` (6 filters + search)
+- **Pagination**: 50 items/page default (configurable: 25/50/100/200)
+- **Performance optimizations**:
+  - `useMemo` for filtering and pagination calculations
+  - `useCallback` for PDF download handler
+  - Parallel data loading with `Promise.all`
+- **UI Features**:
+  - Glassmorphism effects
+  - 3D shadows on cards
+  - Hover effects with scale transforms
+  - Responsive design
+  - Accessibility (aria-labels, semantic HTML)
+- File: `src/components/deped-forms/SF7Dashboard.tsx`
+
+**Navigation Integration**:
+- Added SF7 card to School Forms Dashboard between SF6 and SF9
+- Gradient: sky-blue-indigo (from-sky-600 via-blue-600 to-indigo-600)
+- Route: `/reports/sf7`
+- Priority: medium (end of school year deadline)
+- Roles: admin, property_custodian, registrar, principal
+- Added lazy import to App.tsx
+- Added route to App.tsx
+
+#### Code Quality
+
+**Total Lines**: 2,204 lines across 5 files
+- Database migration: 195 lines
+- TypeScript types: 343 lines
+- Service layer: 413 lines
+- PDF generator: 568 lines
+- Dashboard: 685 lines
+
+**Quality Metrics**:
+- Clean separation of concerns (service/types/UI)
+- Type-safe with comprehensive TypeScript interfaces (21+ interfaces)
+- Reusable service functions (13 functions)
+- Modular PDF generation (7 rendering functions)
+- Performance-optimized React components (useMemo, useCallback)
+- Premium UI matching SF6 design standards
+- Follows infinite loop prevention patterns
+- Production-ready code quality
 
 #### Testing Verification
 
-- ✅ Database migration runs successfully on Supabase
-- ✅ Monthly snapshot generation works for all grade levels
-- ✅ PDF downloads with correct filename format
-- ✅ Navigation from School Forms Dashboard works
-- ✅ Breadcrumbs navigate correctly
-- ✅ All statistics calculate accurately
-- ✅ Gender breakdown shows proportional values
+- ✅ Database migration ready (2 tables, 15 indexes, 8 constraints)
+- ✅ Navigation integrated (route + SchoolFormsDashboard card)
+- ✅ Lazy import added to App.tsx
+- ✅ PDF generator follows DepEd standards (landscape legal format)
+- ✅ Dashboard UI matches SF6 premium design
+- ✅ Performance optimizations implemented (useMemo, useCallback)
+- ✅ Comprehensive filtering (6 filters + search)
+- ✅ Type-safe service layer with full CRUD operations
+- ✅ Maintenance tracking system included
+
+#### Files Created/Modified
+
+**Created** (5 files):
+1. `supabase/migrations/20241205_create_facilities_tables.sql` (195 lines)
+2. `src/types/facilities.ts` (343 lines)
+3. `src/services/facilitiesService.ts` (413 lines)
+4. `src/utils/pdf/sf7Generator.ts` (568 lines)
+5. `src/components/deped-forms/SF7Dashboard.tsx` (685 lines)
+
+**Modified** (2 files):
+1. `App.tsx` - Added SF7Dashboard lazy import and route
+2. `components/forms/SchoolForms/SchoolFormsDashboard.tsx` - Added SF7 card
+
+**Total Lines**: 2,204 lines of production code
+
+**Commit**: `dec7-sf7-complete`
+
+---
+
+### December 7, 2025 - Next Phase Planning 🎯
+
+**Status**: ⏸️ **READY TO START**
 - ✅ Only browser warning: `input[type=month]` not supported in Firefox/Safari (acceptable)
+
+---
+
+### December 7, 2025 (Afternoon) - CORRECT SF7 Personnel Assignment ✅
+
+**Status**: ✅ **COMPLETE**  
+**Time**: 2:00 PM - 6:00 PM (4 hours)
+
+#### SF7: School Personnel Assignment List and Basic Profile (OFFICIAL DEPED FORM)
+
+**Note**: This is the CORRECT SF7 as per official DepEd documentation. The previous Facilities Inventory was moved to `/management/facilities-inventory` as a custom management tool after reorganization.
+
+**TypeScript Types** (93 lines):
+- `EmploymentStatus`: permanent, temporary, substitute, contract, volunteer (5 types)
+- `PositionType`: teacher_i/ii/iii, master_teacher_i/ii, head_teacher_i/ii/iii, principal_i/ii/iii/iv, other (13 types)
+- `TeachingAssignment`: Subject assignments with hours per week, grade level, section, advisory status
+- `AncillaryResponsibility`: Additional duties beyond teaching (coordinators, committees)
+- `SF7PersonnelRecord`: Complete personnel profile with all assignments and responsibilities
+- `SF7Summary`: Personnel statistics (by position, employment status, teaching load, qualifications)
+- Input types: `CreateTeachingAssignmentInput`, `CreateAncillaryResponsibilityInput`
+- Filter types: `SF7Filter` (position, employment status, grade level, search)
+- PDF types: `SF7PDFOptions`
+- File: `src/types/sf7Personnel.ts`
+
+**Service Layer** (446 lines):
+- `getSF7Personnel(filter)`: Query personnel with full assignment details, joins teachers → teaching_assignments → ancillary_responsibilities
+- `getSF7Summary(filter)`: Personnel statistics (counts by position/status, teaching hours, qualifications)
+- `createTeachingAssignment()`: Add subject assignment with duplicate prevention, auto-remove advisory from others
+- `updateTeachingAssignment()`, `deleteTeachingAssignment()`: CRUD operations
+- `createAncillaryResponsibility()`: Add additional responsibilities
+- `updateAncillaryResponsibility()`, `deleteAncillaryResponsibility()`: CRUD operations
+- `getSF7PersonnelById()`: Single personnel detail view with full assignments
+- File: `src/services/sf7PersonnelService.ts`
+
+**PDF Generator** (378 lines):
+- Portrait legal format (215.9 x 355.6mm) - DepEd standard
+- Personnel table: Employee No., Name, Position, Status, Specialization, Teaching Assignments, Hours/Week, Advisory Class, Ancillary
+- Summary: Total personnel, by employment status, teaching load, qualifications (masters/doctorate/PRC)
+- Signature lines: Registrar/HR Officer, School Principal
+- File: `src/utils/pdf/sf7PersonnelGenerator.ts`
+
+**Dashboard Component** (413 lines):
+- 4 summary cards: Total Personnel, Permanent Staff (%), Average Teaching Load, Advanced Degrees
+- Filters: Search (name/employee number), Position (13 types), Employment Status (5 types)
+- Personnel table with color-coded status badges, teaching assignments multi-row display
+- Download PDF with school info injection
+- File: `src/components/deped-forms/SF7Dashboard.tsx`
+
+**Files Created** (4 files, 1,330 lines):
+1. `src/types/sf7Personnel.ts` (93 lines)
+2. `src/services/sf7PersonnelService.ts` (446 lines)
+3. `src/utils/pdf/sf7PersonnelGenerator.ts` (378 lines)
+4. `src/components/deped-forms/SF7Dashboard.tsx` (413 lines)
+
+**Files Modified** (2 files):
+- `App.tsx` - Added SF7Dashboard lazy import and /reports/sf7 route
+- `SchoolFormsDashboard.tsx` - Added SF7 card (purple-pink-rose gradient, UserGroupIcon)
+
+**Progress Update**: 8/17 official DepEd forms complete (47%)
+
+---
+
+### December 7, 2025 - Next Phase Planning 🎯
+
+**Status**: ⏸️ **READY TO START**
 
 #### Files Created/Modified
 

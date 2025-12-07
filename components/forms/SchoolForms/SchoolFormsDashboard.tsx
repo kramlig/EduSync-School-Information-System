@@ -14,6 +14,7 @@ import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL'
 import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
 import { 
   UsersIcon,
+  UserGroupIcon,
   CalendarDaysIcon,
   TrendingUpIcon,
   ClipboardDocumentListIcon,
@@ -175,20 +176,36 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
       priority: 'high'
     },
     {
-      id: 'sf6-textbook',
-      title: 'SF6 - Textbook Ledger',
-      description: 'Track textbook distribution, returns, accountability and financial records.',
+      id: 'sf6-promotion',
+      title: 'SF6 - Summarized Report on Promotion and Level of Proficiency',
+      description: 'Summary number of learner status by end of semester and/or school year.',
       icon: DocumentTextIcon,
       route: '/reports/sf6',
-      gradient: 'from-emerald-600 via-green-600 to-teal-600',
-      shadowColor: 'shadow-emerald-500/25',
-      roles: ['admin', 'librarian', 'registrar', 'principal'],
+      gradient: 'from-violet-600 via-purple-600 to-indigo-600',
+      shadowColor: 'shadow-violet-500/25',
+      roles: ['admin', 'registrar', 'principal'],
       stats: {
-        label: 'Distributions',
-        value: 0 // TODO: Get from PostgreSQL
+        label: 'Promotion Rate',
+        value: `${stats.promotionRate}%`
       },
       deadline: 'Due: End of school year',
-      priority: 'medium'
+      priority: 'high'
+    },
+    {
+      id: 'sf7-personnel',
+      title: 'SF7 - School Personnel Assignment List and Basic Profile',
+      description: 'Personnel profiles, teaching assignments, and ancillary responsibilities.',
+      icon: UserGroupIcon,
+      route: '/reports/sf7',
+      gradient: 'from-purple-600 via-pink-600 to-rose-600',
+      shadowColor: 'shadow-purple-500/25',
+      roles: ['admin', 'principal', 'registrar'],
+      stats: {
+        label: 'Total Personnel',
+        value: 'N/A' // TODO: Add useTeachersPostgreSQL hook to get actual count
+      },
+      deadline: 'Due: Start of school year',
+      priority: 'high'
     },
     {
       id: 'sf9-promotion',
@@ -455,6 +472,90 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
               </div>
             );
           })}
+        </div>
+
+        {/* Management Tools Section */}
+        <div className="mt-12">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">School Management Tools</h2>
+            <p className="text-slate-600">Custom tools for managing school resources and operations</p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+            {/* Textbook Management */}
+            <div
+              className="group relative cursor-pointer focus:outline-none focus:ring-4 focus:ring-emerald-500/20 rounded-2xl"
+              onClick={() => handleCardClick('/management/textbook-ledger')}
+              tabIndex={0}
+              role="button"
+              aria-label="Open Textbook Management System"
+            >
+              <div className="relative overflow-hidden bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 border border-slate-200 hover:border-slate-300 shadow-emerald-500/25">
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-600 via-green-600 to-teal-600 opacity-0 group-hover:opacity-5 transition-opacity duration-500"></div>
+                
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-600 via-green-600 to-teal-600 flex items-center justify-center mb-6 shadow-lg transform transition-all duration-500 group-hover:scale-110 group-hover:rotate-3">
+                  <DocumentTextIcon className="w-8 h-8 text-white" />
+                </div>
+
+                <div className="relative z-10">
+                  <h3 className="text-xl font-bold text-slate-900 mb-3 group-hover:text-slate-700 transition-colors">
+                    Textbook Management System
+                  </h3>
+                  <p className="text-slate-600 mb-6 leading-relaxed">
+                    Track textbook distribution, returns, accountability and financial records. Manage student borrowing and textbook inventory.
+                  </p>
+
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <div className="text-sm text-slate-500">Custom Tool</div>
+                      <div className="text-xs text-amber-600 font-medium">Not an official DepEd form</div>
+                    </div>
+                  </div>
+
+                  <div className="w-full py-3 px-4 rounded-xl font-medium transition-all duration-300 bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 text-white text-center group-hover:shadow-lg transform group-hover:scale-105">
+                    Open Tool →
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Facilities Management */}
+            <div
+              className="group relative cursor-pointer focus:outline-none focus:ring-4 focus:ring-sky-500/20 rounded-2xl"
+              onClick={() => handleCardClick('/management/facilities-inventory')}
+              tabIndex={0}
+              role="button"
+              aria-label="Open Facilities Management System"
+            >
+              <div className="relative overflow-hidden bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 border border-slate-200 hover:border-slate-300 shadow-sky-500/25">
+                <div className="absolute inset-0 bg-gradient-to-br from-sky-600 via-blue-600 to-indigo-600 opacity-0 group-hover:opacity-5 transition-opacity duration-500"></div>
+                
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-600 via-blue-600 to-indigo-600 flex items-center justify-center mb-6 shadow-lg transform transition-all duration-500 group-hover:scale-110 group-hover:rotate-3">
+                  <DocumentTextIcon className="w-8 h-8 text-white" />
+                </div>
+
+                <div className="relative z-10">
+                  <h3 className="text-xl font-bold text-slate-900 mb-3 group-hover:text-slate-700 transition-colors">
+                    Facilities Management System
+                  </h3>
+                  <p className="text-slate-600 mb-6 leading-relaxed">
+                    Comprehensive inventory of school buildings, classrooms, laboratories, and facilities with maintenance tracking.
+                  </p>
+
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <div className="text-sm text-slate-500">Custom Tool</div>
+                      <div className="text-xs text-amber-600 font-medium">Not an official DepEd form</div>
+                    </div>
+                  </div>
+
+                  <div className="w-full py-3 px-4 rounded-xl font-medium transition-all duration-300 bg-gradient-to-r from-sky-600 via-blue-600 to-indigo-600 text-white text-center group-hover:shadow-lg transform group-hover:scale-105">
+                    Open Tool →
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Help Section */}

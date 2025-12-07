@@ -1,6 +1,10 @@
 /**
- * SF6 PDF Generator - Textbook Ledger
- * Generates DepEd-compliant SF6 report for textbook distribution and accountability
+ * Textbook Ledger PDF Generator (Custom Management Tool)
+ * 
+ * NOTE: This is a custom school management tool, not an official DepEd form.
+ * Official DepEd SF6 is "Summarized Report on Promotion and Level of Proficiency"
+ * 
+ * Generates comprehensive textbook distribution and accountability reports
  */
 
 import jsPDF from 'jspdf';
@@ -205,14 +209,14 @@ function renderHeader(doc: jsPDF, pageWidth: number): void {
   
   doc.setFontSize(FONT_SIZES.TITLE);
   doc.setFont('helvetica', 'bold');
-  doc.text('SCHOOL FORM 6 (SF6)', centerX, 28, { align: 'center' });
+  doc.text('SCHOOL FORM 6 (SF6)', centerX, 10, { align: 'center' });
   
   doc.setFontSize(FONT_SIZES.SUBTITLE);
   doc.setFont('helvetica', 'normal');
-  doc.text('Textbook Ledger', centerX, 33, { align: 'center' });
+  doc.text('Textbook Ledger', centerX, 15, { align: 'center' });
   
   doc.setFontSize(FONT_SIZES.SMALL);
-  doc.text('(to be accomplished at the end of the school year)', centerX, 37, { align: 'center' });
+  doc.text('(to be accomplished at the end of the school year)', centerX, 19, { align: 'center' });
 }
 
 /**
@@ -310,23 +314,34 @@ function renderTableHeaders(doc: jsPDF): number {
 }
 
 /**
- * Render table rows
+ * Render table rows with pagination
  */
 function renderTableRows(
   doc: jsPDF,
   distributions: TextbookDistributionWithDetails[],
-  startY: number
+  startY: number,
+  logos: LogoImages | null
 ): number {
   let currentY = startY;
   const maxY = PAGE_CONFIG.HEIGHT - MARGINS.BOTTOM - 20; // Reserve space for footer
+  let currentPage = 1;
 
   doc.setFontSize(FONT_SIZES.BODY);
   doc.setFont('helvetica', 'normal');
 
   distributions.forEach((dist, index) => {
+    // Check if we need a new page
     if (currentY + TABLE_CONFIG.ROW_HEIGHT > maxY) {
-      // Would overflow - skip rendering more rows
-      return;
+      // Add new page
+      doc.addPage();
+      currentPage++;
+      
+      // Re-render logos and headers on new page
+      renderLogos(doc, logos, PAGE_CONFIG.WIDTH);
+      renderHeader(doc, PAGE_CONFIG.WIDTH);
+      
+      // Re-render table headers
+      currentY = renderTableHeaders(doc);
     }
 
     let currentX = MARGINS.LEFT;
@@ -439,7 +454,6 @@ function renderSummary(
  */
 function renderFooter(doc: jsPDF, preparedBy: string): void {
   const footerY = PAGE_CONFIG.HEIGHT - MARGINS.BOTTOM - 15;
-  const centerX = PAGE_CONFIG.WIDTH / 2;
 
   doc.setFontSize(FONT_SIZES.SMALL);
   doc.setFont('helvetica', 'normal');
@@ -476,7 +490,7 @@ export async function generateSF6PDF(options: SF6PDFOptions): Promise<jsPDF> {
   renderSchoolInfoFields(doc, options.schoolInfo, options);
   
   const tableStartY = renderTableHeaders(doc);
-  const tableEndY = renderTableRows(doc, options.distributions, tableStartY);
+  const tableEndY = renderTableRows(doc, options.distributions, tableStartY, logos);
   
   renderSummary(doc, options.summary, tableEndY);
   renderFooter(doc, options.preparedBy);
