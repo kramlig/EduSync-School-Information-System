@@ -12,13 +12,15 @@
  * @see docs/features/DIVISION_LEVEL_ACCESS.md
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useDivisionContext } from '../../contexts/DivisionContext';
 import {
   getDivisionEnrollmentSummary,
   exportEnrollmentToCSV,
   type DivisionEnrollmentAggregate,
 } from '../../services/divisionReportService';
+import { logView, logExport } from '../../services/divisionAuditService';
+import { generateDivisionSF6PDF } from '../../utils/pdf/divisionSF6Generator';
 import {
   ChartBarIcon,
   ArrowDownTrayIcon,
@@ -28,13 +30,16 @@ import {
   ExclamationCircleIcon,
   BuildingOfficeIcon,
 } from '@heroicons/react/24/outline';
+import { DivisionDashboardSkeleton } from './common';
 
 const DivisionSF6Dashboard: React.FC = () => {
   const {
     division,
+    divisionUser,
     accessibleSchools,
     selectedSchoolId,
     hasPermission,
+    schoolYear,
     loading: contextLoading,
   } = useDivisionContext();
 
@@ -43,14 +48,10 @@ const DivisionSF6Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedGrade, setSelectedGrade] = useState<number | ''>('');
   const [viewMode, setViewMode] = useState<'grade' | 'district' | 'school'>('grade');
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const hasLoggedView = useRef(false);
 
   const canExport = hasPermission('reports', 'export');
-
-  // Get school year from context or default
-  const schoolYear = useMemo(() => {
-    const year = new Date().getFullYear();
-    return `${year}-${year + 1}`;
-  }, []);
 
   // Fetch data
   useEffect(() => {
@@ -70,6 +71,19 @@ const DivisionSF6Dashboard: React.FC = () => {
         });
 
         setData(result);
+        
+        // Log view audit event (only once per component mount)
+        if (!hasLoggedView.current && divisionUser) {
+          hasLoggedView.current = true;
+          await logView(
+            division.id,
+            divisionUser.id,
+            divisionUser.name,
+            'sf6',
+            'SF6 Enrollment Summary',
+            'reports'
+          );
+        }
       } catch (err) {
         console.error('[DivisionSF6] Error fetching data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load enrollment data');
@@ -79,7 +93,7 @@ const DivisionSF6Dashboard: React.FC = () => {
     };
 
     fetchData();
-  }, [division?.id, selectedSchoolId, schoolYear, contextLoading]);
+  }, [division?.id, selectedSchoolId, schoolYear, contextLoading, divisionUser]);
 
   // Filter schools by selected grade
   const filteredSchools = useMemo(() => {
@@ -89,7 +103,7 @@ const DivisionSF6Dashboard: React.FC = () => {
   }, [data?.schools, selectedGrade]);
 
   // Handle CSV export
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback(async () => {
     if (!data) return;
 
     const csv = exportEnrollmentToCSV(data);
@@ -100,7 +114,55 @@ const DivisionSF6Dashboard: React.FC = () => {
     a.download = `division-sf6-${schoolYear}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [data, schoolYear]);
+    
+    // Log export audit event
+    if (division?.id && divisionUser) {
+      await logExport(
+        division.id,
+        divisionUser.id,
+        divisionUser.name,
+        'sf6',
+        `SF6 Enrollment Summary (${schoolYear})`,
+        'reports',
+        'csv'
+      );
+    }
+  }, [data, schoolYear, division?.id, divisionUser]);
+
+  // Handle PDF export
+  const handlePDFExport = useCallback(async () => {
+    if (!data || !division) return;
+
+    try {
+      setPdfLoading(true);
+      const pdf = await generateDivisionSF6PDF(data, {
+        division_name: division.name,
+        region: division.region || 'Region XI',
+        school_year: schoolYear,
+        prepared_by: divisionUser?.name,
+        prepared_by_position: divisionUser?.role,
+      });
+
+      pdf.save(`division-sf6-${schoolYear}-${new Date().toISOString().split('T')[0]}.pdf`);
+
+      // Log export audit event
+      if (divisionUser) {
+        await logExport(
+          division.id,
+          divisionUser.id,
+          divisionUser.name,
+          'sf6',
+          `SF6 Enrollment Summary (${schoolYear})`,
+          'reports',
+          'pdf'
+        );
+      }
+    } catch (err) {
+      console.error('[DivisionSF6] PDF export error:', err);
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [data, division, schoolYear, divisionUser]);
 
   // Grade level options
   const gradeOptions = useMemo(() => {
@@ -122,14 +184,7 @@ const DivisionSF6Dashboard: React.FC = () => {
   }, [data]);
 
   if (contextLoading || loading) {
-    return (
-      <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
-          <p className="text-slate-600 dark:text-slate-400">Loading enrollment data...</p>
-        </div>
-      </div>
-    );
+    return <DivisionDashboardSkeleton summaryCards={4} showViewModes={true} showFilters={true} tableColumns={8} />;
   }
 
   if (error) {
@@ -165,13 +220,27 @@ const DivisionSF6Dashboard: React.FC = () => {
         </div>
 
         {canExport && data && (
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <ArrowDownTrayIcon className="w-4 h-4" />
-            Export CSV
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handlePDFExport}
+              disabled={pdfLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              {pdfLoading ? (
+                <ArrowPathIcon className="w-4 h-4 animate-spin" />
+              ) : (
+                <ArrowDownTrayIcon className="w-4 h-4" />
+              )}
+              {pdfLoading ? 'Generating...' : 'Export PDF'}
+            </button>
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <ArrowDownTrayIcon className="w-4 h-4" />
+              Export CSV
+            </button>
+          </div>
         )}
       </div>
 

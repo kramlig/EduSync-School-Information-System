@@ -2,16 +2,19 @@
  * DivisionSchools - View schools in the division
  * 
  * Displays all schools accessible to the division user with:
- * - Student and teacher counts per school
+ * - Student and teacher counts per school (server-side aggregation via RPC)
  * - District grouping
  * - Quick navigation to school data
  * - Summary statistics
+ * - Debounced search for better performance
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useDivisionContext } from '../../contexts/DivisionContext';
 import { supabase } from '../../lib/supabase';
+import { useDebounce } from '../../../hooks/useDebounce';
 import { AcademicCapIcon, TargetIcon, UserGroupIcon, ArrowPathIcon, SearchIcon } from '../../../components/icons';
+import { SummaryCardSkeleton } from './common';
 
 interface SchoolStats {
   school_id: string;
@@ -31,11 +34,20 @@ interface SchoolWithStats {
 }
 
 const DivisionSchools: React.FC = () => {
-  const { accessibleSchools, selectedSchoolId, selectSchool, loading: contextLoading } = useDivisionContext();
+  const { division, accessibleSchools, selectedSchoolId, selectSchool, loading: contextLoading } = useDivisionContext();
 
   const [schoolStats, setSchoolStats] = useState<Map<string, SchoolStats>>(new Map());
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Summary counts (from server-side aggregation)
+  const [summaryCounts, setSummaryCounts] = useState({
+    totalStudents: 0,
+    totalTeachers: 0,
+  });
+  
+  // Debounce search input
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
   const filteredSchools = useMemo(() => {
     let schools = selectedSchoolId
@@ -43,8 +55,8 @@ const DivisionSchools: React.FC = () => {
       : accessibleSchools;
 
     // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    if (debouncedSearch) {
+      const query = debouncedSearch.toLowerCase();
       schools = schools.filter(s => 
         s.name.toLowerCase().includes(query) ||
         s.school_id_number?.toLowerCase().includes(query) ||
@@ -53,63 +65,145 @@ const DivisionSchools: React.FC = () => {
     }
 
     return schools;
-  }, [accessibleSchools, selectedSchoolId, searchQuery]);
+  }, [accessibleSchools, selectedSchoolId, debouncedSearch]);
 
-  // Fetch student and teacher counts per school
-  const fetchStats = useCallback(async () => {
-    if (accessibleSchools.length === 0) {
+  // Fetch all data using RPC (single API call) with fallback to multiple queries
+  const fetchAllData = useCallback(async () => {
+    if (!division?.id || accessibleSchools.length === 0) {
       setLoading(false);
+      setSummaryCounts({ totalStudents: 0, totalTeachers: 0 });
       return;
     }
 
     try {
       setLoading(true);
-      const schoolIds = accessibleSchools.map(s => s.id);
+      
+      // Try RPC first for optimal performance
+      const { data, error } = await supabase.rpc('get_division_schools_stats', {
+        p_division_id: division.id,
+        p_school_ids: selectedSchoolId ? [selectedSchoolId] : null,
+      });
 
-      // Fetch counts in parallel
+      // Check if RPC function exists
+      if (error?.code === '42883' || error?.code === 'PGRST202' || 
+          (error?.message?.includes('function') && (error?.message?.includes('does not exist') || error?.message?.includes('schema cache')))) {
+        console.warn('[DivisionSchools] RPC not deployed, using fallback');
+        await fetchStatsFallback();
+        return;
+      }
+
+      if (error) {
+        console.error('[DivisionSchools] RPC error:', error);
+        await fetchStatsFallback();
+        return;
+      }
+
+      // Process RPC result
+      console.log('[DivisionSchools] RPC returned data for', data?.total_schools, 'schools');
+      
+      setSummaryCounts({
+        totalStudents: data?.total_students || 0,
+        totalTeachers: data?.total_teachers || 0,
+      });
+
+      // Build stats map from RPC result
+      const stats = new Map<string, SchoolStats>();
+      (data?.schools || []).forEach((school: { school_id: string; student_count: number; teacher_count: number }) => {
+        stats.set(school.school_id, {
+          school_id: school.school_id,
+          student_count: school.student_count,
+          teacher_count: school.teacher_count,
+        });
+      });
+      setSchoolStats(stats);
+
+    } catch (err) {
+      console.error('[DivisionSchools] Error:', err);
+      await fetchStatsFallback();
+    } finally {
+      setLoading(false);
+    }
+  }, [division?.id, accessibleSchools, selectedSchoolId]);
+
+  // Fallback: Fetch using multiple queries (for when RPC is not deployed)
+  const fetchStatsFallback = useCallback(async () => {
+    if (accessibleSchools.length === 0) {
+      setSummaryCounts({ totalStudents: 0, totalTeachers: 0 });
+      return;
+    }
+
+    const schoolIds = accessibleSchools.map(s => s.id);
+
+    try {
+      // Fetch summary counts
       const [studentsResult, teachersResult] = await Promise.all([
         supabase
           .from('students')
-          .select('school_id')
+          .select('*', { count: 'exact', head: true })
           .in('school_id', schoolIds)
           .is('deleted_at', null)
           .eq('enrollment_status', 'enrolled'),
         supabase
           .from('teachers')
-          .select('school_id')
+          .select('*', { count: 'exact', head: true })
           .in('school_id', schoolIds)
           .is('deleted_at', null),
       ]);
 
-      // Count by school
+      setSummaryCounts({
+        totalStudents: studentsResult.count || 0,
+        totalTeachers: teachersResult.count || 0,
+      });
+
+      // Initialize stats with zeros
       const stats = new Map<string, SchoolStats>();
       schoolIds.forEach(id => {
         stats.set(id, { school_id: id, student_count: 0, teacher_count: 0 });
       });
 
-      (studentsResult.data || []).forEach(s => {
-        const stat = stats.get(s.school_id);
-        if (stat) stat.student_count++;
-      });
+      // Fetch counts per school in batches
+      const batchSize = 10;
+      for (let i = 0; i < schoolIds.length; i += batchSize) {
+        const batch = schoolIds.slice(i, i + batchSize);
+        
+        const countPromises = batch.flatMap(schoolId => [
+          supabase
+            .from('students')
+            .select('*', { count: 'exact', head: true })
+            .eq('school_id', schoolId)
+            .is('deleted_at', null)
+            .eq('enrollment_status', 'enrolled')
+            .then(result => ({ schoolId, type: 'students', count: result.count || 0 })),
+          supabase
+            .from('teachers')
+            .select('*', { count: 'exact', head: true })
+            .eq('school_id', schoolId)
+            .is('deleted_at', null)
+            .then(result => ({ schoolId, type: 'teachers', count: result.count || 0 })),
+        ]);
 
-      (teachersResult.data || []).forEach(t => {
-        const stat = stats.get(t.school_id);
-        if (stat) stat.teacher_count++;
-      });
+        const results = await Promise.all(countPromises);
+        
+        results.forEach(({ schoolId, type, count }) => {
+          const stat = stats.get(schoolId);
+          if (stat) {
+            if (type === 'students') stat.student_count = count;
+            else stat.teacher_count = count;
+          }
+        });
+      }
 
       setSchoolStats(stats);
     } catch (err) {
-      console.error('[DivisionSchools] Error fetching stats:', err);
-    } finally {
-      setLoading(false);
+      console.error('[DivisionSchools] Fallback error:', err);
     }
   }, [accessibleSchools]);
 
   useEffect(() => {
     if (!contextLoading) {
-      fetchStats();
+      fetchAllData();
     }
-  }, [fetchStats, contextLoading]);
+  }, [fetchAllData, contextLoading]);
 
   // Map schools with stats
   const schoolsWithStats: SchoolWithStats[] = useMemo(() => {
@@ -127,11 +221,11 @@ const DivisionSchools: React.FC = () => {
   const summary = useMemo(() => {
     return {
       totalSchools: accessibleSchools.length,
-      totalStudents: Array.from(schoolStats.values()).reduce((sum, s) => sum + s.student_count, 0),
-      totalTeachers: Array.from(schoolStats.values()).reduce((sum, s) => sum + s.teacher_count, 0),
+      totalStudents: summaryCounts.totalStudents,
+      totalTeachers: summaryCounts.totalTeachers,
       districts: new Set(accessibleSchools.map(s => s.district).filter(Boolean)).size,
     };
-  }, [accessibleSchools, schoolStats]);
+  }, [accessibleSchools, summaryCounts]);
 
   if (contextLoading) {
     return (
@@ -164,8 +258,9 @@ const DivisionSchools: React.FC = () => {
             />
           </div>
           <button
-            onClick={fetchStats}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            onClick={() => fetchAllData()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
           >
             <span className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}><ArrowPathIcon /></span>
             Refresh
@@ -174,28 +269,57 @@ const DivisionSchools: React.FC = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Total Schools</p>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white">{summary.totalSchools}</p>
+      {contextLoading ? (
+        <SummaryCardSkeleton count={4} />
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Total Schools</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{summary.totalSchools}</p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Total Students</p>
+            <p className="text-2xl font-bold text-blue-600">{summary.totalStudents.toLocaleString()}</p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Total Teachers</p>
+            <p className="text-2xl font-bold text-green-600">{summary.totalTeachers.toLocaleString()}</p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Districts</p>
+            <p className="text-2xl font-bold text-amber-600">{summary.districts}</p>
+          </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Total Students</p>
-          <p className="text-2xl font-bold text-blue-600">{summary.totalStudents.toLocaleString()}</p>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Total Teachers</p>
-          <p className="text-2xl font-bold text-green-600">{summary.totalTeachers.toLocaleString()}</p>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Districts</p>
-          <p className="text-2xl font-bold text-amber-600">{summary.districts}</p>
-        </div>
-      </div>
+      )}
 
       {/* School Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {schoolsWithStats.map(school => (
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 animate-pulse"
+            >
+              <div className="p-5">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+                  <div className="flex-1">
+                    <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded w-3/4 mb-2" />
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2 mb-2" />
+                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/3" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 px-5 py-3 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 rounded-b-xl">
+                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-20" />
+                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-16" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {schoolsWithStats.map(school => (
           <div
             key={school.id}
             className={`bg-white dark:bg-slate-800 rounded-xl border transition-all cursor-pointer ${
@@ -243,9 +367,10 @@ const DivisionSchools: React.FC = () => {
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
 
-      {filteredSchools.length === 0 && (
+      {!loading && filteredSchools.length === 0 && (
         <div className="text-center py-12">
           <div className="w-16 h-16 mx-auto text-slate-300 dark:text-slate-600 mb-4"><AcademicCapIcon /></div>
           <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">

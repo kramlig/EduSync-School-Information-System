@@ -7,10 +7,12 @@
  * - Recent activity feed
  * - School performance summaries
  * 
+ * OPTIMIZED: Uses RPC function for single API call with fallback
+ * 
  * @see docs/features/DIVISION_LEVEL_ACCESS.md
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useDivisionContext } from '../../contexts/DivisionContext';
 import { supabase } from '../../lib/supabase';
 import { Link } from 'react-router-dom';
@@ -97,7 +99,7 @@ interface SchoolSummaryData {
 
 const DivisionDashboard: React.FC = () => {
   const {
-    divisionUser,
+    division,
     accessibleSchools,
     selectedSchoolId,
     hasPermission,
@@ -114,79 +116,128 @@ const DivisionDashboard: React.FC = () => {
   const [schoolSummaries, setSchoolSummaries] = useState<SchoolSummaryData[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch division statistics
-  useEffect(() => {
-    const fetchStats = async () => {
-      if (!divisionUser || accessibleSchools.length === 0) {
-        setLoading(false);
+  // Memoize school IDs to prevent unnecessary re-fetches
+  const schoolIds = useMemo(() => {
+    if (selectedSchoolId) return [selectedSchoolId];
+    return accessibleSchools.map(s => s.id);
+  }, [selectedSchoolId, accessibleSchools]);
+
+  // Fetch dashboard stats using RPC with fallback
+  const fetchDashboardData = useCallback(async () => {
+    if (!division?.id || accessibleSchools.length === 0) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Try RPC first for optimal performance (single API call)
+      const { data, error } = await supabase.rpc('get_division_dashboard_stats', {
+        p_division_id: division.id,
+        p_school_ids: selectedSchoolId ? [selectedSchoolId] : null,
+      });
+
+      // Check if RPC function exists
+      if (error?.code === '42883' || error?.code === 'PGRST202' ||
+          (error?.message?.includes('function') && error?.message?.includes('does not exist'))) {
+        console.warn('[DivisionDashboard] RPC not available, using fallback');
+        await fetchDashboardDataFallback();
         return;
       }
 
-      try {
-        const schoolIds = selectedSchoolId 
-          ? [selectedSchoolId] 
-          : accessibleSchools.map(s => s.id);
-
-        // Fetch student counts
-        const { data: studentData, error: studentError } = await supabase
-          .from('students')
-          .select('id, school_id')
-          .in('school_id', schoolIds)
-          .is('deleted_at', null);
-
-        if (studentError) {
-          console.error('[DivisionDashboard] Error fetching students:', studentError);
-        }
-
-        // Fetch teacher counts
-        const { data: teacherData, error: teacherError } = await supabase
-          .from('users')
-          .select('id, school_id')
-          .in('school_id', schoolIds)
-          .eq('role', 'teacher')
-          .is('deleted_at', null);
-
-        if (teacherError) {
-          console.error('[DivisionDashboard] Error fetching teachers:', teacherError);
-        }
-
-        // Calculate stats
-        setStats({
-          totalSchools: selectedSchoolId ? 1 : accessibleSchools.length,
-          totalStudents: studentData?.length || 0,
-          totalTeachers: teacherData?.length || 0,
-          schoolsReportingOnTime: Math.floor((selectedSchoolId ? 1 : accessibleSchools.length) * 0.8), // Placeholder
-          pendingReports: Math.floor((selectedSchoolId ? 1 : accessibleSchools.length) * 0.2), // Placeholder
-        });
-
-        // Build school summaries
-        const summaries: SchoolSummaryData[] = accessibleSchools
-          .filter(s => !selectedSchoolId || s.id === selectedSchoolId)
-          .map(school => {
-            const schoolStudents = studentData?.filter(st => st.school_id === school.id).length || 0;
-            const schoolTeachers = teacherData?.filter(t => t.school_id === school.id).length || 0;
-            
-            return {
-              id: school.id,
-              name: school.name,
-              district: school.district || null,
-              studentCount: schoolStudents,
-              teacherCount: schoolTeachers,
-              lastReportDate: null, // TODO: Fetch from reports table
-              reportStatus: Math.random() > 0.3 ? 'on-time' : 'pending' as const,
-            };
-          });
-
-        setSchoolSummaries(summaries);
-        setLoading(false);
-      } catch (err) {
-        console.error('[DivisionDashboard] Error fetching stats:', err);
-        setLoading(false);
+      if (error) {
+        console.error('[DivisionDashboard] RPC error:', error);
+        await fetchDashboardDataFallback();
+        return;
       }
-    };
 
-    fetchStats();
-  }, [divisionUser, accessibleSchools, selectedSchoolId]);
+      // Use RPC data
+      setStats({
+        totalSchools: data?.total_schools || 0,
+        totalStudents: data?.total_students || 0,
+        totalTeachers: data?.total_teachers || 0,
+        schoolsReportingOnTime: Math.floor((data?.total_schools || 0) * 0.8), // Placeholder
+        pendingReports: Math.floor((data?.total_schools || 0) * 0.2), // Placeholder
+      });
+
+      const summaries: SchoolSummaryData[] = (data?.schools || []).map((school: {
+        school_id: string;
+        school_name: string;
+        district: string | null;
+        student_count: number;
+        teacher_count: number;
+      }) => ({
+        id: school.school_id,
+        name: school.school_name,
+        district: school.district,
+        studentCount: school.student_count,
+        teacherCount: school.teacher_count,
+        lastReportDate: null,
+        reportStatus: Math.random() > 0.3 ? 'on-time' : 'pending' as const,
+      }));
+
+      setSchoolSummaries(summaries);
+      setLoading(false);
+    } catch (err) {
+      console.error('[DivisionDashboard] Error:', err);
+      await fetchDashboardDataFallback();
+    }
+  }, [division?.id, selectedSchoolId, accessibleSchools]);
+
+  // Fallback: fetch data using multiple API calls
+  const fetchDashboardDataFallback = useCallback(async () => {
+    try {
+      const targetSchoolIds = selectedSchoolId ? [selectedSchoolId] : schoolIds;
+
+      // Fetch student counts (count only, no data transfer)
+      const { count: studentCount } = await supabase
+        .from('students')
+        .select('*', { count: 'exact', head: true })
+        .in('school_id', targetSchoolIds)
+        .is('deleted_at', null)
+        .eq('enrollment_status', 'enrolled');
+
+      // Fetch teacher counts  
+      const { count: teacherCount } = await supabase
+        .from('teachers')
+        .select('*', { count: 'exact', head: true })
+        .in('school_id', targetSchoolIds)
+        .is('deleted_at', null);
+
+      setStats({
+        totalSchools: targetSchoolIds.length,
+        totalStudents: studentCount || 0,
+        totalTeachers: teacherCount || 0,
+        schoolsReportingOnTime: Math.floor(targetSchoolIds.length * 0.8),
+        pendingReports: Math.floor(targetSchoolIds.length * 0.2),
+      });
+
+      // Build school summaries from context (no extra API calls)
+      const summaries: SchoolSummaryData[] = accessibleSchools
+        .filter(s => !selectedSchoolId || s.id === selectedSchoolId)
+        .map(school => ({
+          id: school.id,
+          name: school.name,
+          district: school.district || null,
+          studentCount: 0, // Not available in fallback without extra calls
+          teacherCount: 0,
+          lastReportDate: null,
+          reportStatus: Math.random() > 0.3 ? 'on-time' : 'pending' as const,
+        }));
+
+      setSchoolSummaries(summaries);
+      setLoading(false);
+    } catch (err) {
+      console.error('[DivisionDashboard] Fallback error:', err);
+      setLoading(false);
+    }
+  }, [selectedSchoolId, schoolIds, accessibleSchools]);
+
+  // Fetch dashboard stats
+  useEffect(() => {
+    if (!contextLoading) {
+      fetchDashboardData();
+    }
+  }, [fetchDashboardData, contextLoading]);
 
   // Stat cards data
   const statCards = useMemo(() => [
@@ -257,11 +308,48 @@ const DivisionDashboard: React.FC = () => {
     return (
       <div className="p-6">
         <div className="animate-pulse space-y-6">
+          {/* Header skeleton */}
           <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-1/3"></div>
+          <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/4"></div>
+          
+          {/* Stats cards skeleton */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-32 bg-slate-200 dark:bg-slate-700 rounded-xl"></div>
+              <div key={i} className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-16"></div>
+                    <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-24"></div>
+                  </div>
+                  <div className="w-12 h-12 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+                </div>
+              </div>
             ))}
+          </div>
+          
+          {/* Quick actions skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-20 bg-slate-200 dark:bg-slate-700 rounded-xl"></div>
+            ))}
+          </div>
+          
+          {/* Table skeleton */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+              <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-40"></div>
+            </div>
+            <div className="p-4 space-y-3">
+              {[1, 2, 3, 4, 5].map(i => (
+                <div key={i} className="flex items-center gap-4">
+                  <div className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+                  <div className="flex-1 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                  <div className="w-16 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                  <div className="w-16 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                  <div className="w-20 h-6 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

@@ -55,6 +55,34 @@ import type {
 } from '../types/division';
 
 // =====================================================
+// HELPER: Get current school year
+// =====================================================
+
+const getCurrentSchoolYear = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth(); // 0-indexed
+  
+  // Philippine school year starts in August
+  // If we're in Jan-July, we're in the second half of SY (previous year - current year)
+  // If we're in Aug-Dec, we're in the first half of SY (current year - next year)
+  if (month < 7) { // Jan (0) to July (6)
+    return `${year - 1}-${year}`;
+  }
+  return `${year}-${year + 1}`;
+};
+
+const getAvailableSchoolYears = (): string[] => {
+  const currentYear = new Date().getFullYear();
+  // Provide current SY plus 2 previous years
+  return [
+    `${currentYear}-${currentYear + 1}`,     // Current or upcoming
+    `${currentYear - 1}-${currentYear}`,     // Previous
+    `${currentYear - 2}-${currentYear - 1}`, // 2 years ago
+  ];
+};
+
+// =====================================================
 // DEFAULT CONTEXT VALUE
 // =====================================================
 
@@ -63,14 +91,28 @@ const defaultContextValue: DivisionContextData = {
   division: null,
   isDivisionUser: false,
   accessibleSchools: [],
+  availableDistricts: [],
+  selectedDistrict: null,
   selectedSchoolId: null,
+  filteredSchools: [],
+  schoolYear: getCurrentSchoolYear(),
+  availableSchoolYears: getAvailableSchoolYears(),
   loading: true,
   error: null,
+  selectDistrict: () => {
+    console.warn('[DivisionContext] selectDistrict called outside of DivisionContextProvider');
+  },
   selectSchool: () => {
     console.warn('[DivisionContext] selectSchool called outside of DivisionContextProvider');
   },
+  setSchoolYear: () => {
+    console.warn('[DivisionContext] setSchoolYear called outside of DivisionContextProvider');
+  },
   refreshSchools: async () => {
     console.warn('[DivisionContext] refreshSchools called outside of DivisionContextProvider');
+  },
+  refreshData: async () => {
+    console.warn('[DivisionContext] refreshData called outside of DivisionContextProvider');
   },
   hasPermission: () => false,
   canAccessSchool: () => false,
@@ -108,9 +150,47 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
   const [divisionUser, setDivisionUser] = useState<DivisionUser | null>(null);
   const [division, setDivision] = useState<Division | null>(null);
   const [accessibleSchools, setAccessibleSchools] = useState<SchoolSummary[]>([]);
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // School year state - persisted in localStorage
+  const [schoolYear, setSchoolYearState] = useState<string>(() => {
+    // Try to restore from localStorage, otherwise use current SY
+    const stored = localStorage.getItem('division_school_year');
+    const available = getAvailableSchoolYears();
+    if (stored && available.includes(stored)) {
+      return stored;
+    }
+    return getCurrentSchoolYear();
+  });
+  
+  // Available school years
+  const availableSchoolYears = useMemo(() => getAvailableSchoolYears(), []);
+  
+  // Derive unique districts from accessible schools
+  const availableDistricts = useMemo(() => {
+    const districts = new Set<string>();
+    accessibleSchools.forEach(school => {
+      if (school.district) {
+        districts.add(school.district);
+      }
+    });
+    return Array.from(districts).sort();
+  }, [accessibleSchools]);
+  
+  // Filter schools by selected district
+  const filteredSchools = useMemo(() => {
+    if (!selectedDistrict) return accessibleSchools;
+    return accessibleSchools.filter(s => s.district === selectedDistrict);
+  }, [accessibleSchools, selectedDistrict]);
+  
+  // Setter that also persists to localStorage
+  const setSchoolYear = useCallback((sy: string) => {
+    setSchoolYearState(sy);
+    localStorage.setItem('division_school_year', sy);
+  }, []);
 
   // =====================================================
   // FETCH DIVISION USER
@@ -369,6 +449,31 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
   // =====================================================
 
   /**
+   * Select a district for filtering (or null for all districts)
+   * When a district is selected, clear the school selection if it's not in that district
+   */
+  const selectDistrict = useCallback((district: string | null) => {
+    setSelectedDistrict(district);
+    
+    // If selecting a district, check if current school is in that district
+    if (district && selectedSchoolId) {
+      const currentSchool = accessibleSchools.find(s => s.id === selectedSchoolId);
+      if (currentSchool && currentSchool.district !== district) {
+        // Clear school selection since it's not in the selected district
+        setSelectedSchoolId(null);
+        localStorage.removeItem('edusync_division_selected_school');
+      }
+    }
+
+    // Persist to localStorage
+    if (district) {
+      localStorage.setItem('edusync_division_selected_district', district);
+    } else {
+      localStorage.removeItem('edusync_division_selected_district');
+    }
+  }, [accessibleSchools, selectedSchoolId]);
+
+  /**
    * Select a school for filtering (or null for all schools)
    */
   const selectSchool = useCallback((schoolId: string | null) => {
@@ -378,6 +483,15 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
     }
 
     setSelectedSchoolId(schoolId);
+    
+    // If selecting a school, also set its district
+    if (schoolId) {
+      const school = accessibleSchools.find(s => s.id === schoolId);
+      if (school?.district && school.district !== selectedDistrict) {
+        setSelectedDistrict(school.district);
+        localStorage.setItem('edusync_division_selected_district', school.district);
+      }
+    }
 
     // Persist to localStorage
     if (schoolId) {
@@ -385,7 +499,7 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
     } else {
       localStorage.removeItem('edusync_division_selected_school');
     }
-  }, [accessibleSchools]);
+  }, [accessibleSchools, selectedDistrict]);
 
   /**
    * Refresh accessible schools list
@@ -396,6 +510,13 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
     const schools = await fetchAccessibleSchools(divisionUser);
     setAccessibleSchools(schools);
   }, [divisionUser, fetchAccessibleSchools]);
+
+  /**
+   * Refresh all division data (division, user, schools)
+   */
+  const refreshData = useCallback(async () => {
+    await loadDivisionData();
+  }, [loadDivisionData]);
 
   // =====================================================
   // PERMISSION HELPERS
@@ -442,22 +563,38 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
     division,
     isDivisionUser: !!divisionUser,
     accessibleSchools,
+    availableDistricts,
+    selectedDistrict,
     selectedSchoolId,
+    filteredSchools,
+    schoolYear,
+    availableSchoolYears,
     loading,
     error,
+    selectDistrict,
     selectSchool,
+    setSchoolYear,
     refreshSchools,
+    refreshData,
     hasPermission,
     canAccessSchool,
   }), [
     divisionUser,
     division,
     accessibleSchools,
+    availableDistricts,
+    selectedDistrict,
     selectedSchoolId,
+    filteredSchools,
+    schoolYear,
+    availableSchoolYears,
     loading,
     error,
+    selectDistrict,
     selectSchool,
+    setSchoolYear,
     refreshSchools,
+    refreshData,
     hasPermission,
     canAccessSchool,
   ]);

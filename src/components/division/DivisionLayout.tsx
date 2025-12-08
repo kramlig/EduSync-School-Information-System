@@ -86,6 +86,11 @@ const NavIcon: React.FC<{ name: string; className?: string }> = ({ name, classNa
         <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
       </svg>
     ),
+    clipboard: (
+      <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+      </svg>
+    ),
   };
   return <>{icons[name] || null}</>;
 };
@@ -95,8 +100,15 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
     divisionUser,
     division,
     accessibleSchools,
+    availableDistricts,
+    selectedDistrict,
     selectedSchoolId,
+    filteredSchools,
+    selectDistrict,
     selectSchool,
+    schoolYear,
+    availableSchoolYears,
+    setSchoolYear,
     hasPermission,
     loading,
   } = useDivisionContext();
@@ -126,16 +138,29 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
     }
   }, [isSchoolDropdownOpen]);
 
-  // Group schools by district and filter by search
-  const groupedSchools = useMemo(() => {
+  // Filter schools by search query (uses filteredSchools which already considers district filter)
+  const searchFilteredSchools = useMemo(() => {
     const query = schoolSearchQuery.toLowerCase().trim();
-    const filtered = query 
-      ? accessibleSchools.filter(s => s.name.toLowerCase().includes(query))
-      : accessibleSchools;
+    if (!query) return filteredSchools;
+    return filteredSchools.filter(s => 
+      s.name.toLowerCase().includes(query) || 
+      s.district?.toLowerCase().includes(query)
+    );
+  }, [filteredSchools, schoolSearchQuery]);
+
+  // Group schools by district for display
+  const groupedSchools = useMemo(() => {
+    // If a district is selected, don't group - just show as flat list
+    if (selectedDistrict) {
+      return [{
+        district: selectedDistrict,
+        schools: searchFilteredSchools.sort((a, b) => a.name.localeCompare(b.name)),
+      }];
+    }
     
     // Group by district
-    const groups: Record<string, typeof accessibleSchools> = {};
-    filtered.forEach(school => {
+    const groups: Record<string, typeof filteredSchools> = {};
+    searchFilteredSchools.forEach(school => {
       const district = school.district || 'No District Assigned';
       if (!groups[district]) {
         groups[district] = [];
@@ -154,7 +179,7 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
       district,
       schools: groups[district].sort((a, b) => a.name.localeCompare(b.name)),
     }));
-  }, [accessibleSchools, schoolSearchQuery]);
+  }, [searchFilteredSchools, selectedDistrict]);
 
   // Total filtered count
   const filteredCount = useMemo(() => 
@@ -213,6 +238,20 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
         label: 'More Reports',
         show: hasPermission('reports', 'read'),
         end: true, // Exact match only - don't highlight for SF5/SF6/SF7
+      },
+      {
+        path: '/division/users',
+        iconName: 'users',
+        label: 'User Management',
+        show: hasPermission('users', 'read'),
+        end: true,
+      },
+      {
+        path: '/division/audit-log',
+        iconName: 'clipboard',
+        label: 'Audit Log',
+        show: hasPermission('settings', 'read'),
+        end: true,
       },
       {
         path: '/division/settings',
@@ -302,12 +341,37 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
           </div>
         </div>
 
-        {/* School Selector - Enhanced with search and district grouping */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-700" ref={dropdownRef}>
-          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
-            View School
+        {/* Filter Scope - District and School Selectors */}
+        <div className="p-4 border-b border-slate-200 dark:border-slate-700 space-y-3" ref={dropdownRef}>
+          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
+            Filter Scope
           </label>
+          
+          {/* District Selector */}
+          <div>
+            <label className="block text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1">
+              District
+            </label>
+            <select
+              value={selectedDistrict || ''}
+              onChange={(e) => selectDistrict(e.target.value || null)}
+              title="Select district"
+              className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
+            >
+              <option value="">All Districts ({availableDistricts.length})</option>
+              {availableDistricts.map(district => (
+                <option key={district} value={district}>
+                  {district}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* School Selector */}
           <div className="relative">
+            <label className="block text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1">
+              School
+            </label>
             {/* Dropdown Trigger Button */}
             <button
               type="button"
@@ -317,7 +381,9 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
               <span className="truncate">
                 {selectedSchoolId 
                   ? (selectedSchool?.name || 'Selected School')
-                  : `All Schools (${accessibleSchools.length})`
+                  : selectedDistrict 
+                    ? `All in ${selectedDistrict} (${filteredSchools.length})`
+                    : `All Schools (${accessibleSchools.length})`
                 }
               </span>
               <NavIcon 
@@ -371,19 +437,26 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
                         : 'text-slate-700 dark:text-slate-300'
                     }`}
                   >
-                    <span>All Schools ({filteredCount})</span>
+                    <span>
+                      {selectedDistrict 
+                        ? `All in ${selectedDistrict} (${filteredCount})`
+                        : `All Schools (${filteredCount})`
+                      }
+                    </span>
                     {!selectedSchoolId && (
                       <NavIcon name="check" className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     )}
                   </button>
 
-                  {/* Grouped Schools by District */}
+                  {/* Grouped Schools by District (or flat list if district selected) */}
                   {groupedSchools.map(group => (
                     <div key={group.district}>
-                      {/* District Header */}
-                      <div className="sticky top-0 px-3 py-1.5 bg-slate-100 dark:bg-slate-900 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide border-t border-slate-200 dark:border-slate-700">
-                        {group.district} ({group.schools.length})
-                      </div>
+                      {/* District Header - only show if no district is selected */}
+                      {!selectedDistrict && (
+                        <div className="sticky top-0 px-3 py-1.5 bg-slate-100 dark:bg-slate-900 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide border-t border-slate-200 dark:border-slate-700">
+                          {group.district} ({group.schools.length})
+                        </div>
+                      )}
                       {/* Schools in District */}
                       {group.schools.map(school => (
                         <button
@@ -394,7 +467,7 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
                             setIsSchoolDropdownOpen(false);
                             setSchoolSearchQuery('');
                           }}
-                          className={`w-full flex items-center justify-between px-3 py-2 pl-5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${
+                          className={`w-full flex items-center justify-between px-3 py-2 ${!selectedDistrict ? 'pl-5' : ''} text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${
                             selectedSchoolId === school.id 
                               ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium' 
                               : 'text-slate-700 dark:text-slate-300'
@@ -419,12 +492,46 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
               </div>
             )}
           </div>
-          {selectedSchool && (
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-1">
-              <NavIcon name="mapPin" className="w-3 h-3" />
-              {selectedSchool.district || 'No district'}
-            </p>
+          
+          {/* Current Selection Summary */}
+          {(selectedDistrict || selectedSchoolId) && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <NavIcon name="mapPin" className="w-3 h-3" />
+                {selectedSchoolId 
+                  ? selectedSchool?.name 
+                  : `${filteredSchools.length} schools in ${selectedDistrict}`
+                }
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  selectDistrict(null);
+                  selectSchool(null);
+                }}
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+              >
+                Clear
+              </button>
+            </div>
           )}
+        </div>
+
+        {/* School Year Selector */}
+        <div className="px-4 pb-4 border-b border-slate-200 dark:border-slate-700">
+          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+            School Year
+          </label>
+          <select
+            value={schoolYear}
+            onChange={(e) => setSchoolYear(e.target.value)}
+            aria-label="Select school year"
+            className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
+          >
+            {availableSchoolYears.map(sy => (
+              <option key={sy} value={sy}>SY {sy}</option>
+            ))}
+          </select>
         </div>
 
         {/* Navigation */}

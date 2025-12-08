@@ -256,8 +256,23 @@ export interface DivisionContextData {
   // List of accessible schools
   accessibleSchools: SchoolSummary[];
   
+  // List of unique districts from accessible schools
+  availableDistricts: string[];
+  
+  // Currently selected district (for filtering)
+  selectedDistrict: string | null;
+  
   // Currently selected school (for filtering)
   selectedSchoolId: string | null;
+  
+  // Schools filtered by selected district
+  filteredSchools: SchoolSummary[];
+  
+  // Currently selected school year (for filtering data)
+  schoolYear: string;
+  
+  // Available school years to select from
+  availableSchoolYears: string[];
   
   // Loading state
   loading: boolean;
@@ -266,8 +281,11 @@ export interface DivisionContextData {
   error: string | null;
   
   // Actions
+  selectDistrict: (district: string | null) => void;
   selectSchool: (schoolId: string | null) => void;
+  setSchoolYear: (schoolYear: string) => void;
   refreshSchools: () => Promise<void>;
+  refreshData: () => Promise<void>;
   
   // Permission helpers
   hasPermission: (module: keyof ModulePermissions, action: PermissionAction) => boolean;

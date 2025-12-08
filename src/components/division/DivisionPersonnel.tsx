@@ -4,8 +4,10 @@
  * Displays personnel data from teachers table with:
  * - Multi-school aggregation for division users
  * - Filtering by position, employment status, school
- * - Search by name/employee number
+ * - Search by name/employee number (debounced)
  * - Export to CSV functionality
+ * - Server-side pagination for performance
+ * - Skeleton loaders for better UX
  * 
  * IMPORTANT: Feature flag hooks are memoized to prevent infinite render loops
  * caused by settings object reference changes from useSchoolData
@@ -14,7 +16,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useDivisionContext } from '../../contexts/DivisionContext';
 import { supabase } from '../../lib/supabase';
+import { useDebounce } from '../../../hooks/useDebounce';
 import { UserGroupIcon, ArrowDownTrayIcon, FunnelIcon, SearchIcon, ArrowPathIcon } from '../../../components/icons';
+import { TableSkeleton, Pagination, SummaryCardSkeleton } from './common';
 
 // Personnel types
 type PositionType = 'teacher_i' | 'teacher_ii' | 'teacher_iii' | 'master_teacher_i' | 'master_teacher_ii' | 
@@ -45,13 +49,6 @@ interface PersonnelFilter {
   search?: string;
 }
 
-interface PersonnelSummary {
-  total: number;
-  by_position: Record<string, number>;
-  by_status: Record<string, number>;
-  by_school: Record<string, number>;
-}
-
 const POSITION_LABELS: Record<PositionType, string> = {
   teacher_i: 'Teacher I',
   teacher_ii: 'Teacher II',
@@ -77,15 +74,31 @@ const STATUS_LABELS: Record<EmploymentStatus, string> = {
 };
 
 const DivisionPersonnel: React.FC = () => {
-  const { accessibleSchools, selectedSchoolId, hasPermission, loading: contextLoading } = useDivisionContext();
+  const { division, accessibleSchools, selectedSchoolId, hasPermission, loading: contextLoading } = useDivisionContext();
 
   const [personnel, setPersonnel] = useState<PersonnelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<PersonnelFilter>({});
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [total, setTotal] = useState(0);
+  
+  // Summary counts (fetched from server)
+  const [summaryCounts, setSummaryCounts] = useState<{
+    total: number;
+    permanent: number;
+    temporary: number;
+    schoolCount: number;
+  }>({ total: 0, permanent: 0, temporary: 0, schoolCount: 0 });
 
   const canExport = hasPermission('personnel', 'export');
+  
+  // Debounce search input (300ms delay)
+  const debouncedSearch = useDebounce(filter.search || '', 300);
 
   // Memoize school IDs to prevent unnecessary re-fetches
   const schoolIds = useMemo(() => {
@@ -93,10 +106,88 @@ const DivisionPersonnel: React.FC = () => {
     return accessibleSchools.map(s => s.id);
   }, [selectedSchoolId, accessibleSchools]);
 
-  // Fetch personnel data
+  // Fetch summary counts using RPC for single API call (4 calls → 1 call)
+  const fetchSummaryCounts = useCallback(async () => {
+    if (schoolIds.length === 0 || !division?.id) {
+      setSummaryCounts({ total: 0, permanent: 0, temporary: 0, schoolCount: 0 });
+      return;
+    }
+
+    try {
+      // Try RPC first (single API call)
+      const { data, error } = await supabase.rpc('get_division_personnel_counts', {
+        p_division_id: division.id,
+        p_school_ids: selectedSchoolId ? [selectedSchoolId] : null,
+      });
+
+      // Check if RPC exists
+      if (error?.code === '42883' || error?.code === 'PGRST202' ||
+          (error?.message?.includes('function') && error?.message?.includes('does not exist'))) {
+        console.warn('[DivisionPersonnel] RPC not available, using fallback');
+        await fetchSummaryCountsFallback();
+        return;
+      }
+
+      if (error) {
+        console.error('[DivisionPersonnel] RPC error:', error);
+        await fetchSummaryCountsFallback();
+        return;
+      }
+
+      setSummaryCounts({
+        total: data?.total || 0,
+        permanent: data?.permanent || 0,
+        temporary: data?.temporary || 0,
+        schoolCount: data?.school_count || schoolIds.length,
+      });
+    } catch (err) {
+      console.error('[DivisionPersonnel] Error fetching summary counts:', err);
+      await fetchSummaryCountsFallback();
+    }
+  }, [schoolIds, division?.id, selectedSchoolId]);
+
+  // Fallback: fetch counts with multiple API calls
+  const fetchSummaryCountsFallback = useCallback(async () => {
+    try {
+      // Get total count
+      const { count: totalCount } = await supabase
+        .from('teachers')
+        .select('*', { count: 'exact', head: true })
+        .in('school_id', schoolIds)
+        .is('deleted_at', null);
+
+      // Get permanent count
+      const { count: permanentCount } = await supabase
+        .from('teachers')
+        .select('*', { count: 'exact', head: true })
+        .in('school_id', schoolIds)
+        .is('deleted_at', null)
+        .eq('employment_status', 'permanent');
+
+      // Get temporary count
+      const { count: temporaryCount } = await supabase
+        .from('teachers')
+        .select('*', { count: 'exact', head: true })
+        .in('school_id', schoolIds)
+        .is('deleted_at', null)
+        .eq('employment_status', 'temporary');
+
+      setSummaryCounts({
+        total: totalCount || 0,
+        permanent: permanentCount || 0,
+        temporary: temporaryCount || 0,
+        schoolCount: schoolIds.length,
+      });
+    } catch (err) {
+      console.error('[DivisionPersonnel] Error fetching summary counts:', err);
+    }
+  }, [schoolIds]);
+
+  // Fetch personnel data with pagination
   const fetchPersonnel = useCallback(async () => {
     if (schoolIds.length === 0) {
       setPersonnel([]);
+      setTotal(0);
       setLoading(false);
       return;
     }
@@ -105,6 +196,7 @@ const DivisionPersonnel: React.FC = () => {
       setLoading(true);
       setError(null);
 
+      // Build query with filters
       let query = supabase
         .from('teachers')
         .select(`
@@ -122,7 +214,7 @@ const DivisionPersonnel: React.FC = () => {
           highest_education,
           major_specialization,
           schools(name)
-        `)
+        `, { count: 'exact' })
         .in('school_id', schoolIds)
         .is('deleted_at', null);
 
@@ -133,12 +225,18 @@ const DivisionPersonnel: React.FC = () => {
       if (filter.employment_status) {
         query = query.eq('employment_status', filter.employment_status);
       }
-      if (filter.search) {
-        const searchTerm = `%${filter.search.toLowerCase()}%`;
+      if (debouncedSearch) {
+        const searchTerm = `%${debouncedSearch.toLowerCase()}%`;
         query = query.or(`name.ilike.${searchTerm},first_name.ilike.${searchTerm},last_name.ilike.${searchTerm},employee_number.ilike.${searchTerm}`);
       }
 
-      const { data, error: fetchError } = await query.order('name', { ascending: true });
+      // Apply pagination
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      
+      const { data, error: fetchError, count } = await query
+        .order('name', { ascending: true })
+        .range(from, to);
 
       if (fetchError) throw fetchError;
 
@@ -164,69 +262,90 @@ const DivisionPersonnel: React.FC = () => {
       });
 
       setPersonnel(mappedData);
+      setTotal(count || 0);
     } catch (err) {
       console.error('[DivisionPersonnel] Error fetching personnel:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch personnel data');
     } finally {
       setLoading(false);
     }
-  }, [schoolIds, filter]);
+  }, [schoolIds, filter.position, filter.employment_status, debouncedSearch, page, pageSize]);
 
+  // Fetch data on mount and when dependencies change
   useEffect(() => {
     if (!contextLoading) {
       fetchPersonnel();
     }
   }, [fetchPersonnel, contextLoading]);
 
-  // Calculate summary statistics
-  const summary: PersonnelSummary = useMemo(() => {
-    const result: PersonnelSummary = {
-      total: personnel.length,
-      by_position: {},
-      by_status: {},
-      by_school: {},
-    };
+  // Fetch summary counts on school change
+  useEffect(() => {
+    if (!contextLoading) {
+      fetchSummaryCounts();
+    }
+  }, [fetchSummaryCounts, contextLoading]);
 
-    personnel.forEach(p => {
-      // By position
-      result.by_position[p.position] = (result.by_position[p.position] || 0) + 1;
-      // By status
-      result.by_status[p.employment_status] = (result.by_status[p.employment_status] || 0) + 1;
-      // By school
-      const schoolName = p.school_name || 'Unknown';
-      result.by_school[schoolName] = (result.by_school[schoolName] || 0) + 1;
-    });
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [filter.position, filter.employment_status, debouncedSearch]);
 
-    return result;
-  }, [personnel]);
+  // Export to CSV (exports current page for performance, or all for small datasets)
+  const handleExport = useCallback(async () => {
+    if (!canExport) return;
 
-  // Export to CSV
-  const handleExport = useCallback(() => {
-    if (!canExport || personnel.length === 0) return;
+    try {
+      // For export, fetch all matching records (up to 5000)
+      let query = supabase
+        .from('teachers')
+        .select(`
+          id, school_id, employee_number, name, first_name, last_name,
+          email, position, employment_status, date_hired, schools(name)
+        `)
+        .in('school_id', schoolIds)
+        .is('deleted_at', null)
+        .limit(5000);
 
-    const headers = ['Name', 'Employee Number', 'Position', 'Employment Status', 'School', 'Email', 'Date Hired'];
-    const rows = personnel.map(p => [
-      p.name,
-      p.employee_number || '',
-      POSITION_LABELS[p.position] || p.position,
-      STATUS_LABELS[p.employment_status] || p.employment_status,
-      p.school_name || '',
-      p.email || '',
-      p.date_hired || '',
-    ]);
+      if (filter.position) query = query.eq('position', filter.position);
+      if (filter.employment_status) query = query.eq('employment_status', filter.employment_status);
+      if (debouncedSearch) {
+        const searchTerm = `%${debouncedSearch.toLowerCase()}%`;
+        query = query.or(`name.ilike.${searchTerm},first_name.ilike.${searchTerm},last_name.ilike.${searchTerm},employee_number.ilike.${searchTerm}`);
+      }
 
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
+      const { data } = await query.order('name', { ascending: true });
+      
+      if (!data || data.length === 0) return;
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `personnel-sf7-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [canExport, personnel]);
+      const headers = ['Name', 'Employee Number', 'Position', 'Employment Status', 'School', 'Email', 'Date Hired'];
+      const rows = data.map(p => {
+        const schoolData = Array.isArray(p.schools) ? p.schools[0] : p.schools;
+        return [
+          p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+          p.employee_number || '',
+          POSITION_LABELS[p.position as PositionType] || p.position,
+          STATUS_LABELS[p.employment_status as EmploymentStatus] || p.employment_status,
+          schoolData?.name || '',
+          p.email || '',
+          p.date_hired || '',
+        ];
+      });
+
+      const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `personnel-sf7-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[DivisionPersonnel] Export error:', err);
+    }
+  }, [canExport, schoolIds, filter.position, filter.employment_status, debouncedSearch]);
 
   // Handle filter changes
   const handleFilterChange = (key: keyof PersonnelFilter, value: string | undefined) => {
@@ -253,7 +372,7 @@ const DivisionPersonnel: React.FC = () => {
             Personnel Data (SF7)
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">
-            {summary.total} personnel across {selectedSchoolId ? '1 school' : `${accessibleSchools.length} schools`}
+            {summaryCounts.total.toLocaleString()} personnel across {selectedSchoolId ? '1 school' : `${accessibleSchools.length} schools`}
           </p>
         </div>
         
@@ -269,8 +388,9 @@ const DivisionPersonnel: React.FC = () => {
           </button>
           
           <button
-            onClick={fetchPersonnel}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            onClick={() => { fetchPersonnel(); fetchSummaryCounts(); }}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
           >
             <span className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}><ArrowPathIcon /></span>
             Refresh
@@ -279,7 +399,7 @@ const DivisionPersonnel: React.FC = () => {
           {canExport && (
             <button 
               onClick={handleExport}
-              disabled={personnel.length === 0}
+              disabled={total === 0}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-medium transition-colors"
             >
               <span className="w-4 h-4"><ArrowDownTrayIcon /></span>
@@ -343,24 +463,28 @@ const DivisionPersonnel: React.FC = () => {
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Total Personnel</p>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white">{summary.total}</p>
+      {contextLoading ? (
+        <SummaryCardSkeleton count={4} />
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Total Personnel</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{summaryCounts.total.toLocaleString()}</p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Permanent</p>
+            <p className="text-2xl font-bold text-green-600">{summaryCounts.permanent.toLocaleString()}</p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Temporary</p>
+            <p className="text-2xl font-bold text-amber-600">{summaryCounts.temporary.toLocaleString()}</p>
+          </div>
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Schools</p>
+            <p className="text-2xl font-bold text-blue-600">{summaryCounts.schoolCount}</p>
+          </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Permanent</p>
-          <p className="text-2xl font-bold text-green-600">{summary.by_status['permanent'] || 0}</p>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Temporary</p>
-          <p className="text-2xl font-bold text-amber-600">{summary.by_status['temporary'] || 0}</p>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Schools</p>
-          <p className="text-2xl font-bold text-blue-600">{Object.keys(summary.by_school).length}</p>
-        </div>
-      </div>
+      )}
 
       {/* Error State */}
       {error && (
@@ -372,10 +496,7 @@ const DivisionPersonnel: React.FC = () => {
       {/* Data Table */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center">
-            <div className="w-8 h-8 mx-auto animate-spin text-blue-600 mb-4"><ArrowPathIcon /></div>
-            <p className="text-slate-500 dark:text-slate-400">Loading personnel data...</p>
-          </div>
+          <TableSkeleton columns={6} rows={10} />
         ) : personnel.length === 0 ? (
           <div className="p-12 text-center">
             <div className="w-16 h-16 mx-auto text-slate-300 dark:text-slate-600 mb-4"><UserGroupIcon /></div>
@@ -389,52 +510,64 @@ const DivisionPersonnel: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Employee #</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Position</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">School</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Email</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                {personnel.map(p => (
-                  <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="font-medium text-slate-900 dark:text-white">{p.name}</span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-sm">
-                      {p.employee_number || '-'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
-                        {POSITION_LABELS[p.position] || p.position}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        p.employment_status === 'permanent' 
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                          : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
-                      }`}>
-                        {STATUS_LABELS[p.employment_status] || p.employment_status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm max-w-[200px] truncate">
-                      {p.school_name}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">
-                      {p.email || '-'}
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Employee #</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Position</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">School</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Email</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {personnel.map(p => (
+                    <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors">
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-slate-900 dark:text-white">{p.name}</span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-sm">
+                        {p.employee_number || '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                          {POSITION_LABELS[p.position] || p.position}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                          p.employment_status === 'permanent' 
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                            : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                        }`}>
+                          {STATUS_LABELS[p.employment_status] || p.employment_status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm max-w-[200px] truncate">
+                        {p.school_name}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">
+                        {p.email || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Pagination */}
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+              loading={loading}
+            />
+          </>
         )}
       </div>
     </div>

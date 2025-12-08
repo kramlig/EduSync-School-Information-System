@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS promotion_records (
   -- Promotion Decision
   promotion_status TEXT NOT NULL CHECK (promotion_status IN (
     'promoted',
+    'conditionally_promoted',
     'retained',
     'pending',
     'graduated',

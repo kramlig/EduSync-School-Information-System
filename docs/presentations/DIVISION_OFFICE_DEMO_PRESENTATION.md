@@ -251,6 +251,36 @@
 
 ---
 
+# 🏢 NEW: Division-Level Access
+
+## Oversight Across All Schools
+
+> **Available December 2025** - Complete division-wide management
+
+### Features:
+- 📊 **Consolidated Dashboard** - View all schools in one place
+- 🏫 **School Grid View** - Compare metrics across schools
+- 📋 **Division Reports** - SF5, SF6, SF7 for entire division
+- 🔍 **Cascading Filters** - Filter by District → School
+- 📈 **Performance Comparison** - Benchmark schools side-by-side
+
+### Division Roles:
+| Role | Access Level |
+|------|-------------|
+| **Superintendent** | Full access to all division data |
+| **Supervisor** | View all, limited admin |
+| **Analyst** | Reports and analytics only |
+| **PSDS** | Assigned district(s) only |
+
+### Key Benefits:
+- ✅ **Single Sign-On** - Access all school data with one login
+- ✅ **Real-Time Aggregation** - Live enrollment & attendance stats
+- ✅ **Consolidated PDF Exports** - Division-wide reports in one click
+- ✅ **Audit Trail** - Track all division-level activities
+- ✅ **Fast Loading** - Server-side aggregation via RPC functions
+
+---
+
 # 🎮 Live Demo
 
 ## System Walkthrough
