@@ -57,14 +57,11 @@ const PERMISSION_AREAS: Array<{ key: 'enrollment' | 'personnel' | 'reports' | 's
 
 const MODULE_OPTIONS: { value: DivisionModule; label: string; description: string }[] = [
   { value: 'sf1_enrollment', label: 'SF1 - Enrollment', description: 'School Form 1: School Register and Enrollment' },
-  { value: 'sf2_attendance', label: 'SF2 - Attendance', description: 'School Form 2: Daily Attendance Report' },
+  { value: 'sf5_promotion', label: 'SF5 - Promotion', description: 'School Form 5: Report on Promotion and Learning Progress' },
+  { value: 'sf6_summary', label: 'SF6 - Enrollment Summary', description: 'School Form 6: Summarized Report on Promotion and Enrollment' },
   { value: 'sf7_personnel', label: 'SF7 - Personnel', description: 'School Form 7: School Personnel Assignment List' },
-  { value: 'sf10_learner_profile', label: 'SF10 - Learner Profile', description: 'School Form 10: Learner Permanent Record' },
-  { value: 'reports_consolidated', label: 'Consolidated Reports', description: 'Division-wide aggregated reports' },
-  { value: 'analytics_dashboard', label: 'Analytics Dashboard', description: 'Data visualization and insights' },
+  { value: 'reports_consolidated', label: 'More Reports', description: 'Additional consolidated division-wide reports' },
   { value: 'school_management', label: 'School Management', description: 'View and manage school profiles' },
-  { value: 'personnel_management', label: 'Personnel Management', description: 'Manage division personnel data' },
-  { value: 'data_export', label: 'Data Export', description: 'Export data to CSV/Excel/PDF' },
 ];
 
 type TabKey = 'profile' | 'modules' | 'deadlines' | 'permissions';
