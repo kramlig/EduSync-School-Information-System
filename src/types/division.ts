@@ -83,17 +83,15 @@ export interface DivisionSettings {
 
 /**
  * Available modules for division-level access
+ * NOTE: Only implemented modules are included. Add more as features are built.
  */
 export type DivisionModule = 
   | 'sf1_enrollment'       // School Form 1 - Enrollment
-  | 'sf2_attendance'       // School Form 2 - Attendance
+  | 'sf5_promotion'        // School Form 5 - Promotion
+  | 'sf6_summary'          // School Form 6 - Enrollment Summary
   | 'sf7_personnel'        // School Form 7 - Personnel
-  | 'sf10_learner_profile' // School Form 10 - Learner Profile
-  | 'reports_consolidated' // Consolidated Reports
-  | 'analytics_dashboard'  // Analytics Dashboard
-  | 'school_management'    // School Management
-  | 'personnel_management' // Personnel Management
-  | 'data_export';         // Data Export
+  | 'reports_consolidated' // More Reports
+  | 'school_management';   // School Management
 
 // =====================================================
 // DIVISION USER ENTITY

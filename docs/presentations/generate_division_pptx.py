@@ -185,8 +185,8 @@ def add_table_slide(prs, title, headers, rows):
     
     return slide
 
-def add_diagram_slide(prs, title, description, diagram_text):
-    """Add a slide with a text-based diagram"""
+def add_dashboard_slide(prs, title, subtitle):
+    """Add a professional dashboard mockup slide with visual cards"""
     slide_layout = prs.slide_layouts[6]  # Blank
     slide = prs.slides.add_slide(slide_layout)
     
@@ -207,31 +207,180 @@ def add_diagram_slide(prs, title, description, diagram_text):
     p.font.bold = True
     p.font.color.rgb = WHITE
     
-    # Description
-    if description:
-        desc_box = slide.shapes.add_textbox(Inches(0.5), Inches(1.4), Inches(9), Inches(0.5))
+    # Subtitle/Description
+    if subtitle:
+        desc_box = slide.shapes.add_textbox(Inches(0.5), Inches(1.35), Inches(9), Inches(0.4))
         tf = desc_box.text_frame
         p = tf.paragraphs[0]
-        p.text = description
+        p.text = subtitle
         p.font.size = Pt(16)
         p.font.color.rgb = GRAY_TEXT
     
-    # Diagram box
-    diagram_shape = slide.shapes.add_shape(
-        MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), Inches(2), Inches(9), Inches(4.5)
+    # Dashboard container background
+    container = slide.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.3), Inches(1.85), Inches(9.4), Inches(5.3)
     )
-    diagram_shape.fill.solid()
-    diagram_shape.fill.fore_color.rgb = RGBColor(248, 250, 252)  # Very light gray
-    diagram_shape.line.color.rgb = RGBColor(203, 213, 225)
+    container.fill.solid()
+    container.fill.fore_color.rgb = RGBColor(248, 250, 252)
+    container.line.color.rgb = RGBColor(226, 232, 240)
     
-    diagram_box = slide.shapes.add_textbox(Inches(0.7), Inches(2.2), Inches(8.6), Inches(4.2))
-    tf = diagram_box.text_frame
-    tf.word_wrap = True
+    # Division header bar inside container
+    div_header = slide.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), Inches(2.05), Inches(9), Inches(0.6)
+    )
+    div_header.fill.solid()
+    div_header.fill.fore_color.rgb = WHITE
+    div_header.line.color.rgb = RGBColor(226, 232, 240)
+    
+    # Division name
+    div_text = slide.shapes.add_textbox(Inches(0.7), Inches(2.15), Inches(5), Inches(0.4))
+    tf = div_text.text_frame
     p = tf.paragraphs[0]
-    p.text = diagram_text
-    p.font.name = "Consolas"
-    p.font.size = Pt(11)
+    p.text = "📍 Division of City Schools - Manila"
+    p.font.size = Pt(16)
+    p.font.bold = True
+    p.font.color.rgb = BLUE_PRIMARY
+    
+    # User role
+    user_text = slide.shapes.add_textbox(Inches(7), Inches(2.15), Inches(2.3), Inches(0.4))
+    tf = user_text.text_frame
+    p = tf.paragraphs[0]
+    p.text = "👤 Superintendent"
+    p.font.size = Pt(14)
     p.font.color.rgb = GRAY_TEXT
+    p.alignment = PP_ALIGN.RIGHT
+    
+    # Statistics cards
+    stats = [
+        ("🏫", "42", "Schools", BLUE_PRIMARY),
+        ("👨‍🎓", "25,432", "Students", RGBColor(16, 185, 129)),
+        ("👨‍🏫", "1,245", "Teachers", RGBColor(139, 92, 246)),
+        ("📈", "+3.2%", "Growth", RGBColor(245, 158, 11)),
+    ]
+    
+    card_width = Inches(2.05)
+    card_height = Inches(1.2)
+    start_x = Inches(0.5)
+    gap = Inches(0.2)
+    card_y = Inches(2.85)
+    
+    for i, (icon, value, label, color) in enumerate(stats):
+        x = start_x + (card_width + gap) * i
+        
+        # Card background
+        card = slide.shapes.add_shape(
+            MSO_SHAPE.ROUNDED_RECTANGLE, x, card_y, card_width, card_height
+        )
+        card.fill.solid()
+        card.fill.fore_color.rgb = WHITE
+        card.line.color.rgb = RGBColor(226, 232, 240)
+        
+        # Icon and value
+        val_box = slide.shapes.add_textbox(x, card_y + Inches(0.15), card_width, Inches(0.6))
+        tf = val_box.text_frame
+        p = tf.paragraphs[0]
+        p.text = f"{icon} {value}"
+        p.font.size = Pt(28)
+        p.font.bold = True
+        p.font.color.rgb = color
+        p.alignment = PP_ALIGN.CENTER
+        
+        # Label
+        lbl_box = slide.shapes.add_textbox(x, card_y + Inches(0.7), card_width, Inches(0.35))
+        tf = lbl_box.text_frame
+        p = tf.paragraphs[0]
+        p.text = label
+        p.font.size = Pt(14)
+        p.font.color.rgb = GRAY_TEXT
+        p.alignment = PP_ALIGN.CENTER
+    
+    # Schools Overview Section
+    section_y = Inches(4.25)
+    
+    # Section header
+    section_header = slide.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.5), section_y, Inches(9), Inches(0.5)
+    )
+    section_header.fill.solid()
+    section_header.fill.fore_color.rgb = WHITE
+    section_header.line.color.rgb = RGBColor(226, 232, 240)
+    
+    section_title = slide.shapes.add_textbox(Inches(0.7), section_y + Inches(0.1), Inches(4), Inches(0.35))
+    tf = section_title.text_frame
+    p = tf.paragraphs[0]
+    p.text = "🏫 Schools Overview"
+    p.font.size = Pt(16)
+    p.font.bold = True
+    p.font.color.rgb = BLUE_PRIMARY
+    
+    view_all = slide.shapes.add_textbox(Inches(7.5), section_y + Inches(0.1), Inches(1.8), Inches(0.35))
+    tf = view_all.text_frame
+    p = tf.paragraphs[0]
+    p.text = "View All →"
+    p.font.size = Pt(12)
+    p.font.color.rgb = BLUE_SECONDARY
+    p.alignment = PP_ALIGN.RIGHT
+    
+    # School cards
+    schools = [
+        ("Rizal Elem.", "523"),
+        ("Bonifacio ES", "412"),
+        ("Mabini Central", "687"),
+        ("Aguinaldo ES", "345"),
+    ]
+    
+    school_card_width = Inches(2.05)
+    school_card_height = Inches(0.9)
+    school_y = section_y + Inches(0.65)
+    
+    for i, (school_name, students) in enumerate(schools):
+        x = start_x + (school_card_width + gap) * i
+        
+        # School card
+        school_card = slide.shapes.add_shape(
+            MSO_SHAPE.ROUNDED_RECTANGLE, x, school_y, school_card_width, school_card_height
+        )
+        school_card.fill.solid()
+        school_card.fill.fore_color.rgb = WHITE
+        school_card.line.color.rgb = RGBColor(226, 232, 240)
+        
+        # School name
+        name_box = slide.shapes.add_textbox(x, school_y + Inches(0.1), school_card_width, Inches(0.35))
+        tf = name_box.text_frame
+        p = tf.paragraphs[0]
+        p.text = f"🏫 {school_name}"
+        p.font.size = Pt(12)
+        p.font.bold = True
+        p.font.color.rgb = GRAY_TEXT
+        p.alignment = PP_ALIGN.CENTER
+        
+        # Student count
+        count_box = slide.shapes.add_textbox(x, school_y + Inches(0.45), school_card_width, Inches(0.35))
+        tf = count_box.text_frame
+        p = tf.paragraphs[0]
+        p.text = f"👨‍🎓 {students} students"
+        p.font.size = Pt(11)
+        p.font.color.rgb = BLUE_SECONDARY
+        p.alignment = PP_ALIGN.CENTER
+    
+    # More indicator
+    more_box = slide.shapes.add_textbox(Inches(8.7), school_y + Inches(0.3), Inches(0.6), Inches(0.35))
+    tf = more_box.text_frame
+    p = tf.paragraphs[0]
+    p.text = "..."
+    p.font.size = Pt(18)
+    p.font.bold = True
+    p.font.color.rgb = GRAY_TEXT
+    
+    # Footer note
+    footer_box = slide.shapes.add_textbox(Inches(0.5), Inches(6.9), Inches(9), Inches(0.3))
+    tf = footer_box.text_frame
+    p = tf.paragraphs[0]
+    p.text = "Real-time dashboard with server-side aggregation for optimal performance"
+    p.font.size = Pt(11)
+    p.font.italic = True
+    p.font.color.rgb = RGBColor(148, 163, 184)
+    p.alignment = PP_ALIGN.CENTER
     
     return slide
 
@@ -346,28 +495,9 @@ def create_presentation():
         ]
     )
     
-    # Slide 5: Dashboard
-    add_diagram_slide(prs, "📊 Division Dashboard", 
-        "Your Command Center for All Schools",
-        """
-┌──────────────────────────────────────────────────────────────┐
-│  📍 Division of City Schools - Manila       👤 Superintendent │
-├───────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐         │
-│  │ 🏫 42   │  │ 👨‍🎓 25,432│  │ 👨‍🏫 1,245│  │ 📈 +3.2% │         │
-│  │ Schools │  │ Students │  │ Teachers│  │ Growth  │         │
-│  └─────────┘  └─────────┘  └─────────┘  └─────────┘         │
-│                                                               │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │ 🏫 Schools Overview                      [View All →]   │ │
-│  │ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐            │ │
-│  │ │School 1│ │School 2│ │School 3│ │School 4│   ...      │ │
-│  │ │ 523    │ │ 412    │ │ 687    │ │ 345    │            │ │
-│  │ └────────┘ └────────┘ └────────┘ └────────┘            │ │
-│  └─────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────┘
-        """
+    # Slide 5: Dashboard (with visual mockup)
+    add_dashboard_slide(prs, "📊 Division Dashboard", 
+        "Your Command Center for All Schools"
     )
     
     # Slide 6: Cascading Filters

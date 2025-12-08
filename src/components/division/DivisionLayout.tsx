@@ -187,83 +187,105 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
     [groupedSchools]
   );
 
-  // Navigation items based on permissions
+  // Get enabled modules from division settings
+  const enabledModules = useMemo(() => {
+    return division?.settings?.enabledModules || [];
+  }, [division?.settings?.enabledModules]);
+
+  // Helper to check if a module is enabled
+  const isModuleEnabled = (moduleKey: string): boolean => {
+    // If no modules are configured, show all (default behavior)
+    if (!enabledModules || enabledModules.length === 0) return true;
+    return enabledModules.includes(moduleKey as typeof enabledModules[number]);
+  };
+
+  // Navigation items based on permissions AND enabled modules
   const navItems = useMemo(() => {
     const items = [
       {
         path: '/division',
         iconName: 'dashboard',
         label: 'Dashboard',
-        show: true,
+        show: true, // Dashboard always visible
         end: true, // Exact match only
+        moduleKey: null, // No module restriction
       },
       {
         path: '/division/schools',
         iconName: 'school',
         label: 'Schools',
-        show: hasPermission('schools', 'read'),
+        show: hasPermission('schools', 'read') && isModuleEnabled('school_management'),
         end: false,
+        moduleKey: 'school_management',
       },
       {
         path: '/division/enrollment',
         iconName: 'document',
         label: 'Enrollment (SF1)',
-        show: hasPermission('enrollment', 'read'),
+        show: hasPermission('enrollment', 'read') && isModuleEnabled('sf1_enrollment'),
         end: false,
+        moduleKey: 'sf1_enrollment',
       },
       {
         path: '/division/reports/sf5',
         iconName: 'chart',
         label: 'SF5 - Promotion',
-        show: hasPermission('reports', 'read'),
+        show: hasPermission('reports', 'read') && isModuleEnabled('sf5_promotion'),
         end: true, // Exact match to avoid conflict with /division/reports
+        moduleKey: 'sf5_promotion',
       },
       {
         path: '/division/reports/sf6',
         iconName: 'chart',
         label: 'SF6 - Enrollment Summary',
-        show: hasPermission('reports', 'read'),
+        show: hasPermission('reports', 'read') && isModuleEnabled('sf6_summary'),
         end: true, // Exact match to avoid conflict with /division/reports
+        moduleKey: 'sf6_summary',
       },
       {
         path: '/division/reports/sf7',
         iconName: 'users',
         label: 'SF7 - Personnel',
-        show: hasPermission('personnel', 'read'),
+        show: hasPermission('personnel', 'read') && isModuleEnabled('sf7_personnel'),
         end: true, // Exact match to avoid conflict with /division/reports
+        moduleKey: 'sf7_personnel',
       },
       {
         path: '/division/reports',
         iconName: 'chart',
         label: 'More Reports',
-        show: hasPermission('reports', 'read'),
+        show: hasPermission('reports', 'read') && isModuleEnabled('reports_consolidated'),
         end: true, // Exact match only - don't highlight for SF5/SF6/SF7
+        moduleKey: 'reports_consolidated',
       },
       {
         path: '/division/users',
         iconName: 'users',
         label: 'User Management',
-        show: hasPermission('users', 'read'),
+        show: hasPermission('users', 'read'), // User management always enabled for admins
         end: true,
+        moduleKey: null, // No module restriction
       },
       {
         path: '/division/audit-log',
         iconName: 'clipboard',
         label: 'Audit Log',
-        show: hasPermission('settings', 'read'),
+        show: hasPermission('settings', 'read'), // Audit log always enabled for admins
         end: true,
+        moduleKey: null, // No module restriction
       },
       {
         path: '/division/settings',
         iconName: 'settings',
         label: 'Settings',
-        show: hasPermission('settings', 'read'),
+        show: hasPermission('settings', 'read'), // Settings always enabled for admins
         end: false,
+        moduleKey: null, // No module restriction
       },
     ];
 
     return items.filter(item => item.show);
-  }, [hasPermission]);
+  }, [hasPermission, enabledModules, isModuleEnabled]);
 
   // Get selected school name
   const selectedSchool = useMemo(() => {
