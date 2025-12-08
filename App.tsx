@@ -101,10 +101,13 @@ const DivisionSchools = lazy(() => import('./src/components/division/DivisionSch
 const DivisionPersonnel = lazy(() => import('./src/components/division/DivisionPersonnel'));
 const DivisionEnrollment = lazy(() => import('./src/components/division/DivisionEnrollment'));
 const DivisionReports = lazy(() => import('./src/components/division/DivisionReports'));
-const DivisionSettings = lazy(() => import('./src/components/division/DivisionSettings'));
+const DivisionSettings = lazy(() => import('./src/components/division/DivisionSettingsEnhanced'));
+const DivisionUserManagement = lazy(() => import('./src/components/division/DivisionUserManagement'));
 const DivisionSF5Dashboard = lazy(() => import('./src/components/division/DivisionSF5Dashboard'));
 const DivisionSF6Dashboard = lazy(() => import('./src/components/division/DivisionSF6Dashboard'));
 const DivisionSF7Dashboard = lazy(() => import('./src/components/division/DivisionSF7Dashboard'));
+const DivisionAuditLog = lazy(() => import('./src/components/division/DivisionAuditLog'));
+const DivisionOnboarding = lazy(() => import('./src/components/division/DivisionOnboarding'));
 import { DivisionContextProvider, useDivisionContext } from './src/contexts/DivisionContext';
 import DivisionGuard from './src/components/division/DivisionGuard';
 
@@ -652,8 +655,16 @@ const App: React.FC = () => {
                 <Route path="reports/sf5" element={<DivisionSF5Dashboard />} />
                 <Route path="reports/sf6" element={<DivisionSF6Dashboard />} />
                 <Route path="reports/sf7" element={<DivisionSF7Dashboard />} />
+                <Route path="users" element={<DivisionUserManagement />} />
+                <Route path="audit-log" element={<DivisionAuditLog />} />
                 <Route path="settings" element={<DivisionSettings />} />
               </Route>
+              {/* Division Onboarding - Standalone route without layout */}
+              <Route path="/division/onboarding" element={
+                <DivisionGuard>
+                  <DivisionOnboarding />
+                </DivisionGuard>
+              } />
               {/* Redirect all other routes to division dashboard */}
               <Route path="*" element={<Navigate to="/division" replace />} />
             </Routes>

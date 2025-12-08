@@ -13,13 +13,15 @@
  * @see docs/features/DIVISION_LEVEL_ACCESS.md
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useDivisionContext } from '../../contexts/DivisionContext';
 import {
   getDivisionPersonnelSummary,
   exportPersonnelToCSV,
   type DivisionPersonnelAggregate,
 } from '../../services/divisionReportService';
+import { logView, logExport } from '../../services/divisionAuditService';
+import { downloadDivisionSF7PDF } from '../../utils/pdf/divisionSF7Generator';
 import {
   ChartBarIcon,
   ArrowDownTrayIcon,
@@ -30,6 +32,7 @@ import {
   BriefcaseIcon,
   ClockIcon,
 } from '@heroicons/react/24/outline';
+import { DivisionDashboardSkeleton } from './common';
 
 // Position display names
 const POSITION_LABELS: Record<string, string> = {
@@ -60,6 +63,7 @@ const STATUS_COLORS: Record<string, string> = {
 const DivisionSF7Dashboard: React.FC = () => {
   const {
     division,
+    divisionUser,
     accessibleSchools,
     selectedSchoolId,
     hasPermission,
@@ -70,6 +74,8 @@ const DivisionSF7Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'position' | 'status' | 'district' | 'school'>('position');
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const hasLoggedView = useRef(false);
 
   const canExport = hasPermission('reports', 'export');
 
@@ -90,6 +96,19 @@ const DivisionSF7Dashboard: React.FC = () => {
         });
 
         setData(result);
+        
+        // Log view audit event (only once per component mount)
+        if (!hasLoggedView.current && divisionUser) {
+          hasLoggedView.current = true;
+          await logView(
+            division.id,
+            divisionUser.id,
+            divisionUser.name,
+            'sf7',
+            'SF7 Personnel Report',
+            'reports'
+          );
+        }
       } catch (err) {
         console.error('[DivisionSF7] Error fetching data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load personnel data');
@@ -99,10 +118,10 @@ const DivisionSF7Dashboard: React.FC = () => {
     };
 
     fetchData();
-  }, [division?.id, selectedSchoolId, contextLoading]);
+  }, [division?.id, selectedSchoolId, contextLoading, divisionUser]);
 
   // Handle CSV export
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback(async () => {
     if (!data) return;
 
     const csv = exportPersonnelToCSV(data);
@@ -113,7 +132,56 @@ const DivisionSF7Dashboard: React.FC = () => {
     a.download = `division-sf7-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [data]);
+    
+    // Log export audit event
+    if (division?.id && divisionUser) {
+      await logExport(
+        division.id,
+        divisionUser.id,
+        divisionUser.name,
+        'sf7',
+        'SF7 Personnel Report',
+        'reports',
+        'csv'
+      );
+    }
+  }, [data, division?.id, divisionUser]);
+
+  // Handle PDF export
+  const handlePDFExport = useCallback(async () => {
+    if (!data || !division) return;
+
+    try {
+      setPdfLoading(true);
+      await downloadDivisionSF7PDF(data, {
+        division_name: division.name,
+        region: division.region || 'Region XI',
+        school_year: new Date().getFullYear().toString(),
+        date_prepared: new Date().toLocaleDateString('en-PH', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }),
+      });
+
+      // Log export audit event
+      if (divisionUser) {
+        await logExport(
+          division.id,
+          divisionUser.id,
+          divisionUser.name,
+          'sf7',
+          'SF7 Personnel Report PDF',
+          'reports',
+          'pdf'
+        );
+      }
+    } catch (err) {
+      console.error('[DivisionSF7] PDF export error:', err);
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [data, division, divisionUser]);
 
   // Calculate permanent vs non-permanent
   const permanentCount = useMemo(() => {
@@ -136,14 +204,7 @@ const DivisionSF7Dashboard: React.FC = () => {
   };
 
   if (contextLoading || loading) {
-    return (
-      <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
-          <p className="text-slate-600 dark:text-slate-400">Loading personnel data...</p>
-        </div>
-      </div>
-    );
+    return <DivisionDashboardSkeleton summaryCards={4} showViewModes={true} showFilters={false} tableColumns={6} />;
   }
 
   if (error) {
@@ -178,13 +239,27 @@ const DivisionSF7Dashboard: React.FC = () => {
         </div>
 
         {canExport && data && (
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <ArrowDownTrayIcon className="w-4 h-4" />
-            Export CSV
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handlePDFExport}
+              disabled={pdfLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              {pdfLoading ? (
+                <ArrowPathIcon className="w-4 h-4 animate-spin" />
+              ) : (
+                <ArrowDownTrayIcon className="w-4 h-4" />
+              )}
+              {pdfLoading ? 'Generating...' : 'Export PDF'}
+            </button>
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <ArrowDownTrayIcon className="w-4 h-4" />
+              Export CSV
+            </button>
+          </div>
         )}
       </div>
 

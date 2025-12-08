@@ -22,7 +22,7 @@ interface ReportData {
 }
 
 const DivisionReports: React.FC = () => {
-  const { accessibleSchools, selectedSchoolId, hasPermission, loading: contextLoading } = useDivisionContext();
+  const { division, accessibleSchools, selectedSchoolId, hasPermission, loading: contextLoading } = useDivisionContext();
 
   const canGenerate = hasPermission('reports', 'generate');
   const canExport = hasPermission('reports', 'export');
@@ -39,9 +39,9 @@ const DivisionReports: React.FC = () => {
     return accessibleSchools.map(s => s.id);
   }, [selectedSchoolId, accessibleSchools]);
 
-  // Generate enrollment summary report
+  // Generate enrollment summary report using RPC for optimal performance
   const generateEnrollmentReport = useCallback(async () => {
-    if (schoolIds.length === 0) return;
+    if (schoolIds.length === 0 || !division?.id) return;
 
     setReports(prev => ({
       ...prev,
@@ -49,15 +49,54 @@ const DivisionReports: React.FC = () => {
     }));
 
     try {
+      // Try RPC first for optimal performance
+      const { data, error } = await supabase.rpc('get_division_enrollment_summary', {
+        p_division_id: division.id,
+        p_school_ids: selectedSchoolId ? [selectedSchoolId] : null,
+      });
+
+      // Fallback to direct query if RPC not available
+      if (error?.code === '42883' || error?.code === 'PGRST202') {
+        console.warn('[DivisionReports] RPC not available, using fallback');
+        await generateEnrollmentReportFallback();
+        return;
+      }
+
+      if (error) throw error;
+
+      // Transform RPC response to expected format
+      const summary = {
+        totalStudents: data?.total_students || 0,
+        byGrade: data?.by_grade || {},
+        byStatus: { enrolled: data?.total_students || 0 },
+        bySchool: {},
+      };
+
+      setReports(prev => ({
+        ...prev,
+        enrollment: { ...prev.enrollment, loading: false, generated: true, data: summary },
+      }));
+    } catch (err) {
+      console.error('[DivisionReports] Enrollment report error:', err);
+      setReports(prev => ({
+        ...prev,
+        enrollment: { ...prev.enrollment, loading: false, error: 'Failed to generate report' },
+      }));
+    }
+  }, [schoolIds, division?.id, selectedSchoolId]);
+
+  // Fallback: Generate enrollment report using direct queries
+  const generateEnrollmentReportFallback = useCallback(async () => {
+    try {
       const { data: students, error } = await supabase
         .from('students')
         .select('school_id, grade_level, gender, enrollment_status')
         .in('school_id', schoolIds)
-        .is('deleted_at', null);
+        .is('deleted_at', null)
+        .limit(10000); // Limit for safety
 
       if (error) throw error;
 
-      // Aggregate data
       const summary = {
         totalStudents: students?.length || 0,
         byGrade: {} as Record<number, { male: number; female: number; total: number }>,
@@ -91,9 +130,9 @@ const DivisionReports: React.FC = () => {
     }
   }, [schoolIds]);
 
-  // Generate personnel summary report
+  // Generate personnel summary report using RPC for optimal performance
   const generatePersonnelReport = useCallback(async () => {
-    if (schoolIds.length === 0) return;
+    if (schoolIds.length === 0 || !division?.id) return;
 
     setReports(prev => ({
       ...prev,
@@ -101,11 +140,51 @@ const DivisionReports: React.FC = () => {
     }));
 
     try {
+      // Try RPC first for optimal performance
+      const { data, error } = await supabase.rpc('get_division_personnel_summary', {
+        p_division_id: division.id,
+        p_school_ids: selectedSchoolId ? [selectedSchoolId] : null,
+      });
+
+      // Fallback to direct query if RPC not available
+      if (error?.code === '42883' || error?.code === 'PGRST202') {
+        console.warn('[DivisionReports] RPC not available, using fallback');
+        await generatePersonnelReportFallback();
+        return;
+      }
+
+      if (error) throw error;
+
+      // Transform RPC response to expected format
+      const summary = {
+        totalTeachers: data?.total_personnel || 0,
+        byPosition: data?.by_position || {},
+        byStatus: data?.by_status || {},
+        bySchool: {},
+      };
+
+      setReports(prev => ({
+        ...prev,
+        personnel: { ...prev.personnel, loading: false, generated: true, data: summary },
+      }));
+    } catch (err) {
+      console.error('[DivisionReports] Personnel report error:', err);
+      setReports(prev => ({
+        ...prev,
+        personnel: { ...prev.personnel, loading: false, error: 'Failed to generate report' },
+      }));
+    }
+  }, [schoolIds, division?.id, selectedSchoolId]);
+
+  // Fallback: Generate personnel report using direct queries
+  const generatePersonnelReportFallback = useCallback(async () => {
+    try {
       const { data: teachers, error } = await supabase
         .from('teachers')
         .select('school_id, position, employment_status')
         .in('school_id', schoolIds)
-        .is('deleted_at', null);
+        .is('deleted_at', null)
+        .limit(10000); // Limit for safety
 
       if (error) throw error;
 

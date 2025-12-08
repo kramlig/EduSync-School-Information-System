@@ -12,13 +12,15 @@
  * @see docs/features/DIVISION_LEVEL_ACCESS.md
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useDivisionContext } from '../../contexts/DivisionContext';
 import {
   getDivisionPromotionSummary,
   exportPromotionToCSV,
   type DivisionPromotionAggregate,
 } from '../../services/divisionReportService';
+import { logView, logExport } from '../../services/divisionAuditService';
+import { downloadDivisionSF5PDF } from '../../utils/pdf/divisionSF5Generator';
 import {
   ChartBarIcon,
   ArrowDownTrayIcon,
@@ -28,14 +30,18 @@ import {
   CheckCircleIcon,
   ExclamationCircleIcon,
   BuildingOfficeIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
+import { DivisionDashboardSkeleton } from './common';
 
 const DivisionSF5Dashboard: React.FC = () => {
   const {
     division,
+    divisionUser,
     accessibleSchools,
     selectedSchoolId,
     hasPermission,
+    schoolYear,
     loading: contextLoading,
   } = useDivisionContext();
 
@@ -44,25 +50,10 @@ const DivisionSF5Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedGrade, setSelectedGrade] = useState<number | ''>('');
   const [viewMode, setViewMode] = useState<'grade' | 'district' | 'school'>('grade');
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const hasLoggedView = useRef(false);
 
   const canExport = hasPermission('reports', 'export');
-
-  // Available school years (current and previous 2 years)
-  const availableSchoolYears = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    // In Dec 2025, current SY is 2025-2026, but promotion data is for completed years
-    return [
-      `${currentYear - 1}-${currentYear}`,     // 2024-2025 (most recent completed)
-      `${currentYear - 2}-${currentYear - 1}`, // 2023-2024
-      `${currentYear}-${currentYear + 1}`,     // 2025-2026 (current, may have no data)
-    ];
-  }, []);
-
-  // Default to previous school year (completed year with promotion data)
-  const [schoolYear, setSchoolYear] = useState(() => {
-    const currentYear = new Date().getFullYear();
-    return `${currentYear - 1}-${currentYear}`; // 2024-2025
-  });
 
   // Fetch data
   useEffect(() => {
@@ -83,6 +74,19 @@ const DivisionSF5Dashboard: React.FC = () => {
         });
 
         setData(result);
+        
+        // Log view audit event (only once per component mount)
+        if (!hasLoggedView.current && divisionUser) {
+          hasLoggedView.current = true;
+          await logView(
+            division.id,
+            divisionUser.id,
+            divisionUser.name,
+            'sf5',
+            'SF5 Promotion Report',
+            'reports'
+          );
+        }
       } catch (err) {
         console.error('[DivisionSF5] Error fetching data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load promotion data');
@@ -92,7 +96,7 @@ const DivisionSF5Dashboard: React.FC = () => {
     };
 
     fetchData();
-  }, [division?.id, selectedSchoolId, schoolYear, contextLoading]);
+  }, [division?.id, selectedSchoolId, schoolYear, contextLoading, divisionUser]);
 
   // Filter schools by selected grade
   const filteredSchools = useMemo(() => {
@@ -102,7 +106,7 @@ const DivisionSF5Dashboard: React.FC = () => {
   }, [data?.schools, selectedGrade]);
 
   // Handle CSV export
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback(async () => {
     if (!data) return;
 
     const csv = exportPromotionToCSV(data);
@@ -113,7 +117,57 @@ const DivisionSF5Dashboard: React.FC = () => {
     a.download = `division-sf5-${schoolYear}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [data, schoolYear]);
+    
+    // Log export audit event
+    if (division?.id && divisionUser) {
+      await logExport(
+        division.id,
+        divisionUser.id,
+        divisionUser.name,
+        'sf5',
+        `SF5 Promotion Report (${schoolYear})`,
+        'reports',
+        'csv'
+      );
+    }
+  }, [data, schoolYear, division?.id, divisionUser]);
+
+  // Handle PDF export
+  const handleExportPDF = useCallback(async () => {
+    if (!data || !division) return;
+
+    try {
+      setPdfLoading(true);
+      await downloadDivisionSF5PDF(data, {
+        division_name: division.name,
+        region: division.region || 'Region XI',
+        school_year: schoolYear,
+        grading_period: 'Final',
+        date_prepared: new Date().toLocaleDateString('en-PH', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }),
+      });
+
+      // Log export audit event
+      if (divisionUser) {
+        await logExport(
+          division.id,
+          divisionUser.id,
+          divisionUser.name,
+          'sf5',
+          `SF5 Promotion Report PDF (${schoolYear})`,
+          'reports',
+          'pdf'
+        );
+      }
+    } catch (err) {
+      console.error('[DivisionSF5] PDF export error:', err);
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [data, division, schoolYear, divisionUser]);
 
   // Grade level options
   const gradeOptions = useMemo(() => {
@@ -124,14 +178,7 @@ const DivisionSF5Dashboard: React.FC = () => {
   }, [data?.by_grade]);
 
   if (contextLoading || loading) {
-    return (
-      <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <ArrowPathIcon className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
-          <p className="text-slate-600 dark:text-slate-400">Loading promotion data...</p>
-        </div>
-      </div>
-    );
+    return <DivisionDashboardSkeleton summaryCards={4} showViewModes={true} showFilters={true} tableColumns={7} />;
   }
 
   if (error) {
@@ -167,13 +214,27 @@ const DivisionSF5Dashboard: React.FC = () => {
         </div>
 
         {canExport && data && (
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <ArrowDownTrayIcon className="w-4 h-4" />
-            Export CSV
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleExportPDF}
+              disabled={pdfLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              {pdfLoading ? (
+                <ArrowPathIcon className="w-4 h-4 animate-spin" />
+              ) : (
+                <DocumentTextIcon className="w-4 h-4" />
+              )}
+              Export PDF
+            </button>
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <ArrowDownTrayIcon className="w-4 h-4" />
+              Export CSV
+            </button>
+          </div>
         )}
       </div>
 
@@ -214,21 +275,6 @@ const DivisionSF5Dashboard: React.FC = () => {
 
       {/* Filters and View Mode */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-            School Year
-          </label>
-          <select
-            value={schoolYear}
-            onChange={(e) => setSchoolYear(e.target.value)}
-            className="w-full sm:w-40 px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {availableSchoolYears.map(sy => (
-              <option key={sy} value={sy}>{sy}</option>
-            ))}
-          </select>
-        </div>
-
         <div className="flex-1">
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
             Filter by Grade
@@ -236,6 +282,7 @@ const DivisionSF5Dashboard: React.FC = () => {
           <select
             value={selectedGrade}
             onChange={(e) => setSelectedGrade(e.target.value === '' ? '' : Number(e.target.value))}
+            aria-label="Filter by grade"
             className="w-full sm:w-48 px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Grades</option>

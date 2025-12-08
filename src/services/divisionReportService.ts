@@ -107,13 +107,75 @@ export interface DivisionReportFilter {
 // =====================================================
 
 /**
- * Get aggregated enrollment data for a division
+ * Get aggregated enrollment data for a division using RPC function for optimal performance
  */
 export const getDivisionEnrollmentSummary = async (
   filter: DivisionReportFilter
 ): Promise<DivisionEnrollmentAggregate> => {
+  console.log('[DivisionReportService] getDivisionEnrollmentSummary called - RPC VERSION');
   const { division_id, school_ids } = filter;
-  // Note: school_year not used - students table doesn't have school_year column
+
+  // Use RPC function for server-side aggregation (1 API call instead of 40+)
+  const { data, error } = await supabase.rpc('get_division_enrollment_summary', {
+    p_division_id: division_id,
+    p_school_ids: school_ids && school_ids.length > 0 ? school_ids : null,
+  });
+
+  // Check if RPC function doesn't exist (fall back to pagination)
+  if (error?.code === '42883' || error?.message?.includes('function') && error?.message?.includes('does not exist')) {
+    console.warn('[DivisionReportService] RPC function not deployed, falling back to pagination');
+    return getDivisionEnrollmentSummaryFallback(filter);
+  }
+
+  if (error) {
+    console.error('[DivisionReportService] RPC error:', error);
+    throw new Error(`Failed to fetch enrollment summary: ${error.message}`);
+  }
+
+  console.log('[DivisionReportService] RPC result:', {
+    total_schools: data?.total_schools,
+    total_students: data?.total_students,
+  });
+
+  // Transform RPC response to match expected format
+  const result: DivisionEnrollmentAggregate = {
+    total_schools: data?.total_schools || 0,
+    total_students: data?.total_students || 0,
+    total_male: data?.total_male || 0,
+    total_female: data?.total_female || 0,
+    by_grade: data?.by_grade || {},
+    by_district: data?.by_district || {},
+    schools: (data?.schools || []).map((school: {
+      school_id: string;
+      school_name: string;
+      district: string | null;
+      total_students: number;
+      male_count: number;
+      female_count: number;
+      by_grade: Record<string, { male: number; female: number; total: number }>;
+    }) => ({
+      school_id: school.school_id,
+      school_name: school.school_name,
+      district: school.district,
+      total_students: school.total_students,
+      male_count: school.male_count,
+      female_count: school.female_count,
+      by_grade: school.by_grade || {},
+      by_status: { enrolled: school.total_students },
+    })),
+  };
+
+  return result;
+};
+
+/**
+ * Fallback method using pagination (for when RPC function is not deployed)
+ */
+const getDivisionEnrollmentSummaryFallback = async (
+  filter: DivisionReportFilter
+): Promise<DivisionEnrollmentAggregate> => {
+  console.log('[DivisionReportService] Using fallback pagination method');
+  const { division_id, school_ids } = filter;
 
   // Get schools in division
   let schoolsQuery = supabase
@@ -147,26 +209,50 @@ export const getDivisionEnrollmentSummary = async (
 
   const schoolIdList = schools.map(s => s.id);
 
-  // Get students for all schools
-  // Note: Students table doesn't have school_year - we filter by enrollment_status for current students
-  const studentsQuery = supabase
+  // Get students count
+  const { count: totalCount } = await supabase
     .from('students')
-    .select('id, school_id, grade_level, gender, enrollment_status')
+    .select('id', { count: 'exact', head: true })
     .in('school_id', schoolIdList)
     .is('deleted_at', null)
     .eq('enrollment_status', 'enrolled');
 
-  const { data: students, error: studentsError } = await studentsQuery;
+  const PAGE_SIZE = 1000;
+  let allStudents: {
+    id: string;
+    school_id: string;
+    grade_level: number;
+    gender: string;
+    enrollment_status: string;
+  }[] = [];
+  
+  const totalPages = Math.ceil((totalCount || 0) / PAGE_SIZE);
+  
+  for (let page = 0; page < totalPages; page++) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    
+    const { data: pageStudents, error: pageError } = await supabase
+      .from('students')
+      .select('id, school_id, grade_level, gender, enrollment_status')
+      .in('school_id', schoolIdList)
+      .is('deleted_at', null)
+      .eq('enrollment_status', 'enrolled')
+      .order('id', { ascending: true })
+      .range(from, to);
 
-  if (studentsError) {
-    console.error('[DivisionReportService] Error fetching students:', studentsError);
-    throw new Error(`Failed to fetch students: ${studentsError.message}`);
+    if (pageError) {
+      throw new Error(`Failed to fetch students: ${pageError.message}`);
+    }
+
+    if (pageStudents && pageStudents.length > 0) {
+      allStudents = [...allStudents, ...pageStudents];
+    }
   }
 
-  // Build school lookup
+  const students = allStudents;
   const schoolLookup = new Map(schools.map(s => [s.id, s]));
 
-  // Aggregate data
   const aggregate: DivisionEnrollmentAggregate = {
     total_schools: schools.length,
     total_students: 0,
@@ -177,7 +263,6 @@ export const getDivisionEnrollmentSummary = async (
     schools: [],
   };
 
-  // Per-school summaries
   const schoolSummaries = new Map<string, DivisionEnrollmentSummary>();
 
   schools.forEach(school => {
@@ -193,7 +278,6 @@ export const getDivisionEnrollmentSummary = async (
     });
   });
 
-  // Process students
   (students || []).forEach(student => {
     const school = schoolLookup.get(student.school_id);
     if (!school) return;
@@ -202,7 +286,6 @@ export const getDivisionEnrollmentSummary = async (
     const grade = Number(student.grade_level) || 0;
     const isMale = student.gender === 'Male';
 
-    // Update school summary
     summary.total_students++;
     if (isMale) summary.male_count++;
     else summary.female_count++;
@@ -217,7 +300,6 @@ export const getDivisionEnrollmentSummary = async (
     summary.by_status[student.enrollment_status || 'unknown'] =
       (summary.by_status[student.enrollment_status || 'unknown'] || 0) + 1;
 
-    // Update aggregate
     aggregate.total_students++;
     if (isMale) aggregate.total_male++;
     else aggregate.total_female++;
@@ -229,7 +311,6 @@ export const getDivisionEnrollmentSummary = async (
     if (isMale) aggregate.by_grade[grade].male++;
     else aggregate.by_grade[grade].female++;
 
-    // Update by district
     const district = school.district || 'Unassigned';
     if (!aggregate.by_district[district]) {
       aggregate.by_district[district] = { schools: 0, students: 0, male: 0, female: 0 };
@@ -239,7 +320,6 @@ export const getDivisionEnrollmentSummary = async (
     else aggregate.by_district[district].female++;
   });
 
-  // Count schools per district
   schools.forEach(school => {
     const district = school.district || 'Unassigned';
     if (!aggregate.by_district[district]) {
@@ -258,9 +338,64 @@ export const getDivisionEnrollmentSummary = async (
 // =====================================================
 
 /**
- * Get aggregated personnel data for a division
+ * Get aggregated personnel data for a division using RPC function for optimal performance
  */
 export const getDivisionPersonnelSummary = async (
+  filter: DivisionReportFilter
+): Promise<DivisionPersonnelAggregate> => {
+  console.log('[DivisionReportService] getDivisionPersonnelSummary called - RPC VERSION');
+  const { division_id, school_ids } = filter;
+
+  // Use RPC function for server-side aggregation (1 API call instead of multiple)
+  const { data, error } = await supabase.rpc('get_division_personnel_summary', {
+    p_division_id: division_id,
+    p_school_ids: school_ids && school_ids.length > 0 ? school_ids : null,
+  });
+
+  // Check if RPC function doesn't exist (fall back to pagination)
+  // Error codes: 42883 (PostgreSQL), PGRST202 (PostgREST - function not found in schema cache)
+  if (error?.code === '42883' || error?.code === 'PGRST202' || 
+      (error?.message?.includes('function') && (error?.message?.includes('does not exist') || error?.message?.includes('schema cache')))) {
+    console.warn('[DivisionReportService] RPC function not deployed, falling back to pagination');
+    return getDivisionPersonnelSummaryFallback(filter);
+  }
+
+  if (error) {
+    console.error('[DivisionReportService] RPC error:', error);
+    throw new Error(`Failed to fetch personnel summary: ${error.message}`);
+  }
+
+  console.log('[DivisionReportService] RPC returned personnel data:', data?.total_personnel, 'personnel');
+
+  // Transform RPC result to expected format
+  return {
+    total_schools: data?.total_schools || 0,
+    total_personnel: data?.total_personnel || 0,
+    by_position: data?.by_position || {},
+    by_status: data?.by_status || {},
+    by_district: data?.by_district || {},
+    schools: (data?.schools || []).map((s: {
+      school_id: string;
+      school_name: string;
+      district: string | null;
+      total_personnel: number;
+      by_position: Record<string, number>;
+      by_status: Record<string, number>;
+    }) => ({
+      school_id: s.school_id,
+      school_name: s.school_name,
+      district: s.district,
+      total_personnel: s.total_personnel,
+      by_position: s.by_position || {},
+      by_status: s.by_status || {},
+    })),
+  };
+};
+
+/**
+ * Fallback: Get aggregated personnel data using client-side pagination
+ */
+const getDivisionPersonnelSummaryFallback = async (
   filter: DivisionReportFilter
 ): Promise<DivisionPersonnelAggregate> => {
   const { division_id, school_ids } = filter;
@@ -296,17 +431,51 @@ export const getDivisionPersonnelSummary = async (
 
   const schoolIdList = schools.map(s => s.id);
 
-  // Get teachers for all schools
-  const { data: teachers, error: teachersError } = await supabase
+  // Get teachers for all schools with pagination to avoid Supabase 1000 row limit
+  // First, get the count
+  const { count: teacherCount } = await supabase
     .from('teachers')
-    .select('id, school_id, position, employment_status')
+    .select('id', { count: 'exact', head: true })
     .in('school_id', schoolIdList)
     .is('deleted_at', null);
 
-  if (teachersError) {
-    console.error('[DivisionReportService] Error fetching teachers:', teachersError);
-    throw new Error(`Failed to fetch teachers: ${teachersError.message}`);
+  console.log('[DivisionReportService] Total teachers count:', teacherCount);
+
+  const PAGE_SIZE = 1000;
+  let allTeachers: {
+    id: string;
+    school_id: string;
+    position: string | null;
+    employment_status: string | null;
+  }[] = [];
+
+  const totalPages = Math.ceil((teacherCount || 0) / PAGE_SIZE);
+
+  for (let page = 0; page < totalPages; page++) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    const { data: pageTeachers, error: pageError } = await supabase
+      .from('teachers')
+      .select('id, school_id, position, employment_status')
+      .in('school_id', schoolIdList)
+      .is('deleted_at', null)
+      .order('id', { ascending: true })
+      .range(from, to);
+
+    if (pageError) {
+      console.error('[DivisionReportService] Error fetching teachers page', page, ':', pageError);
+      throw new Error(`Failed to fetch teachers: ${pageError.message}`);
+    }
+
+    if (pageTeachers && pageTeachers.length > 0) {
+      allTeachers = [...allTeachers, ...pageTeachers];
+    }
   }
+
+  const teachers = allTeachers;
+
+  console.log('[DivisionReportService] Teachers fetched:', teachers?.length || 0);
 
   // Build school lookup
   const schoolLookup = new Map(schools.map(s => [s.id, s]));
@@ -381,11 +550,82 @@ export const getDivisionPersonnelSummary = async (
 // =====================================================
 
 /**
- * Get aggregated promotion data for a division
+ * Get aggregated promotion data for a division using RPC function for optimal performance
  */
 export const getDivisionPromotionSummary = async (
   filter: DivisionReportFilter
 ): Promise<DivisionPromotionAggregate> => {
+  console.log('[DivisionReportService] getDivisionPromotionSummary called - RPC VERSION');
+  const { division_id, school_ids, school_year, grading_period } = filter;
+
+  // Use RPC function for server-side aggregation (1 API call instead of 40+)
+  const { data, error } = await supabase.rpc('get_division_promotion_summary', {
+    p_division_id: division_id,
+    p_school_year: school_year || null,
+    p_grading_period: grading_period || 'final',
+    p_school_ids: school_ids && school_ids.length > 0 ? school_ids : null,
+  });
+
+  // Check if RPC function doesn't exist (fall back to pagination)
+  if (error?.code === '42883' || error?.message?.includes('function') && error?.message?.includes('does not exist')) {
+    console.warn('[DivisionReportService] RPC function not deployed, falling back to pagination');
+    return getDivisionPromotionSummaryFallback(filter);
+  }
+
+  if (error) {
+    console.error('[DivisionReportService] RPC error:', error);
+    throw new Error(`Failed to fetch promotion summary: ${error.message}`);
+  }
+
+  console.log('[DivisionReportService] RPC promotion result:', {
+    total_schools: data?.total_schools,
+    total_students: data?.total_students,
+    total_promoted: data?.total_promoted,
+  });
+
+  // Transform RPC response to match expected format
+  const result: DivisionPromotionAggregate = {
+    total_schools: data?.total_schools || 0,
+    total_students: data?.total_students || 0,
+    total_promoted: data?.total_promoted || 0,
+      total_retained: data?.total_retained || 0,
+      total_conditionally_promoted: data?.total_conditionally_promoted || 0,
+      overall_promotion_rate: data?.overall_promotion_rate || 0,
+      by_grade: data?.by_grade || {},
+      by_district: data?.by_district || {},
+      schools: (data?.schools || []).map((school: {
+        school_id: string;
+        school_name: string;
+        district: string | null;
+        total_students: number;
+        promoted: number;
+        retained: number;
+        conditionally_promoted: number;
+        promotion_rate: number;
+        by_grade: Record<string, { total: number; promoted: number; retained: number; conditionally_promoted: number; promotion_rate: number }>;
+      }) => ({
+        school_id: school.school_id,
+        school_name: school.school_name,
+        district: school.district,
+        total_students: school.total_students,
+        promoted: school.promoted,
+        retained: school.retained,
+        conditionally_promoted: school.conditionally_promoted,
+        promotion_rate: school.promotion_rate,
+        by_grade: school.by_grade || {},
+      })),
+    };
+
+  return result;
+};
+
+/**
+ * Fallback method using pagination (for when RPC function is not deployed)
+ */
+const getDivisionPromotionSummaryFallback = async (
+  filter: DivisionReportFilter
+): Promise<DivisionPromotionAggregate> => {
+  console.log('[DivisionReportService] Using fallback pagination method for promotion');
   const { division_id, school_ids, school_year, grading_period } = filter;
 
   // Get schools in division
@@ -402,7 +642,6 @@ export const getDivisionPromotionSummary = async (
   const { data: schools, error: schoolsError } = await schoolsQuery;
 
   if (schoolsError) {
-    console.error('[DivisionReportService] Error fetching schools:', schoolsError);
     throw new Error(`Failed to fetch schools: ${schoolsError.message}`);
   }
 
@@ -422,39 +661,66 @@ export const getDivisionPromotionSummary = async (
 
   const schoolIdList = schools.map(s => s.id);
 
-  console.log('[DivisionReportService] Fetching promotion records for:', {
-    schoolCount: schoolIdList.length,
-    school_year,
-    grading_period,
-  });
-
-  // Get promotion records for all schools
-  let promotionQuery = supabase
+  // Get count
+  let countQuery = supabase
     .from('promotion_records')
-    .select('id, school_id, student_id, current_grade_level, promotion_status, school_year, grading_period')
+    .select('id', { count: 'exact', head: true })
     .in('school_id', schoolIdList);
 
   if (school_year) {
-    promotionQuery = promotionQuery.eq('school_year', school_year);
+    countQuery = countQuery.eq('school_year', school_year);
   }
-
   if (grading_period) {
-    promotionQuery = promotionQuery.eq('grading_period', grading_period);
+    countQuery = countQuery.eq('grading_period', grading_period);
   }
 
-  const { data: records, error: recordsError } = await promotionQuery;
+  const { count: totalCount } = await countQuery;
 
-  console.log('[DivisionReportService] Promotion records fetched:', records?.length || 0);
+  const PAGE_SIZE = 1000;
+  let allRecords: {
+    id: string;
+    school_id: string;
+    student_id: string;
+    current_grade_level: number;
+    promotion_status: string;
+    school_year: string;
+    grading_period: string;
+  }[] = [];
 
-  if (recordsError) {
-    console.error('[DivisionReportService] Error fetching promotion records:', recordsError);
-    throw new Error(`Failed to fetch promotion records: ${recordsError.message}`);
+  const totalPages = Math.ceil((totalCount || 0) / PAGE_SIZE);
+
+  for (let page = 0; page < totalPages; page++) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    let promotionQuery = supabase
+      .from('promotion_records')
+      .select('id, school_id, student_id, current_grade_level, promotion_status, school_year, grading_period')
+      .in('school_id', schoolIdList)
+      .order('id', { ascending: true })
+      .range(from, to);
+
+    if (school_year) {
+      promotionQuery = promotionQuery.eq('school_year', school_year);
+    }
+    if (grading_period) {
+      promotionQuery = promotionQuery.eq('grading_period', grading_period);
+    }
+
+    const { data: pageRecords, error: pageError } = await promotionQuery;
+
+    if (pageError) {
+      throw new Error(`Failed to fetch promotion records: ${pageError.message}`);
+    }
+
+    if (pageRecords && pageRecords.length > 0) {
+      allRecords = [...allRecords, ...pageRecords];
+    }
   }
 
-  // Build school lookup
+  const records = allRecords;
   const schoolLookup = new Map(schools.map(s => [s.id, s]));
 
-  // Aggregate data
   const aggregate: DivisionPromotionAggregate = {
     total_schools: schools.length,
     total_students: 0,
@@ -467,7 +733,6 @@ export const getDivisionPromotionSummary = async (
     schools: [],
   };
 
-  // Per-school summaries
   const schoolSummaries = new Map<string, DivisionPromotionSummary>();
 
   schools.forEach(school => {
@@ -484,7 +749,6 @@ export const getDivisionPromotionSummary = async (
     });
   });
 
-  // Process records
   (records || []).forEach(record => {
     const school = schoolLookup.get(record.school_id);
     if (!school) return;
@@ -493,7 +757,6 @@ export const getDivisionPromotionSummary = async (
     const grade = Number(record.current_grade_level) || 0;
     const status = record.promotion_status;
 
-    // Update school summary
     summary.total_students++;
     if (status === 'promoted') summary.promoted++;
     else if (status === 'retained') summary.retained++;
@@ -513,7 +776,6 @@ export const getDivisionPromotionSummary = async (
     else if (status === 'retained') summary.by_grade[grade].retained++;
     else if (status === 'conditionally_promoted') summary.by_grade[grade].conditionally_promoted++;
 
-    // Update aggregate
     aggregate.total_students++;
     if (status === 'promoted') aggregate.total_promoted++;
     else if (status === 'retained') aggregate.total_retained++;
@@ -533,7 +795,6 @@ export const getDivisionPromotionSummary = async (
     else if (status === 'retained') aggregate.by_grade[grade].retained++;
     else if (status === 'conditionally_promoted') aggregate.by_grade[grade].conditionally_promoted++;
 
-    // Update by district
     const district = school.district || 'Unassigned';
     if (!aggregate.by_district[district]) {
       aggregate.by_district[district] = { schools: 0, students: 0, promoted: 0, promotion_rate: 0 };
@@ -542,7 +803,6 @@ export const getDivisionPromotionSummary = async (
     if (status === 'promoted') aggregate.by_district[district].promoted++;
   });
 
-  // Count schools per district and calculate rates
   schools.forEach(school => {
     const district = school.district || 'Unassigned';
     if (!aggregate.by_district[district]) {
@@ -551,7 +811,6 @@ export const getDivisionPromotionSummary = async (
     aggregate.by_district[district].schools++;
   });
 
-  // Calculate promotion rates
   if (aggregate.total_students > 0) {
     aggregate.overall_promotion_rate =
       Math.round((aggregate.total_promoted / aggregate.total_students) * 10000) / 100;
@@ -571,7 +830,6 @@ export const getDivisionPromotionSummary = async (
     }
   });
 
-  // Calculate school-level rates
   schoolSummaries.forEach(summary => {
     if (summary.total_students > 0) {
       summary.promotion_rate =

@@ -23,8 +23,8 @@ import type {
   UpdateDivisionUserInput,
   CreateDistrictInput,
   UpdateDistrictInput,
-  DEFAULT_PERMISSIONS_BY_ROLE,
 } from '../types/division';
+import { DEFAULT_PERMISSIONS_BY_ROLE } from '../types/division';
 
 // =====================================================
 // DIVISION OPERATIONS
