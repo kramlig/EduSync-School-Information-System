@@ -101,7 +101,9 @@ const DivisionDashboard: React.FC = () => {
   const {
     division,
     accessibleSchools,
+    filteredSchools,
     selectedSchoolId,
+    selectedDistrict,
     hasPermission,
     loading: contextLoading,
   } = useDivisionContext();
@@ -116,24 +118,33 @@ const DivisionDashboard: React.FC = () => {
   const [schoolSummaries, setSchoolSummaries] = useState<SchoolSummaryData[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Use filtered schools (by district) instead of all accessible schools
+  const targetSchools = useMemo(() => {
+    if (selectedSchoolId) {
+      return accessibleSchools.filter(s => s.id === selectedSchoolId);
+    }
+    // If district is selected, use filteredSchools from context
+    return filteredSchools;
+  }, [selectedSchoolId, filteredSchools, accessibleSchools]);
+
   // Memoize school IDs to prevent unnecessary re-fetches
   const schoolIds = useMemo(() => {
-    if (selectedSchoolId) return [selectedSchoolId];
-    return accessibleSchools.map(s => s.id);
-  }, [selectedSchoolId, accessibleSchools]);
+    return targetSchools.map(s => s.id);
+  }, [targetSchools]);
 
   // Fetch dashboard stats using RPC with fallback
   const fetchDashboardData = useCallback(async () => {
-    if (!division?.id || accessibleSchools.length === 0) {
+    if (!division?.id || targetSchools.length === 0) {
       setLoading(false);
       return;
     }
 
     try {
       // Try RPC first for optimal performance (single API call)
+      // Pass school IDs to filter by district/school selection
       const { data, error } = await supabase.rpc('get_division_dashboard_stats', {
         p_division_id: division.id,
-        p_school_ids: selectedSchoolId ? [selectedSchoolId] : null,
+        p_school_ids: schoolIds.length < accessibleSchools.length ? schoolIds : null,
       });
 
       // Check if RPC function exists
@@ -181,12 +192,13 @@ const DivisionDashboard: React.FC = () => {
       console.error('[DivisionDashboard] Error:', err);
       await fetchDashboardDataFallback();
     }
-  }, [division?.id, selectedSchoolId, accessibleSchools]);
+  }, [division?.id, schoolIds, targetSchools, accessibleSchools]);
 
   // Fallback: fetch data using multiple API calls
   const fetchDashboardDataFallback = useCallback(async () => {
     try {
-      const targetSchoolIds = selectedSchoolId ? [selectedSchoolId] : schoolIds;
+      // Use already-filtered school IDs (by district and/or school selection)
+      const targetSchoolIds = schoolIds;
 
       // Fetch student counts (count only, no data transfer)
       const { count: studentCount } = await supabase
@@ -211,18 +223,16 @@ const DivisionDashboard: React.FC = () => {
         pendingReports: Math.floor(targetSchoolIds.length * 0.2),
       });
 
-      // Build school summaries from context (no extra API calls)
-      const summaries: SchoolSummaryData[] = accessibleSchools
-        .filter(s => !selectedSchoolId || s.id === selectedSchoolId)
-        .map(school => ({
-          id: school.id,
-          name: school.name,
-          district: school.district || null,
-          studentCount: 0, // Not available in fallback without extra calls
-          teacherCount: 0,
-          lastReportDate: null,
-          reportStatus: Math.random() > 0.3 ? 'on-time' : 'pending' as const,
-        }));
+      // Build school summaries from filtered schools (already filtered by district)
+      const summaries: SchoolSummaryData[] = targetSchools.map(school => ({
+        id: school.id,
+        name: school.name,
+        district: school.district || null,
+        studentCount: 0, // Not available in fallback without extra calls
+        teacherCount: 0,
+        lastReportDate: null,
+        reportStatus: Math.random() > 0.3 ? 'on-time' : 'pending' as const,
+      }));
 
       setSchoolSummaries(summaries);
       setLoading(false);
@@ -230,7 +240,7 @@ const DivisionDashboard: React.FC = () => {
       console.error('[DivisionDashboard] Fallback error:', err);
       setLoading(false);
     }
-  }, [selectedSchoolId, schoolIds, accessibleSchools]);
+  }, [schoolIds, targetSchools]);
 
   // Fetch dashboard stats
   useEffect(() => {
@@ -363,11 +373,14 @@ const DivisionDashboard: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
             Division Dashboard
+            {selectedDistrict && (
+              <span className="text-lg font-normal text-slate-500 ml-2">— {selectedDistrict}</span>
+            )}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">
             {selectedSchoolId 
               ? `Viewing: ${accessibleSchools.find(s => s.id === selectedSchoolId)?.name}`
-              : `Overview of ${accessibleSchools.length} schools`
+              : `Overview of ${targetSchools.length} schools`
             }
           </p>
         </div>

@@ -83,6 +83,21 @@ const getAvailableSchoolYears = (): string[] => {
 };
 
 // =====================================================
+// HELPER: Get current quarter
+// =====================================================
+
+const getCurrentQuarter = (): 'Q1' | 'Q2' | 'Q3' | 'Q4' => {
+  const now = new Date();
+  const month = now.getMonth(); // 0-indexed
+  
+  // Philippine school year: Aug-Oct=Q1, Nov-Jan=Q2, Feb-Apr=Q3, May-Jul=Q4
+  if (month >= 7 && month <= 9) return 'Q1';  // Aug, Sep, Oct
+  if (month >= 10 || month === 0) return 'Q2'; // Nov, Dec, Jan
+  if (month >= 1 && month <= 3) return 'Q3';   // Feb, Mar, Apr
+  return 'Q4'; // May, Jun, Jul
+};
+
+// =====================================================
 // DEFAULT CONTEXT VALUE
 // =====================================================
 
@@ -97,6 +112,7 @@ const defaultContextValue: DivisionContextData = {
   filteredSchools: [],
   schoolYear: getCurrentSchoolYear(),
   availableSchoolYears: getAvailableSchoolYears(),
+  quarter: getCurrentQuarter(),
   loading: true,
   error: null,
   selectDistrict: () => {
@@ -107,6 +123,9 @@ const defaultContextValue: DivisionContextData = {
   },
   setSchoolYear: () => {
     console.warn('[DivisionContext] setSchoolYear called outside of DivisionContextProvider');
+  },
+  setQuarter: () => {
+    console.warn('[DivisionContext] setQuarter called outside of DivisionContextProvider');
   },
   refreshSchools: async () => {
     console.warn('[DivisionContext] refreshSchools called outside of DivisionContextProvider');
@@ -166,6 +185,15 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
     return getCurrentSchoolYear();
   });
   
+  // Quarter state - persisted in localStorage
+  const [quarter, setQuarterState] = useState<'Q1' | 'Q2' | 'Q3' | 'Q4'>(() => {
+    const stored = localStorage.getItem('division_quarter') as 'Q1' | 'Q2' | 'Q3' | 'Q4' | null;
+    if (stored && ['Q1', 'Q2', 'Q3', 'Q4'].includes(stored)) {
+      return stored;
+    }
+    return getCurrentQuarter();
+  });
+  
   // Available school years
   const availableSchoolYears = useMemo(() => getAvailableSchoolYears(), []);
   
@@ -190,6 +218,12 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
   const setSchoolYear = useCallback((sy: string) => {
     setSchoolYearState(sy);
     localStorage.setItem('division_school_year', sy);
+  }, []);
+  
+  // Quarter setter that also persists to localStorage
+  const setQuarter = useCallback((q: 'Q1' | 'Q2' | 'Q3' | 'Q4') => {
+    setQuarterState(q);
+    localStorage.setItem('division_quarter', q);
   }, []);
 
   // =====================================================
@@ -569,11 +603,13 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
     filteredSchools,
     schoolYear,
     availableSchoolYears,
+    quarter,
     loading,
     error,
     selectDistrict,
     selectSchool,
     setSchoolYear,
+    setQuarter,
     refreshSchools,
     refreshData,
     hasPermission,
@@ -588,11 +624,13 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
     filteredSchools,
     schoolYear,
     availableSchoolYears,
+    quarter,
     loading,
     error,
     selectDistrict,
     selectSchool,
     setSchoolYear,
+    setQuarter,
     refreshSchools,
     refreshData,
     hasPermission,

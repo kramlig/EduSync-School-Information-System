@@ -65,6 +65,7 @@ const DivisionSF7Dashboard: React.FC = () => {
     division,
     divisionUser,
     accessibleSchools,
+    filteredSchools,
     selectedSchoolId,
     hasPermission,
     loading: contextLoading,
@@ -79,7 +80,7 @@ const DivisionSF7Dashboard: React.FC = () => {
 
   const canExport = hasPermission('reports', 'export');
 
-  // Fetch data
+  // Fetch data (use global district filter)
   useEffect(() => {
     if (!division?.id || contextLoading) return;
 
@@ -88,11 +89,14 @@ const DivisionSF7Dashboard: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        const schoolIds = selectedSchoolId ? [selectedSchoolId] : undefined;
+        // Use filteredSchools (already filtered by global district) or selectedSchool
+        const schoolIds = selectedSchoolId 
+          ? [selectedSchoolId] 
+          : filteredSchools.map(s => s.id);
 
         const result = await getDivisionPersonnelSummary({
           division_id: division.id,
-          school_ids: schoolIds,
+          school_ids: schoolIds.length < accessibleSchools.length ? schoolIds : undefined,
         });
 
         setData(result);
@@ -118,7 +122,7 @@ const DivisionSF7Dashboard: React.FC = () => {
     };
 
     fetchData();
-  }, [division?.id, selectedSchoolId, contextLoading, divisionUser]);
+  }, [division?.id, selectedSchoolId, filteredSchools, contextLoading, divisionUser, accessibleSchools]);
 
   // Handle CSV export
   const handleExport = useCallback(async () => {

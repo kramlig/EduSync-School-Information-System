@@ -108,7 +108,8 @@ export type AuditResourceType =
   | 'sf9'
   | 'sf10'
   | 'enrollment_data'
-  | 'personnel_data';
+  | 'personnel_data'
+  | 'proficiency';
 
 /**
  * Status of audit action

@@ -106,6 +106,7 @@ const DivisionUserManagement = lazy(() => import('./src/components/division/Divi
 const DivisionSF5Dashboard = lazy(() => import('./src/components/division/DivisionSF5Dashboard'));
 const DivisionSF6Dashboard = lazy(() => import('./src/components/division/DivisionSF6Dashboard'));
 const DivisionSF7Dashboard = lazy(() => import('./src/components/division/DivisionSF7Dashboard'));
+const DivisionProficiencyDashboard = lazy(() => import('./src/components/division/DivisionProficiencyDashboard'));
 const DivisionAuditLog = lazy(() => import('./src/components/division/DivisionAuditLog'));
 const DivisionOnboarding = lazy(() => import('./src/components/division/DivisionOnboarding'));
 import { DivisionContextProvider, useDivisionContext } from './src/contexts/DivisionContext';
@@ -655,6 +656,7 @@ const App: React.FC = () => {
                 <Route path="reports/sf5" element={<DivisionSF5Dashboard />} />
                 <Route path="reports/sf6" element={<DivisionSF6Dashboard />} />
                 <Route path="reports/sf7" element={<DivisionSF7Dashboard />} />
+                <Route path="reports/proficiency" element={<DivisionProficiencyDashboard />} />
                 <Route path="users" element={<DivisionUserManagement />} />
                 <Route path="audit-log" element={<DivisionAuditLog />} />
                 <Route path="settings" element={<DivisionSettings />} />

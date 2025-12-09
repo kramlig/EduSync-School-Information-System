@@ -272,6 +272,9 @@ export interface DivisionContextData {
   // Available school years to select from
   availableSchoolYears: string[];
   
+  // Currently selected quarter (for filtering data)
+  quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4';
+  
   // Loading state
   loading: boolean;
   
@@ -282,6 +285,7 @@ export interface DivisionContextData {
   selectDistrict: (district: string | null) => void;
   selectSchool: (schoolId: string | null) => void;
   setSchoolYear: (schoolYear: string) => void;
+  setQuarter: (quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4') => void;
   refreshSchools: () => Promise<void>;
   refreshData: () => Promise<void>;
   

@@ -22,7 +22,14 @@ interface ReportData {
 }
 
 const DivisionReports: React.FC = () => {
-  const { division, accessibleSchools, selectedSchoolId, hasPermission, loading: contextLoading } = useDivisionContext();
+  const { 
+    division, 
+    accessibleSchools, 
+    filteredSchools,
+    selectedSchoolId, 
+    hasPermission, 
+    loading: contextLoading 
+  } = useDivisionContext();
 
   const canGenerate = hasPermission('reports', 'generate');
   const canExport = hasPermission('reports', 'export');
@@ -33,11 +40,12 @@ const DivisionReports: React.FC = () => {
     completion: { type: 'completion', generated: false, loading: false, data: null, error: null },
   });
 
-  // Memoize school IDs
+  // Memoize school IDs (use global district filter)
   const schoolIds = useMemo(() => {
     if (selectedSchoolId) return [selectedSchoolId];
-    return accessibleSchools.map(s => s.id);
-  }, [selectedSchoolId, accessibleSchools]);
+    // Use filteredSchools from context (already filtered by global district)
+    return filteredSchools.map(s => s.id);
+  }, [selectedSchoolId, filteredSchools]);
 
   // Generate enrollment summary report using RPC for optimal performance
   const generateEnrollmentReport = useCallback(async () => {

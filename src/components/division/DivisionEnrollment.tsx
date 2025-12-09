@@ -69,7 +69,14 @@ const STATUS_LABELS: Record<EnrollmentStatus, string> = {
 };
 
 const DivisionEnrollment: React.FC = () => {
-  const { division, accessibleSchools, selectedSchoolId, hasPermission, loading: contextLoading } = useDivisionContext();
+  const { 
+    division, 
+    accessibleSchools, 
+    selectedSchoolId, 
+    selectedDistrict,
+    hasPermission, 
+    loading: contextLoading 
+  } = useDivisionContext();
 
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,11 +112,13 @@ const DivisionEnrollment: React.FC = () => {
     return Array.from(districtSet).sort();
   }, [accessibleSchools]);
 
-  // Get schools filtered by selected district
+  // Get schools filtered by selected district (from sidebar global filter)
   const filteredSchools = useMemo(() => {
-    if (!filter.district) return accessibleSchools;
-    return accessibleSchools.filter(s => s.district === filter.district);
-  }, [accessibleSchools, filter.district]);
+    // Use global district filter from context, or local filter
+    const activeDistrict = selectedDistrict || filter.district;
+    if (!activeDistrict) return accessibleSchools;
+    return accessibleSchools.filter(s => s.district === activeDistrict);
+  }, [accessibleSchools, filter.district, selectedDistrict]);
 
   // Memoize school IDs to prevent unnecessary re-fetches
   const schoolIds = useMemo(() => {
@@ -117,15 +126,9 @@ const DivisionEnrollment: React.FC = () => {
     if (filter.school_id) return [filter.school_id];
     // If context-level school is selected, use that
     if (selectedSchoolId) return [selectedSchoolId];
-    // If district filter is active, use schools in that district
-    if (filter.district) {
-      return accessibleSchools
-        .filter(s => s.district === filter.district)
-        .map(s => s.id);
-    }
-    // Otherwise, all accessible schools
-    return accessibleSchools.map(s => s.id);
-  }, [selectedSchoolId, accessibleSchools, filter.school_id, filter.district]);
+    // Use the filtered schools (already filtered by global or local district)
+    return filteredSchools.map(s => s.id);
+  }, [selectedSchoolId, filteredSchools, filter.school_id]);
 
   // Fetch summary counts using RPC for single API call (4 calls → 1 call)
   const fetchSummaryCounts = useCallback(async () => {

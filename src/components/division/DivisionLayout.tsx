@@ -109,6 +109,8 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
     schoolYear,
     availableSchoolYears,
     setSchoolYear,
+    quarter,
+    setQuarter,
     hasPermission,
     loading,
   } = useDivisionContext();
@@ -249,6 +251,14 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
         show: hasPermission('personnel', 'read') && isModuleEnabled('sf7_personnel'),
         end: true, // Exact match to avoid conflict with /division/reports
         moduleKey: 'sf7_personnel',
+      },
+      {
+        path: '/division/reports/proficiency',
+        iconName: 'chart',
+        label: 'Proficiency Level',
+        show: hasPermission('reports', 'read'),
+        end: true, // Exact match to avoid conflict with /division/reports
+        moduleKey: null, // No module restriction - new feature
       },
       {
         path: '/division/reports',
@@ -541,19 +551,39 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
 
         {/* School Year Selector */}
         <div className="px-4 pb-4 border-b border-slate-200 dark:border-slate-700">
-          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
-            School Year
-          </label>
-          <select
-            value={schoolYear}
-            onChange={(e) => setSchoolYear(e.target.value)}
-            aria-label="Select school year"
-            className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
-          >
-            {availableSchoolYears.map(sy => (
-              <option key={sy} value={sy}>SY {sy}</option>
-            ))}
-          </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+                School Year
+              </label>
+              <select
+                value={schoolYear}
+                onChange={(e) => setSchoolYear(e.target.value)}
+                aria-label="Select school year"
+                className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
+              >
+                {availableSchoolYears.map(sy => (
+                  <option key={sy} value={sy}>SY {sy}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
+                Quarter
+              </label>
+              <select
+                value={quarter}
+                onChange={(e) => setQuarter(e.target.value as 'Q1' | 'Q2' | 'Q3' | 'Q4')}
+                aria-label="Select quarter"
+                className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
+              >
+                <option value="Q1">Q1</option>
+                <option value="Q2">Q2</option>
+                <option value="Q3">Q3</option>
+                <option value="Q4">Q4</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Navigation */}
