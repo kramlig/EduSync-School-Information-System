@@ -34,7 +34,14 @@ interface SchoolWithStats {
 }
 
 const DivisionSchools: React.FC = () => {
-  const { division, accessibleSchools, selectedSchoolId, selectSchool, loading: contextLoading } = useDivisionContext();
+  const { 
+    division, 
+    accessibleSchools, 
+    filteredSchools: contextFilteredSchools,
+    selectedSchoolId, 
+    selectSchool, 
+    loading: contextLoading 
+  } = useDivisionContext();
 
   const [schoolStats, setSchoolStats] = useState<Map<string, SchoolStats>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -49,10 +56,12 @@ const DivisionSchools: React.FC = () => {
   // Debounce search input
   const debouncedSearch = useDebounce(searchQuery, 300);
 
+  // Use global district filter, then apply search
   const filteredSchools = useMemo(() => {
+    // Start with context-filtered schools (already filtered by global district)
     let schools = selectedSchoolId
       ? accessibleSchools.filter(s => s.id === selectedSchoolId)
-      : accessibleSchools;
+      : contextFilteredSchools;
 
     // Apply search filter
     if (debouncedSearch) {
@@ -65,11 +74,11 @@ const DivisionSchools: React.FC = () => {
     }
 
     return schools;
-  }, [accessibleSchools, selectedSchoolId, debouncedSearch]);
+  }, [accessibleSchools, contextFilteredSchools, selectedSchoolId, debouncedSearch]);
 
   // Fetch all data using RPC (single API call) with fallback to multiple queries
   const fetchAllData = useCallback(async () => {
-    if (!division?.id || accessibleSchools.length === 0) {
+    if (!division?.id || contextFilteredSchools.length === 0) {
       setLoading(false);
       setSummaryCounts({ totalStudents: 0, totalTeachers: 0 });
       return;
@@ -78,10 +87,13 @@ const DivisionSchools: React.FC = () => {
     try {
       setLoading(true);
       
+      // Use filtered school IDs based on global district filter
+      const schoolIdsToFetch = contextFilteredSchools.map(s => s.id);
+      
       // Try RPC first for optimal performance
       const { data, error } = await supabase.rpc('get_division_schools_stats', {
         p_division_id: division.id,
-        p_school_ids: selectedSchoolId ? [selectedSchoolId] : null,
+        p_school_ids: schoolIdsToFetch,
       });
 
       // Check if RPC function exists
@@ -123,16 +135,16 @@ const DivisionSchools: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [division?.id, accessibleSchools, selectedSchoolId]);
+  }, [division?.id, contextFilteredSchools]);
 
   // Fallback: Fetch using multiple queries (for when RPC is not deployed)
   const fetchStatsFallback = useCallback(async () => {
-    if (accessibleSchools.length === 0) {
+    if (contextFilteredSchools.length === 0) {
       setSummaryCounts({ totalStudents: 0, totalTeachers: 0 });
       return;
     }
 
-    const schoolIds = accessibleSchools.map(s => s.id);
+    const schoolIds = contextFilteredSchools.map(s => s.id);
 
     try {
       // Fetch summary counts
@@ -197,7 +209,7 @@ const DivisionSchools: React.FC = () => {
     } catch (err) {
       console.error('[DivisionSchools] Fallback error:', err);
     }
-  }, [accessibleSchools]);
+  }, [contextFilteredSchools]);
 
   useEffect(() => {
     if (!contextLoading) {
@@ -217,15 +229,15 @@ const DivisionSchools: React.FC = () => {
     });
   }, [filteredSchools, schoolStats]);
 
-  // Summary statistics
+  // Summary statistics - use contextFilteredSchools for filtered counts
   const summary = useMemo(() => {
     return {
-      totalSchools: accessibleSchools.length,
+      totalSchools: contextFilteredSchools.length,
       totalStudents: summaryCounts.totalStudents,
       totalTeachers: summaryCounts.totalTeachers,
-      districts: new Set(accessibleSchools.map(s => s.district).filter(Boolean)).size,
+      districts: new Set(contextFilteredSchools.map(s => s.district).filter(Boolean)).size,
     };
-  }, [accessibleSchools, summaryCounts]);
+  }, [contextFilteredSchools, summaryCounts]);
 
   if (contextLoading) {
     return (

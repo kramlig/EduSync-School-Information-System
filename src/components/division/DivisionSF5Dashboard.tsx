@@ -39,6 +39,7 @@ const DivisionSF5Dashboard: React.FC = () => {
     division,
     divisionUser,
     accessibleSchools,
+    filteredSchools,
     selectedSchoolId,
     hasPermission,
     schoolYear,
@@ -55,7 +56,7 @@ const DivisionSF5Dashboard: React.FC = () => {
 
   const canExport = hasPermission('reports', 'export');
 
-  // Fetch data
+  // Fetch data (use global district filter)
   useEffect(() => {
     if (!division?.id || contextLoading) return;
 
@@ -64,11 +65,14 @@ const DivisionSF5Dashboard: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        const schoolIds = selectedSchoolId ? [selectedSchoolId] : undefined;
+        // Use filteredSchools (already filtered by global district) or selectedSchool
+        const schoolIds = selectedSchoolId 
+          ? [selectedSchoolId] 
+          : filteredSchools.map(s => s.id);
 
         const result = await getDivisionPromotionSummary({
           division_id: division.id,
-          school_ids: schoolIds,
+          school_ids: schoolIds.length < accessibleSchools.length ? schoolIds : undefined,
           school_year: schoolYear,
           grading_period: 'final',
         });
@@ -96,10 +100,10 @@ const DivisionSF5Dashboard: React.FC = () => {
     };
 
     fetchData();
-  }, [division?.id, selectedSchoolId, schoolYear, contextLoading, divisionUser]);
+  }, [division?.id, selectedSchoolId, filteredSchools, schoolYear, contextLoading, divisionUser, accessibleSchools]);
 
-  // Filter schools by selected grade
-  const filteredSchools = useMemo(() => {
+  // Filter schools in data by selected grade
+  const filteredSchoolsByGrade = useMemo(() => {
     if (!data?.schools) return [];
     if (selectedGrade === '') return data.schools;
     return data.schools.filter(s => s.by_grade[selectedGrade as number]);
@@ -460,7 +464,7 @@ const DivisionSF5Dashboard: React.FC = () => {
             <div className="p-4 border-b border-slate-200 dark:border-slate-700">
               <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 <ChartBarIcon className="w-5 h-5 text-blue-600" />
-                Promotion by School ({filteredSchools.length} schools)
+                Promotion by School ({filteredSchoolsByGrade.length} schools)
               </h3>
             </div>
             <div className="overflow-x-auto">
@@ -476,7 +480,7 @@ const DivisionSF5Dashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                  {filteredSchools
+                  {filteredSchoolsByGrade
                     .sort((a, b) => a.school_name.localeCompare(b.school_name))
                     .map(school => (
                       <tr key={school.school_id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">

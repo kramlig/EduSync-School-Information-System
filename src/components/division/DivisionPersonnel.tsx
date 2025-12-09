@@ -74,7 +74,14 @@ const STATUS_LABELS: Record<EmploymentStatus, string> = {
 };
 
 const DivisionPersonnel: React.FC = () => {
-  const { division, accessibleSchools, selectedSchoolId, hasPermission, loading: contextLoading } = useDivisionContext();
+  const { 
+    division, 
+    accessibleSchools, 
+    filteredSchools,
+    selectedSchoolId, 
+    hasPermission, 
+    loading: contextLoading 
+  } = useDivisionContext();
 
   const [personnel, setPersonnel] = useState<PersonnelRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,11 +107,12 @@ const DivisionPersonnel: React.FC = () => {
   // Debounce search input (300ms delay)
   const debouncedSearch = useDebounce(filter.search || '', 300);
 
-  // Memoize school IDs to prevent unnecessary re-fetches
+  // Memoize school IDs to prevent unnecessary re-fetches (use global district filter)
   const schoolIds = useMemo(() => {
     if (selectedSchoolId) return [selectedSchoolId];
-    return accessibleSchools.map(s => s.id);
-  }, [selectedSchoolId, accessibleSchools]);
+    // Use filteredSchools from context (already filtered by global district)
+    return filteredSchools.map(s => s.id);
+  }, [selectedSchoolId, filteredSchools]);
 
   // Fetch summary counts using RPC for single API call (4 calls → 1 call)
   const fetchSummaryCounts = useCallback(async () => {
