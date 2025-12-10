@@ -52,7 +52,7 @@ const SUBJECT_COLORS = [
 ];
 
 const DivisionProficiencyDashboard: React.FC = () => {
-  const { division, loading: contextLoading, quarter, selectedDistrict } = useDivisionContext();
+  const { division, loading: contextLoading, quarter, selectedDistrict, selectedSchoolId, schoolLevel } = useDivisionContext();
 
   // State
   const [report, setReport] = useState<ProficiencyReport | null>(null);
@@ -101,11 +101,20 @@ const DivisionProficiencyDashboard: React.FC = () => {
         total_schools: report.total_schools,
         school_data_count: report.school_data?.length || 0,
         by_grade_level_count: report.by_grade_level?.length || 0,
+        by_grade_level_sample: report.by_grade_level?.slice(0, 5),
         districts_in_school_data: districts,
         selectedDistrict,
       });
+      // Log transformed depEdData structure
+      if (depEdData.length > 0) {
+        console.log('[ProficiencyDashboard] DepEd data sample:', {
+          first_school: depEdData[0],
+          subjects_keys: Object.keys(depEdData[0]?.subjects || {}),
+          first_subject_keys: depEdData[0]?.subjects ? Object.keys(Object.values(depEdData[0].subjects)[0] || {}) : [],
+        });
+      }
     }
-  }, [report, districts, selectedDistrict]);
+  }, [report, districts, selectedDistrict, depEdData]);
 
   // Helper to match district names (handles "Mati Central" vs "Mati Central District")
   const matchesDistrict = useCallback((dataDistrict: string, filterDistrict: string | null): boolean => {
@@ -126,15 +135,29 @@ const DivisionProficiencyDashboard: React.FC = () => {
     return stripSuffix(normalizedData) === stripSuffix(normalizedFilter);
   }, []);
 
-  // Filter report data by district
+  // Filter report data by district and/or school
   const filteredReport = useMemo((): ProficiencyReport | null => {
     if (!report) return null;
-    if (!selectedDistrict) return report;
+    if (!selectedDistrict && !selectedSchoolId) return report;
 
-    // Filter all arrays by district using fuzzy matching
-    const filteredSchoolData = report.school_data.filter(s => matchesDistrict(s.district, selectedDistrict));
-    const filteredByGradeLevel = report.by_grade_level.filter(s => matchesDistrict(s.district, selectedDistrict));
-    const filteredKindergarten = report.kindergarten.filter(s => matchesDistrict(s.district, selectedDistrict));
+    // Filter all arrays by district and/or school
+    let filteredSchoolData = report.school_data;
+    let filteredByGradeLevel = report.by_grade_level;
+    let filteredKindergarten = report.kindergarten;
+    
+    // Apply district filter first
+    if (selectedDistrict) {
+      filteredSchoolData = filteredSchoolData.filter(s => matchesDistrict(s.district, selectedDistrict));
+      filteredByGradeLevel = filteredByGradeLevel.filter(s => matchesDistrict(s.district, selectedDistrict));
+      filteredKindergarten = filteredKindergarten.filter(s => matchesDistrict(s.district, selectedDistrict));
+    }
+    
+    // Then apply school filter if a specific school is selected
+    if (selectedSchoolId) {
+      filteredSchoolData = filteredSchoolData.filter(s => s.school_id === selectedSchoolId);
+      filteredByGradeLevel = filteredByGradeLevel.filter(s => s.school_id === selectedSchoolId);
+      filteredKindergarten = filteredKindergarten.filter(s => s.school_id === selectedSchoolId);
+    }
     
     // Get unique school IDs in filtered data
     const schoolIds = new Set(filteredSchoolData.map(s => s.school_id));
@@ -177,13 +200,24 @@ const DivisionProficiencyDashboard: React.FC = () => {
       by_grade_level: filteredByGradeLevel,
       kindergarten: filteredKindergarten,
     };
-  }, [report, selectedDistrict, matchesDistrict]);
+  }, [report, selectedDistrict, selectedSchoolId, matchesDistrict]);
 
-  // Filter depEdData by district
+  // Filter depEdData by district and/or school
   const filteredDepEdData = useMemo(() => {
-    if (!selectedDistrict) return depEdData;
-    return depEdData.filter(s => matchesDistrict(s.district, selectedDistrict));
-  }, [depEdData, selectedDistrict, matchesDistrict]);
+    let filtered = depEdData;
+    
+    // Apply district filter
+    if (selectedDistrict) {
+      filtered = filtered.filter(s => matchesDistrict(s.district, selectedDistrict));
+    }
+    
+    // Apply school filter if a specific school is selected
+    if (selectedSchoolId) {
+      filtered = filtered.filter(s => s.school_id === selectedSchoolId);
+    }
+    
+    return filtered;
+  }, [depEdData, selectedDistrict, selectedSchoolId, matchesDistrict]);
 
   // Group by district
   const dataByDistrict = useMemo(() => {
@@ -196,6 +230,28 @@ const DivisionProficiencyDashboard: React.FC = () => {
     }
     return grouped;
   }, [filteredDepEdData]);
+
+  // Helper: Check if a school has data for specific grade levels
+  const hasDataForLevel = useCallback((school: DepEdSchoolRow, level: 'ELEMENTARY' | 'JUNIOR HIGH SCHOOL' | 'ALL') => {
+    if (level === 'ALL') return true;
+    
+    const relevantGrades = level === 'JUNIOR HIGH SCHOOL' ? [7, 8, 9, 10] : [1, 2, 3, 4, 5, 6];
+    
+    for (const [, gradeData] of Object.entries(school.subjects || {})) {
+      for (const grade of relevantGrades) {
+        const data = gradeData[grade] || gradeData[grade.toString()];
+        if (data && (data.passing_rate > 0 || data.mps > 0)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, []);
+
+  // Count schools with data for the selected school level
+  const schoolsWithDataForLevel = useMemo(() => {
+    return filteredDepEdData.filter(school => hasDataForLevel(school, schoolLevel as 'ELEMENTARY' | 'JUNIOR HIGH SCHOOL' | 'ALL')).length;
+  }, [filteredDepEdData, schoolLevel, hasDataForLevel]);
 
   // Export to CSV with totals
   const handleExportCSV = useCallback(() => {
@@ -447,21 +503,32 @@ const DivisionProficiencyDashboard: React.FC = () => {
       {/* DepEd Format View */}
       {viewMode === 'deped' && (
         <div className="space-y-4">
-          {/* Info bar showing current filter */}
-          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-            <span>
-              {selectedDistrict 
-                ? `Showing ${filteredDepEdData.length} schools in ${selectedDistrict}`
-                : `Showing all ${filteredDepEdData.length} schools`}
-            </span>
-            {selectedDistrict && (
-              <span className="text-xs text-slate-400">(Use sidebar to change district filter)</span>
-            )}
+          {/* Info bar showing current filters */}
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+              <span>
+                {selectedSchoolId
+                  ? `Showing 1 school`
+                  : selectedDistrict 
+                    ? `Showing ${schoolsWithDataForLevel} schools in ${selectedDistrict}`
+                    : `Showing ${schoolsWithDataForLevel} of ${filteredDepEdData.length} schools`}
+                {schoolLevel !== 'ALL' && ` with ${schoolLevel === 'JUNIOR HIGH SCHOOL' ? 'JHS' : 'Elementary'} data`}
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300">
+                {schoolLevel === 'ALL' ? 'All Levels' : schoolLevel === 'ELEMENTARY' ? 'Elementary' : schoolLevel === 'JUNIOR HIGH SCHOOL' ? 'Junior High' : 'Senior High'}
+              </span>
+            </div>
+            <span className="text-xs text-slate-400">(Use sidebar filters to change)</span>
           </div>
 
-          {/* DepEd Format Table by District */}
-          {Object.entries(dataByDistrict).map(([district, schools]) => (
-            <DepEdDistrictTable key={district} district={district} schools={schools} />
+          {/* DepEd Format Table by District - ELEMENTARY */}
+          {(schoolLevel === 'ALL' || schoolLevel === 'ELEMENTARY') && Object.entries(dataByDistrict).map(([district, schools]) => (
+            <DepEdDistrictTable key={`elem-${district}`} district={district} schools={schools} level="ELEMENTARY" />
+          ))}
+
+          {/* DepEd Format Table by District - JUNIOR HIGH SCHOOL */}
+          {(schoolLevel === 'ALL' || schoolLevel === 'JUNIOR HIGH SCHOOL') && Object.entries(dataByDistrict).map(([district, schools]) => (
+            <DepEdDistrictTable key={`jhs-${district}`} district={district} schools={schools} level="JUNIOR HIGH SCHOOL" />
           ))}
 
           {filteredDepEdData.length === 0 && (
@@ -651,7 +718,7 @@ const PremiumChartsView: React.FC<PremiumChartsViewProps> = ({ report, depEdData
         <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-5 text-white shadow-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-green-100 text-sm">Total Students</p>
+              <p className="text-green-100 text-sm">Grade Records</p>
               <p className="text-3xl font-bold mt-1">{report.total_grades.toLocaleString()}</p>
             </div>
             <div className="bg-white/20 p-3 rounded-lg">
@@ -659,7 +726,7 @@ const PremiumChartsView: React.FC<PremiumChartsViewProps> = ({ report, depEdData
             </div>
           </div>
           <div className="mt-3 text-green-100 text-xs">
-            Grade entries recorded
+            Quarterly grades recorded
           </div>
         </div>
         
@@ -897,9 +964,18 @@ const PremiumChartsView: React.FC<PremiumChartsViewProps> = ({ report, depEdData
 // SUB-COMPONENTS
 // =====================================================
 
-const DepEdDistrictTable: React.FC<{ district: string; schools: DepEdSchoolRow[] }> = ({ district, schools }) => {
-  // Simplified subjects for display
-  const displaySubjects = [
+const DepEdDistrictTable: React.FC<{ district: string; schools: DepEdSchoolRow[]; level?: 'ELEMENTARY' | 'JUNIOR HIGH SCHOOL' }> = ({ district, schools, level = 'ELEMENTARY' }) => {
+  // Subjects based on level
+  const displaySubjects = level === 'JUNIOR HIGH SCHOOL' ? [
+    { code: 'FIL', name: 'Filipino', grades: [7, 8, 9, 10] },
+    { code: 'ENG', name: 'English', grades: [7, 8, 9, 10] },
+    { code: 'MATH', name: 'Math', grades: [7, 8, 9, 10] },
+    { code: 'SCI', name: 'Science', grades: [7, 8, 9, 10] },
+    { code: 'AP', name: 'AP', grades: [7, 8, 9, 10] },
+    { code: 'ESP', name: 'EsP', grades: [7, 8, 9, 10] },
+    { code: 'TLE', name: 'TLE', grades: [7, 8, 9, 10] },
+    { code: 'MAPEH', name: 'MAPEH', grades: [7, 8, 9, 10] },
+  ] : [
     { code: 'LANG', name: 'Language', grades: [1, 2, 3] },
     { code: 'MTB', name: 'MTB', grades: [1, 2, 3] },
     { code: 'ENG', name: 'English', grades: [1, 2, 3, 4, 5, 6] },
@@ -911,16 +987,46 @@ const DepEdDistrictTable: React.FC<{ district: string; schools: DepEdSchoolRow[]
     { code: 'MAPEH', name: 'MAPEH', grades: [1, 2, 3, 4, 5, 6] },
   ];
 
+  // Helper to find data for a subject/grade - handles various code formats
+  const findSubjectData = (school: DepEdSchoolRow, subjectCode: string, grade: number) => {
+    // Direct match
+    let data = school.subjects[subjectCode]?.[grade] ||
+               school.subjects[subjectCode]?.[grade.toString()] ||
+               school.subjects[subjectCode]?.[`Grade ${grade}`];
+    if (data) return data;
+    
+    // Try finding by prefix (e.g., "FIL" matches "FIL-SEC", "FILIPINO")
+    for (const [code, grades] of Object.entries(school.subjects || {})) {
+      if (code.toUpperCase().startsWith(subjectCode) || 
+          code.toUpperCase().includes(subjectCode) ||
+          subjectCode.toUpperCase().startsWith(code.toUpperCase())) {
+        data = grades[grade] || grades[grade.toString()] || grades[`Grade ${grade}`];
+        if (data) return data;
+      }
+    }
+    return null;
+  };
+
   // Calculate averages for each subject-grade combination
   const averages: { [key: string]: { passSum: number; mpsSum: number; count: number } } = {};
+  let hasAnyData = false;
+  
+  // Debug: Log first school's data
+  if (schools.length > 0) {
+    console.log(`[DepEdDistrictTable] ${level} - First school subjects:`, {
+      school: schools[0].school_name,
+      subjectKeys: Object.keys(schools[0].subjects || {}),
+      sampleData: schools[0].subjects,
+    });
+  }
   
   for (const school of schools) {
     for (const subject of displaySubjects) {
       for (const grade of subject.grades) {
         const key = `${subject.code}-${grade}`;
-        const data = school.subjects[subject.code]?.[`Grade ${grade}`] ||
-                    school.subjects[subject.code]?.[grade.toString()];
+        const data = findSubjectData(school, subject.code, grade);
         if (data) {
+          hasAnyData = true;
           if (!averages[key]) {
             averages[key] = { passSum: 0, mpsSum: 0, count: 0 };
           }
@@ -936,12 +1042,18 @@ const DepEdDistrictTable: React.FC<{ district: string; schools: DepEdSchoolRow[]
     }
   }
 
+  // Don't render if no data for this level
+  if (!hasAnyData) {
+    console.log(`[DepEdDistrictTable] ${level} - No data found for district: ${district}`);
+    return null;
+  }
+
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
       {/* District Header */}
       <div className="px-4 py-3 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
         <h3 className="font-semibold text-slate-900 dark:text-white">
-          ELEMENTARY ({district})
+          {level} ({district})
         </h3>
         <p className="text-xs text-slate-500">{schools.length} schools</p>
       </div>
@@ -988,9 +1100,7 @@ const DepEdDistrictTable: React.FC<{ district: string; schools: DepEdSchoolRow[]
                 </td>
                 {displaySubjects.map(subject =>
                   subject.grades.map(grade => {
-                    const data = school.subjects[subject.code]?.[`Grade ${grade}`] ||
-                                school.subjects[subject.code]?.[grade.toString()] ||
-                                school.subjects[subject.code]?.[`${grade}`];
+                    const data = findSubjectData(school, subject.code, grade);
                     return (
                       <React.Fragment key={`${school.school_id}-${subject.code}-${grade}`}>
                         <td className={`px-1 py-1 text-center border-r border-slate-100 dark:border-slate-800 ${data ? getMPSColor(data.passing_rate) : 'text-slate-300'}`}>

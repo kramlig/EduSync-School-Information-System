@@ -2,9 +2,9 @@
  * DivisionLayout - Layout component for Division-level users
  * 
  * This layout provides:
- * - Division-specific sidebar navigation
+ * - Global filter bar in header (District, School, SY, Quarter, Level)
+ * - Clean sidebar navigation
  * - Division header with user info
- * - School selector dropdown
  * - Breadcrumb navigation
  * 
  * @see docs/features/DIVISION_LEVEL_ACCESS.md
@@ -111,6 +111,8 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
     setSchoolYear,
     quarter,
     setQuarter,
+    schoolLevel,
+    setSchoolLevel,
     hasPermission,
     loading,
   } = useDivisionContext();
@@ -303,6 +305,39 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
     return accessibleSchools.find(s => s.id === selectedSchoolId);
   }, [selectedSchoolId, accessibleSchools]);
 
+  // Determine available school levels based on selected school
+  const availableSchoolLevels = useMemo(() => {
+    // If no school selected, all levels are available
+    if (!selectedSchool) {
+      return ['ALL', 'ELEMENTARY', 'JUNIOR HIGH SCHOOL', 'SENIOR HIGH SCHOOL'] as const;
+    }
+    
+    const schoolType = selectedSchool.school_type?.toLowerCase();
+    
+    // Map school_type to available levels
+    if (schoolType === 'elementary') {
+      return ['ELEMENTARY'] as const;
+    } else if (schoolType === 'high_school' || schoolType === 'secondary') {
+      return ['JUNIOR HIGH SCHOOL'] as const;
+    } else if (schoolType === 'senior_high') {
+      return ['SENIOR HIGH SCHOOL'] as const;
+    } else if (schoolType === 'integrated') {
+      // Integrated schools have all levels
+      return ['ALL', 'ELEMENTARY', 'JUNIOR HIGH SCHOOL', 'SENIOR HIGH SCHOOL'] as const;
+    }
+    
+    // Default: all levels
+    return ['ALL', 'ELEMENTARY', 'JUNIOR HIGH SCHOOL', 'SENIOR HIGH SCHOOL'] as const;
+  }, [selectedSchool]);
+
+  // Auto-adjust school level when school selection changes
+  useEffect(() => {
+    if (selectedSchool && !availableSchoolLevels.includes(schoolLevel as any)) {
+      // Auto-select the first available level for this school
+      setSchoolLevel(availableSchoolLevels[0] as any);
+    }
+  }, [selectedSchool, availableSchoolLevels, schoolLevel, setSchoolLevel]);
+
   // Role badge color
   const roleBadgeColor = useMemo(() => {
     switch (divisionUser?.role) {
@@ -340,289 +375,266 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
   }
 
   return (
-    <div className="flex h-screen bg-slate-100 dark:bg-slate-900">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col">
-        {/* Division Header */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-              <NavIcon name="building" className="w-6 h-6" />
+    <div className="flex flex-col h-screen bg-slate-100 dark:bg-slate-900">
+      {/* Global Header - Single Row with Division Info + Filters + User */}
+      <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex-shrink-0 z-20 px-4 py-2">
+        <div className="flex items-center gap-4">
+          {/* Division Logo & Name */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+              <NavIcon name="building" className="w-4 h-4" />
             </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="font-semibold text-slate-900 dark:text-white truncate text-sm">
+            <div className="hidden lg:block">
+              <h1 className="font-semibold text-slate-900 dark:text-white text-sm leading-tight">
                 {division?.name || 'Division'}
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+              </h1>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
                 {division?.region || 'DepEd'}
               </p>
             </div>
           </div>
-          
-          {/* User Info */}
-          <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
-            <p className="font-medium text-slate-900 dark:text-white text-sm truncate">
-              {divisionUser?.name}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mb-2">
-              {divisionUser?.email}
-            </p>
-            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${roleBadgeColor}`}>
-              {formatRole(divisionUser?.role || '')}
-            </span>
-          </div>
-        </div>
 
-        {/* Filter Scope - District and School Selectors */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-700 space-y-3" ref={dropdownRef}>
-          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-            Filter Scope
-          </label>
-          
-          {/* District Selector */}
-          <div>
-            <label className="block text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1">
-              District
-            </label>
+          {/* Divider */}
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-600 hidden md:block" />
+
+          {/* Filters - Center */}
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+            {/* District Filter */}
             <select
               value={selectedDistrict || ''}
               onChange={(e) => selectDistrict(e.target.value || null)}
-              title="Select district"
-              className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
+              title="District"
+              className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md px-2 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors max-w-[130px]"
             >
-              <option value="">All Districts ({availableDistricts.length})</option>
+              <option value="">All Districts</option>
               {availableDistricts.map(district => (
-                <option key={district} value={district}>
-                  {district}
-                </option>
+                <option key={district} value={district}>{district}</option>
               ))}
             </select>
-          </div>
 
-          {/* School Selector */}
-          <div className="relative">
-            <label className="block text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1">
-              School
-            </label>
-            {/* Dropdown Trigger Button */}
-            <button
-              type="button"
-              onClick={() => setIsSchoolDropdownOpen(!isSchoolDropdownOpen)}
-              className="w-full flex items-center justify-between bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
-            >
-              <span className="truncate">
-                {selectedSchoolId 
-                  ? (selectedSchool?.name || 'Selected School')
-                  : selectedDistrict 
-                    ? `All in ${selectedDistrict} (${filteredSchools.length})`
-                    : `All Schools (${accessibleSchools.length})`
-                }
-              </span>
-              <NavIcon 
-                name="chevronDown" 
-                className={`w-4 h-4 text-slate-400 transition-transform ${isSchoolDropdownOpen ? 'rotate-180' : ''}`} 
-              />
-            </button>
+            {/* School Filter with Search */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsSchoolDropdownOpen(!isSchoolDropdownOpen)}
+                className="flex items-center gap-1 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md px-2 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors max-w-[150px]"
+              >
+                <span className="truncate">
+                  {selectedSchoolId 
+                    ? (selectedSchool?.name || 'School')
+                    : `All Schools (${filteredSchools.length})`
+                  }
+                </span>
+                <NavIcon 
+                  name="chevronDown" 
+                  className={`w-3 h-3 text-slate-400 flex-shrink-0 transition-transform ${isSchoolDropdownOpen ? 'rotate-180' : ''}`} 
+                />
+              </button>
 
-            {/* Dropdown Panel */}
-            {isSchoolDropdownOpen && (
-              <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg overflow-hidden">
-                {/* Search Input */}
-                <div className="p-2 border-b border-slate-200 dark:border-slate-700">
-                  <div className="relative">
-                    <NavIcon name="search" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      placeholder="Search schools..."
-                      value={schoolSearchQuery}
-                      onChange={(e) => setSchoolSearchQuery(e.target.value)}
-                      className="w-full pl-8 pr-8 py-1.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white placeholder-slate-400"
-                    />
-                    {schoolSearchQuery && (
-                      <button
-                        type="button"
-                        aria-label="Clear search"
-                        title="Clear search"
-                        onClick={() => setSchoolSearchQuery('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                      >
-                        <NavIcon name="x" className="w-4 h-4" />
-                      </button>
+              {/* School Dropdown Panel */}
+              {isSchoolDropdownOpen && (
+                <div className="absolute z-50 top-full left-0 mt-1 w-72 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg overflow-hidden">
+                  {/* Search Input */}
+                  <div className="p-2 border-b border-slate-200 dark:border-slate-700">
+                    <div className="relative">
+                      <NavIcon name="search" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        placeholder="Search schools..."
+                        value={schoolSearchQuery}
+                        onChange={(e) => setSchoolSearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-8 py-1.5 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white placeholder-slate-400"
+                      />
+                      {schoolSearchQuery && (
+                        <button
+                          type="button"
+                          aria-label="Clear search"
+                          onClick={() => setSchoolSearchQuery('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          <NavIcon name="x" className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Options List */}
+                  <div className="max-h-64 overflow-y-auto">
+                    {/* All Schools Option */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        selectSchool(null);
+                        setIsSchoolDropdownOpen(false);
+                        setSchoolSearchQuery('');
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50 ${
+                        !selectedSchoolId ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium' : 'text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <span>All Schools ({filteredCount})</span>
+                      {!selectedSchoolId && <NavIcon name="check" className="w-4 h-4 text-blue-600" />}
+                    </button>
+
+                    {/* Grouped Schools */}
+                    {groupedSchools.map(group => (
+                      <div key={group.district}>
+                        {!selectedDistrict && (
+                          <div className="sticky top-0 px-3 py-1.5 bg-slate-100 dark:bg-slate-900 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                            {group.district} ({group.schools.length})
+                          </div>
+                        )}
+                        {group.schools.map(school => (
+                          <button
+                            key={school.id}
+                            type="button"
+                            onClick={() => {
+                              selectSchool(school.id);
+                              setIsSchoolDropdownOpen(false);
+                              setSchoolSearchQuery('');
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 ${!selectedDistrict ? 'pl-5' : ''} text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50 ${
+                              selectedSchoolId === school.id ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium' : 'text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            <span className="truncate">{school.name}</span>
+                            {selectedSchoolId === school.id && <NavIcon name="check" className="w-4 h-4 text-blue-600 flex-shrink-0" />}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+
+                    {groupedSchools.length === 0 && schoolSearchQuery && (
+                      <div className="px-3 py-4 text-sm text-slate-500 text-center">
+                        No schools match "{schoolSearchQuery}"
+                      </div>
                     )}
                   </div>
                 </div>
+              )}
+            </div>
 
-                {/* Scrollable Options List */}
-                <div className="max-h-64 overflow-y-auto">
-                  {/* All Schools Option */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      selectSchool(null);
-                      setIsSchoolDropdownOpen(false);
-                      setSchoolSearchQuery('');
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${
-                      !selectedSchoolId 
-                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium' 
-                        : 'text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    <span>
-                      {selectedDistrict 
-                        ? `All in ${selectedDistrict} (${filteredCount})`
-                        : `All Schools (${filteredCount})`
-                      }
-                    </span>
-                    {!selectedSchoolId && (
-                      <NavIcon name="check" className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    )}
-                  </button>
+            {/* School Level - right after School filter */}
+            <select
+              value={schoolLevel}
+              onChange={(e) => setSchoolLevel(e.target.value as 'ALL' | 'ELEMENTARY' | 'JUNIOR HIGH SCHOOL' | 'SENIOR HIGH SCHOOL')}
+              title="School Level"
+              className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md px-2 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
+            >
+              {availableSchoolLevels.includes('ALL') && <option value="ALL">All Levels</option>}
+              {availableSchoolLevels.includes('ELEMENTARY') && <option value="ELEMENTARY">Elem</option>}
+              {availableSchoolLevels.includes('JUNIOR HIGH SCHOOL') && <option value="JUNIOR HIGH SCHOOL">JHS</option>}
+              {availableSchoolLevels.includes('SENIOR HIGH SCHOOL') && <option value="SENIOR HIGH SCHOOL">SHS</option>}
+            </select>
 
-                  {/* Grouped Schools by District (or flat list if district selected) */}
-                  {groupedSchools.map(group => (
-                    <div key={group.district}>
-                      {/* District Header - only show if no district is selected */}
-                      {!selectedDistrict && (
-                        <div className="sticky top-0 px-3 py-1.5 bg-slate-100 dark:bg-slate-900 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide border-t border-slate-200 dark:border-slate-700">
-                          {group.district} ({group.schools.length})
-                        </div>
-                      )}
-                      {/* Schools in District */}
-                      {group.schools.map(school => (
-                        <button
-                          key={school.id}
-                          type="button"
-                          onClick={() => {
-                            selectSchool(school.id);
-                            setIsSchoolDropdownOpen(false);
-                            setSchoolSearchQuery('');
-                          }}
-                          className={`w-full flex items-center justify-between px-3 py-2 ${!selectedDistrict ? 'pl-5' : ''} text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${
-                            selectedSchoolId === school.id 
-                              ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium' 
-                              : 'text-slate-700 dark:text-slate-300'
-                          }`}
-                        >
-                          <span className="truncate">{school.name}</span>
-                          {selectedSchoolId === school.id && (
-                            <NavIcon name="check" className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  ))}
+            {/* Divider */}
+            <div className="h-6 w-px bg-slate-200 dark:bg-slate-600 hidden md:block" />
 
-                  {/* No results */}
-                  {groupedSchools.length === 0 && schoolSearchQuery && (
-                    <div className="px-3 py-4 text-sm text-slate-500 dark:text-slate-400 text-center">
-                      No schools match "{schoolSearchQuery}"
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Current Selection Summary */}
-          {(selectedDistrict || selectedSchoolId) && (
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                <NavIcon name="mapPin" className="w-3 h-3" />
-                {selectedSchoolId 
-                  ? selectedSchool?.name 
-                  : `${filteredSchools.length} schools in ${selectedDistrict}`
-                }
-              </span>
+            {/* School Year */}
+            <select
+              value={schoolYear}
+              onChange={(e) => setSchoolYear(e.target.value)}
+              title="School Year"
+              className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md px-2 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
+            >
+              {availableSchoolYears.map(sy => (
+                <option key={sy} value={sy}>{sy}</option>
+              ))}
+            </select>
+
+            {/* Quarter */}
+            <select
+              value={quarter}
+              onChange={(e) => setQuarter(e.target.value as 'Q1' | 'Q2' | 'Q3' | 'Q4')}
+              title="Quarter"
+              className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md px-2 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors w-14"
+            >
+              <option value="Q1">Q1</option>
+              <option value="Q2">Q2</option>
+              <option value="Q3">Q3</option>
+              <option value="Q4">Q4</option>
+            </select>
+
+            {/* Clear Filters */}
+            {(selectedDistrict || selectedSchoolId) && (
               <button
                 type="button"
                 onClick={() => {
                   selectDistrict(null);
                   selectSchool(null);
                 }}
-                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+                className="text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-700 font-medium px-1.5 py-0.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
               >
                 Clear
               </button>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* School Year Selector */}
-        <div className="px-4 pb-4 border-b border-slate-200 dark:border-slate-700">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
-                School Year
-              </label>
-              <select
-                value={schoolYear}
-                onChange={(e) => setSchoolYear(e.target.value)}
-                aria-label="Select school year"
-                className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
-              >
-                {availableSchoolYears.map(sy => (
-                  <option key={sy} value={sy}>SY {sy}</option>
-                ))}
-              </select>
+          {/* Right: User Info & Logout */}
+          <div className="flex items-center gap-3 flex-shrink-0 ml-auto pl-4 border-l border-slate-200 dark:border-slate-600">
+            <div className="text-right hidden md:block">
+              <p className="text-xs font-medium text-slate-900 dark:text-white leading-tight truncate max-w-[120px]">
+                {divisionUser?.name}
+              </p>
+              <span className={`inline-block px-1.5 py-0.5 rounded-full text-[9px] font-medium ${roleBadgeColor}`}>
+                {formatRole(divisionUser?.role || '')}
+              </span>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
-                Quarter
-              </label>
-              <select
-                value={quarter}
-                onChange={(e) => setQuarter(e.target.value as 'Q1' | 'Q2' | 'Q3' | 'Q4')}
-                aria-label="Select quarter"
-                className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-300 dark:hover:border-slate-500 transition-colors"
-              >
-                <option value="Q1">Q1</option>
-                <option value="Q2">Q2</option>
-                <option value="Q3">Q3</option>
-                <option value="Q4">Q4</option>
-              </select>
-            </div>
+            <button
+              onClick={onLogout}
+              title="Sign Out"
+              className="p-1.5 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            >
+              <NavIcon name="logout" className="w-4 h-4" />
+            </button>
           </div>
         </div>
+      </header>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          {navItems.map(item => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.end}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
-                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50'
-                }`
-              }
-            >
-              <NavIcon name={item.iconName} className="w-5 h-5" />
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+      {/* Main Layout: Sidebar + Content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar - Navigation Only */}
+        <aside className="w-56 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col flex-shrink-0">
+          {/* Navigation */}
+          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+            {navItems.map(item => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.end}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                      : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50'
+                  }`
+                }
+              >
+                <NavIcon name={item.iconName} className="w-5 h-5" />
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-700">
-          <button
-            onClick={onLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-          >
-            <NavIcon name="logout" className="w-5 h-5" />
-            Sign Out
-          </button>
-        </div>
-      </aside>
+          {/* Sidebar Footer - User on Mobile */}
+          <div className="p-3 border-t border-slate-200 dark:border-slate-700 sm:hidden">
+            <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2">
+              <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                {divisionUser?.name}
+              </p>
+              <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${roleBadgeColor}`}>
+                {formatRole(divisionUser?.role || '')}
+              </span>
+            </div>
+          </div>
+        </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        <Outlet />
-      </main>
+        {/* Main Content */}
+        <main className="flex-1 overflow-auto">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 };

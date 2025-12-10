@@ -28,6 +28,7 @@ const SectionsView = lazy(() => import('./components/SectionsViewOptimized'));
 const UnifiedAssessmentView = lazy(() => import('./components/UnifiedAssessmentView'));
 const GradesDashboard = lazy(() => import('./components/GradesDashboard'));
 const GradesView = lazy(() => import('./components/GradesView'));
+const GradesSummary = lazy(() => import('./components/GradesSummaryNew'));
 const GradebookView = lazy(() => import('./components/GradebookView'));
 const CoreValuesGradebookView = lazy(() => import('./components/CoreValuesGradebookView'));
 const AttendanceView = lazy(() => import('./components/AttendanceView'));
@@ -79,6 +80,10 @@ const ValidationResultsDashboard = lazy(() => import('./components/ValidationRes
 // PostgreSQL Migration Test Components
 const GradebookViewPostgreSQL = lazy(() => import('./components/GradebookViewPostgreSQL'));
 
+// Electronic Class Record (ECR) Components
+const ClassRecordView = lazy(() => import('./components/ClassRecordView'));
+const ClassRecordSelector = lazy(() => import('./components/ClassRecordSelector'));
+
 // School Management for Super Admins
 const SchoolManagementView = lazy(() => import('./components/SchoolManagementView'));
 
@@ -120,6 +125,24 @@ const Form137ManagerWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear })
 
 const Form137CreateWrapper: React.FC<{ schoolYear: string }> = ({ schoolYear }) => {
   return <Form137Manager studentId="" schoolYear={schoolYear} initialMode="create" />;
+};
+
+// Wrapper for ClassRecordView to extract URL params
+const ClassRecordViewWrapper: React.FC<{ schoolYear: string; teacherId: string; schoolId: string }> = ({ 
+  schoolYear, 
+  teacherId, 
+  schoolId 
+}) => {
+  const { sectionId, learningAreaId } = useParams<{ sectionId: string; learningAreaId: string }>();
+  return (
+    <ClassRecordView 
+      sectionId={sectionId || ''} 
+      learningAreaId={learningAreaId || ''} 
+      schoolYear={schoolYear}
+      teacherId={teacherId}
+      schoolId={schoolId}
+    />
+  );
 };
 
 const App: React.FC = () => {
@@ -732,8 +755,21 @@ const App: React.FC = () => {
                         <Route path="/sections" element={<SectionsView session={staffSession} />} />
                         {/* ========== GRADE ENTRY ========== */}
                         <Route path="/grades" element={<GradesDashboard session={staffSession} schoolData={schoolData} />} />
-                        <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/grades/overview" element={<GradesSummary session={staffSession} />} />
                         <Route path="/grades/academic" element={<GradebookView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/grades/class-record-selector" element={
+                          <ClassRecordSelector 
+                            session={staffSession}
+                            schoolYear={settings.schoolYear}
+                          />
+                        } />
+                        <Route path="/grades/class-record/:sectionId/:learningAreaId" element={
+                          <ClassRecordViewWrapper 
+                            schoolYear={settings.schoolYear}
+                            teacherId={(session.user as AuthUser).id}
+                            schoolId={session.user.schoolId || ''}
+                          />
+                        } />
                         <Route path="/grades/core-values" element={<CoreValuesGradebookView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} defaultTab="deep-analytics" hideTabNavigation={true} />} />
                         

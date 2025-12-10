@@ -169,6 +169,7 @@ export function getMPSBgColor(mps: number): string {
 // =====================================================
 
 // Subjects in DepEd order with grade level applicability
+// ELEMENTARY (Grades 1-6)
 export const DEPED_SUBJECTS = [
   { code: 'LANG', name: 'Language', grades: [1, 2, 3] },
   { code: 'MTB', name: 'Mother Tongue', grades: [1, 2, 3] },
@@ -182,6 +183,24 @@ export const DEPED_SUBJECTS = [
   { code: 'EPP', name: 'EPP/TLE', grades: [4, 5, 6] },
   { code: 'TLE', name: 'EPP/TLE', grades: [4, 5, 6] },
   { code: 'MAPEH', name: 'MAPEH', grades: [1, 2, 3, 4, 5, 6] },
+];
+
+// JUNIOR HIGH SCHOOL (Grades 7-10)
+export const JHS_SUBJECTS = [
+  { code: 'FIL', name: 'Filipino', grades: [7, 8, 9, 10] },
+  { code: 'ENG', name: 'English', grades: [7, 8, 9, 10] },
+  { code: 'MATH', name: 'Mathematics', grades: [7, 8, 9, 10] },
+  { code: 'SCI', name: 'Science', grades: [7, 8, 9, 10] },
+  { code: 'AP', name: 'Araling Panlipunan', grades: [7, 8, 9, 10] },
+  { code: 'ESP', name: 'Edukasyon sa Pagpapakatao', grades: [7, 8, 9, 10] },
+  { code: 'TLE', name: 'TLE', grades: [7, 8, 9, 10] },
+  { code: 'MAPEH', name: 'MAPEH', grades: [7, 8, 9, 10] },
+];
+
+// SENIOR HIGH SCHOOL (Grades 11-12)
+export const SHS_SUBJECTS = [
+  { code: 'CORE', name: 'Core Subjects', grades: [11, 12] },
+  { code: 'SPEC', name: 'Specialized', grades: [11, 12] },
 ];
 
 // Transform report data into DepEd-format structure grouped by district and school

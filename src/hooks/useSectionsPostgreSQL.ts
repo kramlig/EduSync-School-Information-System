@@ -100,23 +100,28 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
         throw fetchError;
       }
 
-      // Get student counts if requested
+      // Get student counts if requested - batch to avoid URL length limits
       let studentCounts: Record<string, number> = {};
       if (includeStudentCount && data && data.length > 0) {
         const sectionIds = data.map((s: any) => s.id);
+        const BATCH_SIZE = 50; // Supabase URL limit workaround
         
-        const { data: countData, error: countError } = await supabase
-          .from('students')
-          .select('section_id')
-          .in('section_id', sectionIds)
-          .eq('status', 'enrolled')
-          .is('deleted_at', null);
+        // Batch the queries to avoid URL too long error
+        for (let i = 0; i < sectionIds.length; i += BATCH_SIZE) {
+          const batchIds = sectionIds.slice(i, i + BATCH_SIZE);
+          
+          const { data: countData, error: countError } = await supabase
+            .from('students')
+            .select('section_id')
+            .in('section_id', batchIds)
+            .eq('enrollment_status', 'enrolled')
+            .is('deleted_at', null);
 
-        if (!countError && countData) {
-          studentCounts = countData.reduce((acc, student) => {
-            acc[student.section_id] = (acc[student.section_id] || 0) + 1;
-            return acc;
-          }, {} as Record<string, number>);
+          if (!countError && countData) {
+            countData.forEach(student => {
+              studentCounts[student.section_id] = (studentCounts[student.section_id] || 0) + 1;
+            });
+          }
         }
       }
 
@@ -137,7 +142,21 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
         updatedAt: row.updated_at
       }));
 
-      setSections(transformedSections);
+      // Deduplicate by ID (safety measure)
+      const seen = new Set<string>();
+      const uniqueSections = transformedSections.filter(s => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
+        return true;
+      });
+
+      // Debug: Log if duplicates were found
+      if (transformedSections.length !== uniqueSections.length) {
+        console.warn(`[useSectionsPostgreSQL] Removed ${transformedSections.length - uniqueSections.length} duplicate sections from DB result`);
+      }
+      console.log(`[useSectionsPostgreSQL] Fetched ${uniqueSections.length} unique sections from ${data?.length || 0} raw rows`);
+
+      setSections(uniqueSections);
 
     } catch (err) {
       console.error('[useSectionsPostgreSQL] Error fetching sections:', err);

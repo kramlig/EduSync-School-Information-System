@@ -236,6 +236,7 @@ export interface SchoolSummary {
   principal_name?: string;
   student_count?: number;
   teacher_count?: number;
+  school_type?: 'elementary' | 'high_school' | 'senior_high' | 'integrated' | string;
 }
 
 /**
@@ -275,6 +276,9 @@ export interface DivisionContextData {
   // Currently selected quarter (for filtering data)
   quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4';
   
+  // Currently selected school level (for filtering Elementary vs JHS vs SHS)
+  schoolLevel: 'ALL' | 'ELEMENTARY' | 'JUNIOR HIGH SCHOOL' | 'SENIOR HIGH SCHOOL';
+  
   // Loading state
   loading: boolean;
   
@@ -286,6 +290,7 @@ export interface DivisionContextData {
   selectSchool: (schoolId: string | null) => void;
   setSchoolYear: (schoolYear: string) => void;
   setQuarter: (quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4') => void;
+  setSchoolLevel: (level: 'ALL' | 'ELEMENTARY' | 'JUNIOR HIGH SCHOOL' | 'SENIOR HIGH SCHOOL') => void;
   refreshSchools: () => Promise<void>;
   refreshData: () => Promise<void>;
   

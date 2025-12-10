@@ -120,23 +120,26 @@ const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData }
   const navigationCards = [
     {
       id: 'overview',
-      title: 'Overview & Analytics',
+      title: 'Grades Summary',
       icon: '📊',
-      description: 'View student performance summaries and quick insights',
+      description: 'View quarterly grades across all subjects and students',
       route: '/grades/overview',
       gradient: 'from-blue-500 to-indigo-600',
       stats: { label: 'Students', value: stats.totalStudents },
       visible: true
     },
+    // Academic Gradebook hidden - ECR is now the source of truth for grade entry
+    // Direct grade entry bypasses the WW/PT/QA workflow
+    // Route still exists at /grades/academic for backward compatibility
     {
-      id: 'academic',
-      title: 'Academic Gradebook',
-      icon: '📝',
-      description: 'Enter and manage academic grades by quarter',
-      route: '/grades/academic',
-      gradient: 'from-violet-500 to-purple-600',
-      stats: { label: 'Grades', value: stats.gradesCount },
-      visible: !isParentView // Parents can't edit grades
+      id: 'class-record',
+      title: 'Electronic Class Record',
+      icon: '📋',
+      description: 'Enter WW, PT, QA scores with auto-computed grades (DepEd ECR)',
+      route: '/grades/class-record-selector',
+      gradient: 'from-rose-500 to-pink-600',
+      stats: { label: 'Grade Entry', value: '✓' },
+      visible: !isStudentView && !isParentView // Only staff can access
     },
     {
       id: 'core-values',
