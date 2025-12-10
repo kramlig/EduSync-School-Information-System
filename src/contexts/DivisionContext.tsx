@@ -113,6 +113,7 @@ const defaultContextValue: DivisionContextData = {
   schoolYear: getCurrentSchoolYear(),
   availableSchoolYears: getAvailableSchoolYears(),
   quarter: getCurrentQuarter(),
+  schoolLevel: 'ALL',
   loading: true,
   error: null,
   selectDistrict: () => {
@@ -126,6 +127,9 @@ const defaultContextValue: DivisionContextData = {
   },
   setQuarter: () => {
     console.warn('[DivisionContext] setQuarter called outside of DivisionContextProvider');
+  },
+  setSchoolLevel: () => {
+    console.warn('[DivisionContext] setSchoolLevel called outside of DivisionContextProvider');
   },
   refreshSchools: async () => {
     console.warn('[DivisionContext] refreshSchools called outside of DivisionContextProvider');
@@ -194,6 +198,15 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
     return getCurrentQuarter();
   });
   
+  // School level state - persisted in localStorage
+  const [schoolLevel, setSchoolLevelState] = useState<'ALL' | 'ELEMENTARY' | 'JUNIOR HIGH SCHOOL' | 'SENIOR HIGH SCHOOL'>(() => {
+    const stored = localStorage.getItem('division_school_level') as 'ALL' | 'ELEMENTARY' | 'JUNIOR HIGH SCHOOL' | 'SENIOR HIGH SCHOOL' | null;
+    if (stored && ['ALL', 'ELEMENTARY', 'JUNIOR HIGH SCHOOL', 'SENIOR HIGH SCHOOL'].includes(stored)) {
+      return stored;
+    }
+    return 'ALL';
+  });
+  
   // Available school years
   const availableSchoolYears = useMemo(() => getAvailableSchoolYears(), []);
   
@@ -224,6 +237,12 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
   const setQuarter = useCallback((q: 'Q1' | 'Q2' | 'Q3' | 'Q4') => {
     setQuarterState(q);
     localStorage.setItem('division_quarter', q);
+  }, []);
+
+  // School level setter that also persists to localStorage
+  const setSchoolLevel = useCallback((level: 'ALL' | 'ELEMENTARY' | 'JUNIOR HIGH SCHOOL' | 'SENIOR HIGH SCHOOL') => {
+    setSchoolLevelState(level);
+    localStorage.setItem('division_school_level', level);
   }, []);
 
   // =====================================================
@@ -305,6 +324,7 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
   const fetchAccessibleSchools = useCallback(async (user: DivisionUser): Promise<SchoolSummary[]> => {
     try {
       // Join districts table to get the district name
+      // Note: school_type column may not exist in all environments, so we infer from name
       let query = supabase
         .from('schools')
         .select(`
@@ -350,15 +370,35 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
       }
 
       // Transform data to include district name from the joined districts table
-      const schools: SchoolSummary[] = (data || []).map((school: any) => ({
-        id: school.id,
-        name: school.name,
-        school_id_number: school.school_id_number,
-        address: school.address,
-        principal_name: school.principal_name,
-        // Use the district name from the joined districts table
-        district: school.districts?.name || null,
-      }));
+      // Infer school_type from school name since column may not exist
+      const schools: SchoolSummary[] = (data || []).map((school: any) => {
+        // Infer school type from name
+        const nameLower = school.name?.toLowerCase() || '';
+        let inferredType: string | undefined;
+        
+        if (nameLower.includes('senior high') || nameLower.includes('shs')) {
+          inferredType = 'senior_high';
+        } else if (nameLower.includes('national high') || nameLower.includes('high school') || 
+                   nameLower.includes('secondary') || nameLower.includes('nhs')) {
+          inferredType = 'high_school';
+        } else if (nameLower.includes('integrated') || nameLower.includes('central school')) {
+          inferredType = 'integrated';
+        } else if (nameLower.includes('elementary') || nameLower.includes('primary') || 
+                   nameLower.includes('es ') || nameLower.endsWith(' es')) {
+          inferredType = 'elementary';
+        }
+        
+        return {
+          id: school.id,
+          name: school.name,
+          school_id_number: school.school_id_number,
+          address: school.address,
+          principal_name: school.principal_name,
+          school_type: school.school_type || inferredType, // Use DB value if available, else inferred
+          // Use the district name from the joined districts table
+          district: school.districts?.name || null,
+        };
+      });
 
       return schools;
     } catch (err) {
@@ -604,12 +644,14 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
     schoolYear,
     availableSchoolYears,
     quarter,
+    schoolLevel,
     loading,
     error,
     selectDistrict,
     selectSchool,
     setSchoolYear,
     setQuarter,
+    setSchoolLevel,
     refreshSchools,
     refreshData,
     hasPermission,
@@ -625,12 +667,14 @@ export const DivisionContextProvider: React.FC<DivisionContextProviderProps> = (
     schoolYear,
     availableSchoolYears,
     quarter,
+    schoolLevel,
     loading,
     error,
     selectDistrict,
     selectSchool,
     setSchoolYear,
     setQuarter,
+    setSchoolLevel,
     refreshSchools,
     refreshData,
     hasPermission,

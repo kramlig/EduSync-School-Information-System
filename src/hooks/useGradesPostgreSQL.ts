@@ -12,7 +12,7 @@
  * - Automatic final grade calculation
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 // Type definitions (matching Firestore types)
@@ -71,16 +71,33 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
       let data;
       let fetchError;
 
-      // Optimize: Filter by section via join to reduce data transfer
+      // Optimize: For section-based queries, use two-step approach instead of complex join
+      // This avoids statement timeouts on Supabase
       if (sectionId) {
-        // Join with students table to filter by section
-        const result = await supabase
-          .from('grades')
-          .select('*, students!inner(section_id)')
-          .eq('students.section_id', sectionId);
+        // Step 1: Get student IDs for the section (fast, indexed query)
+        const { data: studentData, error: studentError } = await supabase
+          .from('students')
+          .select('id')
+          .eq('section_id', sectionId)
+          .eq('enrollment_status', 'enrolled')
+          .is('deleted_at', null);
         
-        data = result.data;
-        fetchError = result.error;
+        if (studentError) {
+          fetchError = studentError;
+        } else if (studentData && studentData.length > 0) {
+          // Step 2: Get grades for those students (simpler query, no join)
+          const studentIds = studentData.map(s => s.id);
+          const result = await supabase
+            .from('grades')
+            .select('*')
+            .in('student_id', studentIds);
+          
+          data = result.data;
+          fetchError = result.error;
+        } else {
+          // No students in section
+          data = [];
+        }
       } else {
         // No section filter - fetch with other filters
         let query = supabase
@@ -125,12 +142,20 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
     }
   }, [studentId, learningAreaId, sectionId, schoolId]);
 
-  // Initial fetch (skip if skip=true for lazy loading)
+  // Track previous skip value to detect transitions
+  const prevSkipRef = useRef(skip);
+  
+  // Initial fetch and refetch when skip transitions from true to false
   useEffect(() => {
+    const wasSkipped = prevSkipRef.current;
+    prevSkipRef.current = skip;
+    
     if (!skip) {
+      // Always fetch when not skipping - either initial or after skip changed
+      console.log('[useGradesPostgreSQL] Fetching grades - skip:', skip, 'wasSkipped:', wasSkipped, 'sectionId:', sectionId);
       fetchGrades();
     }
-  }, [fetchGrades, skip]);
+  }, [fetchGrades, skip, sectionId]); // Include sectionId to refetch when it changes
 
   // Real-time subscription
   useEffect(() => {
