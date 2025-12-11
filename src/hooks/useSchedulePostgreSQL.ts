@@ -44,6 +44,11 @@ function transformToFirestore(schedule: ClassSchedule): any {
  * Helper: Transform Firestore camelCase to PostgreSQL snake_case
  */
 function transformToPostgres(schedule: any): any {
+  if (!schedule) {
+    console.error('[transformToPostgres] Schedule is undefined or null');
+    return {};
+  }
+  
   return {
     school_id: schedule.schoolId || schedule.school_id,
     title: schedule.title,
@@ -125,8 +130,17 @@ export function useSchedulePostgreSQL(options: UseScheduleOptions = {}): UseSche
    * Fetch schedules from PostgreSQL
    */
   const fetchSchedules = useCallback(async () => {
+    console.log('[useSchedulePostgreSQL] 🔍 fetchSchedules called with:', { 
+      schoolId, 
+      sectionId, 
+      teacherId, 
+      gradeLevel,
+      hasSchoolId: !!schoolId 
+    });
+    
     if (!schoolId) {
-      console.warn('[useSchedulePostgreSQL] No schoolId provided, skipping fetch');
+      console.warn('[useSchedulePostgreSQL] ⚠️ No schoolId provided, skipping fetch');
+      console.trace('[useSchedulePostgreSQL] Stack trace for missing schoolId');
       setLoading(false);
       return;
     }
@@ -294,7 +308,15 @@ export function useSchedulePostgreSQL(options: UseScheduleOptions = {}): UseSche
   const updateSchedule = useCallback(
     async (id: string, updates: Partial<ClassSchedule>): Promise<ClassSchedule> => {
       try {
+        console.log('[useSchedulePostgreSQL] 🔄 Updating schedule:', { id, updates });
+        
+        if (!updates || Object.keys(updates).length === 0) {
+          throw new Error('No updates provided');
+        }
+        
         const updatesForPostgres = transformToPostgres(updates);
+        console.log('[useSchedulePostgreSQL] Transformed updates:', updatesForPostgres);
+        
         const updatedSchedule = await updateClassSchedule(id, updatesForPostgres);
         const transformedSchedule = transformToFirestore(updatedSchedule);
         

@@ -182,6 +182,15 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             ? { schoolId: schoolId || undefined, enablePolling: true }
             : {}
     );
+    
+    // DIAGNOSTIC: Log PostgreSQL hook initialization
+    console.log('[useSchoolData] 🔍 PostgreSQL hooks initialized:', {
+        USE_POSTGRESQL,
+        shouldFetchSchedules: shouldFetch('classSchedules'),
+        schoolId,
+        schedulesLoading: postgresSchedules.loading,
+        schedulesCount: postgresSchedules.schedules.length
+    });
     const postgresSettings = useSchoolSettingsPostgreSQL({
         schoolId: USE_POSTGRESQL && shouldFetch('settings') ? (schoolId || undefined) : undefined,
         enableRealtime: true
