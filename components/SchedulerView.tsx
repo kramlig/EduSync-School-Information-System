@@ -3,6 +3,12 @@ import { SchoolDataHook } from '../hooks/useSchoolData';
 import type { AuthUser, StudentUser, ClassSchedule, ParentUser } from '../types';
 import Modal from './Modal';
 import { TrashIcon, ChevronLeftIcon, ChevronRightIcon } from './icons';
+import { useSchedulePostgreSQL } from '../src/hooks/useSchedulePostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useTeachersPostgreSQL } from '../src/hooks/useTeachersPostgreSQL';
+import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useSchoolContext } from '../src/contexts/SchoolContext';
 
 // --- UTILITY FUNCTIONS ---
 const getScheduleColor = (schedule: ClassSchedule) => {
@@ -42,12 +48,64 @@ const TOTAL_HOURS = END_HOUR - START_HOUR;
 const DAYS: ClassSchedule['dayOfWeek'][] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
 const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' }; forceStudentId?: string; }> = ({ schoolData, session, forceStudentId }) => {
-    const { classSchedules, sections, teachers, learningAreas, students, addSchedule, updateSchedule, deleteSchedule, substituteAssignments } = schoolData;
+    // Get schoolId from context for PostgreSQL hooks
+    const { schoolId } = useSchoolContext();
+    
+    console.log('[SchedulerView] 🚀 Component mounted with schoolId:', schoolId);
+    
+    // Load data directly from PostgreSQL hooks
+    const { schedules: classSchedules, loading: schedulesLoading, addSchedule, updateSchedule, deleteSchedule } = useSchedulePostgreSQL({
+        schoolId: schoolId || undefined,
+        enablePolling: true
+    });
+    
+    const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({
+        schoolId: schoolId || undefined,
+        includeAdviser: true
+    });
+    
+    const { teachers, loading: teachersLoading } = useTeachersPostgreSQL({
+        schoolId: schoolId || undefined
+    });
+    
+    const { learningAreas, loading: areasLoading } = useLearningAreasPostgreSQL({
+        schoolId: schoolId || undefined
+    });
+    
+    const { students, loading: studentsLoading } = useStudentsPostgreSQL({
+        schoolId: schoolId || undefined,
+        status: 'enrolled'
+    });
+    
+    // Use substitute assignments from props (if needed)
+    const { substituteAssignments } = schoolData;
+    
     const authUser = session.user as AuthUser;
     const isStudentView = session.type === 'student';
     const isParentView = session.type === 'parent';
     const isRegularTeacher = session.type === 'staff' && authUser.role === 'teacher';
     const isReadOnly = isStudentView || isParentView || (session.type === 'staff' && authUser.role === 'principal');
+    
+    // DIAGNOSTIC: Log when component mounts and when data changes
+    useEffect(() => {
+        console.log('[SchedulerView] 🔍 Data received:', {
+            schoolId,
+            classSchedules: classSchedules.length,
+            sections: sections.length,
+            teachers: teachers.length,
+            learningAreas: learningAreas.length,
+            students: students.length,
+            loading: {
+                schedules: schedulesLoading,
+                sections: sectionsLoading,
+                teachers: teachersLoading,
+                areas: areasLoading,
+                students: studentsLoading
+            },
+            session: session.type,
+            user: authUser.name || 'Unknown'
+        });
+    }, [schoolId, classSchedules.length, sections.length, teachers.length, learningAreas.length, students.length, schedulesLoading, sectionsLoading, teachersLoading, areasLoading, studentsLoading]);
 
     const getInitialViewType = (): 'section' | 'teacher' => {
         if (isRegularTeacher) return 'teacher';
@@ -325,8 +383,8 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                 return;
             }
             
-            const updatedSchedule: ClassSchedule = {
-                ...activeInteraction.schedule,
+            // Create partial updates object (only the fields that changed)
+            const updates: Partial<ClassSchedule> = {
                 dayOfWeek: indicator.startDay as ClassSchedule['dayOfWeek'],
                 startTime: indicator.startTime,
                 endTime: indicator.endTime,
@@ -334,11 +392,14 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
             
             // Only add endDayOfWeek if it's different from startDay
             if (indicator.endDay !== indicator.startDay) {
-                updatedSchedule.endDayOfWeek = indicator.endDay as ClassSchedule['dayOfWeek'];
-            } else {
-                // Remove endDayOfWeek field if start and end are the same
-                delete (updatedSchedule as any).endDayOfWeek;
+                updates.endDayOfWeek = indicator.endDay as ClassSchedule['dayOfWeek'];
             }
+            
+            // Create full schedule object for conflict checking
+            const updatedSchedule: ClassSchedule = {
+                ...activeInteraction.schedule,
+                ...updates
+            };
 
             // Check for conflicts before updating
             const conflict = checkScheduleConflict(updatedSchedule, updatedSchedule.id);
@@ -375,8 +436,11 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                 return;
             }
 
-            const result = await updateSchedule(updatedSchedule);
-            if (!result.success) {
+            try {
+                // Call updateSchedule with id and partial updates
+                await updateSchedule(activeInteraction.schedule.id, updates);
+            } catch (err) {
+                console.error('[SchedulerView] Failed to update schedule:', err);
                 setNotification('Failed to update schedule.');
             }
             
@@ -503,7 +567,13 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     const handleModalSave = async (e: React.FormEvent) => {
         e.preventDefault();
         
+        if (!schoolId) {
+            setModalError('School ID is missing. Please refresh the page and try again.');
+            return;
+        }
+        
         const dataToSave: any = {
+            schoolId: schoolId, // CRITICAL: Add schoolId for PostgreSQL
             title: modalData.title!, 
             type: modalData.type!, 
             scope: modalData.scope!,
@@ -530,6 +600,9 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
         if (modalData.type === 'academic' && modalData.teacherId) {
             dataToSave.teacherId = modalData.teacherId;
         }
+        if (modalData.room) {
+            dataToSave.room = modalData.room;
+        }
         
         if (!dataToSave.title || (dataToSave.type === 'academic' && (!dataToSave.learningAreaId || !dataToSave.teacherId || !dataToSave.sectionId))) {
             setModalError('Please fill all required fields for the selected event type.'); return;
@@ -552,10 +625,22 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
             return;
         }
         
-        let result = modalData.isEditing 
-            ? await updateSchedule({ ...dataToSave, id: modalData.id! } as ClassSchedule) 
-            : await addSchedule(dataToSave as Omit<ClassSchedule, 'id'>);
-        if (result.success) setIsModalOpen(false); else setModalError('An error occurred while saving the schedule.');
+        try {
+            if (modalData.isEditing && modalData.id) {
+                // Update existing schedule - only send changed fields
+                const updates = { ...dataToSave };
+                delete updates.schoolId; // Don't send schoolId in updates
+                await updateSchedule(modalData.id, updates);
+            } else {
+                // Add new schedule - send full object including schoolId
+                await addSchedule(dataToSave);
+            }
+            setIsModalOpen(false);
+            setModalError(null);
+        } catch (err) {
+            console.error('[SchedulerView] Error saving schedule:', err);
+            setModalError(err instanceof Error ? err.message : 'An error occurred while saving the schedule.');
+        }
     };
     
     const handleModalDelete = () => {
@@ -613,25 +698,85 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     const currentStudent = students.find(s => s.id === forceStudentId);
     const title = isStudentView ? 'My Class Schedule' : isParentView ? `Schedule for ${currentStudent?.name}` : 'Class Scheduler';
 
+    // DIAGNOSTIC: Check if we have any data at all
+    const hasNoData = classSchedules.length === 0 && sections.length === 0;
+    const hasSchedulesData = classSchedules.length > 0;
+
     // --- RENDER ---
     return (
-        <div>
-            <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
+        <div className="p-6">
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-white mb-4">{title}</h1>
+            
+            {/* DIAGNOSTIC: Show alert when no data is available */}
+            {hasNoData && (
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 p-4 mb-4">
+                    <div className="flex">
+                        <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                        </div>
+                        <div className="ml-3">
+                            <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                                No Schedule Data Available
+                            </h3>
+                            <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
+                                <p>The schedule could not be loaded. This may be due to:</p>
+                                <ul className="list-disc list-inside mt-1 space-y-1">
+                                    <li>School ID not configured in your session</li>
+                                    <li>Database connection issue</li>
+                                    <li>No schedules created yet</li>
+                                </ul>
+                                <p className="mt-2">
+                                    <strong>Debug Info:</strong> Open browser console (F12) and check for:
+                                    <code className="ml-2 px-2 py-1 bg-yellow-100 dark:bg-yellow-800 rounded">
+                                        [useSchedulePostgreSQL] No schoolId provided
+                                    </code>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* DIAGNOSTIC: Show message when sections loaded but no schedules */}
+            {!hasNoData && !hasSchedulesData && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-400 p-4 mb-4">
+                    <div className="flex">
+                        <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                            </svg>
+                        </div>
+                        <div className="ml-3">
+                            <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                                No Schedules Created Yet
+                            </h3>
+                            <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
+                                <p>Classes are loaded ({sections.length} sections found), but no class schedules have been created.</p>
+                                {!isReadOnly && <p className="mt-1">Click "Add Schedule" below to create your first schedule.</p>}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
             {notification && (
                 <div className="fixed top-20 right-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50 animate-pulse">
                     <strong className="font-bold">Conflict!</strong>
                     <span className="block sm:inline ml-2">{notification}</span>
                 </div>
             )}
-            <div className="flex flex-nowrap items-center justify-between gap-4 mb-4 bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm">
-                <div className="flex items-center gap-4">
-                    {/* LEFT GROUP: View By + Filters (single line) */}
-                    <div className="flex items-center gap-3 flex-nowrap overflow-x-auto">
+            
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4 bg-white dark:bg-slate-800 p-3 rounded-lg shadow-sm">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-1 overflow-x-auto">
+                    {/* LEFT GROUP: View By + Filters */}
+                    <div className="flex items-center gap-3 flex-wrap">
                                         {!isStudentView && !isParentView && !isRegularTeacher && (
                                             <>
                                                 <div className="flex items-center space-x-2 whitespace-nowrap">
-                                                        <label className="font-semibold whitespace-nowrap">View by:</label>
-                                                        <select value={viewType} onChange={e => { setViewType(e.target.value as 'section' | 'teacher'); }} className="input-style">
+                                                        <label className="text-sm font-semibold whitespace-nowrap">View by:</label>
+                                                        <select value={viewType} onChange={e => { setViewType(e.target.value as 'section' | 'teacher'); }} className="input-style text-sm">
                                                                 <option value="section">Class</option>
                                                                 <option value="teacher">Teacher</option>
                                                         </select>
@@ -646,23 +791,23 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                                                 ) : (
                                                     <>
                                                         <div className="flex items-center space-x-2">
-                                                                <label className="font-semibold">Grade:</label>
+                                                                <label className="text-sm font-semibold">Grade:</label>
                                                                 <select value={selectedGradeLevel === '' ? '' : String(selectedGradeLevel)} onChange={e => {
                                                                         const gl = e.target.value ? Number(e.target.value) : '';
                                                                         setSelectedGradeLevel(gl);
                                                                         if (gl === '') return;
                                                                         const firstInGrade = sections.find(s => s.gradeLevel === gl);
                                                                         setSelectedId(firstInGrade?.id || null);
-                                                                }} className="input-style min-w-[120px]">
+                                                                }} className="input-style text-sm min-w-[100px]">
                                                                         <option value="">All</option>
-                                                                        {gradeLevels.map(gl => <option key={gl} value={gl}>{gl}</option>)}
+                                                                        {gradeLevels.map(gl => <option key={gl} value={gl}>Grade {gl}</option>)}
                                                                 </select>
                                                         </div>
                                                         <div className="flex items-center space-x-2">
-                                                                <label htmlFor="view-section" className="font-semibold">Section:</label>
-                                                                <select id="view-section" value={selectedId ?? ''} onChange={e => setSelectedId(e.target.value)} className="input-style min-w-[220px]">
+                                                                <label htmlFor="view-section" className="text-sm font-semibold">Section:</label>
+                                                                <select id="view-section" value={selectedId ?? ''} onChange={e => setSelectedId(e.target.value)} className="input-style text-sm min-w-[180px]">
                                                                      {sections.filter(s => selectedGradeLevel === '' || s.gradeLevel === selectedGradeLevel).map(s => (
-                                                                            <option key={s.id} value={s.id}>{`Grade ${s.gradeLevel} - ${s.name}`}</option>
+                                                                            <option key={s.id} value={s.id}>{`${s.gradeLevel} - ${s.name}`}</option>
                                                                      ))}
                                                                 </select>
                                                         </div>
@@ -670,27 +815,24 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                                                 )}
                                             </>
                                         )}
-                        {/* Filters: Search and Clear only (Type and Days removed) */}
-                    <div className="flex items-center space-x-2 min-w-[220px]">
-                        <label className="text-sm font-semibold">Search</label>
-                        <input type="text" className="input-style min-w-[160px]" placeholder="Title/Teacher/Class" value={filters.q ?? ''} onChange={e => setFilters(prev => ({ ...prev, q: e.target.value }))}/>
                     </div>
-                    <div>
-                        <button type="button" className="text-xs px-3 py-2 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setFilters({ type: 'all', daySet: new Set(), teacherIds: new Set(), q: '' })}>Clear</button>
+                    
+                    {/* Search and Clear */}
+                    <div className="flex items-center gap-2">
+                        <input type="text" className="input-style text-sm w-48" placeholder="Search..." value={filters.q ?? ''} onChange={e => setFilters(prev => ({ ...prev, q: e.target.value }))}/>
+                        <button type="button" className="text-xs px-3 py-2 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 whitespace-nowrap" onClick={() => setFilters({ type: 'all', daySet: new Set(), teacherIds: new Set(), q: '' })}>Clear</button>
                     </div>
                 </div>
-                    {/* RIGHT: Date navigator */}
-                    <div className="flex items-center space-x-4 ml-auto">
-                        <button onClick={goToPreviousWeek} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700"><ChevronLeftIcon /></button>
-                        <h2 className="text-lg font-bold text-center whitespace-nowrap">{weekLabel}</h2>
-                        <button onClick={goToNextWeek} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700"><ChevronRightIcon /></button>
-                    </div>
+                
+                {/* RIGHT: Date navigator */}
+                <div className="flex items-center gap-2 lg:gap-4">
+                    <button onClick={goToPreviousWeek} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700" aria-label="Previous week"><ChevronLeftIcon /></button>
+                    <h2 className="text-sm lg:text-base font-bold text-center whitespace-nowrap">{weekLabel}</h2>
+                    <button onClick={goToNextWeek} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700" aria-label="Next week"><ChevronRightIcon /></button>
                 </div>
             </div>
 
-
-
-            <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg p-4 relative grid grid-cols-[auto_1fr] text-sm h-[75vh]">
+            <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg p-3 relative grid grid-cols-[auto_1fr] text-sm" style={{ height: 'calc(100vh - 320px)', minHeight: '500px' }}>
                 {/* Time Column */}
                 <div className="pr-2 text-right text-xs text-slate-500 dark:text-slate-400">
                     <div className="h-10"></div> {/* Spacer for day headers */}

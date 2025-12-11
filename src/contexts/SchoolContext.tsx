@@ -124,9 +124,11 @@ export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ ch
     
     const loadSchoolIdFromSession = async () => {
       try {
+        console.log('[SchoolContext] 🔍 Loading schoolId from session...');
+        
         const sessionStr = localStorage.getItem('edusync_session');
         if (!sessionStr) {
-          console.log('[SchoolContext] No session found - clearing context');
+          console.log('[SchoolContext] ⚠️ No session found - clearing context');
           setSchoolId(null);
           setSchoolIds([]);
           setRole(null);
@@ -135,11 +137,12 @@ export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ ch
           return;
         }
         
+        console.log('[SchoolContext] 📦 Session found, parsing...');
         const session = JSON.parse(sessionStr);
         const user = session.user;
         
         if (!user) {
-          console.log('[SchoolContext] Invalid session - clearing context');
+          console.log('[SchoolContext] ⚠️ Invalid session - clearing context');
           setSchoolId(null);
           setSchoolIds([]);
           setRole(null);
@@ -147,6 +150,13 @@ export const SchoolContextProvider: React.FC<SchoolContextProviderProps> = ({ ch
           setLoading(false);
           return;
         }
+        
+        console.log('[SchoolContext] 👤 User found in session:', {
+          name: user.name,
+          role: user.role,
+          schoolId: user.schoolId,
+          schoolIds: user.schoolIds
+        });
         
         // Extract school data from the user object (comes from Firestore teacher/student/parent document)
         const userSchoolId = user.schoolId || null;
