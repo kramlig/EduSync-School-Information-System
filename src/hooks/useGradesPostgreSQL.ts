@@ -104,6 +104,10 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
           .from('grades')
           .select('*');
 
+        // CRITICAL: Always filter by schoolId to avoid fetching grades from other schools
+        if (schoolId) {
+          query = query.eq('school_id', schoolId);
+        }
         if (studentId) {
           query = query.eq('student_id', studentId);
         }

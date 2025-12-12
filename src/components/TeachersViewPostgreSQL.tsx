@@ -45,7 +45,8 @@ const TeacherRow = React.memo<{
   onEdit: (teacher: any) => void;
   onDelete: (teacher: any) => void;
   onManageAssignments: (teacher: any) => void;
-}>(({ teacher, learningAreasMap, authUserId, getRoleBadgeColor, onEdit, onDelete, onManageAssignments }) => {
+  assignmentsRefreshKey: number;
+}>(({ teacher, learningAreasMap, authUserId, getRoleBadgeColor, onEdit, onDelete, onManageAssignments, assignmentsRefreshKey }) => {
   return (
     <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all duration-150 group">
       <td className="px-6 py-4">
@@ -92,7 +93,7 @@ const TeacherRow = React.memo<{
         )}
       </td>
       <td className="px-6 py-4">
-        <TeacherAssignmentsBadge teacherId={teacher.id} maxDisplay={3} />
+        <TeacherAssignmentsBadge key={`${teacher.id}-${assignmentsRefreshKey}`} teacherId={teacher.id} maxDisplay={3} />
       </td>
       <td className="px-6 py-4 text-right">
         <div className="flex items-center justify-end gap-2">
@@ -159,6 +160,9 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isManageAssignmentsModalOpen, setIsManageAssignmentsModalOpen] = useState(false);
+  
+  // Trigger to force refresh of assignment badges in main table
+  const [assignmentsRefreshKey, setAssignmentsRefreshKey] = useState(0);
   
   // Toast notification state
   const [toast, setToast] = useState<{
@@ -441,11 +445,13 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
       
       // Refetch assignments to update the modal immediately
       await refetchAssignments();
+      // Increment key to refresh main table badges
+      setAssignmentsRefreshKey(prev => prev + 1);
     } catch (err) {
       console.error('Failed to assign learning area:', err);
       showToast('error', 'Failed to assign learning area', err instanceof Error ? err.message : 'Please try again.');
     }
-  }, [selectedTeacher, newAssignment, learningAreas, schoolId, refetchAssignments, showToast]);
+  }, [selectedTeacher, newAssignment, learningAreas, schoolId, refetchAssignments, showToast, setAssignmentsRefreshKey]);
 
   const handleUnassignLearningArea = useCallback(async (assignment: any) => {
     if (!selectedTeacher) return;
@@ -467,6 +473,8 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
       
       // Refetch assignments to update the modal immediately
       await refetchAssignments();
+      // Increment key to refresh main table badges
+      setAssignmentsRefreshKey(prev => prev + 1);
     } catch (err) {
       console.error('Failed to unassign learning area:', err);
       showToast('error', 'Failed to remove assignment', err instanceof Error ? err.message : 'Please try again.');
@@ -641,6 +649,7 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
                       onEdit={handleEditClick}
                       onDelete={handleDeleteClick}
                       onManageAssignments={handleManageAssignmentsClick}
+                      assignmentsRefreshKey={assignmentsRefreshKey}
                     />
                   ))}
                 </tbody>

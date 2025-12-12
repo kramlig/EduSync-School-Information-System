@@ -170,7 +170,12 @@ export function useSchoolData(collectionsToFetch?: string[]): SchoolDataHook {
             ? { schoolId: schoolId || undefined, enableRealtime: false } 
             : {}
     );
-    const postgresGrades = useGradesPostgreSQL(USE_POSTGRESQL && shouldFetch('grades'), schoolId);
+    const postgresGrades = useGradesPostgreSQL(
+        USE_POSTGRESQL && shouldFetch('grades') 
+            ? { schoolId: schoolId || undefined }
+            : { skip: true }
+    );
+    
     const postgresCoreValues = useCoreValuesPostgreSQL(
         USE_POSTGRESQL && (shouldFetch('coreValues') || shouldFetch('coreValueGrades')), 
         schoolId,
