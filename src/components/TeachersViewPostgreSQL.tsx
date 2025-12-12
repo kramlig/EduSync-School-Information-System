@@ -24,6 +24,8 @@ import { GRADE_LEVELS, formatGradeLevel } from '../utils/gradeUtils';
 import Modal from '../../components/Modal';
 import { getAuth, updateEmail } from 'firebase/auth';
 import { TeacherAssignmentsBadge } from './TeacherAssignmentsBadge';
+import { supabase } from '../lib/supabase';
+import { useTeachingAssignments } from '../hooks/useTeachingAssignments';
 
 interface TeachersViewPostgreSQLProps {
   schoolId: string;
@@ -218,17 +220,23 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
     );
   }, [learningAreas, debouncedAssignmentSearchQuery]);
 
-  // Get assigned learning areas for selected teacher
+  // Get assigned learning areas for selected teacher from teaching_assignments table
+  const { assignments: teachingAssignments, loading: assignmentsLoading } = useTeachingAssignments(
+    selectedTeacher?.id || ''
+  );
+
   const assignedLearningAreas = useMemo(() => {
-    if (!selectedTeacher || !selectedTeacher.assignments) return [];
-    return selectedTeacher.assignments.map((assignment: any) => {
-      const learningArea = learningAreas.find(la => la.id === assignment.learningAreaId);
-      return {
-        ...assignment,
-        learningAreaName: learningArea?.name || 'Unknown'
-      };
-    });
-  }, [selectedTeacher, learningAreas]);
+    return teachingAssignments.map((assignment) => ({
+      id: assignment.id,
+      gradeLevel: assignment.grade_level,
+      learningAreaId: assignment.learning_area_id,
+      learningAreaName: assignment.learning_area?.name || assignment.subject || 'Unknown',
+      sectionId: assignment.section_id,
+      sectionName: assignment.section?.name,
+      isAdvisory: assignment.is_advisory,
+      hoursPerWeek: assignment.hours_per_week
+    }));
+  }, [teachingAssignments]);
 
   // Get role badge color
   const getRoleBadgeColor = (role: string) => {
@@ -416,32 +424,31 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
   const handleUnassignLearningArea = useCallback(async (assignment: any) => {
     if (!selectedTeacher) return;
 
-    const learningAreaName = assignment.learningAreaName || 'Unknown';
-    const gradeLevelFormatted = formatGradeLevel(assignment.gradeLevel);
+    const displayName = assignment.isAdvisory 
+      ? `Adviser: Grade ${assignment.gradeLevel} ${assignment.sectionName || ''}`
+      : `${formatGradeLevel(assignment.gradeLevel)} - ${assignment.learningAreaName}`;
 
     try {
-      const assignmentIndex = selectedTeacher.assignments.findIndex(
-        (a: any) => a.gradeLevel === assignment.gradeLevel && a.learningAreaId === assignment.learningAreaId
-      );
+      // Delete from teaching_assignments table
+      const { error } = await supabase
+        .from('teaching_assignments')
+        .delete()
+        .eq('id', assignment.id);
+
+      if (error) throw error;
       
-      if (assignmentIndex !== -1) {
-        await unassignLearningAreaFromTeacher(selectedTeacher.id, assignmentIndex);
+      showToast('success', `✅ Removed "${displayName}" from "${selectedTeacher.name}"`);
+      
+      // Trigger refetch by updating selected teacher
+      const updatedTeacher = teachers.find(t => t.id === selectedTeacher.id);
+      if (updatedTeacher) {
+        setSelectedTeacher({ ...updatedTeacher });
       }
-      
-      // Optimistic update
-      setSelectedTeacher((prev: any) => prev ? { 
-        ...prev, 
-        assignments: (prev.assignments || []).filter((a: any) => 
-          !(a.gradeLevel === assignment.gradeLevel && a.learningAreaId === assignment.learningAreaId)
-        )
-      } : null);
-      
-      showToast('success', `✅ Removed "${gradeLevelFormatted} - ${learningAreaName}" from "${selectedTeacher.name}"`);
     } catch (err) {
       console.error('Failed to unassign learning area:', err);
       showToast('error', 'Failed to remove assignment', err instanceof Error ? err.message : 'Please try again.');
     }
-  }, [selectedTeacher, unassignLearningAreaFromTeacher, showToast]);
+  }, [selectedTeacher, teachers, showToast]);
 
   // Loading state with skeleton
   if (loading && teachers.length === 0) {
@@ -904,16 +911,29 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
               Current Assignments
             </h3>
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {assignedLearningAreas.length > 0 ? (
-                assignedLearningAreas.map((assignment: any, idx: number) => (
+              {assignmentsLoading ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+                </div>
+              ) : assignedLearningAreas.length > 0 ? (
+                assignedLearningAreas.map((assignment: any) => (
                   <div 
-                    key={idx} 
+                    key={assignment.id} 
                     className="flex items-center justify-between bg-slate-50 dark:bg-slate-700 p-3 rounded-md"
                   >
                     <div>
                       <div className="font-medium text-slate-900 dark:text-white">
-                        {formatGradeLevel(assignment.gradeLevel)} - {assignment.learningAreaName}
+                        {assignment.isAdvisory ? (
+                          `📚 Adviser: Grade ${assignment.gradeLevel} ${assignment.sectionName || ''}`
+                        ) : (
+                          `${formatGradeLevel(assignment.gradeLevel)} - ${assignment.learningAreaName}`
+                        )}
                       </div>
+                      {assignment.hoursPerWeek > 0 && (
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          {assignment.hoursPerWeek} hours/week
+                        </div>
+                      )}
                     </div>
                     <button 
                       onClick={() => handleUnassignLearningArea(assignment)} 

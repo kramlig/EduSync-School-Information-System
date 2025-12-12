@@ -14,26 +14,36 @@
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://zjuxulhxxeeupcskkcok.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqdXh1bGh4eGVldXBjc2trY29rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM0MzExNDAsImV4cCI6MjA3OTAwNzE0MH0.rwRzqcxVIjPZ0-qmOvEzFkpeEoIRfnyYCWVRP9m1hX0';
+// Use service_role key for migration (bypasses RLS)
+const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqdXh1bGh4eGVldXBjc2trY29rIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczMzQzMTE0MCwiZXhwIjoyMDQ5MDA3MTQwfQ.V9W8VTxHLxFMu-tQ19hqJ-gHvj4e6V-WLBj3cj8ydYY';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 async function migrateTeachingAssignments() {
   console.log('🚀 Starting migration to teaching_assignments table...\n');
 
   try {
-    // Step 1: Clear existing data (idempotency)
-    console.log('🗑️  Clearing existing teaching_assignments data...');
-    const { error: clearError } = await supabase
+    // Step 1: Check if data already exists
+    console.log('🔍 Checking existing data...');
+    const { count: existingCount } = await supabase
       .from('teaching_assignments')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+      .select('*', { count: 'exact', head: true });
 
-    if (clearError) {
-      console.error('❌ Error clearing table:', clearError);
-      return;
+    if (existingCount > 0) {
+      console.log(`⚠️  Found ${existingCount} existing records.`);
+      console.log('   Clearing table for fresh migration...\n');
+      
+      const { error: clearError } = await supabase
+        .from('teaching_assignments')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (clearError) {
+        console.error('❌ Error clearing table:', clearError);
+        return;
+      }
     }
-    console.log('✅ Cleared existing data\n');
+    console.log('✅ Ready for migration\n');
 
     // Step 2: Migrate Section Advisers
     console.log('📚 Migrating section advisers from sections.adviser_id...');
