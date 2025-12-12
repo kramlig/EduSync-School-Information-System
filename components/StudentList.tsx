@@ -2033,7 +2033,14 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
           sections={sections}
           teachers={teachers}
           schoolYear={settings?.schoolYear || '2023-2024'}
-          schoolData={schoolData as any}
+          schoolData={{
+            ...schoolData,
+            // Override with PostgreSQL data for accurate Form 138 generation
+            grades,
+            sections,
+            attendanceRecords,
+            coreValueGrades
+          } as any}
           onClose={() => setIsViewModalOpen(false)}
         />
       )}

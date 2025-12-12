@@ -4,10 +4,16 @@
  * Shows detailed report card for a single student with print functionality
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
 import { useGradesPostgreSQL } from '../../../src/hooks/useGradesPostgreSQL';
+import { useLearningAreasPostgreSQL } from '../../../src/hooks/useLearningAreasPostgreSQL';
+import { useCoreValuesPostgreSQL } from '../../../src/hooks/useCoreValuesPostgreSQL';
+import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
+import { useTeachersPostgreSQL } from '../../../src/hooks/useTeachersPostgreSQL';
+import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
+import { useSchoolSettingsPostgreSQL } from '../../../src/hooks/useSchoolSettingsPostgreSQL';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
 import PrintableReport from '../../PrintableReport';
 
@@ -16,11 +22,19 @@ const Form138View: React.FC = () => {
   const navigate = useNavigate();
   const { schoolId } = useSchoolContext();
   
-  // Use PostgreSQL hooks
+  // Use PostgreSQL hooks to fetch all necessary data
   const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
-  const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId, studentId });
+  const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
+  const { learningAreas, loading: learningAreasLoading } = useLearningAreasPostgreSQL(schoolId);
+  const { coreValues, coreValueGrades, loading: coreValuesLoading } = useCoreValuesPostgreSQL(true, schoolId, true);
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { teachers, loading: teachersLoading } = useTeachersPostgreSQL({ schoolId });
+  const { attendanceRecords, loading: attendanceLoading } = useAttendancePostgreSQL({ schoolId });
+  const { settings, loading: settingsLoading } = useSchoolSettingsPostgreSQL({ schoolId, enableRealtime: false });
   
-  const loading = studentsLoading || gradesLoading;
+  const loading = studentsLoading || gradesLoading || learningAreasLoading || 
+                  coreValuesLoading || sectionsLoading || teachersLoading || 
+                  attendanceLoading || settingsLoading;
   const error = null;
   
   const [student, setStudent] = useState<any>(null);
@@ -31,6 +45,28 @@ const Form138View: React.FC = () => {
       setStudent(foundStudent);
     }
   }, [students, loading, studentId]);
+  
+  // Build schoolData object for PrintableReport
+  const schoolData = useMemo(() => ({
+    grades,
+    learningAreas,
+    coreValues,
+    coreValueGrades,
+    sections,
+    teachers,
+    attendanceRecords,
+    settings: settings || {
+      schoolName: 'School Name',
+      region: 'Region',
+      division: 'Division',
+      district: 'District',
+      schoolYear: '2024-2025'
+    },
+    monthlySchoolDaysConfig: {
+      Jan: 22, Feb: 20, Mar: 22, Apr: 10, May: 0, Jun: 10, 
+      Jul: 22, Aug: 22, Sep: 21, Oct: 22, Nov: 21, Dec: 10
+    }
+  }), [grades, learningAreas, coreValues, coreValueGrades, sections, teachers, attendanceRecords, settings]);
 
   if (loading) {
     return (
