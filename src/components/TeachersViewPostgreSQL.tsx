@@ -414,6 +414,9 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
     const learningArea = learningAreas.find(la => la.id === newAssignment.learningAreaId);
     const learningAreaName = learningArea?.name || 'Unknown';
     const gradeLevelFormatted = formatGradeLevel(newAssignment.gradeLevel);
+    
+    // Extract numeric grade level from "grade_7" format
+    const gradeNum = parseInt(newAssignment.gradeLevel.replace('grade_', ''));
 
     try {
       // Insert into teaching_assignments table
@@ -422,7 +425,7 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
         .insert({
           school_id: schoolId,
           teacher_id: selectedTeacher.id,
-          grade_level: parseInt(newAssignment.gradeLevel),
+          grade_level: gradeNum,
           learning_area_id: newAssignment.learningAreaId,
           subject: learningAreaName,
           school_year: '2024-2025',
