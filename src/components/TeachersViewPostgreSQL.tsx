@@ -16,7 +16,7 @@
  * IMPORTANT: Memoized to prevent infinite render loops
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTeachersPostgreSQL } from '../hooks/useTeachersPostgreSQL';
 import { useDebounce } from '../../hooks/useDebounce';
 import { PencilIcon, TrashIcon, CloseIcon, SearchIcon } from '../../components/icons';
@@ -129,11 +129,31 @@ const TeacherRow = React.memo<{
 TeacherRow.displayName = 'TeacherRow';
 
 const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({ 
-  schoolId, 
-  learningAreas,
+  schoolId,
+  learningAreas: learningAreasProp,
   authUserId,
   authUserRole
 }) => {
+  // Fetch learning areas from PostgreSQL instead of using prop
+  const [learningAreas, setLearningAreas] = useState<any[]>([]);
+  
+  useEffect(() => {
+    async function fetchLearningAreas() {
+      const { data, error } = await supabase
+        .from('learning_areas')
+        .select('*')
+        .eq('school_id', schoolId)
+        .order('name');
+      
+      if (!error && data) {
+        setLearningAreas(data);
+      }
+    }
+    
+    if (schoolId) {
+      fetchLearningAreas();
+    }
+  }, [schoolId]);
   // State for modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
