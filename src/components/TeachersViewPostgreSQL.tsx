@@ -416,30 +416,36 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
     const gradeLevelFormatted = formatGradeLevel(newAssignment.gradeLevel);
 
     try {
-      await assignLearningAreaToTeacher(selectedTeacher.id, {
-        gradeLevel: newAssignment.gradeLevel,
-        learningAreaId: newAssignment.learningAreaId
-      });
-      
-      // Optimistic update
-      setSelectedTeacher((prev: any) => prev ? { 
-        ...prev, 
-        assignments: [
-          ...(prev.assignments || []),
-          {
-            gradeLevel: newAssignment.gradeLevel,
-            learningAreaId: newAssignment.learningAreaId
-          }
-        ]
-      } : null);
+      // Insert into teaching_assignments table
+      const { error } = await supabase
+        .from('teaching_assignments')
+        .insert({
+          school_id: schoolId,
+          teacher_id: selectedTeacher.id,
+          grade_level: parseInt(newAssignment.gradeLevel),
+          learning_area_id: newAssignment.learningAreaId,
+          subject: learningAreaName,
+          school_year: '2024-2025',
+          is_advisory: false,
+          hours_per_week: 0,
+          is_active: true
+        });
+
+      if (error) throw error;
       
       showToast('success', `✅ Assigned "${gradeLevelFormatted} - ${learningAreaName}" to "${selectedTeacher.name}"`);
       setNewAssignment({ gradeLevel: '', learningAreaId: '' });
+      
+      // Trigger refetch by updating selected teacher
+      const updatedTeacher = teachers.find(t => t.id === selectedTeacher.id);
+      if (updatedTeacher) {
+        setSelectedTeacher({ ...updatedTeacher });
+      }
     } catch (err) {
       console.error('Failed to assign learning area:', err);
       showToast('error', 'Failed to assign learning area', err instanceof Error ? err.message : 'Please try again.');
     }
-  }, [selectedTeacher, newAssignment, assignLearningAreaToTeacher, learningAreas, showToast]);
+  }, [selectedTeacher, newAssignment, learningAreas, schoolId, teachers, showToast]);
 
   const handleUnassignLearningArea = useCallback(async (assignment: any) => {
     if (!selectedTeacher) return;
