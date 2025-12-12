@@ -23,6 +23,7 @@ import { PencilIcon, TrashIcon, CloseIcon, SearchIcon } from '../../components/i
 import { GRADE_LEVELS, formatGradeLevel } from '../utils/gradeUtils';
 import Modal from '../../components/Modal';
 import { getAuth, updateEmail } from 'firebase/auth';
+import { TeacherAssignmentsBadge } from './TeacherAssignmentsBadge';
 
 interface TeachersViewPostgreSQLProps {
   schoolId: string;
@@ -89,29 +90,7 @@ const TeacherRow = React.memo<{
         )}
       </td>
       <td className="px-6 py-4">
-        <div className="flex flex-wrap gap-1.5">
-          {teacher.assignments && teacher.assignments.length > 0 ? (
-            teacher.assignments.slice(0, 3).map((assignment: any, idx: number) => {
-              const learningArea = learningAreasMap.get(assignment.learningAreaId);
-              return (
-                <span 
-                  key={idx}
-                  className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
-                  title={`${formatGradeLevel(assignment.gradeLevel)} - ${learningArea?.name || 'Unknown'}`}
-                >
-                  {formatGradeLevel(assignment.gradeLevel)} - {learningArea?.name || 'Unknown'}
-                </span>
-              );
-            })
-          ) : (
-            <span className="text-xs text-slate-400 dark:text-slate-500 italic">No assignments</span>
-          )}
-          {teacher.assignments && teacher.assignments.length > 3 && (
-            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
-              +{teacher.assignments.length - 3}
-            </span>
-          )}
-        </div>
+        <TeacherAssignmentsBadge teacherId={teacher.id} maxDisplay={3} />
       </td>
       <td className="px-6 py-4 text-right">
         <div className="flex items-center justify-end gap-2">
