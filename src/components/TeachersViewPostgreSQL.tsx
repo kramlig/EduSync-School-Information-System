@@ -241,7 +241,7 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
   }, [learningAreas, debouncedAssignmentSearchQuery]);
 
   // Get assigned learning areas for selected teacher from teaching_assignments table
-  const { assignments: teachingAssignments, loading: assignmentsLoading } = useTeachingAssignments(
+  const { assignments: teachingAssignments, loading: assignmentsLoading, refetch: refetchAssignments } = useTeachingAssignments(
     selectedTeacher?.id || ''
   );
 
@@ -439,16 +439,13 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
       showToast('success', `✅ Assigned "${gradeLevelFormatted} - ${learningAreaName}" to "${selectedTeacher.name}"`);
       setNewAssignment({ gradeLevel: '', learningAreaId: '' });
       
-      // Trigger refetch by updating selected teacher
-      const updatedTeacher = teachers.find(t => t.id === selectedTeacher.id);
-      if (updatedTeacher) {
-        setSelectedTeacher({ ...updatedTeacher });
-      }
+      // Refetch assignments to update the modal immediately
+      await refetchAssignments();
     } catch (err) {
       console.error('Failed to assign learning area:', err);
       showToast('error', 'Failed to assign learning area', err instanceof Error ? err.message : 'Please try again.');
     }
-  }, [selectedTeacher, newAssignment, learningAreas, schoolId, teachers, showToast]);
+  }, [selectedTeacher, newAssignment, learningAreas, schoolId, refetchAssignments, showToast]);
 
   const handleUnassignLearningArea = useCallback(async (assignment: any) => {
     if (!selectedTeacher) return;
@@ -468,16 +465,13 @@ const TeachersViewPostgreSQL: React.FC<TeachersViewPostgreSQLProps> = ({
       
       showToast('success', `✅ Removed "${displayName}" from "${selectedTeacher.name}"`);
       
-      // Trigger refetch by updating selected teacher
-      const updatedTeacher = teachers.find(t => t.id === selectedTeacher.id);
-      if (updatedTeacher) {
-        setSelectedTeacher({ ...updatedTeacher });
-      }
+      // Refetch assignments to update the modal immediately
+      await refetchAssignments();
     } catch (err) {
       console.error('Failed to unassign learning area:', err);
       showToast('error', 'Failed to remove assignment', err instanceof Error ? err.message : 'Please try again.');
     }
-  }, [selectedTeacher, teachers, showToast]);
+  }, [selectedTeacher, refetchAssignments, showToast]);
 
   // Loading state with skeleton
   if (loading && teachers.length === 0) {
