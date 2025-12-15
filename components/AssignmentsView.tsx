@@ -294,6 +294,7 @@ const AssignmentsView: React.FC<{
     const [assignmentToEdit, setAssignmentToEdit] = useState<Partial<Assignment> | null>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [feedbackToEdit, setFeedbackToEdit] = useState<{ studentId: string, feedback: string | null } | null>(null);
+    const [isSaving, setIsSaving] = useState(false); // Prevent double submission
     
     // Student-specific state
     const [submissionModalOpen, setSubmissionModalOpen] = useState(false);
@@ -450,7 +451,7 @@ const AssignmentsView: React.FC<{
 
     const handleSaveAssignment = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!assignmentToEdit) return;
+        if (!assignmentToEdit || isSaving) return; // Prevent double submission
         
     const { id, title, totalPoints, dueDate, sectionId, learningAreaId } = assignmentToEdit;
         if (!title || !totalPoints || !dueDate || !sectionId || !learningAreaId) {
@@ -458,6 +459,7 @@ const AssignmentsView: React.FC<{
         }
 
         try {
+            setIsSaving(true);
             if (id) {
                 await updateAssignment(assignmentToEdit as Assignment);
             } else {
@@ -467,6 +469,8 @@ const AssignmentsView: React.FC<{
         } catch (error) {
             console.error('Failed to save assignment:', error);
             alert(`Failed to save assignment: ${error}`);
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -875,8 +879,10 @@ const AssignmentsView: React.FC<{
                         </div>
                     </div>
                     <div className="flex justify-end space-x-2 pt-4">
-                        <button type="button" onClick={() => setIsAssignmentModalOpen(false)} className="bg-slate-200 dark:bg-slate-600 font-semibold py-2 px-4 rounded-lg">Cancel</button>
-                        <button type="submit" className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg">Save</button>
+                        <button type="button" onClick={() => setIsAssignmentModalOpen(false)} className="bg-slate-200 dark:bg-slate-600 font-semibold py-2 px-4 rounded-lg" disabled={isSaving}>Cancel</button>
+                        <button type="submit" className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled={isSaving}>
+                            {isSaving ? 'Saving...' : 'Save'}
+                        </button>
                     </div>
                 </form>
             </Modal>
@@ -915,7 +921,18 @@ const AssignmentsView: React.FC<{
         <div>
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-6">{title}</h1>
             <div className="space-y-6">
-                {Array.from(studentAssignmentsByLA.entries()).map(([laId, laAssignments]) => (
+                {studentAssignmentsByLA.size === 0 ? (
+                    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-12 text-center">
+                        <EmptyAssignmentsIcon />
+                        <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mt-4">No Assignments Yet</h3>
+                        <p className="text-slate-500 dark:text-slate-400 mt-2">
+                            {!studentForPortal?.sectionId 
+                                ? "You haven't been assigned to a section yet. Please contact your teacher or registrar."
+                                : "Your teachers haven't posted any assignments yet. Check back later!"}
+                        </p>
+                    </div>
+                ) : (
+                    Array.from(studentAssignmentsByLA.entries()).map(([laId, laAssignments]) => (
                     <div key={laId}>
                         <h2 className="text-xl font-bold mb-2">{learningAreas.find(la => la.id === laId)?.name}</h2>
                         <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg overflow-hidden">
@@ -951,7 +968,8 @@ const AssignmentsView: React.FC<{
                             </table>
                         </div>
                     </div>
-                ))}
+                    ))
+                )}
             </div>
 
             <Modal isOpen={submissionModalOpen} onClose={() => setSubmissionModalOpen(false)} title={`Submit: ${assignmentToSubmit?.title}`}>

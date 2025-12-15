@@ -525,7 +525,7 @@ const AcademicTab: React.FC<{
           {subjectPerformance.length > 0 ? (
             <BarChart
               data={subjectPerformance.map(s => ({
-                label: `Subj ${s.subject.substring(0, 6)}`,
+                label: s.subject,
                 value: s.grade,
                 color: s.color
               }))}

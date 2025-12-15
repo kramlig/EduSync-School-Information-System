@@ -10,6 +10,8 @@
  * 
  * IMPORTANT: Parents can only view their own children's billing data.
  * All financial calculations are read-only for parents.
+ * 
+ * PostgreSQL Migration: Updated to use PostgreSQL hooks for data fetching
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -28,6 +30,9 @@ import { useSchoolContext } from '../src/contexts/SchoolContext';
 import { storage } from '../src/services/firestoreService';
 import { useOnlineStatus } from '../src/services/connectionService';
 import { DocumentArrowUpIcon, TrashIcon } from './icons';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useParentsPostgreSQL } from '../src/hooks/useParentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
 
 interface ParentBillingProps {
   schoolData: SchoolDataHook;
@@ -42,9 +47,19 @@ const ParentBilling: React.FC<ParentBillingProps> = ({
   session, 
   selectedChildId 
 }) => {
-  const { students, sections } = schoolData;
   const parent = session.user;
   const { schoolId } = useSchoolContext();
+
+  // PostgreSQL hooks for fresh data
+  const { students: pgStudents, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId: schoolId || '' });
+  const { parents: pgParents } = useParentsPostgreSQL({ schoolId: schoolId || '' });
+  const { sections: pgSections } = useSectionsPostgreSQL({ schoolId: schoolId || '' });
+
+  // Get fresh parent data from PostgreSQL
+  const currentParent = useMemo(() => {
+    const freshParent = (pgParents || []).find(p => p.id === parent.id);
+    return freshParent || parent;
+  }, [pgParents, parent]);
 
   // Online status
   const isOnline = useOnlineStatus();
@@ -76,10 +91,11 @@ const ParentBilling: React.FC<ParentBillingProps> = ({
   const [paymentProofs, setPaymentProofs] = useState<PaymentProof[]>([]);
   const [loadingProofs, setLoadingProofs] = useState(false);
 
-  // Get linked children
+  // Get linked children from PostgreSQL
   const linkedChildren = useMemo(() => {
-    return students.filter(s => parent.studentIds.includes(s.id));
-  }, [students, parent.studentIds]);
+    const studentIds = currentParent.studentIds || [];
+    return (pgStudents || []).filter(s => studentIds.includes(s.id));
+  }, [pgStudents, currentParent.studentIds]);
 
   // Get selected student (or first child)
   const selectedStudent = useMemo(() => {
@@ -89,11 +105,11 @@ const ParentBilling: React.FC<ParentBillingProps> = ({
     return linkedChildren[0];
   }, [linkedChildren, selectedChildId]);
 
-  // Get student section for grade level
+  // Get student section for grade level from PostgreSQL
   const studentSection = useMemo(() => {
     if (!selectedStudent?.sectionId) return null;
-    return sections.find(s => s.id === selectedStudent.sectionId) || null;
-  }, [selectedStudent, sections]);
+    return (pgSections || []).find(s => s.id === selectedStudent.sectionId) || null;
+  }, [selectedStudent, pgSections]);
 
   // Current school year (hardcoded for now, should come from settings)
   const currentSchoolYear = '2024-2025';

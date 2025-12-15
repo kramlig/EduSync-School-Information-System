@@ -14,6 +14,7 @@ import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
 import { useAttendancePostgreSQL } from '../src/hooks/useAttendancePostgreSQL';
 import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
 import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
+import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
 
 interface StudentListProps {
   schoolData: SchoolDataState & { 
@@ -37,15 +38,17 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   const schoolId = authUser.schoolId || '';
   
   // Load real data from PostgreSQL
-  const { students: pgStudents, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
+  const { students: pgStudents, loading: studentsLoading, updateStudent: updateStudentPg, deleteStudent: deleteStudentPg, forceRefetch: refetchStudents, searchStudents: searchStudentsPg } = useStudentsPostgreSQL({ schoolId });
   const { sections: pgSections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
   const { grades: pgGrades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
   const { attendanceRecords: pgAttendance } = useAttendancePostgreSQL({ schoolId });
   const { coreValueGrades: pgCoreValues } = useCoreValuesPostgreSQL({ schoolId });
   const { assignments: pgSubstituteAssignments } = useSubstituteAssignmentsPostgreSQL({ schoolId });
+  const { learningAreas: pgLearningAreas } = useLearningAreasPostgreSQL({ schoolId });
   
   // Use PostgreSQL data, fallback to empty arrays
   const students = pgStudents || [];
+  const learningAreas = pgLearningAreas || [];
   const sections = pgSections || [];
   const grades = pgGrades || [];
   const attendanceRecords = pgAttendance || [];
@@ -82,6 +85,15 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [gradeFilter, setGradeFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'lrn' | 'grade'>('name');
+
+  // Toast notification state
+  const [toast, setToast] = useState<{ show: boolean; type: 'success' | 'error'; message: string }>({ show: false, type: 'success', message: '' });
+  
+  // Show toast helper
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ show: true, type, message });
+    setTimeout(() => setToast({ show: false, type: 'success', message: '' }), 4000);
+  };
 
   // Feature flag: Server-side pagination is now ENABLED
   const USE_SERVER_PAGINATION = true;
@@ -140,7 +152,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     const performSearch = async () => {
       if (debouncedSearchQuery.trim()) {
         console.log(`[StudentList] 🔍 Triggering server-side search: "${debouncedSearchQuery}"`);
-        const results = await searchStudents(debouncedSearchQuery);
+        const results = await searchStudentsPg(debouncedSearchQuery);
         setSearchResults(results);
       } else {
         // Clear search results when query is empty
@@ -149,7 +161,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     };
 
     performSearch();
-  }, [debouncedSearchQuery, searchStudents]);
+  }, [debouncedSearchQuery, searchStudentsPg]);
 
   // Now directly use students from schoolData, which is paginated
   const visibleStudents = useMemo(() => {
@@ -209,14 +221,23 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     setIsEditModalOpen(true);
   };
   
-  const handleUpdateStudent = (e: React.FormEvent) => {
+  const handleUpdateStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (studentToEdit) {
-      updateStudent(studentToEdit);
-      setIsEditModalOpen(false);
-      setStudentToEdit(null);
-      // Refresh paginated data
-      schoolData.refresh();
+      const studentName = studentToEdit.name; // Save name before clearing
+      try {
+        // Use PostgreSQL update
+        await updateStudentPg(studentToEdit.id, studentToEdit);
+        setIsEditModalOpen(false);
+        setStudentToEdit(null);
+        // Show success message immediately
+        showToast('success', `✅ Student "${studentName}" updated successfully!`);
+        // Refresh PostgreSQL data (cache is cleared in updateStudentPg)
+        await refetchStudents();
+      } catch (error) {
+        console.error('Error updating student:', error);
+        showToast('error', 'Failed to update student. Please try again.');
+      }
     }
   };
   
@@ -232,13 +253,19 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     setIsDeleteModalOpen(true);
   };
   
-  const confirmDeleteStudent = () => {
+  const confirmDeleteStudent = async () => {
     if (studentToDelete) {
-      deleteStudent(studentToDelete.id);
-      setIsDeleteModalOpen(false);
-      setStudentToDelete(null);
-      // Refresh paginated data
-      schoolData.refresh();
+      try {
+        await deleteStudentPg(studentToDelete.id);
+        setIsDeleteModalOpen(false);
+        setStudentToDelete(null);
+        // Refresh PostgreSQL data
+        await refetchStudents();
+        showToast('success', `✅ Student "${studentToDelete.name}" deleted successfully!`);
+      } catch (error) {
+        console.error('Error deleting student:', error);
+        showToast('error', 'Failed to delete student. Please try again.');
+      }
     }
   };
 
@@ -263,8 +290,8 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       };
       setStudentToEdit(updatedStudent);
       
-      // Persist to Firestore
-      await updateStudent(updatedStudent);
+      // Persist to PostgreSQL
+      await updateStudentPg(updatedStudent.id, updatedStudent);
       
       // Update search results if we're currently showing search results
       if (searchResults) {
@@ -313,10 +340,10 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
         photoUploadedAt: new Date().toISOString(),
       };
       
-      console.log('[StudentList] 💾 Saving student with photo to Firestore...');
-      // IMPORTANT: Persist the photoURL and photoPath to Firestore
-      await updateStudent(updatedStudent);
-      console.log('[StudentList] ✅ Photo saved to Firestore successfully');
+      console.log('[StudentList] 💾 Saving student with photo to PostgreSQL...');
+      // IMPORTANT: Persist the photoURL and photoPath to PostgreSQL
+      await updateStudentPg(updatedStudent.id, updatedStudent);
+      console.log('[StudentList] ✅ Photo saved to PostgreSQL successfully');
       
       // Update local state AFTER successful Firestore save
       setStudentToEdit(updatedStudent);
@@ -334,11 +361,11 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       // Clear captured blob
       setCapturedBlob(null);
       
-      alert('✅ Photo uploaded successfully!');
+      showToast('success', '✅ Photo uploaded successfully!');
     } catch (error: any) {
       console.error('[StudentList] ❌ Error uploading student photo:', error); // Log error for debugging
       setPhotoError(error.message || 'Failed to upload photo. Please try again.');
-      alert(`❌ Failed to upload photo: ${error.message}`);
+      showToast('error', `Failed to upload photo: ${error.message}`);
     } finally {
       setPhotoUploading(false);
     }
@@ -443,6 +470,28 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
 
   return (
     <div className="space-y-6 pb-6">
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-lg shadow-lg transition-all duration-300 ${
+          toast.type === 'success' 
+            ? 'bg-green-500 text-white' 
+            : 'bg-red-500 text-white'
+        }`}>
+          <div className="flex items-center gap-2">
+            {toast.type === 'success' ? (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+            <span className="font-medium">{toast.message}</span>
+          </div>
+        </div>
+      )}
+
       {/* Enhanced Header with Gradient */}
       <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl shadow-lg p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -2039,7 +2088,8 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             grades,
             sections,
             attendanceRecords,
-            coreValueGrades
+            coreValueGrades,
+            learningAreas
           } as any}
           onClose={() => setIsViewModalOpen(false)}
         />

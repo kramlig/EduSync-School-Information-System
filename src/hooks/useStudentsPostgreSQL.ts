@@ -32,22 +32,52 @@ interface Student {
   suffix?: string;
   sex?: 'Male' | 'Female'; // Match global Student type
   dateOfBirth: Date | string;
+  placeOfBirth?: string;
   gradeLevel?: number | string;
   sectionId?: string;
   sectionName?: string; // Populated from join
   enrollmentStatus?: 'enrolled' | 'transferred' | 'dropped' | 'graduated'; // Match DB column name
   photoURL?: string;
+  photoPath?: string;
+  photoUploadedAt?: string;
   
   // Contact info
   address?: string;
+  barangay?: string;
+  city?: string;
+  province?: string;
+  zipCode?: string;
   contactNumber?: string;
   email?: string;
   
+  // Guardian info
+  guardianName?: string;
+  guardianRelationship?: string;
+  guardianContactNumber?: string;
+  guardianEmail?: string;
+  guardianOccupation?: string;
+  guardianAddress?: string;
+  
   // Additional DepEd fields
   religion?: string;
+  nationality?: string;
   motherTongue?: string;
   indigenousPeople?: string;
   fourPsBeneficiary?: boolean;
+  
+  // Academic history
+  enrollmentDate?: string;
+  previousSchool?: string;
+  previousSchoolAddress?: string;
+  yearLastAttended?: string;
+  
+  // Health info
+  bloodType?: string;
+  healthNotes?: string;
+  specialNeeds?: string;
+  
+  // Other
+  remarks?: string;
   
   // Metadata
   createdAt?: Date | string;
@@ -70,9 +100,11 @@ interface UseStudentsReturn {
   loading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
+  forceRefetch: () => Promise<void>; // Clears cache first, use after updates
   createStudent: (student: Partial<Student>) => Promise<Student>;
   updateStudent: (id: string, updates: Partial<Student>) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
+  searchStudents: (query: string) => Promise<Student[]>;
   totalCount: number; // Total number of students (for pagination)
 }
 
@@ -111,13 +143,11 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
         }
       }
 
-      // Fetching students with optimized single query
-
+      // Fetching students - select ALL columns for complete data
       let query = supabase.from('students').select(
-        // Only select essential columns for better performance
         includeSection 
-          ? 'id, school_id, lrn, name, first_name, middle_name, last_name, suffix, gender, date_of_birth, grade_level, section_id, enrollment_status, contact_number, email, sections(name)'
-          : 'id, school_id, lrn, name, first_name, middle_name, last_name, suffix, gender, date_of_birth, grade_level, section_id, enrollment_status, contact_number, email',
+          ? '*, sections(name)'
+          : '*',
         { count: 'exact' } // Get count in same query
       );
 
@@ -171,22 +201,54 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
         suffix: row.suffix || undefined,
         sex: row.gender, // Map DB 'gender' to Student 'sex'
         dateOfBirth: row.date_of_birth,
+        placeOfBirth: row.place_of_birth || undefined,
         gradeLevel: row.grade_level,
         sectionId: row.section_id || undefined,
         sectionName: row.sections?.name || undefined,
         enrollmentStatus: row.enrollment_status || 'enrolled',
-        photoURL: undefined, // Not in DB yet
+        
+        // Photo fields
+        photoURL: row.photo_url || undefined,
+        photoPath: row.photo_path || undefined,
+        photoUploadedAt: row.photo_uploaded_at || undefined,
         
         // Contact info
         address: row.address || undefined,
+        barangay: row.barangay || undefined,
+        city: row.city || undefined,
+        province: row.province || undefined,
+        zipCode: row.zip_code || undefined,
         contactNumber: row.contact_number || undefined,
         email: row.email || undefined,
         
+        // Guardian info
+        guardianName: row.guardian_name || undefined,
+        guardianRelationship: row.guardian_relationship || undefined,
+        guardianContactNumber: row.guardian_contact_number || undefined,
+        guardianEmail: row.guardian_email || undefined,
+        guardianOccupation: row.guardian_occupation || undefined,
+        guardianAddress: row.guardian_address || undefined,
+        
         // DepEd fields
         religion: row.religion || undefined,
-        motherTongue: undefined, // Not in DB yet
+        nationality: row.nationality || undefined,
+        motherTongue: row.mother_tongue || undefined,
         indigenousPeople: row.indigenous_people ? 'Yes' : undefined, // BOOLEAN → string
-        fourPsBeneficiary: false, // Not in DB yet,
+        fourPsBeneficiary: row.four_ps_beneficiary || false,
+        
+        // Academic history
+        enrollmentDate: row.enrollment_date || undefined,
+        previousSchool: row.previous_school || undefined,
+        previousSchoolAddress: row.previous_school_address || undefined,
+        yearLastAttended: row.year_last_attended || undefined,
+        
+        // Health info
+        bloodType: row.blood_type || undefined,
+        healthNotes: row.health_notes || undefined,
+        specialNeeds: row.special_needs || undefined,
+        
+        // Other
+        remarks: row.remarks || undefined,
         
         // Metadata
         createdAt: row.created_at,
@@ -368,6 +430,7 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
       const updateData: Record<string, any> = {};
       
       // Map Student fields to PostgreSQL column names
+      // Basic Info
       if (updates.schoolId !== undefined) updateData.school_id = updates.schoolId;
       if (updates.lrn !== undefined) updateData.lrn = updates.lrn;
       if (updates.name !== undefined) updateData.name = updates.name;
@@ -375,19 +438,60 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
       if (updates.middleName !== undefined) updateData.middle_name = updates.middleName;
       if (updates.lastName !== undefined) updateData.last_name = updates.lastName;
       if (updates.suffix !== undefined) updateData.suffix = updates.suffix;
-      // Handle sex field (form uses 'sex', DB uses 'gender')
       if (updates.sex !== undefined) updateData.gender = updates.sex;
       if (updates.dateOfBirth !== undefined) updateData.date_of_birth = updates.dateOfBirth;
+      if (updates.placeOfBirth !== undefined) updateData.place_of_birth = updates.placeOfBirth;
       if (updates.gradeLevel !== undefined) updateData.grade_level = updates.gradeLevel;
       if (updates.sectionId !== undefined) updateData.section_id = updates.sectionId;
       if (updates.enrollmentStatus !== undefined) updateData.enrollment_status = updates.enrollmentStatus;
+      
+      // Photo fields
+      if (updates.photoURL !== undefined) updateData.photo_url = updates.photoURL;
+      if (updates.photoPath !== undefined) updateData.photo_path = updates.photoPath;
+      if (updates.photoUploadedAt !== undefined) updateData.photo_uploaded_at = updates.photoUploadedAt;
+      
+      // Contact Info
       if (updates.address !== undefined) updateData.address = updates.address;
+      if (updates.barangay !== undefined) updateData.barangay = updates.barangay;
+      if (updates.city !== undefined) updateData.city = updates.city;
+      if (updates.province !== undefined) updateData.province = updates.province;
+      if (updates.zipCode !== undefined) updateData.zip_code = updates.zipCode;
       if (updates.contactNumber !== undefined) updateData.contact_number = updates.contactNumber;
       if (updates.email !== undefined) updateData.email = updates.email;
+      
+      // Guardian Info
+      if (updates.guardianName !== undefined) updateData.guardian_name = updates.guardianName;
+      if (updates.guardianRelationship !== undefined) updateData.guardian_relationship = updates.guardianRelationship;
+      if (updates.guardianContactNumber !== undefined) updateData.guardian_contact_number = updates.guardianContactNumber;
+      if (updates.guardianEmail !== undefined) updateData.guardian_email = updates.guardianEmail;
+      if (updates.guardianOccupation !== undefined) updateData.guardian_occupation = updates.guardianOccupation;
+      if (updates.guardianAddress !== undefined) updateData.guardian_address = updates.guardianAddress;
+      
+      // DepEd fields
       if (updates.religion !== undefined) updateData.religion = updates.religion;
+      if (updates.nationality !== undefined) updateData.nationality = updates.nationality;
+      if (updates.motherTongue !== undefined) updateData.mother_tongue = updates.motherTongue;
       if (updates.indigenousPeople !== undefined) {
         updateData.indigenous_people = updates.indigenousPeople === 'Yes';
       }
+      if (updates.fourPsBeneficiary !== undefined) updateData.four_ps_beneficiary = updates.fourPsBeneficiary;
+      
+      // Academic History
+      if (updates.enrollmentDate !== undefined) updateData.enrollment_date = updates.enrollmentDate;
+      if (updates.previousSchool !== undefined) updateData.previous_school = updates.previousSchool;
+      if (updates.previousSchoolAddress !== undefined) updateData.previous_school_address = updates.previousSchoolAddress;
+      if (updates.yearLastAttended !== undefined) updateData.year_last_attended = updates.yearLastAttended;
+      
+      // Health Info
+      if (updates.bloodType !== undefined) updateData.blood_type = updates.bloodType;
+      if (updates.healthNotes !== undefined) updateData.health_notes = updates.healthNotes;
+      if (updates.specialNeeds !== undefined) updateData.special_needs = updates.specialNeeds;
+      
+      // Other
+      if (updates.remarks !== undefined) updateData.remarks = updates.remarks;
+      
+      // Always update the updated_at timestamp
+      updateData.updated_at = new Date().toISOString();
 
       const { error: updateError } = await supabase
         .from('students')
@@ -427,14 +531,97 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
     }
   }, []);
 
+  // Search students by name or LRN
+  const searchStudents = useCallback(async (query: string): Promise<Student[]> => {
+    if (!query.trim()) return [];
+    
+    try {
+      let dbQuery = supabase
+        .from('students')
+        .select('*')
+        .or(`name.ilike.%${query}%,lrn.ilike.%${query}%,first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
+        .eq('enrollment_status', 'enrolled')
+        .is('deleted_at', null)
+        .limit(50);
+      
+      if (schoolId) {
+        dbQuery = dbQuery.eq('school_id', schoolId);
+      }
+
+      const { data, error: searchError } = await dbQuery;
+
+      if (searchError) throw searchError;
+
+      // Transform to Student type
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        schoolId: row.school_id,
+        lrn: row.lrn || '',
+        name: row.name || `${row.first_name || ''} ${row.middle_name || ''} ${row.last_name || ''}`.trim(),
+        firstName: row.first_name || '',
+        middleName: row.middle_name,
+        lastName: row.last_name || '',
+        suffix: row.suffix,
+        sex: row.gender,
+        dateOfBirth: row.date_of_birth,
+        placeOfBirth: row.place_of_birth,
+        gradeLevel: row.grade_level,
+        sectionId: row.section_id,
+        enrollmentStatus: row.enrollment_status,
+        photoURL: row.photo_url,
+        photoPath: row.photo_path,
+        photoUploadedAt: row.photo_uploaded_at,
+        address: row.address,
+        barangay: row.barangay,
+        city: row.city,
+        province: row.province,
+        zipCode: row.zip_code,
+        contactNumber: row.contact_number,
+        email: row.email,
+        guardianName: row.guardian_name,
+        guardianRelationship: row.guardian_relationship,
+        guardianContactNumber: row.guardian_contact_number,
+        guardianEmail: row.guardian_email,
+        guardianOccupation: row.guardian_occupation,
+        guardianAddress: row.guardian_address,
+        religion: row.religion,
+        nationality: row.nationality,
+        motherTongue: row.mother_tongue,
+        indigenousPeople: row.indigenous_people ? 'Yes' : 'No',
+        fourPsBeneficiary: row.four_ps_beneficiary,
+        enrollmentDate: row.enrollment_date,
+        previousSchool: row.previous_school,
+        previousSchoolAddress: row.previous_school_address,
+        yearLastAttended: row.year_last_attended,
+        bloodType: row.blood_type,
+        healthNotes: row.health_notes,
+        specialNeeds: row.special_needs,
+        remarks: row.remarks,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+    } catch (err) {
+      console.error('[useStudentsPostgreSQL] Error searching students:', err);
+      return [];
+    }
+  }, [schoolId]);
+
+  // Force refetch - clears cache first then fetches fresh data
+  const forceRefetch = useCallback(async () => {
+    queryCache.clear();
+    await fetchStudents();
+  }, [fetchStudents]);
+
   return {
     students,
     loading,
     error,
     refetch: fetchStudents,
+    forceRefetch, // Use this after updates for guaranteed fresh data
     createStudent: createStudent as (studentData: Partial<Student>) => Promise<Student>,
     updateStudent,
     deleteStudent,
+    searchStudents,
     totalCount
   };
 }

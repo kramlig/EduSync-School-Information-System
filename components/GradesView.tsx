@@ -59,8 +59,8 @@ const normalizeGradeLevel = (gradeLevel: string | number): number | null => {
   return match ? parseInt(match[1], 10) : null;
 };
 
-const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined): number | undefined => {
-  if (grade === undefined) return undefined;
+const calculateQuarterAverage = (grade: number | SubGradeRecord | undefined | null): number | undefined => {
+  if (grade === undefined || grade === null) return undefined;
   if (typeof grade === 'number') return grade;
   const subGrades = Object.values(grade).filter(g => typeof g === 'number');
   if (subGrades.length === 0) return undefined;
@@ -1264,7 +1264,9 @@ const GradesView: React.FC<GradesViewProps> = ({
               {!(isStudentView || isParentView) && (
                 <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Performance</th>
               )}
-              <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Actions</th>
+              {!(isStudentView || isParentView) && (
+                <th className="px-5 py-3 border-b-2 border-slate-200 dark:border-slate-700 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Actions</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -1312,22 +1314,24 @@ const GradesView: React.FC<GradesViewProps> = ({
                         </div>
                       </td>
                     )}
-                    <td className="px-5 py-4 text-sm">
-                      <button 
-                        onClick={(e) => { 
-                          e.stopPropagation(); 
-                          handleGenerateReport(student); 
-                        }} 
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-indigo-600 dark:text-indigo-400 hover:text-white hover:bg-indigo-600 dark:hover:bg-indigo-500 border border-indigo-600 dark:border-indigo-400 rounded-md font-medium text-xs transition-colors"
-                      >
-                        <span>🤖</span>
-                        <span>Generate AI Report</span>
-                      </button>
-                    </td>
+                    {!(isStudentView || isParentView) && (
+                      <td className="px-5 py-4 text-sm">
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            handleGenerateReport(student); 
+                          }} 
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-indigo-600 dark:text-indigo-400 hover:text-white hover:bg-indigo-600 dark:hover:bg-indigo-500 border border-indigo-600 dark:border-indigo-400 rounded-md font-medium text-xs transition-colors"
+                        >
+                          <span>🤖</span>
+                          <span>Generate AI Report</span>
+                        </button>
+                      </td>
+                    )}
                   </tr>
                   {expandedStudents.has(student.id) && (
                     <tr>
-                      <td colSpan={showBulkActions && !(isStudentView || isParentView) ? 5 : 4} className="p-0">
+                      <td colSpan={(isStudentView || isParentView) ? 2 : (showBulkActions ? 5 : 4)} className="p-0">
                         <StudentGradeDetails
                           student={student}
                           learningAreas={learningAreas}

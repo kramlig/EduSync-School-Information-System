@@ -10,15 +10,18 @@
  * 
  * IMPORTANT: Email verification integration added to ensure parent email addresses
  * are verified before accessing sensitive student information.
+ * 
+ * PostgreSQL Migration: Updated to use PostgreSQL hooks for data fetching
  */
 
 import React, { useState, useMemo } from 'react';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
 import type { ParentUser } from '../types';
-import { getFirestoreInstance } from '../src/services/firestoreService';
-import { doc, updateDoc } from 'firebase/firestore';
 import { UserCircleIcon, BellIcon, AcademicCapIcon } from './icons';
 import NotificationHistory from './NotificationHistory';
+import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
+import { useParentsPostgreSQL } from '../src/hooks/useParentsPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
 // import VerificationReminder from './VerificationReminder'; // Temporarily disabled
 
 interface ParentProfileProps {
@@ -28,8 +31,18 @@ interface ParentProfileProps {
 }
 
 const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSessionUpdate }) => {
-  const { students, updateParent } = schoolData;
   const parent = session.user;
+  
+  // PostgreSQL hooks for fresh data
+  const { students: pgStudents, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId: parent.schoolId || '' });
+  const { parents: pgParents, updateParent: updateParentPg } = useParentsPostgreSQL({ schoolId: parent.schoolId || '' });
+  const { sections: pgSections } = useSectionsPostgreSQL({ schoolId: parent.schoolId || '' });
+  
+  // Get fresh parent data from PostgreSQL
+  const currentParent = useMemo(() => {
+    const freshParent = (pgParents || []).find(p => p.id === parent.id);
+    return freshParent || parent;
+  }, [pgParents, parent]);
   
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -60,10 +73,17 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
     announcementAlerts: true,
   });
   
-  // Get linked children
+  // Get linked children from PostgreSQL
   const linkedChildren = useMemo(() => {
-    return students.filter(s => parent.studentIds.includes(s.id));
-  }, [students, parent.studentIds]);
+    const studentIds = currentParent.studentIds || [];
+    return (pgStudents || []).filter(s => studentIds.includes(s.id));
+  }, [pgStudents, currentParent.studentIds]);
+  
+  // Get section info for children
+  const getChildSection = (sectionId?: string) => {
+    if (!sectionId) return null;
+    return (pgSections || []).find(s => s.id === sectionId);
+  };
   
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,15 +119,20 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
         }
       }
       
-      // Update parent via hook (handles Firestore update)
+      // Update parent via PostgreSQL hook
+      await updateParentPg(currentParent.id, {
+        name: formData.name,
+        email: formData.email,
+        contactNumber: formData.phone,
+      });
+      
+      // Create updated parent for session
       const updatedParent = {
-        ...parent,
+        ...currentParent,
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
       };
-      
-      await updateParent(updatedParent);
       
       // Update session with new data
       if (onSessionUpdate) {
@@ -150,14 +175,13 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
     }
     
     try {
-      const db = getFirestoreInstance();
-      const parentRef = doc(db, 'parents', parent.id);
+      // Note: Password changes require Firebase Auth, not database update
+      // For now, show not implemented message
+      setErrorMessage('Password change is handled through Firebase Auth. Please use "Forgot Password" option on login screen.');
+      return;
       
-      // In production, verify current password first
-      // For now, just update
-      await updateDoc(parentRef, {
-        password: passwordData.newPassword
-      });
+      // TODO: Implement Firebase Auth password change
+      // await updatePassword(user, passwordData.newPassword);
       
       setSuccessMessage('✅ Password changed successfully!');
       setIsChangingPassword(false);
@@ -178,17 +202,16 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
   // Save notification preferences
   const handleSaveNotifications = async () => {
     try {
-      const db = getFirestoreInstance();
-      const parentRef = doc(db, 'parents', parent.id);
-      
-      await updateDoc(parentRef, {
+      // Update notification preferences via PostgreSQL hook
+      // Note: notification_preferences is a JSONB column
+      await updateParentPg(currentParent.id, {
         notificationPreferences: notificationPrefs
       });
       
       // Update session with new notification preferences
       if (onSessionUpdate) {
         onSessionUpdate({
-          ...parent,
+          ...currentParent,
           notificationPreferences: notificationPrefs
         });
       }
@@ -592,20 +615,32 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
             
             {linkedChildren.length > 0 ? (
               <div className="space-y-3">
-                {linkedChildren.map(child => (
-                  <div
-                    key={child.id}
-                    className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 hover:border-blue-400 dark:hover:border-blue-600 transition-colors"
-                  >
-                    <p className="font-semibold text-slate-800 dark:text-white">{child.name}</p>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                      LRN: {child.lrn || 'N/A'}
-                    </p>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                      Status: <span className="text-green-600 dark:text-green-400">{child.status || 'Active'}</span>
-                    </p>
-                  </div>
-                ))}
+                {linkedChildren.map(child => {
+                  const section = getChildSection(child.sectionId);
+                  return (
+                    <div
+                      key={child.id}
+                      className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 hover:border-blue-400 dark:hover:border-blue-600 transition-colors"
+                    >
+                      <p className="font-semibold text-slate-800 dark:text-white">{child.name}</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        LRN: {child.lrn || 'N/A'}
+                      </p>
+                      {section && (
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          Grade {section.gradeLevel} - {section.name}
+                        </p>
+                      )}
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        Status: <span className="text-green-600 dark:text-green-400">{child.status || 'Active'}</span>
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : studentsLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
               </div>
             ) : (
               <p className="text-slate-600 dark:text-slate-400 text-sm">
@@ -622,10 +657,12 @@ const ParentProfile: React.FC<ParentProfileProps> = ({ schoolData, session, onSe
         </div>
       </div>
       
-      {/* Notification History Section (Full Width) */}
+      {/* Notification History Section - Hidden until notification system is implemented */}
+      {/* TODO: Uncomment when notification backend is ready
       <div className="mt-6">
         <NotificationHistory parent={parent} />
       </div>
+      */}
     </div>
   );
 };

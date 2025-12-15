@@ -30,8 +30,20 @@ interface AnnouncementsViewProps {
 const ITEMS_PER_PAGE = 10;
 
 const AnnouncementsViewComponent: React.FC<AnnouncementsViewProps> = ({ session }) => {
-    const { schoolId } = useSchoolContext();
-    const { announcements, loading, addAnnouncement, updateAnnouncement, deleteAnnouncement } = useAnnouncementsPostgreSQL({ schoolId });
+    const { schoolId: contextSchoolId } = useSchoolContext();
+    
+    // Get schoolId from user (works for all user types: AuthUser, StudentUser, ParentUser)
+    const userSchoolId = useMemo(() => {
+        const user = session.user as (AuthUser | StudentUser | ParentUser);
+        return 'schoolId' in user ? user.schoolId : '';
+    }, [session.user]);
+    
+    // Use schoolId from context or fallback to user's schoolId
+    const schoolId = contextSchoolId || userSchoolId || '';
+    
+    const { announcements, loading, addAnnouncement, updateAnnouncement, deleteAnnouncement } = useAnnouncementsPostgreSQL({ schoolId: schoolId || undefined });
+    
+    const authUser = session.user as AuthUser;
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -57,7 +69,6 @@ const AnnouncementsViewComponent: React.FC<AnnouncementsViewProps> = ({ session 
         setTimeout(() => setToast({ show: false, type: 'success', message: '' }), 5000);
     }, []);
 
-    const authUser = session.user as AuthUser;
     const canManage = session.type === 'staff' && ['admin', 'principal'].includes(authUser.role);
 
     // Get target badge styling
@@ -136,9 +147,14 @@ const AnnouncementsViewComponent: React.FC<AnnouncementsViewProps> = ({ session 
 
     const handleOpenModal = (announcement: Announcement | null = null) => {
         if (!canManage) return;
+        if (!schoolId) {
+            showToast('error', 'School ID is required to create announcements');
+            return;
+        }
         setAnnouncementToEdit(announcement 
             ? { ...announcement } 
             : { 
+                schoolId,
                 target: 'all', 
                 date: new Date().toISOString().split('T')[0], 
                 authorId: authUser.id,
