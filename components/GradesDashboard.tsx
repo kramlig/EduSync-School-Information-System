@@ -6,6 +6,7 @@ import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
 import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
 import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
 import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useParentsPostgreSQL } from '../src/hooks/useParentsPostgreSQL';
 
 interface GradesDashboardProps {
   session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
@@ -22,6 +23,14 @@ const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData }
   const { grades: pgGrades } = useGradesPostgreSQL({ schoolId });
   const { coreValueGrades: pgCoreValueGrades } = useCoreValuesPostgreSQL(true, schoolId);
   const { sections: pgSections } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+  const { parents: pgParents } = useParentsPostgreSQL({ schoolId });
+  
+  // Get fresh parent data if in parent view
+  const currentParent = useMemo(() => {
+    if (session.type !== 'parent') return null;
+    const parent = session.user as ParentUser;
+    return (pgParents || []).find(p => p.id === parent.id) || parent;
+  }, [session, pgParents]);
   
   const students = pgStudents || [];
   const grades = pgGrades || [];
@@ -38,9 +47,10 @@ const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData }
       return students.filter(s => s.id === session.user.id);
     }
     
-    if (isParentView) {
-      // Parents see their own children only
-      return students.filter(s => s.id === (session.user as ParentUser).children?.[0]);
+    if (isParentView && currentParent) {
+      // Parents see their own children only - use fresh studentIds
+      const studentIds = currentParent.studentIds || [];
+      return students.filter(s => studentIds.includes(s.id));
     }
     
     if (['admin', 'principal', 'registrar'].includes(authUser.role)) {
@@ -159,7 +169,7 @@ const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData }
       route: '/grades/analytics',
       gradient: 'from-amber-500 to-orange-600',
       stats: { label: 'Avg Grade', value: `${stats.avgGrade}%` },
-      visible: true
+      visible: !isStudentView && !isParentView // Only staff can view class-wide analytics
     }
   ];
 

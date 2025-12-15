@@ -3,6 +3,8 @@ import { NavLink } from 'react-router-dom';
 import type { AuthUser, StudentUser, ParentUser, Announcement } from '../types';
 import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronRightIcon, BuildingOfficeIcon, CheckBadgeIcon, UserCircleIcon, CreditCardIcon, CurrencyDollarIcon, ChartPieIcon, DocumentTextIcon } from './icons';
 import { useSchoolProfilePostgreSQL } from '../src/hooks/useSchoolProfilePostgreSQL';
+import { useAssignmentsPostgreSQL } from '../src/hooks/useAssignmentsPostgreSQL';
+import { useAnnouncementsPostgreSQL } from '../src/hooks/useAnnouncementsPostgreSQL';
 import DepEdLogo from './DepEdLogo';
 
 interface SidebarProps {
@@ -14,15 +16,58 @@ const Sidebar: React.FC<SidebarProps> = ({ session, announcements = [] }) => {
   // Fetch school profile from PostgreSQL instead of receiving as props
   const { schoolName, schoolYear } = useSchoolProfilePostgreSQL();
   
+  // Fetch assignments for student badge count
+  const { assignments, studentAssignmentGrades } = useAssignmentsPostgreSQL();
+
+  // Get schoolId for announcements
+  const schoolId = useMemo(() => {
+    const user = session.user as (AuthUser | StudentUser | ParentUser);
+    return 'schoolId' in user ? user.schoolId : '';
+  }, [session.user]);
+  
+  // Fetch announcements from PostgreSQL for accurate counts
+  const { announcements: pgAnnouncements } = useAnnouncementsPostgreSQL({ schoolId: schoolId || undefined });
+  
   const [isCollapsed, setIsCollapsed] = useState(false);
   
   // Calculate announcement count for parents
   const parentAnnouncementCount = useMemo(() => {
     if (session.type !== 'parent') return null;
-    const count = announcements.filter(a => ['all', 'parents'].includes(a.target)).length;
+    const count = (pgAnnouncements || []).filter(a => ['all', 'parents'].includes(a.target)).length;
     return count > 0 ? String(count) : null;
-  }, [announcements, session.type]);
+  }, [pgAnnouncements, session.type]);
+
+  // Calculate announcement count for students
+  const studentAnnouncementCount = useMemo(() => {
+    if (session.type !== 'student') return null;
+    const count = (pgAnnouncements || []).filter(a => ['all', 'students'].includes(a.target)).length;
+    return count > 0 ? String(count) : null;
+  }, [pgAnnouncements, session.type]);
   
+  // Calculate pending assignment count for students
+  const studentPendingAssignmentCount = useMemo(() => {
+    if (session.type !== 'student') return null;
+    const student = session.user as StudentUser;
+    if (!student.sectionId) return null;
+    
+    // Filter assignments for this student's section
+    const studentAssignments = assignments.filter(a => a.sectionId === student.sectionId);
+    
+    // Count assignments that are not yet submitted or graded
+    let pendingCount = 0;
+    studentAssignments.forEach(assignment => {
+      const grade = studentAssignmentGrades.find(
+        g => g.assignmentId === assignment.id && g.studentId === student.id
+      );
+      // Pending = no submission and no grade
+      if (!grade?.submissionDate && (grade?.score === null || grade?.score === undefined)) {
+        pendingCount++;
+      }
+    });
+    
+    return pendingCount > 0 ? String(pendingCount) : null;
+  }, [session, assignments, studentAssignmentGrades]);
+
   const staffNavGroups = [
     {
       title: 'Main',
@@ -91,7 +136,8 @@ const Sidebar: React.FC<SidebarProps> = ({ session, announcements = [] }) => {
   
   const studentNavItems = [
     { path: '/', label: 'Dashboard', icon: <HomeIcon />, badge: null },
-    { path: '/assignments', label: 'My Assignments', icon: <ClipboardDocumentCheckIcon />, badge: '3' },
+    { path: '/announcements', label: 'Announcements', icon: <MegaphoneIcon />, badge: studentAnnouncementCount },
+    { path: '/assignments', label: 'My Assignments', icon: <ClipboardDocumentCheckIcon />, badge: studentPendingAssignmentCount },
     { path: '/grades', label: 'My Grades & Reports', icon: <ClipboardDocumentListIcon />, badge: null },
     { path: '/attendance', label: 'My Attendance', icon: <CalendarDaysIcon />, badge: null },
     { path: '/schedule', label: 'My Schedule', icon: <CalendarIcon />, badge: null },

@@ -2,14 +2,21 @@
  * Form138DownloadButtonV2 - Official Format Version
  * 
  * Uses the same PrintableReport component as admin/teacher views
- * to ensure consistent DepEd-compliant formatting
+ * to ensure consistent DepEd-compliant formatting.
+ * 
+ * Updated to fetch data from PostgreSQL directly for parent portal.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import PrintableReport from './PrintableReport';
-import { generateForm138PDFFromComponent, previewForm138Data } from '../src/services/form138GeneratorV2';
+import { generateForm138PDFFromComponent } from '../src/services/form138GeneratorV2';
 import type { Student } from '../types';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
+import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
+import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useAttendancePostgreSQL } from '../src/hooks/useAttendancePostgreSQL';
+import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
+import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
 
 interface Form138DownloadButtonV2Props {
   student: Student;
@@ -22,6 +29,86 @@ const Form138DownloadButtonV2: React.FC<Form138DownloadButtonV2Props> = ({
 }) => {
   const [showPreview, setShowPreview] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // Fetch data from PostgreSQL for accurate preview
+  const schoolId = student.schoolId || '';
+  const { grades: pgGrades } = useGradesPostgreSQL({ studentId: student.id, schoolId });
+  const { sections: pgSections } = useSectionsPostgreSQL({ schoolId });
+  const { attendanceRecords: pgAttendance } = useAttendancePostgreSQL({ schoolId });
+  const { learningAreas: pgLearningAreas } = useLearningAreasPostgreSQL();
+  const { coreValues: pgCoreValues } = useCoreValuesPostgreSQL(true, schoolId);
+
+  // Calculate preview data from PostgreSQL
+  const previewData = useMemo(() => {
+    if (!showPreview) return null;
+    
+    const section = (pgSections || []).find(s => s.id === student.sectionId);
+    const studentGrades = pgGrades || [];
+    
+    // Filter learning areas by student's grade level
+    const gradeLevel = section?.gradeLevel;
+    const studentGradeIds = new Set(studentGrades.map(g => g.learningAreaId));
+    
+    const relevantLearningAreas = (pgLearningAreas || []).filter(la => {
+      if (!studentGradeIds.has(la.id)) return false;
+      if (gradeLevel) {
+        if (Array.isArray(la.gradeLevel)) {
+          return la.gradeLevel.includes(gradeLevel as number);
+        }
+        return la.gradeLevel === gradeLevel;
+      }
+      return true;
+    });
+    
+    // Calculate average
+    const finalGrades = studentGrades
+      .map(g => g.finalGrade)
+      .filter((g): g is number => typeof g === 'number' && g > 0);
+    
+    const average = finalGrades.length > 0
+      ? (finalGrades.reduce((sum, g) => sum + g, 0) / finalGrades.length).toFixed(2)
+      : 'N/A';
+    
+    // Get attendance data
+    const studentAttendanceRecords = (pgAttendance || []).filter(r => r.studentId === student.id);
+    let attendanceData = { present: 0, absent: 0, total: 0, percentage: 0 };
+    
+    if (studentAttendanceRecords.length > 0) {
+      const present = studentAttendanceRecords.filter((r: any) => 
+        r.status === 'present' || r.status === 'late' || r.dailyStatus === 'present' || r.dailyStatus === 'late'
+      ).length;
+      const absent = studentAttendanceRecords.filter((r: any) => 
+        r.status === 'absent' || r.dailyStatus === 'absent'
+      ).length;
+      const total = present + absent;
+      const percentage = total > 0 ? (present / total) * 100 : 0;
+      
+      attendanceData = { present, absent, total, percentage };
+    }
+    
+    return {
+      studentInfo: {
+        name: student.name,
+        lrn: student.lrn || 'N/A',
+        gradeLevel: section?.gradeLevel || 'N/A',
+        section: section?.name || 'N/A',
+      },
+      gradesCount: relevantLearningAreas.length,
+      attendanceData,
+      coreValuesCount: (pgCoreValues || []).length,
+      average,
+    };
+  }, [showPreview, student, pgGrades, pgSections, pgAttendance, pgLearningAreas, pgCoreValues]);
+
+  // Create enriched schoolData with PostgreSQL data for PDF generation
+  const enrichedSchoolData = useMemo(() => ({
+    ...schoolData,
+    grades: pgGrades || [],
+    sections: pgSections || [],
+    attendanceRecords: pgAttendance || [],
+    learningAreas: pgLearningAreas || [],
+    coreValues: pgCoreValues || [],
+  }), [schoolData, pgGrades, pgSections, pgAttendance, pgLearningAreas, pgCoreValues]);
 
   const handlePreview = () => {
     setShowPreview(!showPreview);
@@ -41,7 +128,7 @@ const Form138DownloadButtonV2: React.FC<Form138DownloadButtonV2Props> = ({
         throw new Error(`Form elements not found. Page 1: ${!!page1}, Page 2: ${!!page2}`);
       }
       
-      await generateForm138PDFFromComponent(student, schoolData);
+      await generateForm138PDFFromComponent(student, enrichedSchoolData as SchoolDataHook);
     } catch (error) {
       console.error('PDF generation failed:', error);
       alert(`Failed to generate PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -49,8 +136,6 @@ const Form138DownloadButtonV2: React.FC<Form138DownloadButtonV2Props> = ({
       setIsGenerating(false);
     }
   };
-
-  const previewData = showPreview ? previewForm138Data(student, schoolData) : null;
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md overflow-hidden">
@@ -121,7 +206,7 @@ const Form138DownloadButtonV2: React.FC<Form138DownloadButtonV2Props> = ({
       <div className="absolute -left-[9999px] top-0 opacity-0 pointer-events-none">
         <PrintableReport
           student={student}
-          schoolData={schoolData}
+          schoolData={enrichedSchoolData as SchoolDataHook}
           hideDownloadButton={true}
           studentIndex={0}
         />

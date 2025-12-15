@@ -3,6 +3,8 @@ import { onAuthStateChanged, signInAnonymously, signOut } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import { useSchoolDataPostgreSQL } from './src/hooks/useSchoolDataPostgreSQL';
+import { useStudentsPostgreSQL } from './src/hooks/useStudentsPostgreSQL';
+import { useParentsPostgreSQL } from './src/hooks/useParentsPostgreSQL';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useFirestoreSyncStatus } from './hooks/useFirestoreSyncStatus';
 import type { AuthUser, StudentUser, ParentUser } from './types';
@@ -421,20 +423,32 @@ const App: React.FC = () => {
   // Track selected child for parent sessions
   const [parentSelectedChildId, setParentSelectedChildId] = useState<string | null>(null);
   
-  // Auto-select first child for parent sessions (simplified)
+  // Get PostgreSQL students and parents for parent child selection
+  const parentSchoolId = session?.type === 'parent' ? (session.user as ParentUser).schoolId : undefined;
+  const { students: pgStudentsForParent } = useStudentsPostgreSQL({ schoolId: parentSchoolId });
+  const { parents: pgParentsForParent } = useParentsPostgreSQL({ schoolId: parentSchoolId });
+  
+  // Get fresh parent data from PostgreSQL (session data may be stale)
+  const currentParentFresh = useMemo(() => {
+    if (session?.type !== 'parent') return null;
+    const sessionParent = session.user as ParentUser;
+    return pgParentsForParent.find(p => p.id === sessionParent.id) || sessionParent;
+  }, [session, pgParentsForParent]);
+  
+  // Auto-select first child for parent sessions (using PostgreSQL data)
   useEffect(() => {
-    if (session?.type === 'parent') {
-      const parent = session.user as ParentUser;
-      const children = students.filter(s => parent.studentIds.includes(s.id));
+    if (session?.type === 'parent' && currentParentFresh && pgStudentsForParent.length > 0) {
+      const studentIds = currentParentFresh.studentIds || [];
+      const children = pgStudentsForParent.filter(s => studentIds.includes(s.id));
       if (children.length > 0 && !parentSelectedChildId) {
         setParentSelectedChildId(children[0].id);
       } else if (children.length === 0) {
         setParentSelectedChildId(null);
       }
-    } else {
+    } else if (session?.type !== 'parent') {
       setParentSelectedChildId(null);
     }
-  }, [session, students, parentSelectedChildId]);
+  }, [session, pgStudentsForParent, currentParentFresh, parentSelectedChildId]);
 
   const handleLogin = useCallback((user: AuthUser | StudentUser | ParentUser | DivisionAuthUser, type: 'staff' | 'student' | 'parent' | 'division') => {
     // Check if this is a division user
@@ -892,12 +906,12 @@ const App: React.FC = () => {
         {session.type === 'student' && (
           <>
             <Route path="/dashboard" element={<StudentDashboard schoolData={schoolData} session={studentSession} />} />
+            <Route path="/announcements" element={<AnnouncementsView session={studentSession} />} />
             <Route path="/assignments" element={<AssignmentsView session={studentSession} />} />
             <Route path="/grades" element={<GradesDashboard schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades/academic" element={<GradebookView schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades/core-values" element={<CoreValuesGradebookView schoolData={schoolData} session={studentSession} />} />
-            <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={studentSession} defaultTab="deep-analytics" hideTabNavigation={true} />} />
             <Route path="/core-values" element={<Navigate to="/grades/core-values" replace />} />
             <Route path="/attendance" element={<AttendanceView session={studentSession} />} />
             <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={studentSession} />} />
@@ -914,7 +928,6 @@ const App: React.FC = () => {
             <Route path="/assignments" element={<AssignmentsView session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/grades" element={<GradesDashboard schoolData={schoolData} session={parentSession} />} />
             <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
-            <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} defaultTab="deep-analytics" hideTabNavigation={true} />} />
             <Route path="/core-values" element={<Navigate to="/grades/overview" replace />} />
             <Route path="/attendance" element={<AttendanceView session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />
             <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={parentSession} forceStudentId={parentSelectedChildId ?? undefined} />} />

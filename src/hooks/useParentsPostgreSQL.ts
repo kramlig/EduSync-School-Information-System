@@ -267,19 +267,24 @@ export function useParentsPostgreSQL(options: UseParentsOptions = {}): UseParent
   const updateParent = useCallback(async (id: string, updates: Partial<Parent>): Promise<void> => {
     try {
       // Extract studentIds separately (managed via junction table)
-      const { studentIds, ...dbUpdates } = updates;
+      const { studentIds, ...dbUpdates } = updates || {};
+
+      // Build update object with only provided fields
+      const updateData: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+      };
+      
+      if (dbUpdates.name !== undefined) updateData.name = dbUpdates.name;
+      if (dbUpdates.email !== undefined) updateData.email = dbUpdates.email;
+      if (dbUpdates.relationship !== undefined) updateData.relationship = dbUpdates.relationship;
+      if (dbUpdates.occupation !== undefined) updateData.occupation = dbUpdates.occupation;
+      if (dbUpdates.contactNumber !== undefined) updateData.contact_number = dbUpdates.contactNumber;
+      if (dbUpdates.address !== undefined) updateData.address = dbUpdates.address;
+      if (dbUpdates.notificationPreferences !== undefined) updateData.notification_preferences = dbUpdates.notificationPreferences;
 
       const { error } = await supabase
         .from('parents')
-        .update({
-          name: dbUpdates.name,
-          email: dbUpdates.email,
-          relationship: dbUpdates.relationship,
-          occupation: dbUpdates.occupation,
-          contact_number: dbUpdates.contactNumber,
-          address: dbUpdates.address,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', id);
 
       if (error) throw error;
