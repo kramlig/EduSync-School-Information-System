@@ -22,7 +22,8 @@ const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData }
   const { students: pgStudents } = useStudentsPostgreSQL({ schoolId });
   const { grades: pgGrades } = useGradesPostgreSQL({ schoolId });
   const { coreValueGrades: pgCoreValueGrades } = useCoreValuesPostgreSQL(true, schoolId);
-  const { sections: pgSections } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+  // Load sections without school year filter to get all sections with students
+  const { sections: pgSections } = useSectionsPostgreSQL({ schoolId });
   const { parents: pgParents } = useParentsPostgreSQL({ schoolId });
   
   // Get fresh parent data if in parent view

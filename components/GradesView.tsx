@@ -435,7 +435,8 @@ const GradesView: React.FC<GradesViewProps> = ({
   const { students: pgStudents, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
   const { grades: pgGrades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
   const { learningAreas: pgLearningAreas, loading: areasLoading } = useLearningAreasPostgreSQL({ schoolId });
-  const { sections: pgSections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+  // Load sections without school year filter to get all sections with students
+  const { sections: pgSections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
   const { assignments: pgSubstituteAssignments } = useSubstituteAssignmentsPostgreSQL({ schoolId });
   const { schedules: pgClassSchedules } = useSchedulePostgreSQL({ schoolId });
   

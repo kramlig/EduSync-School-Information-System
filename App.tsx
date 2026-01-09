@@ -86,8 +86,11 @@ const GradebookViewPostgreSQL = lazy(() => import('./components/GradebookViewPos
 const ClassRecordView = lazy(() => import('./components/ClassRecordView'));
 const ClassRecordSelector = lazy(() => import('./components/ClassRecordSelector'));
 
-// School Management for Super Admins
-const SchoolManagementView = lazy(() => import('./components/SchoolManagementView'));
+// School Management for Super Admins (Legacy - deprecated)
+// const SchoolManagementView = lazy(() => import('./components/SchoolManagementView'));
+
+// New SuperAdmin Module
+const SuperAdminLayout = lazy(() => import('./src/components/superadmin/SuperAdminLayout'));
 
 // Enrollment components
 const EnrollmentPortal = lazy(() => import('./src/components/enrollment/portal/EnrollmentPortal'));
@@ -95,6 +98,9 @@ const ApplicationForm = lazy(() => import('./src/components/enrollment/forms/App
 const ApplicationStatus = lazy(() => import('./src/components/enrollment/status/ApplicationStatus'));
 const AdminEnrollmentDashboard = lazy(() => import('./src/components/enrollment/admin/AdminEnrollmentDashboard'));
 const ApplicationReview = lazy(() => import('./src/components/enrollment/admin/ApplicationReview'));
+
+// Admin components - Using V2 with Cloud Function (no admin password re-entry needed!)
+const UserManagementPanel = lazy(() => import('./src/components/admin/UserManagementPanelV2'));
 
 // Marketing components
 const LandingPage = lazy(() => import('./src/components/marketing/LandingPage'));
@@ -116,6 +122,9 @@ const DivisionSF7Dashboard = lazy(() => import('./src/components/division/Divisi
 const DivisionProficiencyDashboard = lazy(() => import('./src/components/division/DivisionProficiencyDashboard'));
 const DivisionAuditLog = lazy(() => import('./src/components/division/DivisionAuditLog'));
 const DivisionOnboarding = lazy(() => import('./src/components/division/DivisionOnboarding'));
+const DivisionSF1Import = lazy(() => import('./src/components/division/DivisionSF1Import'));
+const DivisionSF5Import = lazy(() => import('./src/components/division/DivisionSF5Import'));
+const DivisionSF7Import = lazy(() => import('./src/components/division/DivisionSF7Import'));
 import { DivisionContextProvider, useDivisionContext } from './src/contexts/DivisionContext';
 import DivisionGuard from './src/components/division/DivisionGuard';
 
@@ -694,6 +703,9 @@ const App: React.FC = () => {
                 <Route path="reports/sf6" element={<DivisionSF6Dashboard />} />
                 <Route path="reports/sf7" element={<DivisionSF7Dashboard />} />
                 <Route path="reports/proficiency" element={<DivisionProficiencyDashboard />} />
+                <Route path="sf1-import" element={<DivisionSF1Import />} />
+                <Route path="sf5-import" element={<DivisionSF5Import />} />
+                <Route path="sf7-import" element={<DivisionSF7Import />} />
                 <Route path="users" element={<DivisionUserManagement />} />
                 <Route path="audit-log" element={<DivisionAuditLog />} />
                 <Route path="settings" element={<DivisionSettings />} />
@@ -865,10 +877,10 @@ const App: React.FC = () => {
                         {/* Old Firestore Settings (deprecated - for reference only) */}
                         <Route path="/settings-legacy" element={<SettingsView schoolData={schoolData} />} />
                         
-                        {/* Super Admin Routes - Route always rendered, component handles access control */}
+                        {/* Super Admin Routes - New modular SuperAdmin dashboard */}
                         <Route path="/school-management" element={
                           staffSession.user.role === 'superadmin' 
-                            ? <SchoolManagementView /> 
+                            ? <SuperAdminLayout /> 
                             : <Navigate to="/" replace />
                         } />
                         
@@ -892,6 +904,11 @@ const App: React.FC = () => {
                             <Route path="/admin/enrollment" element={<AdminEnrollmentDashboard />} />
                             <Route path="/admin/enrollment/:applicationId" element={<ApplicationReview />} />
                           </>
+                        )}
+                        
+                        {/* User Management Routes - Admin and SuperAdmin only */}
+                        {(staffSession.user.role === 'admin' || staffSession.user.role === 'superadmin') && (
+                          <Route path="/admin/users" element={<UserManagementPanel />} />
                         )}
                         
                         {/* HIDDEN: Teacher Validation (Outdated) */}

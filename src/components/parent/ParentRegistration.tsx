@@ -15,8 +15,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getFirestoreInstance } from '../../services/firestoreService';
 import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, addDoc } from 'firebase/firestore';
-import { createParentWithRole } from '../../../services/userManagement';
-import type { Student } from '../../../types';
+import { createParentWithRole } from '../../services/userManagement';
+import type { Student } from '../../types';
 
 interface RegistrationForm {
   // Parent Information

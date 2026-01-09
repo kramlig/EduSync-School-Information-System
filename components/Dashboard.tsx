@@ -30,7 +30,8 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
 
   // Load real data from PostgreSQL
   const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
-  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+  // Load sections without school year filter to get all sections with students
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
   const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
   
   const {

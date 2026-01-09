@@ -61,7 +61,8 @@ const CoreValuesGradebookView: React.FC<{
     // Load real data from PostgreSQL
     const { students: pgStudents } = useStudentsPostgreSQL({ schoolId });
     const { coreValues: pgCoreValues, coreValueGrades: pgCoreValueGrades, updateCoreValueGrade } = useCoreValuesPostgreSQL(true, schoolId);
-    const { sections: pgSections } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+    // Load sections without school year filter to get all sections with students
+    const { sections: pgSections } = useSectionsPostgreSQL({ schoolId });
     const { assignments: pgSubstituteAssignments } = useSubstituteAssignmentsPostgreSQL({ schoolId });
     const { schedules: pgClassSchedules } = useSchedulePostgreSQL({ schoolId });
     
@@ -140,11 +141,26 @@ const CoreValuesGradebookView: React.FC<{
         return sections.filter(s => authorizedSectionIds.has(s.id));
     }, [sections, substituteAssignments, classSchedules, authUser]);
 
+    // Auto-select the first section that has students
     useEffect(() => {
-        if (selectedSectionId === 'all' && visibleSections.length > 0) {
-            setSelectedSectionId(visibleSections[0].id);
+        if (selectedSectionId === 'all' && visibleSections.length > 0 && students.length > 0) {
+            // Find sections with students
+            const sectionsWithStudents = visibleSections.filter(section => 
+                students.some(s => s.sectionId === section.id)
+            );
+            
+            if (sectionsWithStudents.length > 0) {
+                // Sort by grade level and pick the first one
+                const sorted = [...sectionsWithStudents].sort((a, b) => 
+                    normalizeGradeLevel(a.gradeLevel) - normalizeGradeLevel(b.gradeLevel)
+                );
+                setSelectedSectionId(sorted[0].id);
+            } else if (visibleSections.length > 0) {
+                // Fallback to first visible section if none have students
+                setSelectedSectionId(visibleSections[0].id);
+            }
         }
-    }, [visibleSections, selectedSectionId]);
+    }, [visibleSections, selectedSectionId, students]);
     
     const filteredStudents = useMemo(() => {
         // If student is logged in, only show their own data
@@ -168,6 +184,7 @@ const CoreValuesGradebookView: React.FC<{
     }, [students, selectedSectionId, debouncedSearchQuery, session]);
 
     // Group sections by grade level for better organization
+    // Only include sections that have enrolled students (active sections)
     const groupedSections = useMemo(() => {
         const groups = {
             elementary: [] as typeof visibleSections,
@@ -175,7 +192,21 @@ const CoreValuesGradebookView: React.FC<{
             seniorHigh: [] as typeof visibleSections
         };
         
-        visibleSections.forEach(section => {
+        // Calculate student counts first
+        const studentCountsMap = new Map<string, number>();
+        students.forEach(student => {
+            if (student.sectionId) {
+                studentCountsMap.set(student.sectionId, (studentCountsMap.get(student.sectionId) || 0) + 1);
+            }
+        });
+        
+        // Only include sections that have students (filter out empty/inactive sections)
+        const activeSections = visibleSections.filter(section => {
+            const studentCount = studentCountsMap.get(section.id) || 0;
+            return studentCount > 0;
+        });
+        
+        activeSections.forEach(section => {
             const numericGradeLevel = normalizeGradeLevel(section.gradeLevel);
             if (numericGradeLevel <= 6) {
                 groups.elementary.push(section);
@@ -186,13 +217,19 @@ const CoreValuesGradebookView: React.FC<{
             }
         });
         
-        // Sort each group by grade level
-        groups.elementary.sort((a, b) => normalizeGradeLevel(a.gradeLevel) - normalizeGradeLevel(b.gradeLevel));
-        groups.juniorHigh.sort((a, b) => normalizeGradeLevel(a.gradeLevel) - normalizeGradeLevel(b.gradeLevel));
-        groups.seniorHigh.sort((a, b) => normalizeGradeLevel(a.gradeLevel) - normalizeGradeLevel(b.gradeLevel));
+        // Sort each group by grade level, then by section name
+        const sortFn = (a: typeof visibleSections[0], b: typeof visibleSections[0]) => {
+            const gradeDiff = normalizeGradeLevel(a.gradeLevel) - normalizeGradeLevel(b.gradeLevel);
+            if (gradeDiff !== 0) return gradeDiff;
+            return a.name.localeCompare(b.name);
+        };
+        
+        groups.elementary.sort(sortFn);
+        groups.juniorHigh.sort(sortFn);
+        groups.seniorHigh.sort(sortFn);
         
         return groups;
-    }, [visibleSections]);
+    }, [visibleSections, students]);
 
     // Calculate student counts per section
     const sectionStudentCounts = useMemo(() => {

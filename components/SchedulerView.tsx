@@ -122,14 +122,18 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     const [viewType, setViewType] = useState<'section' | 'teacher'>(getInitialViewType());
     const [selectedId, setSelectedId] = useState<string | null>(getInitialSelectedId());
     
-    // FIX: Auto-select first section when sections are loaded (for admin/principal)
+    // FIX: Auto-select first section when sections are loaded (for admin/principal ONLY)
+    // Students and parents should NOT auto-select - they use their assigned section
     useEffect(() => {
+        // Skip auto-selection for students/parents - their section is determined by their assignment
+        if (isStudentView || isParentView) return;
+        
         console.log('[SchedulerView] selectedId:', selectedId, 'sections.length:', sections.length, 'viewType:', viewType);
         if (!selectedId && sections.length > 0 && viewType === 'section') {
             console.log('[SchedulerView] Auto-selecting first section:', sections[0].id, sections[0].name);
             setSelectedId(sections[0].id);
         }
-    }, [sections, selectedId, viewType]);
+    }, [sections, selectedId, viewType, isStudentView, isParentView]);
     
     // --- FILTER STATE ---
     type FilterType = 'all' | 'academic' | 'extracurricular';
@@ -651,6 +655,9 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
     const options = useMemo(() => viewType === 'section' ? sections : teachers, [viewType, sections, teachers]);
     const gradeLevels = useMemo(() => Array.from(new Set(sections.map(s => s.gradeLevel))).sort(), [sections]);
     
+    // Extract stable values from session to avoid object reference changes
+    const studentSectionId = isStudentView ? (session.user as StudentUser).sectionId : null;
+    
     useEffect(() => {
         // For a regular teacher, the view is fixed and should not change.
         if (isRegularTeacher) {
@@ -663,13 +670,17 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
 
         // For student/parent view, ensure correct section is selected
         if (isStudentView) {
-            const studentSectionId = (session.user as StudentUser).sectionId;
-            if(selectedId !== studentSectionId) setSelectedId(studentSectionId || null);
+            // Only update if the value actually changed
+            if (selectedId !== studentSectionId) {
+                setSelectedId(studentSectionId || null);
+            }
             return;
         }
         if (isParentView) {
             const childSectionId = students.find(s => s.id === forceStudentId)?.sectionId;
-            if(selectedId !== childSectionId) setSelectedId(childSectionId || null);
+            if (selectedId !== childSectionId) {
+                setSelectedId(childSectionId || null);
+            }
             return;
         }
 
@@ -683,10 +694,10 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
             } else { // viewType is 'section'
                 setSelectedId(options[0].id);
             }
-        } else if (options.length === 0) {
+        } else if (options.length === 0 && selectedId !== null) {
             setSelectedId(null);
         }
-    }, [options, selectedId, isRegularTeacher, authUser.id, isStudentView, isParentView, forceStudentId, session.user, students, viewType, teachers]);
+    }, [options, selectedId, isRegularTeacher, authUser.id, isStudentView, isParentView, forceStudentId, studentSectionId, students, viewType, teachers]);
     
     useEffect(() => {
         if (modalData.type === 'academic' && modalData.learningAreaId) {

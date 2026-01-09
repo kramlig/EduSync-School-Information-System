@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { Student, Grade, Section, Teacher, AttendanceRecord, CoreValueGrade, AttendanceStatus } from '../types';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
 import PrintableReport from './PrintableReport';
@@ -816,47 +816,106 @@ const DocumentsTab: React.FC<{
 // Family Tab Component
 const FamilyTab: React.FC<{
   student: Student;
-}> = () => (
-  <div className="space-y-6">
-    {/* Parent/Guardian Information */}
-    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
-      <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Parent/Guardian Information</h3>
-      <div className="space-y-4">
-        <div className="border-l-4 border-indigo-500 pl-4">
-          <h4 className="font-semibold text-slate-800 dark:text-slate-200">Primary Guardian</h4>
-          <InfoRow label="Name" value="Juan Dela Cruz Sr." />
-          <InfoRow label="Relationship" value="Father" />
-          <InfoRow label="Phone" value="+63 912 345 6789" />
-          <InfoRow label="Email" value="juan.delacruz@email.com" />
-        </div>
-        <div className="border-l-4 border-purple-500 pl-4">
-          <h4 className="font-semibold text-slate-800 dark:text-slate-200">Secondary Guardian</h4>
-          <InfoRow label="Name" value="Maria Dela Cruz" />
-          <InfoRow label="Relationship" value="Mother" />
-          <InfoRow label="Phone" value="+63 917 654 3210" />
-          <InfoRow label="Email" value="maria.delacruz@email.com" />
-        </div>
+}> = ({ student }) => {
+  const [parents, setParents] = useState<Array<{ name: string; relationship: string; contact_number?: string; email?: string }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch parents from database
+  useEffect(() => {
+    async function fetchParents() {
+      try {
+        const { supabase } = await import('../src/lib/supabase');
+        const { data, error } = await supabase
+          .from('parent_students')
+          .select('relationship, is_primary_contact, parents(name, relationship, contact_number, email)')
+          .eq('student_id', student.id);
+        
+        if (!error && data) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          setParents(data.map((link: any) => ({
+            name: link.parents?.name || 'N/A',
+            relationship: link.relationship || link.parents?.relationship || 'Guardian',
+            contact_number: link.parents?.contact_number || undefined,
+            email: link.parents?.email || undefined,
+            is_primary_contact: link.is_primary_contact
+          })));
+        }
+      } catch (err) {
+        console.error('Error fetching parents:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchParents();
+  }, [student.id]);
+
+  // Separate father and mother
+  const father = parents.find(p => p.relationship === 'Father');
+  const mother = parents.find(p => p.relationship === 'Mother');
+  const guardians = parents.filter(p => p.relationship !== 'Father' && p.relationship !== 'Mother');
+
+  return (
+    <div className="space-y-6">
+      {/* Parent/Guardian Information */}
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+        <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Parent/Guardian Information</h3>
+        {loading ? (
+          <div className="text-slate-500">Loading parent information...</div>
+        ) : (
+          <div className="space-y-4">
+            {father && (
+              <div className="border-l-4 border-indigo-500 pl-4">
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200">Father</h4>
+                <InfoRow label="Name" value={father.name} />
+                <InfoRow label="Relationship" value="Father" />
+                <InfoRow label="Phone" value={father.contact_number || 'Not provided'} />
+                <InfoRow label="Email" value={father.email || 'Not provided'} />
+              </div>
+            )}
+            {mother && (
+              <div className="border-l-4 border-purple-500 pl-4">
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200">Mother</h4>
+                <InfoRow label="Name" value={mother.name} />
+                <InfoRow label="Relationship" value="Mother" />
+                <InfoRow label="Phone" value={mother.contact_number || 'Not provided'} />
+                <InfoRow label="Email" value={mother.email || 'Not provided'} />
+              </div>
+            )}
+            {guardians.map((guardian, idx) => (
+              <div key={idx} className="border-l-4 border-green-500 pl-4">
+                <h4 className="font-semibold text-slate-800 dark:text-slate-200">Guardian</h4>
+                <InfoRow label="Name" value={guardian.name} />
+                <InfoRow label="Relationship" value={guardian.relationship} />
+                <InfoRow label="Phone" value={guardian.contact_number || 'Not provided'} />
+                <InfoRow label="Email" value={guardian.email || 'Not provided'} />
+              </div>
+            ))}
+            {parents.length === 0 && !loading && (
+              <div className="text-slate-500 dark:text-slate-400 italic">No parent/guardian information available</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Emergency Contact */}
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+        <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Emergency Contact</h3>
+        <InfoRow label="Name" value={student.guardianName || mother?.name || father?.name || 'Not provided'} />
+        <InfoRow label="Relationship" value={student.guardianRelationship || mother?.relationship || father?.relationship || 'Parent'} />
+        <InfoRow label="Phone" value={student.guardianContactNumber || student.contactNumber || mother?.contact_number || father?.contact_number || 'Not provided'} />
+      </div>
+
+      {/* Additional Information */}
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
+        <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Additional Information</h3>
+        <InfoRow label="Home Address" value={student.address || 'Not provided'} />
+        <InfoRow label="Blood Type" value={student.bloodType || 'Not recorded'} />
+        <InfoRow label="Medical Conditions" value={student.healthNotes || 'None reported'} />
+        <InfoRow label="Allergies" value={student.specialNeeds || 'None reported'} />
       </div>
     </div>
-
-    {/* Emergency Contact */}
-    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
-      <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Emergency Contact</h3>
-      <InfoRow label="Name" value="Rosa Dela Cruz" />
-      <InfoRow label="Relationship" value="Grandmother" />
-      <InfoRow label="Phone" value="+63 915 111 2222" />
-    </div>
-
-    {/* Additional Information */}
-    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
-      <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Additional Information</h3>
-      <InfoRow label="Home Address" value="123 Main Street, Barangay 1, City, Province" />
-      <InfoRow label="Blood Type" value="O+" />
-      <InfoRow label="Medical Conditions" value="None reported" />
-      <InfoRow label="Allergies" value="None reported" />
-    </div>
-  </div>
-);
+  );
+};
 
 // Helper Components
 const InfoRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
