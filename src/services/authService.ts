@@ -233,16 +233,44 @@ export async function getUserByFirebaseUID(firebaseUid: string): Promise<Unified
 }
 
 /**
- * Fallback: Legacy sequential query (if function doesn't exist)
+ * Fallback: Legacy sequential query (if RPC function doesn't exist)
+ * Option A (Role-Centric): Check superadmins → teachers → students → parents
+ * Note: division_users is checked separately in the main login flow
  */
 async function getUserByFirebaseUIDLegacy(firebaseUid: string): Promise<UnifiedUserData | null> {
-  // Try teachers
+  // 1. Try superadmins first (platform level)
+  const { data: superadmin } = await supabase
+    .from('superadmins')
+    .select('*')
+    .eq('firebase_uid', firebaseUid)
+    .is('deleted_at', null)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (superadmin) {
+    return {
+      user_id: superadmin.id,
+      user_type: 'superadmin',
+      email: superadmin.email,
+      name: superadmin.name,
+      role: 'superadmin',
+      school_id: null,
+      school_name: '',
+      contact_number: null,
+      employee_number: null,
+      position: null,
+      first_name: superadmin.name?.split(' ')[0] || '',
+      last_name: superadmin.name?.split(' ').slice(1).join(' ') || ''
+    };
+  }
+
+  // 2. Try teachers (school staff: admin, principal, registrar, teacher)
   const { data: teacher } = await supabase
     .from('teachers')
     .select('*, schools(name)')
     .eq('firebase_uid', firebaseUid)
     .is('deleted_at', null)
-    .single();
+    .maybeSingle();
 
   if (teacher) {
     return {
@@ -261,13 +289,13 @@ async function getUserByFirebaseUIDLegacy(firebaseUid: string): Promise<UnifiedU
     };
   }
 
-  // Try students
+  // 3. Try students
   const { data: student } = await supabase
     .from('students')
     .select('*, schools(name)')
     .eq('firebase_uid', firebaseUid)
     .is('deleted_at', null)
-    .single();
+    .maybeSingle();
 
   if (student) {
     return {
@@ -286,13 +314,13 @@ async function getUserByFirebaseUIDLegacy(firebaseUid: string): Promise<UnifiedU
     };
   }
 
-  // Try parents
+  // 4. Try parents
   const { data: parent } = await supabase
     .from('parents')
     .select('*, schools(name)')
     .eq('firebase_uid', firebaseUid)
     .is('deleted_at', null)
-    .single();
+    .maybeSingle();
 
   if (parent) {
     return {
@@ -494,10 +522,52 @@ export async function login(
     };
   }
   
-  // Step 3: Check if user is a Division user (auto-redirect to /division)
+  // Step 3a: Check if user is a SUPERADMIN (from Firebase token claims)
+  // Superadmin doesn't have a PostgreSQL record - they're stored in Firebase only
+  if (loginType === 'staff') {
+    console.log('[AuthService] Step 3a: Checking for Superadmin...');
+    try {
+      const tokenResult = await firebaseUser.getIdTokenResult();
+      const claims = tokenResult.claims;
+      
+      if (claims.role === 'superadmin' || claims.isSuperAdmin === true) {
+        console.log('[AuthService] ✅ Superadmin found via Firebase claims');
+        
+        // Build superadmin user object from claims
+        const superAdminUser: AuthUser = {
+          id: firebaseUser.uid,
+          email: firebaseUser.email || normalizedEmail,
+          name: firebaseUser.displayName || 'Super Admin',
+          role: 'superadmin',
+          schoolId: 'default', // Superadmin can access all schools
+          firebaseUid: firebaseUser.uid,
+        };
+        
+        // Log success
+        await logLoginAttempt(normalizedEmail, 'success', loginType, {
+          firebaseUid: firebaseUser.uid,
+          userType: 'superadmin',
+          errorMessage: 'Superadmin login via Firebase claims'
+        });
+        
+        // Cache session
+        cacheUserSession(normalizedEmail, loginType, superAdminUser, firebaseUser.uid);
+        
+        return {
+          success: true,
+          user: superAdminUser,
+          userType: 'staff'
+        };
+      }
+    } catch (claimsError) {
+      console.log('[AuthService] Could not read Firebase claims, continuing...');
+    }
+  }
+  
+  // Step 3b: Check if user is a Division user (auto-redirect to /division)
   // This check runs for staff logins only
   if (loginType === 'staff') {
-    console.log('[AuthService] Step 3: Checking for Division user...');
+    console.log('[AuthService] Step 3b: Checking for Division user...');
     try {
       const divisionUser = await getDivisionUserByFirebaseUid(firebaseUser.uid);
       if (divisionUser) {

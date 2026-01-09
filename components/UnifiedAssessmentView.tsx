@@ -52,7 +52,8 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
   const { grades: pgGrades } = useGradesPostgreSQL({ schoolId });
   const { learningAreas: pgLearningAreas } = useLearningAreasPostgreSQL({ schoolId });
   const { coreValues: pgCoreValues, coreValueGrades: pgCoreValueGrades } = useCoreValuesPostgreSQL(true, schoolId);
-  const { sections: pgSections } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+  // Load sections without school year filter to get all sections with students
+  const { sections: pgSections } = useSectionsPostgreSQL({ schoolId });
   
   const students = pgStudents || [];
   const grades = pgGrades || [];
@@ -85,9 +86,23 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
   const teacherGradeLevels = [...new Set(teacherSections.map(s => s.gradeLevel))]; // Unique grade levels
 
   // Filter sections based on teacher's adviser sections (PostgreSQL)
-  const availableSections = isTeacherView
-    ? teacherSections // Use sections where teacher is adviser
-    : sections;
+  // Only show sections that have students enrolled (active sections)
+  const availableSections = useMemo(() => {
+    const baseSections = isTeacherView ? teacherSections : sections;
+    
+    // Filter to only include sections that have enrolled students
+    const sectionsWithStudents = baseSections.filter(section => 
+      students.some(s => s.sectionId === section.id)
+    );
+    
+    // Sort by grade level, then by name
+    return sectionsWithStudents.sort((a, b) => {
+      const gradeA = typeof a.gradeLevel === 'number' ? a.gradeLevel : parseInt(String(a.gradeLevel)) || 0;
+      const gradeB = typeof b.gradeLevel === 'number' ? b.gradeLevel : parseInt(String(b.gradeLevel)) || 0;
+      if (gradeA !== gradeB) return gradeA - gradeB;
+      return a.name.localeCompare(b.name);
+    });
+  }, [isTeacherView, teacherSections, sections, students]);
 
   // Filter learning areas based on teacher's grade levels or student's enrolled subjects
   const availableLearningAreas = isTeacherView

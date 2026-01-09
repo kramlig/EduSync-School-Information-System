@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEnrollmentApplicationsPostgreSQL } from '../../../hooks/useEnrollmentApplicationsPostgreSQL';
-// import { useSchoolData } from '../../../../hooks/useSchoolData'; // REMOVED: Production uses PostgreSQL only
+import { useSchoolContext } from '../../../contexts/SchoolContext';
+import { useSchoolSettingsPostgreSQL } from '../../../hooks/useSchoolSettingsPostgreSQL';
 import type { EnrollmentApplication } from '../../../../types';
 
 type FilterStatus = 'all' | 'submitted' | 'under_review' | 'approved' | 'rejected';
@@ -20,15 +21,22 @@ type FilterStatus = 'all' | 'submitted' | 'under_review' | 'approved' | 'rejecte
  */
 const AdminEnrollmentDashboard: React.FC = () => {
   const navigate = useNavigate();
-  // const { settings } = useSchoolData(['settings']); // REMOVED: Production PostgreSQL
-  const schoolId = ''; // TEMPORARY: Will be loaded from PostgreSQL context
+  
+  // Get schoolId from context
+  const { schoolId } = useSchoolContext();
+  
+  // Get school settings to display current school year
+  const { settings, loading: settingsLoading } = useSchoolSettingsPostgreSQL({ 
+    schoolId: schoolId || '' 
+  });
+  const currentSchoolYear = settings?.schoolYear || '2025-2026';
   
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch applications using PostgreSQL hook
   const { applications, loading } = useEnrollmentApplicationsPostgreSQL({
-    schoolId,
+    schoolId: schoolId || '',
     status: filterStatus === 'all' ? undefined : filterStatus,
     enableRealtime: true,
   });
@@ -80,7 +88,7 @@ const AdminEnrollmentDashboard: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading || settingsLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -100,7 +108,7 @@ const AdminEnrollmentDashboard: React.FC = () => {
             📋 Enrollment Applications
           </h1>
           <p className="text-gray-600">
-            Review and manage student enrollment applications
+            Review and manage student enrollment applications • <span className="font-semibold">SY {currentSchoolYear}</span>
           </p>
         </div>
 

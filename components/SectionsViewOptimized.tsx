@@ -16,6 +16,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 // import { useSchoolData } from '../hooks/useSchoolData'; // REMOVED: Production PostgreSQL
 import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
+import { useSchoolSettingsPostgreSQL } from '../src/hooks/useSchoolSettingsPostgreSQL';
 import type { Section, AuthUser, StudentUser } from '../types';
 import Modal from './Modal';
 import { PencilIcon, TrashIcon, MagnifyingGlassIcon, Squares2X2Icon, ListBulletIcon } from './icons';
@@ -29,11 +30,15 @@ const SectionsViewOptimized: React.FC<SectionsViewOptimizedProps> = ({ session }
   // const dataKeys = useMemo(() => ['teachers', 'settings'], []); // REMOVED
   // const { teachers, settings } = useSchoolData(dataKeys); // REMOVED: Production PostgreSQL
   const teachers: any[] = []; // TEMPORARY: Load from PostgreSQL
-  const settings = { schoolYear: '2024-2025' }; // TEMPORARY: Load from PostgreSQL
   
-  // Get school ID from user session and school year from settings (memoized to prevent loops)
+  // Get school ID from user session (memoized to prevent loops)
   const schoolId = useMemo(() => session.user.schoolId || '', [session.user.schoolId]);
-  const currentSchoolYear = useMemo(() => settings?.schoolYear || '2024-2025', [settings]);
+  
+  // Load school settings from PostgreSQL to get current school year
+  const { settings, loading: settingsLoading } = useSchoolSettingsPostgreSQL({ schoolId });
+  
+  // Get current school year from settings (memoized to prevent loops)
+  const currentSchoolYear = useMemo(() => settings?.schoolYear || '2025-2026', [settings]);
   
   // Memoize feature flags
   const USE_POSTGRESQL = useMemo(
@@ -242,7 +247,7 @@ const SectionsViewOptimized: React.FC<SectionsViewOptimizedProps> = ({ session }
     }
   };
 
-  if (loading) {
+  if (loading || settingsLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -749,7 +754,9 @@ const SectionCard: React.FC<{
   onDelete: (section: Section) => void;
 }> = ({ section, teachers, canManage, onEdit, onDelete }) => {
   const adviser = teachers.find(t => t.id === section.adviserId);
-  const utilizationPercent = section.capacity ? (section.studentCount! / section.capacity) * 100 : 0;
+  const capacity = section.capacity || 40; // Default capacity
+  const studentCount = section.studentCount || 0;
+  const utilizationPercent = capacity > 0 ? (studentCount / capacity) * 100 : 0;
   const isOverCapacity = utilizationPercent > 100;
   const isNearCapacity = utilizationPercent > 90 && !isOverCapacity;
 
@@ -777,7 +784,7 @@ const SectionCard: React.FC<{
             isNearCapacity ? 'text-amber-600 dark:text-amber-400' :
             'text-green-600 dark:text-green-400'
           }`}>
-            {section.studentCount} / {section.capacity || 40}
+            {studentCount} / {capacity}
           </span>
         </div>
 

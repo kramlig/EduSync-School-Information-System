@@ -38,8 +38,9 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   const schoolId = authUser.schoolId || '';
   
   // Load real data from PostgreSQL
+  // Note: Load ALL sections (no school year filter) so students from any year show correct section
   const { students: pgStudents, loading: studentsLoading, updateStudent: updateStudentPg, deleteStudent: deleteStudentPg, forceRefetch: refetchStudents, searchStudents: searchStudentsPg } = useStudentsPostgreSQL({ schoolId });
-  const { sections: pgSections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId, schoolYear: '2024-2025' });
+  const { sections: pgSections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId }); // Removed hardcoded 2024-2025 filter
   const { grades: pgGrades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
   const { attendanceRecords: pgAttendance } = useAttendancePostgreSQL({ schoolId });
   const { coreValueGrades: pgCoreValues } = useCoreValuesPostgreSQL({ schoolId });
@@ -168,19 +169,25 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     // If searching, use search results instead of paginated students
     const sourceStudents = searchResults !== null ? searchResults : students;
     
-    console.log(`[StudentList] visibleStudents calc: searchResults=${searchResults?.length || 'null'}, students=${students.length}, authorizedSections=${authorizedSectionIds?.size || 'all'}`);
+    console.log(`[StudentList] visibleStudents calc: searchResults=${searchResults?.length || 'null'}, students=${students.length}, authorizedSections=${authorizedSectionIds === null ? 'all' : authorizedSectionIds.size}`);
     
-    // Apply section filtering for teachers
-    if (authorizedSectionIds && authorizedSectionIds.size > 0) {
+    // authorizedSectionIds === null means admin/principal/registrar (can see all)
+    // authorizedSectionIds === Set (empty or not) means teacher (filter by sections)
+    if (authorizedSectionIds !== null) {
+      // Teacher - filter by their assigned sections
+      // If empty Set, teacher has no assignments → show no students
       const filtered = sourceStudents.filter(s => s.sectionId && authorizedSectionIds.has(s.sectionId));
       console.log(`[StudentList] After section filter: ${filtered.length} students (from ${sourceStudents.length})`);
-      if (searchResults !== null && filtered.length === 0 && sourceStudents.length > 0) {
+      if (authorizedSectionIds.size === 0) {
+        console.warn(`[StudentList] ⚠️ Teacher has no section assignments - showing no students`);
+      } else if (searchResults !== null && filtered.length === 0 && sourceStudents.length > 0) {
         console.warn(`[StudentList] ⚠️ Search found ${sourceStudents.length} students, but none are in authorized sections!`);
         console.warn(`[StudentList] Authorized section IDs:`, Array.from(authorizedSectionIds));
         console.warn(`[StudentList] Student section IDs:`, sourceStudents.map(s => s.sectionId));
       }
       return filtered;
     }
+    // Admin/Principal/Registrar - show all students
     return sourceStudents;
   }, [students, authorizedSectionIds, searchResults]);
 
@@ -2081,7 +2088,12 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
           coreValueGrades={coreValueGrades}
           sections={sections}
           teachers={teachers}
-          schoolYear={settings?.schoolYear || '2023-2024'}
+          schoolYear={
+            // Get school year from student's section, fall back to settings, then to current year
+            sections.find(s => s.id === selectedStudent.sectionId)?.schoolYear 
+            || settings?.schoolYear 
+            || '2025-2026'
+          }
           schoolData={{
             ...schoolData,
             // Override with PostgreSQL data for accurate Form 138 generation

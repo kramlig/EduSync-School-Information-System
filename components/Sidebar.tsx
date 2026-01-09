@@ -80,6 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, announcements = [] }) => {
       items: [
         { path: '/announcements', label: 'Announcements', icon: <MegaphoneIcon />, roles: ['admin', 'principal', 'teacher'], badge: null },
         { path: '/admin/enrollment', label: 'Enrollment', icon: <ClipboardDocumentListIcon />, roles: ['admin'], badge: null },
+        { path: '/admin/users', label: 'User Management', icon: <UsersIcon />, roles: ['admin', 'superadmin'], badge: null },
         { path: '/students', label: 'Students', icon: <AcademicCapIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
         { path: '/teachers', label: 'Teachers', icon: <BriefcaseIcon />, roles: ['admin', 'registrar'], badge: null },
         { path: '/parents', label: 'Parents', icon: <IdentificationIcon />, roles: ['admin', 'registrar'], badge: null },

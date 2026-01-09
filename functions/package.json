@@ -9,6 +9,7 @@
     "@google-cloud/secret-manager": "^4.2.2",
     "@google/genai": "^0.14.0",
     "@sendgrid/mail": "^8.1.6",
+    "@supabase/supabase-js": "^2.45.0",
     "axios": "^1.13.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",

@@ -580,3 +580,9 @@ exports.processTrialSignup = trialSignup.processTrialSignup;
 const syncPostgresToAuth = require('./src/syncPostgresToAuth');
 exports.syncPostgresToAuth = syncPostgresToAuth.syncPostgresToAuth;
 exports.createAuthUser = syncPostgresToAuth.createAuthUser;
+
+// ========================================
+// User Account Management (Admin SDK)
+// ========================================
+const createUserAccount = require('./src/createUserAccount');
+exports.createUserAccount = createUserAccount.createUserAccount;

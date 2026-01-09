@@ -231,6 +231,30 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
         moduleKey: 'sf1_enrollment',
       },
       {
+        path: '/division/sf1-import',
+        iconName: 'document',
+        label: 'SF1 Import',
+        show: true, // Always visible for division users
+        end: true,
+        moduleKey: null,
+      },
+      {
+        path: '/division/sf5-import',
+        iconName: 'chart',
+        label: 'SF5 Import',
+        show: true, // Always visible for division users
+        end: true,
+        moduleKey: null,
+      },
+      {
+        path: '/division/sf7-import',
+        iconName: 'users',
+        label: 'SF7 Import',
+        show: true, // Always visible for division users
+        end: true,
+        moduleKey: null,
+      },
+      {
         path: '/division/reports/sf5',
         iconName: 'chart',
         label: 'SF5 - Promotion',

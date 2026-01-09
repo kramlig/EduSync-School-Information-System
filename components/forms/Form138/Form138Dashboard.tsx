@@ -100,13 +100,18 @@ interface Form138DashboardProps {
   session: { user: any; type: 'staff' };
 }
 
+// Staff roles that can see all students
+const ADMIN_ROLES = ['admin', 'principal', 'registrar', 'superadmin'];
+
 const Form138Dashboard: React.FC<Form138DashboardProps> = ({ session }) => {
   const navigate = useNavigate();
   const { schoolId } = useSchoolContext();
   
-  // Get teacher ID from session (same as LessonPlanView and AssignmentsView)
+  // Get teacher ID and role from session
   const authUser = session.user;
   const teacherId = (authUser as any).postgresqlId || authUser.id;
+  const userRole = authUser.role?.toLowerCase() || '';
+  const isAdmin = ADMIN_ROLES.includes(userRole);
   
   // Filter states - MUST be declared before hooks that use them
   const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
@@ -219,13 +224,22 @@ const Form138Dashboard: React.FC<Form138DashboardProps> = ({ session }) => {
   const filteredStudents = useMemo(() => {
     let filtered = [...students];
 
-    // TEACHER FILTER: Use teacherId from useSchoolData session
-    const teacherSections = sections.filter(s => s.adviserId === teacherId);
-    
-    if (teacherSections.length > 0) {
-      // Filter students to only those in teacher's sections
-      const teacherSectionIds = teacherSections.map(s => s.id);
-      filtered = filtered.filter(student => teacherSectionIds.includes(student.sectionId));
+    // TEACHER AUTHORIZATION FILTER
+    // Admins/Principals/Registrars can see all students
+    // Teachers can only see students in their assigned sections
+    if (!isAdmin) {
+      const teacherSections = sections.filter(s => s.adviserId === teacherId);
+      const teacherSectionIds = new Set(teacherSections.map(s => s.id));
+      
+      // Filter to only authorized sections
+      // If teacher has no sections, they see no students (empty set)
+      filtered = filtered.filter(student => 
+        student.sectionId && teacherSectionIds.has(student.sectionId)
+      );
+      
+      if (teacherSectionIds.size === 0) {
+        console.warn('[Form138Dashboard] Teacher has no section assignments - showing no students');
+      }
     }
 
     // Filter by search query (name and LRN)
@@ -251,7 +265,7 @@ const Form138Dashboard: React.FC<Form138DashboardProps> = ({ session }) => {
     }
 
     return filtered;
-  }, [students, searchQuery, selectedGradeLevel, selectedSectionId, sections, teacherId]);
+  }, [students, searchQuery, selectedGradeLevel, selectedSectionId, sections, teacherId, isAdmin]);
 
   console.log('=== FINAL FILTERED STUDENTS ===', filteredStudents.length);
   
@@ -270,29 +284,33 @@ const Form138Dashboard: React.FC<Form138DashboardProps> = ({ session }) => {
     setCurrentPage(1);
   }, [searchQuery, selectedGradeLevel, selectedSectionId, performanceFilter, selectedQuarter]);
 
-  // Get available grade levels (only from teacher's sections)
+  // Get available grade levels (filtered by teacher's sections for non-admins)
   const availableGradeLevels = useMemo(() => {
-    // Filter to teacher's sections first
-    const teacherSections = sections.filter(s => s.adviserId === teacherId);
-    const sectionsToUse = teacherSections.length > 0 ? teacherSections : sections;
+    // Admins see all grade levels
+    if (isAdmin) {
+      const grades = new Set(sections.map(s => s.gradeLevel.toString()));
+      return Array.from(grades).sort((a, b) => parseInt(a) - parseInt(b));
+    }
     
-    const grades = new Set(sectionsToUse.map(s => s.gradeLevel.toString()));
+    // Teachers only see grade levels from their assigned sections
+    const teacherSections = sections.filter(s => s.adviserId === teacherId);
+    const grades = new Set(teacherSections.map(s => s.gradeLevel.toString()));
     return Array.from(grades).sort((a, b) => parseInt(a) - parseInt(b));
-  }, [sections, teacherId]);
+  }, [sections, teacherId, isAdmin]);
 
   // Get sections for selected grade (filtered by teacher if applicable)
   const availableSections = useMemo(() => {
-    let sectionsToShow = sections;
-    
-    // TEACHER FILTER: Only show teacher's advised sections
-    const teacherSections = sections.filter(s => s.adviserId === teacherId);
-    if (teacherSections.length > 0) {
-      sectionsToShow = teacherSections;
+    // Admins see all sections
+    if (isAdmin) {
+      if (selectedGradeLevel === 'all') return sections;
+      return sections.filter(s => s.gradeLevel.toString() === selectedGradeLevel);
     }
     
-    if (selectedGradeLevel === 'all') return sectionsToShow;
-    return sectionsToShow.filter(s => s.gradeLevel.toString() === selectedGradeLevel);
-  }, [sections, selectedGradeLevel, teacherId]);
+    // Teachers only see their advised sections
+    const teacherSections = sections.filter(s => s.adviserId === teacherId);
+    if (selectedGradeLevel === 'all') return teacherSections;
+    return teacherSections.filter(s => s.gradeLevel.toString() === selectedGradeLevel);
+  }, [sections, selectedGradeLevel, teacherId, isAdmin]);
 
   // Bulk operations - Memoized to prevent unnecessary re-renders
   const handleSelectAll = useCallback(() => {
