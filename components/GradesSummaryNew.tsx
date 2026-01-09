@@ -73,30 +73,66 @@ const GradesSummaryNew: React.FC<GradesSummaryProps> = ({ session }) => {
   const [loadingSections, setLoadingSections] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
 
-  // Step 1: Load sections on mount
+  // Step 1: Load sections on mount - only sections with enrolled students
   useEffect(() => {
     const loadSections = async () => {
       setLoadingSections(true);
       
-      const { data, error } = await supabase
+      // First, get all sections for the school
+      const { data: allSections, error: sectionsError } = await supabase
         .from('sections')
         .select('id, name, grade_level')
         .eq('school_id', schoolId)
         .order('grade_level')
         .order('name');
       
-      if (error) {
-        console.error('Error loading sections:', error);
+      if (sectionsError) {
+        console.error('Error loading sections:', sectionsError);
         setLoadingSections(false);
         return;
       }
       
-      const sectionList = data || [];
-      setSections(sectionList);
+      if (!allSections || allSections.length === 0) {
+        setSections([]);
+        setLoadingSections(false);
+        return;
+      }
       
-      // Auto-select first section
-      if (sectionList.length > 0) {
-        setSelectedSectionId(sectionList[0].id);
+      // Get sections that have enrolled students
+      const { data: studentCounts, error: countError } = await supabase
+        .from('students')
+        .select('section_id')
+        .eq('school_id', schoolId)
+        .eq('enrollment_status', 'enrolled')
+        .is('deleted_at', null);
+      
+      if (countError) {
+        console.error('Error counting students:', countError);
+        // Fallback to all sections if count fails
+        setSections(allSections);
+        if (allSections.length > 0) {
+          setSelectedSectionId(allSections[0].id);
+        }
+        setLoadingSections(false);
+        return;
+      }
+      
+      // Count students per section
+      const sectionStudentCounts = new Map<string, number>();
+      (studentCounts || []).forEach(s => {
+        if (s.section_id) {
+          sectionStudentCounts.set(s.section_id, (sectionStudentCounts.get(s.section_id) || 0) + 1);
+        }
+      });
+      
+      // Filter to only sections with students
+      const sectionsWithStudents = allSections.filter(s => (sectionStudentCounts.get(s.id) || 0) > 0);
+      
+      setSections(sectionsWithStudents);
+      
+      // Auto-select first section with students
+      if (sectionsWithStudents.length > 0) {
+        setSelectedSectionId(sectionsWithStudents[0].id);
       }
       
       setLoadingSections(false);
