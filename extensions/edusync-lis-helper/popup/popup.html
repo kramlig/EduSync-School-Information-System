@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduSync LIS Helper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <div class="header">
+      <img src="../icons/icon32.png" alt="EduSync" class="logo">
+      <h1>EduSync LIS Helper</h1>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="fill">
+        ✨ Fill LIS
+      </button>
+      <button class="tab-btn" data-tab="extract">
+        📥 Extract from LIS
+      </button>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="status-bar" class="status-bar status-inactive">
+      <span id="status-icon">⚪</span>
+      <span id="status-text">No data loaded</span>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content">
+      <!-- ============================================ -->
+      <!-- TAB 1: FILL LIS (EduSync → LIS) -->
+      <!-- ============================================ -->
+      <div id="tab-fill" class="tab-content active">
+        <!-- Data Import Section -->
+        <div class="section">
+          <h2>📁 Import Data</h2>
+          <p class="help-text">Export data from EduSync, then import the JSON file here.</p>
+          
+          <input type="file" id="file-input" accept=".json" hidden>
+          <button id="import-btn" class="btn btn-primary">
+            <span>📂</span> Import EduSync Export
+          </button>
+          
+          <div id="import-status" class="import-status hidden">
+            <div class="data-summary">
+              <div class="stat">
+                <span class="stat-number" id="student-count">0</span>
+                <span class="stat-label">Students</span>
+              </div>
+              <div class="stat">
+                <span class="stat-number" id="school-name">-</span>
+                <span class="stat-label">School</span>
+              </div>
+            </div>
+            <button id="clear-btn" class="btn btn-secondary btn-small">Clear Data</button>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="section" id="actions-section" style="display: none;">
+          <h2>⚡ Quick Actions</h2>
+          
+          <div class="action-buttons">
+            <button id="search-lrn-btn" class="btn btn-action" disabled>
+              🔍 Search by LRN
+            </button>
+            <button id="autofill-btn" class="btn btn-action" disabled>
+              ✨ Auto-Fill Form
+            </button>
+            <button id="batch-mode-btn" class="btn btn-action" disabled>
+              📋 Batch Mode
+            </button>
+          </div>
+        </div>
+
+        <!-- Current Student -->
+        <div class="section" id="current-student-section" style="display: none;">
+          <h2>👤 Current Student</h2>
+          <div id="current-student-info" class="student-card">
+            <!-- Populated by JS -->
+          </div>
+          <div class="nav-buttons">
+            <button id="prev-btn" class="btn btn-nav">← Previous</button>
+            <span id="student-index">1 of 100</span>
+            <button id="next-btn" class="btn btn-nav">Next →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- TAB 2: EXTRACT FROM LIS (LIS → EduSync) -->
+      <!-- ============================================ -->
+      <div id="tab-extract" class="tab-content" style="display: none;">
+        <!-- Extract Instructions -->
+        <div class="section">
+          <h2>📥 Extract Students from LIS</h2>
+          <p class="help-text">Navigate to a student list or SF1 page in LIS, then extract the data to import into EduSync.</p>
+        </div>
+
+        <!-- Page Detection -->
+        <div class="section">
+          <div id="extract-page-status" class="extract-status">
+            <span id="extract-page-icon">🔍</span>
+            <span id="extract-page-text">Checking page...</span>
+          </div>
+        </div>
+
+        <!-- Extract Actions -->
+        <div class="section">
+          <button id="extract-btn" class="btn btn-primary btn-large" disabled>
+            <span>📋</span> Extract Students from Page
+          </button>
+          
+          <div id="extract-result" class="extract-result hidden">
+            <div class="extract-summary">
+              <div class="data-summary">
+                <div class="stat">
+                  <span class="stat-number" id="extracted-count">0</span>
+                  <span class="stat-label">Students Found</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-number" id="extracted-section">-</span>
+                  <span class="stat-label">Section</span>
+                </div>
+              </div>
+            </div>
+            
+            <div id="extracted-preview" class="extracted-preview">
+              <!-- Preview table populated by JS -->
+            </div>
+            
+            <div class="extract-actions">
+              <button id="download-json-btn" class="btn btn-success">
+                💾 Download JSON
+              </button>
+              <button id="copy-json-btn" class="btn btn-secondary">
+                📋 Copy to Clipboard
+              </button>
+            </div>
+            
+            <p class="help-text" style="margin-top: 12px; text-align: center;">
+              Import this JSON file in EduSync → Students → Import SF1
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- COMMON: Page Status & Settings -->
+      <!-- ============================================ -->
+      
+      <!-- Page Status -->
+      <div class="section" id="page-status-section">
+        <h2>🌐 Current Page</h2>
+        <div id="page-status" class="page-status">
+          <span id="page-status-text">Checking...</span>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div class="section">
+        <h2>⚙️ Settings</h2>
+        <label class="checkbox-label">
+          <input type="checkbox" id="auto-next" checked>
+          Auto-advance to next student after fill
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="confirm-fill">
+          Confirm before auto-fill
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="highlight-fields" checked>
+          Highlight filled fields
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="dev-mode">
+          Dev mode (allow any page)
+        </label>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <a href="#" id="help-link">Help</a>
+      <span class="version">v1.1.0</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

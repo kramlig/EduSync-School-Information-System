@@ -11,10 +11,12 @@ import ImageCropModal from './ImageCropModal';
 import { useStudentsPostgreSQL } from '../src/hooks/useStudentsPostgreSQL';
 import { useSectionsPostgreSQL } from '../src/hooks/useSectionsPostgreSQL';
 import { useGradesPostgreSQL } from '../src/hooks/useGradesPostgreSQL';
+import { exportForLIS, downloadLISExport } from '../src/services/lisExportService';
 import { useAttendancePostgreSQL } from '../src/hooks/useAttendancePostgreSQL';
 import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
 import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
 import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
+import SchoolSF1Import from '../src/components/students/SchoolSF1Import';
 
 interface StudentListProps {
   schoolData: SchoolDataState & { 
@@ -90,10 +92,36 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   // Toast notification state
   const [toast, setToast] = useState<{ show: boolean; type: 'success' | 'error'; message: string }>({ show: false, type: 'success', message: '' });
   
+  // LIS Export state
+  const [lisExportLoading, setLisExportLoading] = useState(false);
+  
+  // SF1 Import state
+  const [isSF1ImportOpen, setIsSF1ImportOpen] = useState(false);
+  
   // Show toast helper
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ show: true, type, message });
     setTimeout(() => setToast({ show: false, type: 'success', message: '' }), 4000);
+  };
+  
+  // Handle Export for LIS
+  const handleExportForLIS = async () => {
+    try {
+      setLisExportLoading(true);
+      const schoolYear = settings?.schoolYear || '2025-2026';
+      
+      const exportData = await exportForLIS(schoolId, schoolYear, {
+        onlyWithLrn: false // Include all students, even those without LRN
+      });
+      
+      downloadLISExport(exportData);
+      showToast('success', `Exported ${exportData.totalCount} students for LIS. Import this file in the EduSync LIS Helper extension.`);
+    } catch (error: any) {
+      console.error('LIS export error:', error);
+      showToast('error', `Export failed: ${error.message}`);
+    } finally {
+      setLisExportLoading(false);
+    }
   };
 
   // Feature flag: Server-side pagination is now ENABLED
@@ -513,17 +541,53 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
               <p className="text-indigo-100 text-sm mt-1">Manage and track student information</p>
             </div>
           </div>
-          {canManageStudents && (
+          <div className="flex items-center gap-3">
+            {/* Import from SF1 Button */}
+            {canManageStudents && (
+              <button
+                onClick={() => setIsSF1ImportOpen(true)}
+                className="bg-white/20 backdrop-blur-sm text-white font-semibold py-2.5 px-5 rounded-lg hover:bg-white/30 transition-all flex items-center gap-2 border border-white/30"
+                title="Import students from DepEd LIS SF1 CSV file"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Import SF1
+              </button>
+            )}
+            
+            {/* Export for LIS Button */}
             <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="bg-white text-indigo-600 font-semibold py-2.5 px-6 rounded-lg hover:bg-indigo-50 transition-all shadow-lg flex items-center gap-2"
+              onClick={handleExportForLIS}
+              disabled={lisExportLoading}
+              className="bg-white/20 backdrop-blur-sm text-white font-semibold py-2.5 px-5 rounded-lg hover:bg-white/30 transition-all flex items-center gap-2 border border-white/30"
+              title="Export data for DepEd LIS Helper extension"
             >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Student
+              {lisExportLoading ? (
+                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+              )}
+              Export for LIS
             </button>
-          )}
+            
+            {canManageStudents && (
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="bg-white text-indigo-600 font-semibold py-2.5 px-6 rounded-lg hover:bg-indigo-50 transition-all shadow-lg flex items-center gap-2"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Student
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2124,6 +2188,20 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             setShowCropModal(false);
             setImageToCrop(null);
             setCapturedBlob(null);
+          }}
+        />
+      )}
+
+      {/* SF1 Import Modal */}
+      {isSF1ImportOpen && (
+        <SchoolSF1Import
+          schoolId={schoolId}
+          schoolName={settings?.schoolName || 'School'}
+          onClose={() => setIsSF1ImportOpen(false)}
+          onImportComplete={async () => {
+            // Refresh students list after import
+            await refetchStudents();
+            showToast('success', 'Students imported successfully! List refreshed.');
           }}
         />
       )}
