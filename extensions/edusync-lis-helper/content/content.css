@@ -1,0 +1,166 @@
+/* EduSync LIS Helper - Content Script Styles */
+
+/* Floating Toolbar */
+#edusync-toolbar {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 200px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 999999;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+#edusync-toolbar.minimized .edusync-toolbar-content {
+  display: none;
+}
+
+#edusync-toolbar.minimized {
+  width: 100px;
+}
+
+.edusync-toolbar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.edusync-minimize {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.edusync-minimize:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.edusync-toolbar-content {
+  padding: 12px;
+}
+
+.edusync-status {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.edusync-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.edusync-btn:last-child {
+  margin-bottom: 0;
+}
+
+#edusync-fill-next {
+  background: #2563eb;
+  color: white;
+}
+
+#edusync-fill-next:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+#edusync-fill-next:disabled {
+  background: #e5e7eb;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+#edusync-skip {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+#edusync-skip:hover {
+  background: #e5e7eb;
+}
+
+/* Notification */
+.edusync-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 9999999;
+  animation: slideIn 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.edusync-notification-info {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.edusync-notification-success {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.edusync-notification-warning {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.edusync-notification-error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.edusync-notification.fade-out {
+  animation: fadeOut 0.3s ease forwards;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
