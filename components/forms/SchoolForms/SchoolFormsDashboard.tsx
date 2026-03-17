@@ -53,6 +53,8 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
   
   const userRole = session.type === 'staff' ? (session.user as AuthUser).role : session.type;
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'elementary' | 'shs' | 'tools'>('all');
   
   // Calculate real-time stats from PostgreSQL data
   const stats = useMemo(() => {
@@ -208,6 +210,22 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
       priority: 'high'
     },
     {
+      id: 'sf8-health',
+      title: 'SF8 - Health & Nutrition Report',
+      description: 'Track student health data including BMI, nutritional status, and deworming records.',
+      icon: UsersIcon,
+      route: '/reports/school-forms/sf8',
+      gradient: 'from-rose-600 via-pink-600 to-red-600',
+      shadowColor: 'shadow-rose-500/25',
+      roles: ['admin', 'registrar', 'principal', 'teacher'],
+      stats: {
+        label: 'Health Records',
+        value: 0 // TODO: Get from PostgreSQL
+      },
+      deadline: 'Due: Quarterly',
+      priority: 'high'
+    },
+    {
       id: 'sf9-promotion',
       title: 'SF9 - Promotion/Retention Report',
       description: 'End-of-year promotion status and retention statistics for performance tracking.',
@@ -222,6 +240,103 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
       },
       deadline: 'Due: End of school year',
       priority: 'medium'
+    },
+    {
+      id: 'sf10-permanent',
+      title: 'SF10 - Permanent Academic Record',
+      description: 'Official DepEd SF10 form — cumulative academic history across all school years (ES & JHS).',
+      icon: DocumentTextIcon,
+      route: '/reports/school-forms/sf10',
+      gradient: 'from-indigo-600 via-blue-600 to-cyan-600',
+      shadowColor: 'shadow-indigo-500/25',
+      roles: ['admin', 'teacher', 'registrar', 'principal'],
+      stats: {
+        label: 'Records',
+        value: stats.totalEnrolled
+      },
+      deadline: 'Due: End of school year',
+      priority: 'high'
+    },
+    // ========== SHS-SPECIFIC FORMS ==========
+    {
+      id: 'sf1-shs',
+      title: 'SF1-SHS - School Register (SHS)',
+      description: 'School register for Senior High School with track and strand classification.',
+      icon: UsersIcon,
+      route: '/reports/school-forms/sf1-shs',
+      gradient: 'from-sky-600 via-blue-600 to-indigo-600',
+      shadowColor: 'shadow-sky-500/25',
+      roles: ['admin', 'registrar', 'principal'],
+      stats: {
+        label: 'SHS Students',
+        value: students.filter(s => s.grade_level >= 11 && (s.status === 'active' || !s.status)).length
+      },
+      deadline: 'Due: First week of semester',
+      priority: 'high'
+    },
+    {
+      id: 'sf2-shs',
+      title: 'SF2-SHS - Daily Attendance (SHS)',
+      description: 'Daily attendance tracking for SHS with semester-based reporting.',
+      icon: CalendarDaysIcon,
+      route: '/reports/school-forms/sf2-shs',
+      gradient: 'from-lime-600 via-green-600 to-emerald-600',
+      shadowColor: 'shadow-lime-500/25',
+      roles: ['admin', 'teacher', 'registrar', 'principal'],
+      stats: {
+        label: 'SHS Attendance',
+        value: 'Track/Strand'
+      },
+      deadline: 'Due: Monthly',
+      priority: 'high'
+    },
+    {
+      id: 'sf5a-shs',
+      title: 'SF5A-SHS - End of Semester Status',
+      description: 'Track SHS learner status by track/strand at end of semester and school year.',
+      icon: TrendingUpIcon,
+      route: '/reports/school-forms/sf5a-shs',
+      gradient: 'from-teal-600 via-cyan-600 to-blue-600',
+      shadowColor: 'shadow-teal-500/25',
+      roles: ['admin', 'registrar', 'principal', 'teacher'],
+      stats: {
+        label: 'SHS Students',
+        value: students.filter(s => s.grade_level >= 11 && (s.status === 'active' || !s.status)).length
+      },
+      deadline: 'Due: End of semester',
+      priority: 'high'
+    },
+    {
+      id: 'sf5b-shs',
+      title: 'SF5B-SHS - SHS Completers',
+      description: 'Track Grade 12 students with complete SHS requirements and graduation eligibility.',
+      icon: DocumentTextIcon,
+      route: '/reports/school-forms/sf5b-shs',
+      gradient: 'from-emerald-600 via-green-600 to-teal-600',
+      shadowColor: 'shadow-emerald-500/25',
+      roles: ['admin', 'registrar', 'principal'],
+      stats: {
+        label: 'Grade 12',
+        value: students.filter(s => s.grade_level === 12 && (s.status === 'active' || !s.status)).length
+      },
+      deadline: 'Due: Before graduation',
+      priority: 'high'
+    },
+    {
+      id: 'sf9-shs',
+      title: 'SF9-SHS - Progress Report Card (SHS)',
+      description: 'SHS learner progress report with semester grades (Midterm + Final = Semester Grade).',
+      icon: ChartBarIcon,
+      route: '/reports/school-forms/sf9-shs',
+      gradient: 'from-fuchsia-600 via-pink-600 to-rose-600',
+      shadowColor: 'shadow-fuchsia-500/25',
+      roles: ['admin', 'registrar', 'principal', 'teacher'],
+      stats: {
+        label: 'SHS Grades',
+        value: students.filter(s => s.grade_level >= 11 && (s.status === 'active' || !s.status)).length
+      },
+      deadline: 'Due: End of semester',
+      priority: 'high'
     }
   ];
 
@@ -252,6 +367,30 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
   const accessibleForms = schoolForms.filter(form => 
     form.roles.includes(userRole)
   );
+
+  // Filter forms by search query and category
+  const filteredForms = useMemo(() => {
+    let forms = accessibleForms;
+    
+    // Category filter
+    if (activeCategory === 'elementary') {
+      forms = forms.filter(f => !f.id.includes('-shs'));
+    } else if (activeCategory === 'shs') {
+      forms = forms.filter(f => f.id.includes('-shs'));
+    }
+    
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      forms = forms.filter(f => 
+        f.title.toLowerCase().includes(q) || 
+        f.description.toLowerCase().includes(q) ||
+        f.id.toLowerCase().includes(q)
+      );
+    }
+    
+    return forms;
+  }, [accessibleForms, searchQuery, activeCategory]);
 
   const handleCardClick = (route: string) => {
     navigate(route);
@@ -367,14 +506,80 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
           </div>
         </div>
 
+        {/* Search & Filter Bar */}
+        <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-lg rounded-2xl p-4 shadow-sm border border-slate-200">
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Search Input */}
+            <div className="relative flex-1">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search forms... (e.g. SF10, attendance, enrollment)"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {/* Category Tabs */}
+            <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+              {[
+                { key: 'all' as const, label: 'All', count: accessibleForms.length },
+                { key: 'elementary' as const, label: 'K-10', count: accessibleForms.filter(f => !f.id.includes('-shs')).length },
+                { key: 'shs' as const, label: 'SHS', count: accessibleForms.filter(f => f.id.includes('-shs')).length },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveCategory(tab.key)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                    activeCategory === tab.key
+                      ? 'bg-white text-blue-700 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {tab.label} <span className="text-xs opacity-60">({tab.count})</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          {searchQuery && (
+            <div className="mt-2 text-sm text-slate-500">
+              {filteredForms.length} {filteredForms.length === 1 ? 'form' : 'forms'} found
+            </div>
+          )}
+        </div>
+
         {/* School Forms Grid */}
         <div className={`
           grid gap-8
-          ${accessibleForms.length === 1 ? 'grid-cols-1 max-w-md mx-auto' : ''}
-          ${accessibleForms.length === 2 ? 'grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto' : ''}
-          ${accessibleForms.length >= 3 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : ''}
+          ${filteredForms.length === 0 ? '' : ''}
+          ${filteredForms.length === 1 ? 'grid-cols-1 max-w-md mx-auto' : ''}
+          ${filteredForms.length === 2 ? 'grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto' : ''}
+          ${filteredForms.length >= 3 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : ''}
         `}>
-          {accessibleForms.map((form) => {
+          {filteredForms.length === 0 && (
+            <div className="col-span-full text-center py-16">
+              <div className="text-5xl mb-4">🔍</div>
+              <h3 className="text-xl font-semibold text-slate-700 mb-2">No forms found</h3>
+              <p className="text-slate-500">Try a different search term or category</p>
+              <button
+                onClick={() => { setSearchQuery(''); setActiveCategory('all'); }}
+                className="mt-4 px-4 py-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
+          {filteredForms.map((form) => {
             const IconComponent = form.icon;
             const isHovered = hoveredCard === form.id;
             
@@ -474,7 +679,8 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
           })}
         </div>
 
-        {/* Management Tools Section */}
+        {/* Management Tools Section — admin/principal/registrar only */}
+        {['admin', 'principal', 'registrar'].includes(userRole) && (
         <div className="mt-12">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-slate-900 mb-2">School Management Tools</h2>
@@ -557,6 +763,7 @@ const SchoolFormsDashboard: React.FC<SchoolFormsDashboardProps> = ({ session }) 
             </div>
           </div>
         </div>
+        )}
 
         {/* Help Section */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-200">

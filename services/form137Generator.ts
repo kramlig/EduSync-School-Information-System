@@ -68,8 +68,37 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
     
     const student = studentData as Student;
 
+    // Step 1.2: Get school info from PostgreSQL
+    let schoolName = '';
+    let schoolIdNumber = '';
+    let schoolDistrict = '';
+    let schoolDivision = '';
+    let schoolRegion = '';
+    let schoolAddress = '';
+    if ((studentData as any).school_id) {
+      const { data: schoolData } = await supabase
+        .from('schools')
+        .select('name, school_id_number, district, division, region, address')
+        .eq('id', (studentData as any).school_id)
+        .single();
+      if (schoolData) {
+        schoolName = schoolData.name || '';
+        schoolIdNumber = schoolData.school_id_number || '';
+        schoolDistrict = schoolData.district || '';
+        schoolDivision = schoolData.division || '';
+        schoolRegion = schoolData.region || '';
+        schoolAddress = schoolData.address || '';
+      }
+    }
+
     // Step 1.5: Check if Form 137 already exists for this student
-    const existingRecord = await Form137Service.getByStudentId(options.studentId);
+    // Form137Service uses Firestore (legacy) — gracefully handle if unavailable
+    let existingRecord: AcademicHistory | null = null;
+    try {
+      existingRecord = await Form137Service.getByStudentId(options.studentId);
+    } catch (_) {
+      // Firestore may be unavailable after migration to Supabase — treat as no existing record
+    }
     const isUpdate = existingRecord !== null;
 
     // If updating, check if this school year already exists in the record
@@ -126,7 +155,7 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
       quarter: g.quarter,
       grade: g.grade,
       schoolYear: g.school_year
-    })) as Grade[];
+    })) as unknown as Grade[];
 
     if (grades.length === 0) {
       warnings.push('No grades found for this student');
@@ -136,7 +165,8 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
     const { data: learningAreasData } = await supabase
       .from('learning_areas')
       .select('id, name, code')
-      .is('deleted_at', null);
+      .eq('school_id', (studentData as any).school_id)
+      .eq('is_active', true);
     
     const learningAreasMap = new Map<string, string>();
     (learningAreasData || []).forEach(la => {
@@ -227,8 +257,8 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
 
     // Step 9: Create SchoolYearRecord for this year
     const now = new Date().toISOString();
-    const currentSchoolName = 'Your School Name'; // TODO: Get from school settings
-    const currentSchoolId = 'SCH001'; // TODO: Get from school settings
+    const currentSchoolName = schoolName || 'Your School Name';
+    const currentSchoolId = schoolIdNumber || '';
     
     const schoolYearData: SchoolYearRecord = {
       schoolYear,
@@ -272,14 +302,21 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
       // This is creating a new Form 137 with first year
       const newForm137: Omit<AcademicHistory, 'id'> = {
         studentId: student.id,
-        studentName: student.name || `${student.first_name} ${student.last_name}`,
+        studentName: student.name || `${(studentData as any).first_name || student.firstName} ${(studentData as any).last_name || student.lastName}`,
         lrn: student.lrn || '',
-        birthDate: student.date_of_birth || student.dateOfBirth || '',
-        birthPlace: student.place_of_birth || student.placeOfBirth || '',
-        parentGuardian: student.guardianName || student.guardian_name || '',
+        sex: (studentData as any).gender || student.sex,
+        birthDate: (studentData as any).date_of_birth || student.dateOfBirth || '',
+        birthPlace: (studentData as any).place_of_birth || student.placeOfBirth || '',
+        parentGuardian: (studentData as any).guardian_name || student.guardianName || '',
         
-        currentSchoolName: 'Your School Name', // TODO: Get from school settings
-        currentSchoolId: 'SCH001', // TODO: Get from school settings
+        currentSchoolName: schoolName || 'Your School Name',
+        currentSchoolId: schoolIdNumber || '',
+        
+        // School location info
+        district: schoolDistrict,
+        division: schoolDivision,
+        region: schoolRegion,
+        completeAddress: schoolAddress,
         
         schoolYears: [schoolYearData], // First year entry
         
@@ -335,13 +372,13 @@ function transformGradesToForm137(
     const gradeRecord = subjectGradesList[0];
     
     // PostgreSQL grades already have q1, q2, q3, q4 as numbers (not objects)
-    const q1 = gradeRecord.q1 || 0;
-    const q2 = gradeRecord.q2 || 0;
-    const q3 = gradeRecord.q3 || 0;
-    const q4 = gradeRecord.q4 || 0;
+    const q1 = typeof gradeRecord.q1 === 'number' ? gradeRecord.q1 : 0;
+    const q2 = typeof gradeRecord.q2 === 'number' ? gradeRecord.q2 : 0;
+    const q3 = typeof gradeRecord.q3 === 'number' ? gradeRecord.q3 : 0;
+    const q4 = typeof gradeRecord.q4 === 'number' ? gradeRecord.q4 : 0;
     
-    // Use final_grade from PostgreSQL or compute it
-    const finalGrade = gradeRecord.final_grade || gradeRecord.finalGrade || computeFinalGrade(q1, q2, q3, q4);
+    // Use finalGrade from record or compute it
+    const finalGrade = (typeof gradeRecord.finalGrade === 'number' ? gradeRecord.finalGrade : 0) || computeFinalGrade(q1, q2, q3, q4);
     const remarks: 'Passed' | 'Failed' = finalGrade >= 75 ? 'Passed' : 'Failed';
     
     subjectGrades.push({

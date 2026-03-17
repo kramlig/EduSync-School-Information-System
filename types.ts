@@ -108,6 +108,22 @@ export interface Student {
   photoURL?: string;         // Firebase Storage download URL
   photoPath?: string;        // Storage path for deletion/update
   photoUploadedAt?: string;  // ISO timestamp of last upload
+  
+  // SHS Support (Grade 11-12)
+  shs_track?: 'ACADEMIC' | 'TVL' | 'SPORTS' | 'ARTS';
+  shs_strand?: 'STEM' | 'ABM' | 'HUMSS' | 'GAS' | 'TVL-HE' | 'TVL-ICT' | 'TVL-IA' | 'TVL-AF' | 'SPORTS' | 'ARTS';
+  shs_specialization?: string;  // TVL specialization or sports/arts focus
+  current_semester?: 1 | 2;
+  shs_completion_status?: 'in_progress' | 'completed' | 'incomplete';
+  graduation_date?: string;
+  
+  // PostgreSQL snake_case aliases
+  shsTrack?: string;
+  shsStrand?: string;
+  shsSpecialization?: string;
+  currentSemester?: number;
+  shsCompletionStatus?: string;
+  graduationDate?: string;
 }
 
 export type StudentUser = Omit<Student, 'password'>;

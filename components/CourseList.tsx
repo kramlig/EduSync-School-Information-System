@@ -168,6 +168,7 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ session }) => {
     updateLearningArea,
     deleteLearningArea,
     bulkDeleteLearningAreas,
+    seedDefaults,
   } = useLearningAreasPostgreSQL();
 
   // UI State
@@ -682,11 +683,56 @@ const LearningAreaList: React.FC<LearningAreaListProps> = ({ session }) => {
       {/* Content */}
       {filteredAreas.length === 0 ? (
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-12 text-center">
-          <p className="text-slate-600 dark:text-slate-400 text-lg">
-            {searchQuery || categoryFilter !== 'all' || statusFilter !== 'all'
-              ? 'No learning areas match your filters.'
-              : 'No learning areas yet. Click "Add Learning Area" to get started.'}
-          </p>
+          {searchQuery || categoryFilter !== 'all' || statusFilter !== 'all' ? (
+            <p className="text-slate-600 dark:text-slate-400 text-lg">
+              No learning areas match your filters.
+            </p>
+          ) : (
+            <>
+              <div className="mb-4">
+                <svg className="mx-auto h-12 w-12 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                </svg>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400 text-lg mb-2">
+                No learning areas yet.
+              </p>
+              <p className="text-slate-500 dark:text-slate-500 text-sm mb-6">
+                Load the standard DepEd K-12 subjects for your school type, or add them manually.
+              </p>
+              <div className="flex justify-center gap-3">
+                {isAdmin && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await seedDefaults();
+                        setToast({ message: 'Default DepEd subjects loaded successfully!', type: 'success' });
+                      } catch (err) {
+                        setToast({ message: 'Failed to load defaults. Please try again.', type: 'error' });
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Load Default DepEd Subjects
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={() => { setEditingArea(null); setFormData(DEFAULT_FORM_DATA); setIsModalOpen(true); }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors font-medium"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Manually
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <>

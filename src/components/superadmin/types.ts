@@ -48,6 +48,7 @@ export interface CreateSchoolInput {
   name: string;
   code?: string;
   school_id_number?: string;
+  school_type?: 'elementary' | 'high_school' | 'senior_high' | 'integrated';
   address?: string;
   phone?: string;
   email?: string;
