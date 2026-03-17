@@ -14,6 +14,26 @@
     display: none !important;
   }
 
+  /* Override global index.css print rules that hide everything */
+  .sf10-print-container,
+  .sf10-print-container * {
+    visibility: visible !important;
+  }
+
+  .sf10-print-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    z-index: 99999;
+  }
+
+  /* Reset page for SF10 — A4 landscape to fit grade pairs side-by-side */
+  @page {
+    size: A4 landscape;
+    margin: 0.3in;
+  }
+
   /* Reset page */
   body {
     margin: 0;
@@ -24,7 +44,6 @@
   }
 
   .sf10-print-container {
-    width: 100%;
     max-width: none;
     margin: 0;
     padding: 0;
