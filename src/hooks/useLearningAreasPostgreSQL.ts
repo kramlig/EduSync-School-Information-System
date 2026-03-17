@@ -16,6 +16,8 @@ import {
   updateLearningArea as updateLearningAreaService,
   deleteLearningArea as deleteLearningAreaService,
   bulkDeleteLearningAreas as bulkDeleteLearningAreasService,
+  fetchSchoolType,
+  seedDefaultLearningAreas,
 } from '../services/learningAreasServicePostgreSQL';
 
 interface UseLearningAreasOptions {
@@ -182,6 +184,25 @@ export function useLearningAreasPostgreSQL(options: UseLearningAreasOptions = {}
     loadLearningAreas(true);
   }, [loadLearningAreas]);
 
+  /**
+   * Seed default DepEd learning areas based on school type
+   */
+  const seedDefaults = useCallback(async () => {
+    if (!schoolId) throw new Error('School ID is required');
+    try {
+      setLoading(true);
+      const schoolType = await fetchSchoolType(schoolId);
+      const newAreas = await seedDefaultLearningAreas(schoolId, schoolType);
+      setLearningAreas(newAreas.sort((a, b) => (a.order || 0) - (b.order || 0)));
+      return newAreas;
+    } catch (err) {
+      console.error('[useLearningAreasPostgreSQL] Error seeding defaults:', err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [schoolId]);
+
   return {
     learningAreas,
     loading,
@@ -191,5 +212,6 @@ export function useLearningAreasPostgreSQL(options: UseLearningAreasOptions = {}
     deleteLearningArea: deleteLearningAreaHandler,
     bulkDeleteLearningAreas: bulkDeleteLearningAreasHandler,
     refresh,
+    seedDefaults,
   };
 }

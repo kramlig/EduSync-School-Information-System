@@ -167,6 +167,11 @@ export interface AcademicHistory {
   currentSchoolName: string;
   currentSchoolId: string;
   
+  // School location
+  district?: string;
+  division?: string;
+  region?: string;
+  
   // Transfer History
   transferHistory?: SchoolTransferRecord[];
   

@@ -104,7 +104,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, announcements = [] }) => {
       items: [
         { path: '/reports/form137', label: 'Form 137', icon: <DocumentTextIcon />, roles: ['admin', 'registrar', 'principal'], badge: null },
         { path: '/reports/form138', label: 'Form 138', icon: <DocumentTextIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
-        { path: '/reports/school-forms', label: 'School Forms', icon: <ClipboardDocumentListIcon />, roles: ['admin', 'registrar', 'principal'], badge: null },
+        { path: '/reports/school-forms', label: 'School Forms', icon: <ClipboardDocumentListIcon />, roles: ['admin', 'teacher', 'registrar', 'principal'], badge: null },
         { path: '/reports/elln', label: 'ELLN Assessment', icon: <BookOpenIcon />, roles: ['admin', 'teacher', 'principal'], badge: null },
       ]
     },
@@ -129,7 +129,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, announcements = [] }) => {
       items: [
         { path: '/school-management', label: 'School Management', icon: <BuildingOfficeIcon />, roles: ['superadmin'], badge: null },
         { path: '/settings', label: 'Settings', icon: <CogIcon />, roles: ['admin'], badge: null },
-        { path: '/validation-results', label: 'Validation Results', icon: <ClipboardDocumentCheckIcon />, roles: ['admin'], badge: null },
+        // { path: '/validation-results', label: 'Validation Results', icon: <ClipboardDocumentCheckIcon />, roles: ['admin'], badge: null }, // HIDDEN: Temporarily disabled
         // { path: '/teacher-validation', label: 'Account Validation', icon: <CheckBadgeIcon />, roles: ['teacher'], badge: null }, // HIDDEN: Outdated
       ]
     }

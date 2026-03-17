@@ -316,3 +316,106 @@ export async function fetchLearningAreasByTrack(
 
   return (data || []).map(transformRowToLearningArea);
 }
+
+// ==================== School Type Helper ====================
+
+export type SchoolType = 'elementary' | 'high_school' | 'senior_high' | 'integrated' | null;
+
+/**
+ * Fetch the school_type for a given school
+ */
+export async function fetchSchoolType(schoolId: string): Promise<SchoolType> {
+  const { data, error } = await supabase
+    .from('schools')
+    .select('school_type')
+    .eq('id', schoolId)
+    .single();
+
+  if (error || !data) return null;
+  return (data.school_type as SchoolType) || null;
+}
+
+// ==================== Default Learning Areas ====================
+
+interface DefaultSubject {
+  code: string;
+  name: string;
+  gradeLevels: number[];
+  category: 'core' | 'specialized' | 'elective' | 'tle' | 'sports';
+  order: number;
+  isComposite?: boolean;
+  components?: string[];
+}
+
+const ELEMENTARY_DEFAULTS: DefaultSubject[] = [
+  { code: 'MTB', name: 'Mother Tongue', gradeLevels: [1, 2, 3], category: 'core', order: 1 },
+  { code: 'FIL', name: 'Filipino', gradeLevels: [1, 2, 3, 4, 5, 6], category: 'core', order: 2 },
+  { code: 'ENG', name: 'English', gradeLevels: [1, 2, 3, 4, 5, 6], category: 'core', order: 3 },
+  { code: 'MATH', name: 'Mathematics', gradeLevels: [1, 2, 3, 4, 5, 6], category: 'core', order: 4 },
+  { code: 'SCI', name: 'Science', gradeLevels: [3, 4, 5, 6], category: 'core', order: 5 },
+  { code: 'AP', name: 'Araling Panlipunan', gradeLevels: [1, 2, 3, 4, 5, 6], category: 'core', order: 6 },
+  { code: 'ESP', name: 'Edukasyon sa Pagpapakatao', gradeLevels: [1, 2, 3, 4, 5, 6], category: 'core', order: 7 },
+  { code: 'EPP', name: 'EPP/TLE', gradeLevels: [4, 5, 6], category: 'tle', order: 8 },
+  { code: 'MAPEH', name: 'MAPEH', gradeLevels: [1, 2, 3, 4, 5, 6], category: 'core', order: 9, isComposite: true, components: ['Music', 'Arts', 'Physical Education', 'Health'] },
+];
+
+const SECONDARY_DEFAULTS: DefaultSubject[] = [
+  { code: 'FIL', name: 'Filipino', gradeLevels: [7, 8, 9, 10], category: 'core', order: 1 },
+  { code: 'ENG', name: 'English', gradeLevels: [7, 8, 9, 10], category: 'core', order: 2 },
+  { code: 'MATH', name: 'Mathematics', gradeLevels: [7, 8, 9, 10], category: 'core', order: 3 },
+  { code: 'SCI', name: 'Science', gradeLevels: [7, 8, 9, 10], category: 'core', order: 4 },
+  { code: 'AP', name: 'Araling Panlipunan', gradeLevels: [7, 8, 9, 10], category: 'core', order: 5 },
+  { code: 'ESP', name: 'Edukasyon sa Pagpapakatao', gradeLevels: [7, 8, 9, 10], category: 'core', order: 6 },
+  { code: 'TLE', name: 'Technology and Livelihood Education', gradeLevels: [7, 8, 9, 10], category: 'tle', order: 7 },
+  { code: 'MAPEH', name: 'MAPEH', gradeLevels: [7, 8, 9, 10], category: 'core', order: 8, isComposite: true, components: ['Music', 'Arts', 'Physical Education', 'Health'] },
+];
+
+/**
+ * Seed default DepEd learning areas for a school based on its type.
+ * Returns the newly created learning areas.
+ */
+export async function seedDefaultLearningAreas(
+  schoolId: string,
+  schoolType: SchoolType
+): Promise<LearningArea[]> {
+  let subjects: DefaultSubject[] = [];
+
+  if (schoolType === 'elementary') {
+    subjects = ELEMENTARY_DEFAULTS;
+  } else if (schoolType === 'high_school') {
+    subjects = SECONDARY_DEFAULTS;
+  } else if (schoolType === 'integrated') {
+    subjects = [...ELEMENTARY_DEFAULTS, ...SECONDARY_DEFAULTS.map((s, i) => ({
+      ...s,
+      code: `${s.code}-SEC`,
+      order: ELEMENTARY_DEFAULTS.length + i + 1,
+    }))];
+  } else {
+    // Default to elementary if unknown
+    subjects = ELEMENTARY_DEFAULTS;
+  }
+
+  const rows = subjects.map(s => ({
+    school_id: schoolId,
+    code: s.code,
+    name: s.name,
+    grade_levels: s.gradeLevels,
+    category: s.category,
+    display_order: s.order,
+    is_active: true,
+    is_composite: s.isComposite || false,
+    components: s.components || null,
+  }));
+
+  const { data, error } = await supabase
+    .from('learning_areas')
+    .insert(rows)
+    .select();
+
+  if (error) {
+    console.error('[learningAreasServicePostgreSQL] Error seeding default learning areas:', error);
+    throw error;
+  }
+
+  return (data || []).map(transformRowToLearningArea);
+}

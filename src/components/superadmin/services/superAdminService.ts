@@ -164,6 +164,7 @@ export async function createSchool(input: CreateSchoolInput): Promise<{ school_i
         name: input.name,
         code: input.code,
         school_id_number: input.school_id_number,
+        school_type: input.school_type || null,
         address: input.address,
         phone: input.phone,
         email: input.email,

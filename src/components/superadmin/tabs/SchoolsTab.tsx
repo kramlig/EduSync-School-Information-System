@@ -43,6 +43,7 @@ const CreateSchoolModal: React.FC<CreateSchoolModalProps> = ({ isOpen, onClose, 
     name: '',
     code: '',
     school_id_number: '',
+    school_type: 'elementary',
     address: '',
     phone: '',
     email: '',
@@ -136,6 +137,23 @@ const CreateSchoolModal: React.FC<CreateSchoolModalProps> = ({ isOpen, onClose, 
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                     placeholder="e.g., 304567"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    School Type *
+                  </label>
+                  <select
+                    required
+                    value={formData.school_type}
+                    onChange={(e) => setFormData({ ...formData, school_type: e.target.value as CreateSchoolInput['school_type'] })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="elementary">Elementary School</option>
+                    <option value="high_school">High School (JHS)</option>
+                    <option value="senior_high">Senior High School</option>
+                    <option value="integrated">Integrated School (K-12)</option>
+                  </select>
                 </div>
 
                 <div>

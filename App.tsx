@@ -62,6 +62,13 @@ const SchoolFormsDashboard = lazy(() => import('./components/forms/SchoolForms/S
 const SF1Dashboard = lazy(() => import('./components/forms/SchoolForms/SF1Dashboard'));
 const SF2Dashboard = lazy(() => import('./components/forms/SchoolForms/SF2Dashboard'));
 const SF9Dashboard = lazy(() => import('./components/forms/SchoolForms/SF9Dashboard'));
+const SF8Dashboard = lazy(() => import('./components/forms/SchoolForms/SF8Dashboard'));
+const SF5ASHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF5ASHSDashboard'));
+const SF5BSHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF5BSHSDashboard'));
+const SF1SHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF1SHSDashboard'));
+const SF2SHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF2SHSDashboard'));
+const SF9SHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF9SHSDashboard'));
+const SF10Dashboard = lazy(() => import('./components/forms/SF10/SF10Dashboard'));
 const ELLNDashboard = lazy(() => import('./components/forms/ELLN/ELLNDashboard'));
 const ELLNAssessment = lazy(() => import('./components/forms/ELLN/ELLNAssessment'));
 const ELLNResults = lazy(() => import('./components/forms/ELLN/ELLNResults'));
@@ -815,6 +822,13 @@ const App: React.FC = () => {
                         <Route path="/reports/school-forms/sf1" element={<SF1Dashboard session={staffSession} onBack={() => window.history.back()} />} />
                         <Route path="/reports/school-forms/sf2" element={<SF2Dashboard session={staffSession} onBack={() => window.history.back()} />} />
                         <Route path="/reports/school-forms/sf9" element={<SF9Dashboard session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf8" element={<SF8Dashboard session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf5a-shs" element={<SF5ASHSDashboard session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf5b-shs" element={<SF5BSHSDashboard session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf1-shs" element={<SF1SHSDashboard session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf2-shs" element={<SF2SHSDashboard session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf9-shs" element={<SF9SHSDashboard session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf10" element={<SF10Dashboard />} />
                         
                         {/* ELLN Assessment */}
                         <Route path="/reports/elln" element={<ELLNDashboard />} />

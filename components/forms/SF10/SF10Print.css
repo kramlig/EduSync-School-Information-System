@@ -1,0 +1,379 @@
+/**
+ * SF10 Print Stylesheet
+ * 
+ * Matches the official DepEd SF10-ES / SF10-JHS format:
+ * - A4 landscape for scholastic records
+ * - Two school-year blocks per row
+ * - Compact tables with borders
+ * - DepEd header with logo
+ */
+
+@media print {
+  /* Hide screen-only elements */
+  .sf10-no-print {
+    display: none !important;
+  }
+
+  /* Reset page */
+  body {
+    margin: 0;
+    padding: 0;
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .sf10-print-container {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: white !important;
+  }
+
+  /* Page break control */
+  .sf10-page {
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+
+  .sf10-page:last-child {
+    page-break-after: auto;
+  }
+}
+
+/* ============================================================================
+   SF10 FORM STYLES (Screen + Print)
+   ============================================================================ */
+
+.sf10-form {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 10px;
+  color: #000;
+  line-height: 1.2;
+  background: white;
+}
+
+.sf10-form * {
+  box-sizing: border-box;
+}
+
+/* --- Header --- */
+.sf10-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 2px solid #000;
+  position: relative;
+}
+
+.sf10-header-label {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 8px;
+  font-weight: bold;
+}
+
+.sf10-header-logo-left,
+.sf10-header-logo-right {
+  flex: 0 0 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sf10-header-center {
+  flex: 1;
+  text-align: center;
+}
+
+.sf10-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.sf10-header-republic {
+  font-size: 9px;
+  font-style: italic;
+}
+
+.sf10-header-dept {
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.sf10-header-title {
+  font-size: 12px;
+  font-weight: bold;
+  margin-top: 2px;
+}
+
+.sf10-header-subtitle {
+  font-size: 8px;
+  font-style: italic;
+}
+
+/* --- Personal Information --- */
+.sf10-personal-info {
+  border: 1px solid #000;
+  margin-top: 4px;
+}
+
+.sf10-personal-info-header {
+  background: #1a237e;
+  color: white;
+  text-align: center;
+  font-weight: bold;
+  font-size: 9px;
+  padding: 2px;
+}
+
+.sf10-info-row {
+  display: flex;
+  border-bottom: 1px solid #000;
+}
+
+.sf10-info-row:last-child {
+  border-bottom: none;
+}
+
+.sf10-info-cell {
+  flex: 1;
+  padding: 2px 4px;
+  border-right: 1px solid #000;
+  min-height: 18px;
+  display: flex;
+  align-items: center;
+}
+
+.sf10-info-cell:last-child {
+  border-right: none;
+}
+
+.sf10-info-label {
+  font-size: 7px;
+  color: #333;
+  text-transform: uppercase;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.sf10-info-value {
+  font-size: 9px;
+  font-weight: bold;
+  flex: 1;
+  border-bottom: 1px dotted #666;
+  min-width: 60px;
+}
+
+/* --- Eligibility Section --- */
+.sf10-eligibility {
+  border: 1px solid #000;
+  border-top: none;
+}
+
+.sf10-eligibility-header {
+  background: #1a237e;
+  color: white;
+  text-align: center;
+  font-weight: bold;
+  font-size: 9px;
+  padding: 2px;
+}
+
+/* --- Scholastic Record Section --- */
+.sf10-scholastic-section-header {
+  background: #1a237e;
+  color: white;
+  text-align: center;
+  font-weight: bold;
+  font-size: 10px;
+  padding: 3px;
+  margin-top: 6px;
+}
+
+.sf10-scholastic-pair {
+  display: flex;
+  gap: 0;
+  border: 1px solid #000;
+  border-top: none;
+}
+
+.sf10-scholastic-block {
+  flex: 1;
+  border-right: 1px solid #000;
+}
+
+.sf10-scholastic-block:last-child {
+  border-right: none;
+}
+
+/* School info within each block */
+.sf10-school-info {
+  padding: 2px 4px;
+  border-bottom: 1px solid #000;
+  font-size: 8px;
+}
+
+.sf10-school-info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 1px 0;
+}
+
+/* Grade table within each block */
+.sf10-grade-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8px;
+}
+
+.sf10-grade-table th {
+  background: #e8eaf6;
+  border: 1px solid #000;
+  padding: 2px 3px;
+  text-align: center;
+  font-size: 7px;
+  font-weight: bold;
+}
+
+.sf10-grade-table td {
+  border: 1px solid #000;
+  padding: 2px 3px;
+  text-align: center;
+  height: 16px;
+}
+
+.sf10-grade-table td.sf10-subject-name {
+  text-align: left;
+  font-weight: bold;
+  font-size: 7.5px;
+  padding-left: 4px;
+}
+
+.sf10-grade-table td.sf10-sub-subject {
+  text-align: left;
+  font-style: italic;
+  font-size: 7px;
+  padding-left: 12px;
+}
+
+.sf10-grade-table .sf10-gen-avg-row {
+  background: #fff9c4;
+  font-weight: bold;
+}
+
+.sf10-grade-table .sf10-gen-avg-row td {
+  font-size: 8px;
+}
+
+/* Remedial Classes */
+.sf10-remedial-header {
+  background: #ffcc80;
+  font-weight: bold;
+  font-size: 7px;
+  padding: 2px 4px;
+  border: 1px solid #000;
+  border-top: none;
+}
+
+.sf10-remedial-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 7px;
+}
+
+.sf10-remedial-table th,
+.sf10-remedial-table td {
+  border: 1px solid #000;
+  padding: 2px;
+  text-align: center;
+  height: 14px;
+}
+
+.sf10-remedial-table th {
+  background: #ffe0b2;
+  font-size: 6.5px;
+}
+
+/* --- Certification Section --- */
+.sf10-certification {
+  border: 2px solid #000;
+  padding: 8px;
+  margin-top: 8px;
+  font-size: 9px;
+}
+
+.sf10-certification-title {
+  text-align: center;
+  font-weight: bold;
+  font-size: 11px;
+  margin-bottom: 6px;
+  text-decoration: underline;
+}
+
+.sf10-certification-text {
+  line-height: 1.6;
+  text-indent: 24px;
+}
+
+.sf10-certification-underline {
+  display: inline-block;
+  border-bottom: 1px solid #000;
+  min-width: 120px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.sf10-signature-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding: 0 16px;
+}
+
+.sf10-signature-block {
+  text-align: center;
+}
+
+.sf10-signature-line {
+  border-bottom: 1px solid #000;
+  width: 200px;
+  margin-bottom: 2px;
+}
+
+.sf10-signature-label {
+  font-size: 7px;
+  font-style: italic;
+}
+
+/* --- Footer --- */
+.sf10-footer {
+  text-align: right;
+  font-size: 7px;
+  font-style: italic;
+  padding: 4px;
+  color: #666;
+}
+
+/* ============================================================================
+   SCREEN-ONLY OVERRIDES
+   ============================================================================ */
+
+@media screen {
+  .sf10-print-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+
+  .sf10-page {
+    background: white;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 24px;
+  }
+}
