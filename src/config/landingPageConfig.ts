@@ -91,35 +91,15 @@ export const PRICING = {
   }
 };
 
-export const TESTIMONIALS = [
-  {
-    name: 'Principal Maria Santos',
-    role: 'School Principal',
-    school: 'San Pedro Elementary School',
-    location: 'Laguna',
-    quote: 'EduSync cut our form generation time from 2 weeks to 2 hours. The AI insights helped us identify 15 at-risk students early. Game changer!',
-    rating: 5,
-    // TODO: Add photo: '/assets/testimonials/maria-santos.jpg'
-  },
-  {
-    name: 'Registrar Juan dela Cruz',
-    role: 'School Registrar',
-    school: 'Nueva Ecija National High School',
-    location: 'Nueva Ecija',
-    quote: 'The enrollment portal reduced our registration lines by 90%. Parents love applying from home, and we processed 800 students in one week.',
-    rating: 5,
-    // TODO: Add photo: '/assets/testimonials/juan-delacruz.jpg'
-  },
-  {
-    name: 'Dr. Carmen Reyes',
-    role: 'Division Education Supervisor',
-    school: 'DepEd Division Office - Metro Manila',
-    location: 'Metro Manila',
-    quote: 'EduSync\'s EBEIS export feature saved us countless hours during submission deadlines. The data accuracy is perfect.',
-    rating: 5,
-    // TODO: Add photo: '/assets/testimonials/carmen-reyes.jpg'
-  }
-];
+// Testimonials removed — will be populated with real feedback once schools are onboarded
+export const TESTIMONIALS: Array<{
+  name: string;
+  role: string;
+  school: string;
+  location: string;
+  quote: string;
+  rating: number;
+}> = [];
 
 export const STATS = {
   schoolsInPH: '47,000+',
