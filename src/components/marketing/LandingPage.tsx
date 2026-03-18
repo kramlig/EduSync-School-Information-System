@@ -39,9 +39,37 @@ import {
 import './landing-animations.css';
 import { TrialSignupModal } from './TrialSignupModal';
 import EdusyncLogo from '../../../components/EdusyncLogo';
+import { DashboardMockup, PhoneMockup, FormPreview } from './LandingIllustrations';
+
+// Self-contained FAQ item — keeps its own open/close state so toggling
+// doesn't re-render the entire LandingPage and lose scroll position.
+const FAQItem: React.FC<{ question: string; answer: string }> = ({ question, answer }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+      >
+        <span className="font-bold text-lg text-slate-900 dark:text-white">
+          {question}
+        </span>
+        {isOpen ? (
+          <ChevronUpIcon className="w-6 h-6 text-slate-600 dark:text-slate-400 flex-shrink-0" />
+        ) : (
+          <ChevronDownIcon className="w-6 h-6 text-slate-600 dark:text-slate-400 flex-shrink-0" />
+        )}
+      </button>
+      {isOpen && (
+        <div className="px-6 pb-5 text-slate-700 dark:text-slate-300">
+          {answer}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const LandingPage: React.FC = () => {
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -107,45 +135,9 @@ const LandingPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Right: Visual Element */}
+          {/* Right: Dashboard Mockup */}
           <div className="hidden lg:block">
-            <div className="relative">
-              {/* Floating cards animation */}
-              <div className="space-y-4">
-                <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-6 shadow-2xl animate-float">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="w-12 h-12 bg-green-400 rounded-full flex items-center justify-center">
-                      <CheckCircleIcon className="w-7 h-7 text-white" />
-                    </div>
-                    <div>
-                      <p className="font-bold">Form 138 Generated</p>
-                      <p className="text-sm text-blue-200">40 students in 30 seconds</p>
-                    </div>
-                  </div>
-                  <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-                    <div className="h-full w-full bg-gradient-to-r from-green-400 to-blue-500 animate-progress"></div>
-                  </div>
-                </div>
-
-                <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-6 shadow-2xl animate-float delay-300">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold">At-Risk Students Detected</span>
-                    <span className="text-2xl font-bold text-red-300">5</span>
-                  </div>
-                  <p className="text-sm text-blue-200">AI recommends early intervention</p>
-                </div>
-
-                <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl p-6 shadow-2xl animate-float delay-500">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-blue-200">Time Saved This Month</p>
-                      <p className="text-3xl font-bold">127 hours</p>
-                    </div>
-                    <ChartBarIcon className="w-12 h-12 text-yellow-300" />
-                  </div>
-                </div>
-              </div>
-            </div>
+            <DashboardMockup />
           </div>
         </div>
 
@@ -153,7 +145,7 @@ const LandingPage: React.FC = () => {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 mt-24 pt-12 border-t border-white/20">
           <div className="text-center">
             <p className="text-4xl lg:text-5xl font-bold mb-2">47K+</p>
-            <p className="text-blue-200">Schools in PH</p>
+            <p className="text-blue-200">Schools in PH to Serve</p>
           </div>
           <div className="text-center">
             <p className="text-4xl lg:text-5xl font-bold mb-2">80%</p>
@@ -394,7 +386,7 @@ const LandingPage: React.FC = () => {
             Measurable Impact on Your School
           </h2>
           <p className="text-xl text-indigo-100 max-w-3xl mx-auto">
-            Real results from schools using EduSync every day.
+            Built to deliver measurable results for your school.
           </p>
         </div>
 
@@ -421,73 +413,108 @@ const LandingPage: React.FC = () => {
     </section>
   );
 
-  // Social Proof / Testimonials
-  const TestimonialsSection = () => (
-    <section className="py-20 bg-slate-50 dark:bg-slate-900" data-section="testimonials">
+  // Why Trust EduSync / See It In Action
+  const TrustSection = () => (
+    <section className="py-20 bg-slate-50 dark:bg-slate-900" data-section="why-edusync">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16">
           <h2 className="text-4xl lg:text-5xl font-bold mb-4 text-slate-900 dark:text-white">
-            Trusted by Schools Nationwide
+            Built for Philippine Schools
           </h2>
-          <p className="text-xl text-slate-600 dark:text-slate-400">
-            See what educators are saying about EduSync.
+          <p className="text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto">
+            Designed from the ground up for DepEd compliance, Filipino workflows, and the unique needs of K-12 education.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
+        {/* Trust Pillars */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
           {[
             {
-              name: 'Principal Maria Santos',
-              school: 'San Pedro Elementary School',
-              quote: 'EduSync cut our form generation time from 2 weeks to 2 hours. The AI insights helped us identify 15 at-risk students early. Game changer!',
-              rating: 5
+              icon: '🛡️',
+              title: '100% DepEd-Compliant',
+              description: 'Form 137, 138, SF1, SF2, SF5, SF9, SF10, and ELLN — all pixel-perfect to DepEd standards.',
+              gradient: 'from-blue-500 to-indigo-600',
             },
             {
-              name: 'Parent - PTA President Ana Rivera',
-              school: 'Santa Rosa Elementary School',
-              quote: 'The parent portal changed everything! I can check my child\'s grades anytime, pay tuition online, and get instant SMS alerts when she\'s absent. No more going to school just to ask for updates.',
-              rating: 5
+              icon: '📡',
+              title: 'Works Offline',
+              description: 'Progressive Web App architecture means teachers can work even without internet. Data syncs automatically when back online.',
+              gradient: 'from-teal-500 to-cyan-600',
             },
             {
-              name: 'Registrar Juan dela Cruz',
-              school: 'Nueva Ecija National High School',
-              quote: 'The enrollment portal reduced our registration lines by 90%. Parents love applying from home, and we processed 800 students in one week.',
-              rating: 5
+              icon: '🔒',
+              title: 'Secure & Private',
+              description: 'Role-based access control with 6 user levels. Your school data is encrypted and isolated — no cross-school access.',
+              gradient: 'from-slate-600 to-slate-800',
             },
             {
-              name: 'School Bookkeeper Teresa Lopez',
-              school: 'San Miguel National High School',
-              quote: 'Our billing chaos is finally solved. Payment recording takes 5 minutes instead of 30, and parents can upload payment proofs from their phones. We eliminated 90% of payment disputes.',
-              rating: 5
+              icon: '🤖',
+              title: 'AI-Powered Insights',
+              description: 'Gemini AI generates lesson plans and identifies at-risk students automatically, so teachers can focus on teaching.',
+              gradient: 'from-purple-500 to-pink-600',
             },
             {
-              name: 'Division Education Supervisor',
-              school: 'DepEd Division Office - Metro Manila',
-              quote: 'EduSync\'s EBEIS export feature saved us countless hours during submission deadlines. The data accuracy is perfect.',
-              rating: 5
-            }
-          ].map((testimonial, index) => (
-            <div key={index} className="bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-lg border border-slate-200 dark:border-slate-700">
-              <div className="flex gap-1 mb-4">
-                {Array.from({ length: testimonial.rating }).map((_, i) => (
-                  <span key={i} className="text-yellow-400 text-2xl">⭐</span>
-                ))}
+              icon: '👨‍👩‍👧',
+              title: 'Parent Portal Included',
+              description: 'Parents get 24/7 access to grades, attendance, billing, and notifications — reducing office calls dramatically.',
+              gradient: 'from-amber-500 to-orange-600',
+            },
+            {
+              icon: '⚡',
+              title: 'Fast Setup',
+              description: 'Go live in days, not months. Import existing data, configure your school, and start generating forms immediately.',
+              gradient: 'from-green-500 to-emerald-600',
+            },
+          ].map((item, index) => (
+            <div key={index} className="bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-lg border border-slate-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-1 transition-all">
+              <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center text-2xl mb-5 shadow-lg`}>
+                {item.icon}
               </div>
-
-              <p className="text-slate-700 dark:text-slate-300 mb-6 italic">
-                "{testimonial.quote}"
+              <h3 className="text-xl font-bold mb-3 text-slate-900 dark:text-white">
+                {item.title}
+              </h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                {item.description}
               </p>
-
-              <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
-                <p className="font-bold text-slate-900 dark:text-white">
-                  {testimonial.name}
-                </p>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  {testimonial.school}
-                </p>
-              </div>
             </div>
           ))}
+        </div>
+
+        {/* CTA: See It Live — with product mockups */}
+        <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-10 lg:p-16 text-white overflow-hidden">
+          <div className="grid lg:grid-cols-2 gap-10 items-center">
+            {/* Left: text + buttons */}
+            <div className="text-center lg:text-left">
+              <h3 className="text-3xl lg:text-4xl font-bold mb-4">
+                See EduSync In Action
+              </h3>
+              <p className="text-lg text-indigo-100 mb-8 max-w-xl">
+                Book a free live demo and explore the full system with your own data. No commitment, no credit card.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+                <button
+                  onClick={() => window.open('https://calendly.com/edusync/demo', '_blank')}
+                  className="px-8 py-4 bg-white text-indigo-700 rounded-xl font-bold text-lg hover:bg-yellow-300 hover:text-indigo-900 transition-all shadow-xl hover:scale-105"
+                >
+                  Schedule Free Demo
+                </button>
+                <button
+                  onClick={() => setIsTrialModalOpen(true)}
+                  className="px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white rounded-xl font-bold text-lg hover:bg-white/20 transition-all"
+                >
+                  Start 30-Day Free Trial
+                </button>
+              </div>
+            </div>
+
+            {/* Right: Product mockups */}
+            <div className="hidden lg:flex items-center justify-center gap-6">
+              <PhoneMockup />
+              <div className="mt-12">
+                <FormPreview />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -678,30 +705,7 @@ const LandingPage: React.FC = () => {
 
           <div className="space-y-4">
             {faqs.map((faq, index) => (
-              <div
-                key={index}
-                className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden"
-              >
-                <button
-                  onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                  className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                >
-                  <span className="font-bold text-lg text-slate-900 dark:text-white">
-                    {faq.question}
-                  </span>
-                  {openFaq === index ? (
-                    <ChevronUpIcon className="w-6 h-6 text-slate-600 dark:text-slate-400" />
-                  ) : (
-                    <ChevronDownIcon className="w-6 h-6 text-slate-600 dark:text-slate-400" />
-                  )}
-                </button>
-
-                {openFaq === index && (
-                  <div className="px-6 pb-5 text-slate-700 dark:text-slate-300">
-                    {faq.answer}
-                  </div>
-                )}
-              </div>
+              <FAQItem key={index} question={faq.question} answer={faq.answer} />
             ))}
           </div>
         </div>
@@ -717,7 +721,7 @@ const LandingPage: React.FC = () => {
           Ready to Transform Your School?
         </h2>
         <p className="text-xl lg:text-2xl mb-8 text-indigo-100">
-          Join hundreds of schools already using EduSync. Start your free 30-day trial today—no credit card required.
+          Start your free 30-day trial today — no credit card required. Experience the full power of EduSync.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
@@ -862,7 +866,7 @@ const LandingPage: React.FC = () => {
         {/* Bottom Bar */}
         <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm">
-            © 2025 EduSync. All rights reserved.
+            © 2026 EduSync. All rights reserved.
           </p>
           <div className="flex items-center gap-6 text-sm">
             <a href="https://facebook.com/edusync" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
@@ -883,14 +887,8 @@ const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900">
       {/* Navigation Bar - Notebook paper style with alternating blue/red lines */}
-      <nav 
-        className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm"
-        style={{
-          backgroundImage: 'repeating-linear-gradient(0deg, transparent 0, transparent 19px, #4169e1 19px, #4169e1 20px, transparent 20px, transparent 39px, #ef4444 39px, #ef4444 40px)',
-          backgroundSize: '100% 40px'
-        } as React.CSSProperties}
-      >
-        <div className="max-w-7xl mx-auto px-6 py-5 overflow-visible">
+      <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between gap-4">
             {/* Logo - Responsive: Text on desktop, icon only on mobile */}
             <div className="flex items-center flex-shrink-0">
@@ -902,35 +900,32 @@ const LandingPage: React.FC = () => {
               </div>
             </div>
             
-            {/* Desktop Navigation Links - Handwriting style aligned to notebook lines */}
-            <div className="hidden md:flex items-baseline gap-8" style={{ paddingTop: '6px' }}>
+            {/* Desktop Navigation Links */}
+            <div className="hidden md:flex items-center gap-8">
               <button
                 onClick={() => {
                   const section = document.querySelector('[data-section="solution"]');
                   section?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="text-base font-semibold text-slate-700 hover:text-blue-600 transition-colors"
-                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
+                className="text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-colors"
               >
                 Features
               </button>
               <button
                 onClick={() => {
-                  const section = document.querySelector('[data-section="testimonials"]');
+                  const section = document.querySelector('[data-section="why-edusync"]');
                   section?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="text-base font-semibold text-slate-700 hover:text-blue-600 transition-colors"
-                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
+                className="text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-colors"
               >
-                Testimonials
+                Why EduSync
               </button>
               <button
                 onClick={() => {
                   const section = document.querySelector('[data-section="pricing"]');
                   section?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="text-base font-semibold text-slate-700 hover:text-blue-600 transition-colors"
-                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
+                className="text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-colors"
               >
                 Pricing
               </button>
@@ -939,22 +934,19 @@ const LandingPage: React.FC = () => {
                   const section = document.querySelector('[data-section="faq"]');
                   section?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="text-base font-semibold text-slate-700 hover:text-blue-600 transition-colors"
-                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
+                className="text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-colors"
               >
                 FAQ
               </button>
               <button
                 onClick={() => window.location.href = '/admin'}
-                className="text-base font-semibold text-slate-700 hover:text-blue-600 transition-colors cursor-pointer"
-                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
+                className="text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer"
               >
                 Login
               </button>
               <button
                 onClick={() => setIsTrialModalOpen(true)}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white rounded-lg text-base font-bold hover:shadow-lg hover:scale-105 transition-all"
-                style={{ fontFamily: '"Comic Sans MS", "Segoe Print", cursive' }}
+                className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm font-bold hover:shadow-lg hover:scale-105 transition-all"
               >
                 Start Free Trial
               </button>
@@ -993,13 +985,13 @@ const LandingPage: React.FC = () => {
               </button>
               <button
                 onClick={() => {
-                  const section = document.querySelector('[data-section="testimonials"]');
+                  const section = document.querySelector('[data-section="why-edusync"]');
                   section?.scrollIntoView({ behavior: 'smooth' });
                   setIsMobileMenuOpen(false);
                 }}
                 className="block w-full text-left py-2 text-base font-semibold text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
               >
-                Testimonials
+                Why EduSync
               </button>
               <button
                 onClick={() => {
@@ -1048,7 +1040,7 @@ const LandingPage: React.FC = () => {
       <ProblemSection />
       <SolutionSection />
       <ImpactSection />
-      <TestimonialsSection />
+      <TrustSection />
       <PricingSection />
       <FAQSection />
       <FinalCTASection />
