@@ -627,6 +627,7 @@ const UserManagementPanel: React.FC = () => {
             setCurrentPage(1);
           }}
           className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          title="Filter by role"
         >
           <option value="all">All Roles</option>
           <option value="admin">Admins</option>
@@ -838,6 +839,7 @@ const UserManagementPanel: React.FC = () => {
                       value={teacherForm.firstName}
                       onChange={(e) => setTeacherForm(f => ({...f, firstName: e.target.value}))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="First name"
                     />
                   </div>
                   <div>
@@ -848,6 +850,7 @@ const UserManagementPanel: React.FC = () => {
                       value={teacherForm.lastName}
                       onChange={(e) => setTeacherForm(f => ({...f, lastName: e.target.value}))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Last name"
                     />
                   </div>
                 </div>
@@ -859,6 +862,7 @@ const UserManagementPanel: React.FC = () => {
                     value={teacherForm.middleName}
                     onChange={(e) => setTeacherForm(f => ({...f, middleName: e.target.value}))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Middle name"
                   />
                 </div>
                 
@@ -975,6 +979,7 @@ const UserManagementPanel: React.FC = () => {
                       value={studentForm.firstName}
                       onChange={(e) => setStudentForm(f => ({...f, firstName: e.target.value}))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      placeholder="First name"
                     />
                   </div>
                   <div>
@@ -985,6 +990,7 @@ const UserManagementPanel: React.FC = () => {
                       value={studentForm.lastName}
                       onChange={(e) => setStudentForm(f => ({...f, lastName: e.target.value}))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      placeholder="Last name"
                     />
                   </div>
                 </div>
@@ -996,6 +1002,7 @@ const UserManagementPanel: React.FC = () => {
                     value={studentForm.middleName}
                     onChange={(e) => setStudentForm(f => ({...f, middleName: e.target.value}))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    placeholder="Middle name"
                   />
                 </div>
                 
@@ -1007,6 +1014,7 @@ const UserManagementPanel: React.FC = () => {
                       value={studentForm.gradeLevel}
                       onChange={(e) => setStudentForm(f => ({...f, gradeLevel: Number(e.target.value)}))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      title="Grade level"
                     >
                       {[7, 8, 9, 10, 11, 12].map(grade => (
                         <option key={grade} value={grade}>Grade {grade}</option>
@@ -1021,6 +1029,7 @@ const UserManagementPanel: React.FC = () => {
                       value={studentForm.birthdate}
                       onChange={(e) => setStudentForm(f => ({...f, birthdate: e.target.value}))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      title="Birthdate"
                     />
                   </div>
                 </div>
@@ -1113,6 +1122,7 @@ const UserManagementPanel: React.FC = () => {
                       value={registrarForm.firstName}
                       onChange={(e) => setRegistrarForm(f => ({...f, firstName: e.target.value}))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      placeholder="First name"
                     />
                   </div>
                   <div>
@@ -1123,6 +1133,7 @@ const UserManagementPanel: React.FC = () => {
                       value={registrarForm.lastName}
                       onChange={(e) => setRegistrarForm(f => ({...f, lastName: e.target.value}))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      placeholder="Last name"
                     />
                   </div>
                 </div>

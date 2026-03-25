@@ -1646,6 +1646,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
                     accept="image/jpeg,image/jpg,image/png"
                     className="hidden"
                     onChange={handleFileSelect}
+                    title="Upload student photo"
                   />
                 </div>
               </div>

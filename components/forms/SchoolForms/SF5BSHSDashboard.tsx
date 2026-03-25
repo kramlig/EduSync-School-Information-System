@@ -10,7 +10,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
-import { useSHSStudents, useSHSCompletion, SHS_TRACKS, SHS_STRANDS, getTrackName, getStrandName } from '../../../src/hooks/useSHSPostgreSQL';
+import { useSHSStudents, useSHSCompletion, SHS_TRACKS, SHS_STRANDS } from '../../../src/hooks/useSHSPostgreSQL';
 import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
 import type { AuthUser, StudentUser, ParentUser } from '../../../types';
 import BackButton from '../../BackButton';
@@ -28,12 +28,12 @@ interface SF5BSHSDashboardProps {
   onBack: () => void;
 }
 
-// Completion status options
-const COMPLETION_STATUS_OPTIONS = [
-  { value: 'eligible', label: 'Eligible for Graduation', color: 'bg-green-100 text-green-800', icon: CheckCircleIcon },
-  { value: 'pending', label: 'Requirements Pending', color: 'bg-yellow-100 text-yellow-800', icon: ExclamationTriangleIcon },
-  { value: 'incomplete', label: 'Incomplete', color: 'bg-red-100 text-red-800', icon: ExclamationTriangleIcon },
-];
+// Completion status options (kept for reference)
+// const COMPLETION_STATUS_OPTIONS = [
+//   { value: 'eligible', label: 'Eligible for Graduation', color: 'bg-green-100 text-green-800', icon: CheckCircleIcon },
+//   { value: 'pending', label: 'Requirements Pending', color: 'bg-yellow-100 text-yellow-800', icon: ExclamationTriangleIcon },
+//   { value: 'incomplete', label: 'Incomplete', color: 'bg-red-100 text-red-800', icon: ExclamationTriangleIcon },
+// ];
 
 // CSV Export helper
 const exportToCSV = (data: any[], filename: string) => {
@@ -61,9 +61,9 @@ const exportToCSV = (data: any[], filename: string) => {
   document.body.removeChild(link);
 };
 
-const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session, onBack }) => {
-  const { schoolId, settings, school } = useSchoolContext();
-  const currentSchoolYear = settings?.currentSchoolYear || '2025-2026';
+const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session: _session, onBack: _onBack }) => {
+  const { schoolId } = useSchoolContext();
+  const currentSchoolYear = '2025-2026';
 
   // State
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>(currentSchoolYear);
@@ -77,8 +77,8 @@ const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session, onBack }) 
   const PAGE_SIZE = 50;
 
   // Data hooks - Focus on Grade 12 students (graduating)
-  const { students, statistics, loading: studentsLoading } = useSHSStudents({
-    schoolId,
+  const { students, statistics: _statistics, loading: studentsLoading } = useSHSStudents({
+    schoolId: schoolId || undefined,
     gradeLevel: 12, // SF5B focuses on Grade 12 (graduating students)
     track: selectedTrack || undefined,
     strand: selectedStrand || undefined,
@@ -86,18 +86,18 @@ const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session, onBack }) 
   });
 
   const { requirements, loading: requirementsLoading } = useSHSCompletion({
-    schoolId,
+    schoolId: schoolId || undefined,
     schoolYear: selectedSchoolYear,
     eligibleOnly: filterEligible === 'eligible',
   });
 
-  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId: schoolId || undefined });
 
   const loading = studentsLoading || sectionsLoading || requirementsLoading;
 
   // Filter Grade 12 sections only
   const grade12Sections = useMemo(() => {
-    return sections.filter(s => s.grade_level === 12);
+    return sections.filter(s => s.gradeLevel === 12);
   }, [sections]);
 
   // Available strands based on selected track
@@ -243,7 +243,7 @@ const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session, onBack }) 
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <BackButton onClick={onBack} />
+            <BackButton />
             <div>
               <h1 className="text-2xl font-bold text-slate-800">SF5B-SHS</h1>
               <p className="text-sm text-slate-600">Learners with Complete SHS Requirements</p>
@@ -329,6 +329,7 @@ const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session, onBack }) 
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">School Year</label>
               <select
+                title="School Year"
                 value={selectedSchoolYear}
                 onChange={(e) => setSelectedSchoolYear(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -343,6 +344,7 @@ const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session, onBack }) 
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Track</label>
               <select
+                title="Track"
                 value={selectedTrack ?? ''}
                 onChange={(e) => setSelectedTrack(e.target.value || null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -358,6 +360,7 @@ const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session, onBack }) 
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Strand</label>
               <select
+                title="Strand"
                 value={selectedStrand ?? ''}
                 onChange={(e) => setSelectedStrand(e.target.value || null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -373,6 +376,7 @@ const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session, onBack }) 
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Section</label>
               <select
+                title="Section"
                 value={selectedSection ?? ''}
                 onChange={(e) => setSelectedSection(e.target.value || null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -388,6 +392,7 @@ const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session, onBack }) 
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Status</label>
               <select
+                title="Status"
                 value={filterEligible}
                 onChange={(e) => setFilterEligible(e.target.value as 'all' | 'eligible' | 'pending')}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -516,7 +521,7 @@ const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session, onBack }) 
                   Requirements Checklist ({filteredStudents.length} students)
                 </span>
               </div>
-              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 500px)' }}>
+              <div className="overflow-auto max-h-[calc(100vh-500px)]">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 sticky top-0 z-10">
                     <tr>
@@ -600,7 +605,7 @@ const SF5BSHSDashboard: React.FC<SF5BSHSDashboardProps> = ({ session, onBack }) 
                   Students ({filteredStudents.length})
                 </span>
               </div>
-              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 500px)' }}>
+              <div className="overflow-auto max-h-[calc(100vh-500px)]">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 sticky top-0 z-10">
                     <tr>

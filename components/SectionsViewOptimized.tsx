@@ -41,10 +41,8 @@ const SectionsViewOptimized: React.FC<SectionsViewOptimizedProps> = ({ session }
   const currentSchoolYear = useMemo(() => settings?.schoolYear || '2025-2026', [settings]);
   
   // Memoize feature flags
-  const USE_POSTGRESQL = useMemo(
-    () => import.meta.env.VITE_USE_POSTGRESQL === 'true',
-    []
-  );
+  // Feature flag for PostgreSQL migration is always true now
+  // const USE_POSTGRESQL = import.meta.env.VITE_USE_POSTGRESQL === 'true';
 
   // UI State - must be before hook that uses selectedSchoolYear
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -112,7 +110,7 @@ const SectionsViewOptimized: React.FC<SectionsViewOptimizedProps> = ({ session }
       acc[grade].sections++;
       acc[grade].students += s.studentCount || 0;
       return acc;
-    }, {} as Record<number, { sections: number; students: number }>);
+    }, {} as Record<string | number, { sections: number; students: number }>);
 
     return {
       totalSections,
@@ -202,7 +200,7 @@ const SectionsViewOptimized: React.FC<SectionsViewOptimizedProps> = ({ session }
         const updates = {
           name: sectionToEdit.name,
           gradeLevel: sectionToEdit.gradeLevel,
-          adviserId: sectionToEdit.adviserId || null, // Convert empty string to null
+          adviserId: sectionToEdit.adviserId || undefined, // Convert empty string/null to undefined
           capacity: (sectionToEdit as any).capacity,
           room: (sectionToEdit as any).room
         };
@@ -329,6 +327,7 @@ const SectionsViewOptimized: React.FC<SectionsViewOptimizedProps> = ({ session }
             <select
               value={selectedSchoolYear}
               onChange={(e) => setSelectedSchoolYear(e.target.value)}
+              title="School Year"
               className="px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-white"
             >
               <option value="2024-2025">2024-2025</option>
@@ -343,6 +342,7 @@ const SectionsViewOptimized: React.FC<SectionsViewOptimizedProps> = ({ session }
             <select
               value={selectedGradeLevel}
               onChange={(e) => setSelectedGradeLevel(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+              title="Grade Level"
               className="px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-slate-700 dark:text-white"
             >
               <option value="all">All Grades</option>
@@ -356,6 +356,7 @@ const SectionsViewOptimized: React.FC<SectionsViewOptimizedProps> = ({ session }
           <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
             <button
               onClick={() => setViewMode('cards')}
+              title="Card view"
               className={`p-2 rounded-md transition-colors ${
                 viewMode === 'cards'
                   ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-400 shadow-sm'
@@ -366,6 +367,7 @@ const SectionsViewOptimized: React.FC<SectionsViewOptimizedProps> = ({ session }
             </button>
             <button
               onClick={() => setViewMode('table')}
+              title="Table view"
               className={`p-2 rounded-md transition-colors ${
                 viewMode === 'table'
                   ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-400 shadow-sm'
@@ -813,14 +815,14 @@ const SectionCard: React.FC<{
               onClick={() => onEdit(section)} 
               className="flex-1 flex items-center justify-center gap-1 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 font-medium text-sm py-2 rounded-md hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-colors"
             >
-              <PencilIcon className="w-4 h-4" />
+              <PencilIcon />
               <span>Edit</span>
             </button>
             <button 
               onClick={() => onDelete(section)} 
               className="flex-1 flex items-center justify-center gap-1 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium text-sm py-2 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
             >
-              <TrashIcon className="w-4 h-4" />
+              <TrashIcon />
               <span>Delete</span>
             </button>
           </div>

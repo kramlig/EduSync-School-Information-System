@@ -357,6 +357,7 @@ const SF9SHSDashboard: React.FC<SF9SHSDashboardProps> = ({ session, onBack }) =>
                 value={selectedSchoolYear}
                 onChange={(e) => setSelectedSchoolYear(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                title="School Year"
               >
                 {schoolYears.map(year => (
                   <option key={year} value={year}>{year}</option>
@@ -371,6 +372,7 @@ const SF9SHSDashboard: React.FC<SF9SHSDashboardProps> = ({ session, onBack }) =>
                 value={selectedSemester}
                 onChange={(e) => setSelectedSemester(Number(e.target.value) as 1 | 2)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                title="Semester"
               >
                 <option value={1}>1st Semester</option>
                 <option value={2}>2nd Semester</option>
@@ -384,6 +386,7 @@ const SF9SHSDashboard: React.FC<SF9SHSDashboardProps> = ({ session, onBack }) =>
                 value={selectedGradeLevel ?? ''}
                 onChange={(e) => setSelectedGradeLevel(e.target.value ? Number(e.target.value) as 11 | 12 : null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                title="Grade Level"
               >
                 <option value="">All Grades</option>
                 <option value={11}>Grade 11</option>
@@ -398,6 +401,7 @@ const SF9SHSDashboard: React.FC<SF9SHSDashboardProps> = ({ session, onBack }) =>
                 value={selectedTrack ?? ''}
                 onChange={(e) => setSelectedTrack(e.target.value || null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                title="Track"
               >
                 <option value="">All Tracks</option>
                 {SHS_TRACKS.map(track => (
@@ -413,6 +417,7 @@ const SF9SHSDashboard: React.FC<SF9SHSDashboardProps> = ({ session, onBack }) =>
                 value={selectedStrand ?? ''}
                 onChange={(e) => setSelectedStrand(e.target.value || null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                title="Strand"
               >
                 <option value="">All Strands</option>
                 {availableStrands.map(strand => (
@@ -428,6 +433,7 @@ const SF9SHSDashboard: React.FC<SF9SHSDashboardProps> = ({ session, onBack }) =>
                 value={selectedSection ?? ''}
                 onChange={(e) => setSelectedSection(e.target.value || null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                title="Section"
               >
                 <option value="">All Sections</option>
                 {shsSections.map(section => (
@@ -659,7 +665,7 @@ const SF9SHSDashboard: React.FC<SF9SHSDashboardProps> = ({ session, onBack }) =>
                   Students ({studentsWithGrades.length}) - Click a student to view report card
                 </span>
               </div>
-              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 500px)' }}>
+              <div className="overflow-auto max-h-[calc(100vh-500px)]">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 sticky top-0 z-10">
                     <tr>

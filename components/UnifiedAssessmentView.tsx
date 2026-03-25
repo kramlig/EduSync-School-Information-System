@@ -34,7 +34,7 @@ interface UnifiedAssessmentViewProps {
   hideTabNavigation?: boolean; // NEW: Hide tab navigation when used as detail view
 }
 
-type TabType = 'overview' | 'academic-gradebook' | 'core-values-gradebook' | 'deep-analytics';
+type TabType = 'overview' | 'academic-gradebook' | 'core-values-gradebook' | 'deep-analytics' | 'report-cards';
 type FilterType = 'all' | 'honor' | 'needs-improvement' | 'incomplete';
 
 const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({ 
@@ -50,7 +50,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
   // Load real data from PostgreSQL
   const { students: pgStudents } = useStudentsPostgreSQL({ schoolId });
   const { grades: pgGrades } = useGradesPostgreSQL({ schoolId });
-  const { learningAreas: pgLearningAreas } = useLearningAreasPostgreSQL({ schoolId });
+  const { learningAreas: pgLearningAreas } = useLearningAreasPostgreSQL();
   const { coreValues: pgCoreValues, coreValueGrades: pgCoreValueGrades } = useCoreValuesPostgreSQL(true, schoolId);
   // Load sections without school year filter to get all sections with students
   const { sections: pgSections } = useSectionsPostgreSQL({ schoolId });
@@ -108,9 +108,9 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
   const availableLearningAreas = isTeacherView
     ? learningAreas.filter(la => {
         // Show learning areas applicable to teacher's grade levels
-        return Array.isArray(la.gradeLevel) 
+        return la.gradeLevel 
           ? la.gradeLevel.some(g => teacherGradeLevels.includes(g))
-          : teacherGradeLevels.includes(la.gradeLevel);
+          : true;
       })
     : isStudentView && grades && grades.length > 0
     ? learningAreas.filter(la => {
@@ -129,7 +129,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
     ? students.filter(s => {
         // Teachers can only see students in their specific assigned sections
         return teacherSectionIds.length > 0
-          ? teacherSectionIds.includes(s.sectionId) // Use specific section IDs if available
+          ? teacherSectionIds.includes(s.sectionId!) // Use specific section IDs if available
           : (() => {
               // Fallback to grade level matching if no section IDs
               const studentSection = sections.find(sec => sec.id === s.sectionId);
@@ -670,7 +670,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
       ? students.filter(s => {
           // Teachers can only see students in their specific assigned sections
           return teacherSectionIds.length > 0
-            ? teacherSectionIds.includes(s.sectionId)
+            ? teacherSectionIds.includes(s.sectionId!)
             : (() => {
                 const studentSection = sections.find(sec => sec.id === s.sectionId);
                 return studentSection && teacherGradeLevels.includes(studentSection.gradeLevel);
@@ -872,7 +872,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
       ? students.filter(s => {
           // Teachers can only see students in their specific assigned sections
           return teacherSectionIds.length > 0
-            ? teacherSectionIds.includes(s.sectionId)
+            ? teacherSectionIds.includes(s.sectionId!)
             : (() => {
                 const studentSection = sections.find(sec => sec.id === s.sectionId);
                 return studentSection && teacherGradeLevels.includes(studentSection.gradeLevel);
@@ -1308,6 +1308,7 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
                       {searchQuery && (
                         <button
                           onClick={() => setSearchQuery('')}
+                          title="Clear search"
                           className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                         >
                           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2476,13 +2477,10 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
                       <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
                         {qt.average}%
                       </div>
-                      <div className="w-full flex items-end" style={{ height: '160px' }}>
+                      <div className="w-full flex items-end h-[160px]">
                         <div 
-                          className="w-full bg-gradient-to-t from-indigo-600 to-indigo-400 rounded-t-lg transition-all hover:from-indigo-700 hover:to-indigo-500 shadow-md"
-                          style={{ 
-                            height: `${heightPercent}%`,
-                            minHeight: '20px'
-                          }}
+                          className="w-full bg-gradient-to-t from-indigo-600 to-indigo-400 rounded-t-lg transition-all hover:from-indigo-700 hover:to-indigo-500 shadow-md min-h-[20px]"
+                          style={{ height: `${heightPercent}%` }}
                         />
                       </div>
                       <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
@@ -2630,7 +2628,6 @@ const UnifiedAssessmentView: React.FC<UnifiedAssessmentViewProps> = ({
             </h3>
             <div className="space-y-3">
               {deepAnalytics.subjectPerformance.map((subject, idx) => {
-                const maxTotal = Math.max(...deepAnalytics.subjectPerformance.map(s => s.total));
                 const passingRate = subject.total > 0 ? Math.round((subject.passing / subject.total) * 100) : 0;
                 
                 return (

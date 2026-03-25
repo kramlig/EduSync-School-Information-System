@@ -9,7 +9,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
-import { useSHSStudents, SHS_TRACKS, SHS_STRANDS, getTrackName, getStrandName } from '../../../src/hooks/useSHSPostgreSQL';
+import { useSHSStudents, SHS_TRACKS, SHS_STRANDS, getTrackName } from '../../../src/hooks/useSHSPostgreSQL';
 import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
 import type { AuthUser, StudentUser, ParentUser } from '../../../types';
 import BackButton from '../../BackButton';
@@ -52,9 +52,9 @@ const exportToCSV = (data: any[], filename: string) => {
   document.body.removeChild(link);
 };
 
-const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) => {
-  const { schoolId, settings, school } = useSchoolContext();
-  const currentSchoolYear = settings?.currentSchoolYear || '2025-2026';
+const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session: _session, onBack: _onBack }) => {
+  const { schoolId } = useSchoolContext();
+  const currentSchoolYear = '2025-2026';
 
   // State
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>(currentSchoolYear);
@@ -69,23 +69,23 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
   const PAGE_SIZE = 50;
 
   // Data hooks - SHS only (grades 11-12)
-  const { students, statistics, loading: studentsLoading } = useSHSStudents({
-    schoolId,
+  const { students, loading: studentsLoading } = useSHSStudents({
+    schoolId: schoolId || undefined,
     gradeLevel: selectedGradeLevel || undefined,
     track: selectedTrack || undefined,
     strand: selectedStrand || undefined,
     sectionId: selectedSection || undefined,
   });
 
-  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId: schoolId || undefined });
 
   const loading = studentsLoading || sectionsLoading;
 
   // Filter SHS sections only (Grades 11-12)
   const shsSections = useMemo(() => {
-    let filtered = sections.filter(s => s.grade_level >= 11);
+    let filtered = sections.filter(s => Number(s.gradeLevel) >= 11);
     if (selectedGradeLevel) {
-      filtered = filtered.filter(s => s.grade_level === selectedGradeLevel);
+      filtered = filtered.filter(s => Number(s.gradeLevel) === selectedGradeLevel);
     }
     return filtered;
   }, [sections, selectedGradeLevel]);
@@ -191,20 +191,20 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
     const exportData = filteredStudents.map((s, index) => ({
       'No.': index + 1,
       'LRN': s.lrn,
-      'Last Name': s.lastName || s.name?.split(' ').pop() || '',
-      'First Name': s.firstName || s.name?.split(' ')[0] || '',
-      'Middle Name': s.middleName || '',
+      'Last Name': s.last_name || s.name?.split(' ').pop() || '',
+      'First Name': s.first_name || s.name?.split(' ')[0] || '',
+      'Middle Name': s.middle_name || '',
       'Sex': s.gender || '',
-      'Birth Date': s.birthday || s.birthDate || '',
-      'Age': s.age || '',
+      'Birth Date': (s as any).birthday || (s as any).birth_date || '',
+      'Age': (s as any).age || '',
       'Grade Level': s.grade_level,
       'Section': s.section_name || '',
       'Track': s.shs_track || '',
       'Strand': s.shs_strand || '',
       'Specialization': s.shs_specialization || '',
-      'Parent/Guardian': s.guardianName || '',
-      'Contact': s.parentContact || '',
-      'Address': s.address || '',
+      'Parent/Guardian': (s as any).guardian_name || '',
+      'Contact': (s as any).parent_contact || '',
+      'Address': (s as any).address || '',
     }));
 
     const filename = `SF1-SHS_${selectedSchoolYear}_Sem${selectedSemester}_${new Date().toISOString().split('T')[0]}.csv`;
@@ -222,7 +222,7 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
         {/* Header */}
         <div className="flex items-center justify-between print:hidden">
           <div className="flex items-center gap-4">
-            <BackButton onClick={onBack} />
+            <BackButton />
             <div>
               <h1 className="text-2xl font-bold text-slate-800">SF1-SHS</h1>
               <p className="text-sm text-slate-600">School Register - Senior High School</p>
@@ -251,7 +251,7 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
           <p className="text-xs">Republic of the Philippines • Department of Education</p>
           <h1 className="text-lg font-bold">School Form 1 (SF1) School Register</h1>
           <h2 className="text-base font-semibold">SENIOR HIGH SCHOOL</h2>
-          <p className="text-sm">{school?.name || 'School Name'}</p>
+          <p className="text-sm">{'School Name'}</p>
           <p className="text-sm">School Year {selectedSchoolYear} • Semester {selectedSemester}</p>
         </div>
 
@@ -317,6 +317,7 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">School Year</label>
               <select
+                title="School Year"
                 value={selectedSchoolYear}
                 onChange={(e) => setSelectedSchoolYear(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -331,6 +332,7 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Semester</label>
               <select
+                title="Semester"
                 value={selectedSemester}
                 onChange={(e) => setSelectedSemester(Number(e.target.value) as 1 | 2)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -344,6 +346,7 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Grade Level</label>
               <select
+                title="Grade Level"
                 value={selectedGradeLevel ?? ''}
                 onChange={(e) => setSelectedGradeLevel(e.target.value ? Number(e.target.value) as 11 | 12 : null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -358,6 +361,7 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Track</label>
               <select
+                title="Track"
                 value={selectedTrack ?? ''}
                 onChange={(e) => setSelectedTrack(e.target.value || null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -373,6 +377,7 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Strand</label>
               <select
+                title="Strand"
                 value={selectedStrand ?? ''}
                 onChange={(e) => setSelectedStrand(e.target.value || null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -388,6 +393,7 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Section</label>
               <select
+                title="Section"
                 value={selectedSection ?? ''}
                 onChange={(e) => setSelectedSection(e.target.value || null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -395,7 +401,7 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
                 <option value="">All Sections</option>
                 {shsSections.map(section => (
                   <option key={section.id} value={section.id}>
-                    {section.name} (G{section.grade_level})
+                    {section.name} (G{section.gradeLevel})
                   </option>
                 ))}
               </select>
@@ -517,7 +523,7 @@ const SF1SHSDashboard: React.FC<SF1SHSDashboardProps> = ({ session, onBack }) =>
                   Students ({filteredStudents.length})
                 </span>
               </div>
-              <div className="overflow-auto print:overflow-visible" style={{ maxHeight: 'calc(100vh - 500px)' }}>
+              <div className="overflow-auto print:overflow-visible max-h-[calc(100vh-500px)]">
                 <table className="w-full text-sm print:text-xs">
                   <thead className="bg-slate-50 sticky top-0 z-10 print:bg-slate-200">
                     <tr>

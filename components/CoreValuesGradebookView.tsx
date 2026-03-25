@@ -89,6 +89,20 @@ const CoreValuesGradebookView: React.FC<{
     const debouncedSearchQuery = useDebounce(searchQuery, 500);
     
     const isReadOnly = authUser.role === 'principal';
+    const teacherId = (authUser as any).postgresqlId || authUser.id;
+
+    // Adviser gating: only adviser (or admin-like roles) can edit core values for a section
+    const canEditCoreValues = useMemo(() => {
+      if (['admin', 'principal', 'registrar', 'superadmin'].includes(authUser.role)) {
+        // Principal is read-only by isReadOnly, admin/registrar/superadmin can edit
+        return !isReadOnly;
+      }
+      if (!selectedSectionId || selectedSectionId === 'all') return false;
+      const section = sections.find(s => s.id === selectedSectionId);
+      return section?.adviserId === teacherId;
+    }, [authUser.role, isReadOnly, selectedSectionId, sections, teacherId]);
+
+    const effectiveReadOnly = isReadOnly || !canEditCoreValues;
     const [page, setPage] = useState(1);
     const pageSize = 25;
 
@@ -302,7 +316,7 @@ const CoreValuesGradebookView: React.FC<{
 
     // Bulk action handlers
     const copyQuarterGrades = async (fromQuarter: 'q1' | 'q2' | 'q3' | 'q4', toQuarter: 'q1' | 'q2' | 'q3' | 'q4') => {
-        if (isReadOnly) return;
+        if (effectiveReadOnly) return;
         if (!confirm(`Copy all grades from ${fromQuarter.toUpperCase()} to ${toQuarter.toUpperCase()}?`)) return;
 
         for (const student of filteredStudents) {
@@ -322,7 +336,7 @@ const CoreValuesGradebookView: React.FC<{
     };
 
     const applyGradeToAll = async (quarter: 'q1' | 'q2' | 'q3' | 'q4', coreValueId: string, behavior: string, grade: CoreValueMarking) => {
-        if (isReadOnly) return;
+        if (effectiveReadOnly) return;
         if (!confirm(`Apply "${grade}" to all ${filteredStudents.length} students for this behavior in ${quarter.toUpperCase()}?`)) return;
 
         for (const student of filteredStudents) {
@@ -333,7 +347,7 @@ const CoreValuesGradebookView: React.FC<{
 
     // Quick Fill: Apply selected grade to ALL empty cells for current quarter
     const quickFillAllEmpty = async (grade: CoreValueMarking) => {
-        if (isReadOnly) return;
+        if (effectiveReadOnly) return;
         const targetQuarter = selectedQuarter === 'all' ? getCurrentQuarter() : selectedQuarter;
         
         let count = 0;
@@ -372,7 +386,7 @@ const CoreValuesGradebookView: React.FC<{
 
     // Quick Fill: Apply grade to entire column (all students, one behavior, one quarter)
     const quickFillColumn = async (coreValueId: string, behavior: string, quarter: 'q1' | 'q2' | 'q3' | 'q4', grade: CoreValueMarking) => {
-        if (isReadOnly) return;
+        if (effectiveReadOnly) return;
         if (!confirm(`Set all ${filteredStudents.length} students to "${grade}" for this behavior?`)) return;
         
         for (const student of filteredStudents) {
@@ -382,7 +396,7 @@ const CoreValuesGradebookView: React.FC<{
 
     // Fill Down: Copy grade from first student to all below (for a specific column)
     const fillDown = async (coreValueId: string, behavior: string, quarter: 'q1' | 'q2' | 'q3' | 'q4') => {
-        if (isReadOnly || filteredStudents.length < 2) return;
+        if (effectiveReadOnly || filteredStudents.length < 2) return;
         
         const firstStudent = filteredStudents[0];
         const gradeRecord = gradeMap.get(`${firstStudent.id}-${coreValueId}`);
@@ -702,7 +716,7 @@ const CoreValuesGradebookView: React.FC<{
         behaviorIdx: number,
         quarterIdx: number
     ) => {
-        if (isReadOnly) return;
+        if (effectiveReadOnly) return;
 
         let newStudentIdx = studentIdx;
         let newCvIdx = cvIdx;
@@ -808,6 +822,20 @@ const CoreValuesGradebookView: React.FC<{
     return (
         <div className="space-y-4">
             <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Core Values Gradebook</h1>
+
+            {/* Adviser-only editing notice */}
+            {effectiveReadOnly && !isReadOnly && (
+                <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                    <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <p className="text-sm text-amber-700 dark:text-amber-300">
+                        {!selectedSectionId || selectedSectionId === 'all'
+                            ? 'Select a specific section to edit core values.'
+                            : 'Only the class adviser can edit core values for this section. You are viewing in read-only mode.'}
+                    </p>
+                </div>
+            )}
             
             {/* Progress Overview */}
             {filteredStudents.length > 0 && (
@@ -890,6 +918,7 @@ const CoreValuesGradebookView: React.FC<{
                             value={selectedSectionId}
                             onChange={(e) => setSelectedSectionId(e.target.value as any)}
                             className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white"
+                            title="Select class"
                         >
                             <option value="all">All Classes</option>
                             
@@ -947,6 +976,7 @@ const CoreValuesGradebookView: React.FC<{
                             value={selectedQuarter}
                             onChange={(e) => setSelectedQuarter(e.target.value as any)}
                             className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white"
+                            title="Select quarter"
                         >
                             <option value="all">All Quarters</option>
                             <option value="q1">1st Quarter</option>
@@ -962,6 +992,7 @@ const CoreValuesGradebookView: React.FC<{
                             value={filterByGrade}
                             onChange={(e) => setFilterByGrade(e.target.value as any)}
                             className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white"
+                            title="Filter by grade"
                         >
                             <option value="all">All Grades</option>
                             <option value="empty">Empty Only</option>
@@ -991,8 +1022,8 @@ const CoreValuesGradebookView: React.FC<{
                     </label>
                 </div>
 
-                {/* Bulk Actions - Only for teachers */}
-                {!isReadOnly && (
+                {/* Bulk Actions - Only for advisers/admins */}
+                {!effectiveReadOnly && (
                     <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                         <h3 className="font-semibold text-slate-800 dark:text-white text-sm mb-3">Bulk Actions</h3>
                         
@@ -1109,7 +1140,7 @@ const CoreValuesGradebookView: React.FC<{
 
             {/* Spreadsheet Table */}
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
-                <div className="overflow-x-auto" style={{ maxHeight: '70vh' }}>
+                <div className="overflow-x-auto max-h-[70vh]">
                     <table className={`min-w-full border-collapse ${compactView ? 'text-[10px]' : 'text-xs'}`}>
                         <thead className="sticky top-0 z-20">
                             {/* Core Values Header Row - One header per behavior */}
@@ -1180,7 +1211,7 @@ const CoreValuesGradebookView: React.FC<{
                                                     <div className="flex flex-col items-center gap-0.5">
                                                         <span>{quarter}</span>
                                                         {/* Quick Fill Column Buttons */}
-                                                        {!isReadOnly && (
+                                                        {!effectiveReadOnly && (
                                                             <div className="flex gap-0.5">
                                                                 {MARKING_OPTIONS.map(opt => (
                                                                     <button
@@ -1250,7 +1281,7 @@ const CoreValuesGradebookView: React.FC<{
                                                 
                                                 // Quick Fill Mode: Click to instantly set grade
                                                 const handleCellClick = () => {
-                                                    if (quickFillMode && !isReadOnly) {
+                                                    if (quickFillMode && !effectiveReadOnly) {
                                                         handleMarkingChange(student.id, cv.id, quarter, behavior, selectedQuickGrade);
                                                     }
                                                 };
@@ -1266,11 +1297,11 @@ const CoreValuesGradebookView: React.FC<{
                                                         } ${
                                                             isSaving ? 'opacity-60' : ''
                                                         } ${
-                                                            quickFillMode && !isReadOnly ? 'cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/30' : ''
+                                                            quickFillMode && !effectiveReadOnly ? 'cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/30' : ''
                                                         }`}
                                                     >
                                                         <div className="relative">
-                                                            {quickFillMode && !isReadOnly ? (
+                                                            {quickFillMode && !effectiveReadOnly ? (
                                                                 // Quick Fill Mode: Show clickable button instead of dropdown
                                                                 <button
                                                                     type="button"
@@ -1288,7 +1319,8 @@ const CoreValuesGradebookView: React.FC<{
                                                                     value={marking ?? ''}
                                                                     onChange={(e) => handleMarkingChange(student.id, cv.id, quarter, behavior, e.target.value)}
                                                                     onKeyDown={(e) => handleKeyDown(e, studentIdx, cvIdx, behaviorIdx, quarterIdx)}
-                                                                    disabled={isReadOnly}
+                                                                    disabled={effectiveReadOnly}
+                                                                    title="Behavior marking"
                                                                     className={`w-full px-1 text-center font-bold border-0 focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 cursor-pointer ${
                                                                         compactView ? 'py-0.5 text-[10px]' : 'py-1 text-xs'
                                                                     } ${getMarkingColor(marking)}`}

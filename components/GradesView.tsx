@@ -240,6 +240,7 @@ const GradeCell: React.FC<{
       tabIndex={tabIndex}
       disabled={disabled}
       className="w-full p-1 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-center disabled:bg-slate-100 dark:disabled:bg-slate-700/50"
+      title="Grade value"
     />
   );
 });
@@ -1152,6 +1153,7 @@ const GradesView: React.FC<GradesViewProps> = ({
                 value={selectedSectionId}
                 onChange={(e) => setSelectedSectionId(e.target.value as any)}
                 className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                title="Class"
               >
                 <option value="all">All</option>
                 {visibleSections.map(s => (
@@ -1174,6 +1176,7 @@ const GradesView: React.FC<GradesViewProps> = ({
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortType)}
                 className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                title="Sort by"
               >
                 <option value="name">Name</option>
                 <option value="average">Average Grade</option>
@@ -1256,6 +1259,7 @@ const GradesView: React.FC<GradesViewProps> = ({
                     checked={selectedStudentIds.size === pagedStudents.length && pagedStudents.length > 0}
                     onChange={toggleSelectAll}
                     className="w-4 h-4 text-indigo-600 bg-white border-slate-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600 cursor-pointer"
+                    title="Select all students"
                   />
                 </th>
               )}
@@ -1284,6 +1288,7 @@ const GradesView: React.FC<GradesViewProps> = ({
                           checked={selectedStudentIds.has(student.id)}
                           onChange={() => toggleStudentSelection(student.id)}
                           className="w-4 h-4 text-indigo-600 bg-white border-slate-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600 cursor-pointer"
+                          title="Select student"
                         />
                       </td>
                     )}

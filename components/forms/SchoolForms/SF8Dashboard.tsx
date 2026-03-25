@@ -11,6 +11,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
+import { useSchoolSettingsPostgreSQL } from '../../../src/hooks/useSchoolSettingsPostgreSQL';
 import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
 import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
 import { 
@@ -20,18 +21,15 @@ import {
   type StudentHealthRecord,
   type HealthRecordInput 
 } from '../../../src/hooks/useStudentHealthPostgreSQL';
-import type { AuthUser, StudentUser, ParentUser, Student, Section } from '../../../types';
+import type { AuthUser, StudentUser, ParentUser, Student } from '../../../types';
 import BackButton from '../../BackButton';
 import { 
   HeartIcon,
   UsersIcon,
   ChartBarIcon,
   ArrowDownTrayIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon,
   PlusIcon,
   PencilIcon,
-  DocumentTextIcon,
   CheckCircleIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -46,7 +44,7 @@ interface SF8DashboardProps {
 }
 
 // Grade level display helper
-const getGradeLevelDisplay = (gradeLevel: number | undefined): string => {
+const getGradeLevelDisplay = (gradeLevel: number | string | undefined): string => {
   if (gradeLevel === undefined || gradeLevel === null) return 'N/A';
   if (gradeLevel === 0) return 'Kinder';
   return `Grade ${gradeLevel}`;
@@ -96,9 +94,10 @@ const exportToCSV = (data: any[], filename: string) => {
   document.body.removeChild(link);
 };
 
-const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
-  const { schoolId, settings } = useSchoolContext();
-  const currentSchoolYear = settings?.currentSchoolYear || '2025-2026';
+const SF8Dashboard: React.FC<SF8DashboardProps> = ({ onBack: _onBack }) => {
+  const { schoolId } = useSchoolContext();
+  const { settings } = useSchoolSettingsPostgreSQL({ schoolId: schoolId || undefined });
+  const currentSchoolYear = settings?.schoolYear || '2025-2026';
   
   // Pagination constants
   const PAGE_SIZE = 50;
@@ -125,18 +124,18 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
   }, [toast]);
   
   // Hooks
-  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
-  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId: schoolId || undefined });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId: schoolId || undefined });
   const { 
     healthRecords, 
     loading: healthLoading, 
     statistics,
     createHealthRecord,
     updateHealthRecord,
-    deleteHealthRecord,
+    deleteHealthRecord: _deleteHealthRecord,
     refresh
   } = useStudentHealthPostgreSQL({
-    schoolId,
+    schoolId: schoolId || undefined,
     schoolYear: selectedSchoolYear,
     assessmentPeriod,
     gradeLevel: selectedGradeLevel || undefined,
@@ -148,14 +147,14 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
 
   // Filter students based on selection
   const filteredStudents = useMemo(() => {
-    let result = students.filter(s => s.status === 'active' || !s.status);
+    let result = students.filter(s => (s as any).status === 'active' || !(s as any).status);
     
     if (selectedGradeLevel !== null) {
-      result = result.filter(s => s.gradeLevel === selectedGradeLevel || s.grade_level === selectedGradeLevel);
+      result = result.filter(s => s.gradeLevel === selectedGradeLevel);
     }
     
     if (selectedSection) {
-      result = result.filter(s => s.sectionId === selectedSection || s.section_id === selectedSection);
+      result = result.filter(s => s.sectionId === selectedSection);
     }
     
     if (searchQuery) {
@@ -196,15 +195,16 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
   }, [filteredStudents, getStudentHealthRecord]);
 
   // Available grade levels
-  const gradeLevels = useMemo(() => {
-    const levels = new Set(students.map(s => s.gradeLevel || s.grade_level).filter(Boolean));
-    return Array.from(levels).sort((a, b) => Number(a) - Number(b)) as number[];
-  }, [students]);
+  // Available grade levels (for future use)
+  // const _gradeLevels = useMemo(() => {
+  //   const levels = new Set(students.map(s => s.gradeLevel).filter(Boolean));
+  //   return Array.from(levels).sort((a, b) => Number(a) - Number(b)) as number[];
+  // }, [students]);
 
   // Filtered sections based on grade level
   const filteredSections = useMemo(() => {
     if (!selectedGradeLevel) return sections;
-    return sections.filter(s => s.grade_level === selectedGradeLevel);
+    return sections.filter(s => s.gradeLevel === selectedGradeLevel);
   }, [sections, selectedGradeLevel]);
 
   // Handle opening entry modal
@@ -248,7 +248,7 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <BackButton onClick={onBack} />
+            <BackButton />
             <div>
               <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
                 <HeartIcon className="h-8 w-8 text-rose-600" />
@@ -385,6 +385,7 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
               <select
                 value={selectedSchoolYear}
                 onChange={(e) => setSelectedSchoolYear(e.target.value)}
+                title="School Year"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 {schoolYears.map(year => (
@@ -399,6 +400,7 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
               <select
                 value={assessmentPeriod}
                 onChange={(e) => setAssessmentPeriod(e.target.value as 'beginning' | 'end')}
+                title="Assessment Period"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="beginning">Beginning of SY</option>
@@ -415,6 +417,7 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
                   setSelectedGradeLevel(e.target.value ? Number(e.target.value) : null);
                   setSelectedSection(null);
                 }}
+                title="Grade Level"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">All Grades</option>
@@ -431,12 +434,13 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
               <select
                 value={selectedSection ?? ''}
                 onChange={(e) => setSelectedSection(e.target.value || null)}
+                title="Section"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">All Sections</option>
                 {filteredSections.map(section => (
                   <option key={section.id} value={section.id}>
-                    {section.name} ({getGradeLevelDisplay(section.grade_level)})
+                    {section.name} ({getGradeLevelDisplay(section.gradeLevel)})
                   </option>
                 ))}
               </select>
@@ -486,7 +490,7 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
         </div>
 
         {/* Content Area */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 320px)' }}>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col max-h-[calc(100vh-320px)]">
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -528,7 +532,7 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
                   ) : (
                     paginatedStudents.map((student) => {
                       const record = getStudentHealthRecord(student.id);
-                      const section = sections.find(s => s.id === (student.sectionId || student.section_id));
+                      const section = sections.find(s => s.id === student.sectionId);
                       
                       return (
                         <tr key={student.id} className="hover:bg-slate-50">
@@ -537,7 +541,7 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
                             <span className="text-xs text-slate-400 ml-2">({student.lrn})</span>
                           </td>
                           <td className="px-3 py-1.5 text-slate-600">
-                            {getGradeLevelDisplay(student.gradeLevel || student.grade_level)}
+                            {getGradeLevelDisplay(student.gradeLevel)}
                             {section && ` - ${section.name}`}
                           </td>
                           <td className="px-3 py-1.5 text-center">
@@ -611,6 +615,7 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
                     <button
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
+                      title="Previous page"
                       className="p-1 text-slate-600 hover:bg-slate-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <ChevronLeftIcon className="h-4 w-4" />
@@ -621,6 +626,7 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
                     <button
                       onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                       disabled={currentPage === totalPages}
+                      title="Next page"
                       className="p-1 text-slate-600 hover:bg-slate-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <ChevronRightIcon className="h-4 w-4" />
@@ -810,6 +816,7 @@ const SF8Dashboard: React.FC<SF8DashboardProps> = ({ session, onBack }) => {
             <span className="flex-1">{toast.message}</span>
             <button 
               onClick={() => setToast(null)} 
+              title="Dismiss"
               className="p-1 hover:bg-white/20 rounded"
             >
               <XMarkIcon className="h-4 w-4" />
@@ -835,9 +842,9 @@ interface HealthEntryModalProps {
 const HealthEntryModal: React.FC<HealthEntryModalProps> = ({
   student,
   existingRecord,
-  schoolId,
-  schoolYear,
-  assessmentPeriod,
+  schoolId: _schoolId,
+  schoolYear: _schoolYear,
+  assessmentPeriod: _assessmentPeriod,
   onSave,
   onClose
 }) => {
@@ -915,6 +922,7 @@ const HealthEntryModal: React.FC<HealthEntryModalProps> = ({
             </div>
             <button
               onClick={onClose}
+              title="Close"
               className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
             >
               <XMarkIcon className="h-5 w-5" />
@@ -974,6 +982,7 @@ const HealthEntryModal: React.FC<HealthEntryModalProps> = ({
                   <select
                     value={formData.vision_screening}
                     onChange={(e) => setFormData({ ...formData, vision_screening: e.target.value })}
+                    title="Vision Screening"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Normal">Normal</option>
@@ -986,6 +995,7 @@ const HealthEntryModal: React.FC<HealthEntryModalProps> = ({
                   <select
                     value={formData.hearing_screening}
                     onChange={(e) => setFormData({ ...formData, hearing_screening: e.target.value })}
+                    title="Hearing Screening"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Normal">Normal</option>
@@ -998,6 +1008,7 @@ const HealthEntryModal: React.FC<HealthEntryModalProps> = ({
                   <select
                     value={formData.oral_health_screening}
                     onChange={(e) => setFormData({ ...formData, oral_health_screening: e.target.value })}
+                    title="Oral Health Screening"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="No Cavities">No Cavities</option>
@@ -1012,6 +1023,7 @@ const HealthEntryModal: React.FC<HealthEntryModalProps> = ({
                   <select
                     value={formData.skin_screening}
                     onChange={(e) => setFormData({ ...formData, skin_screening: e.target.value })}
+                    title="Skin Screening"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Normal">Normal</option>
@@ -1029,7 +1041,8 @@ const HealthEntryModal: React.FC<HealthEntryModalProps> = ({
                   <label className="block text-xs text-slate-500 mb-1">Status</label>
                   <select
                     value={formData.deworming_status}
-                    onChange={(e) => setFormData({ ...formData, deworming_status: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, deworming_status: e.target.value as 'Completed' | 'Partial' | 'Not Administered' })}
+                    title="Deworming Status"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Not Administered">Not Administered</option>
@@ -1043,6 +1056,7 @@ const HealthEntryModal: React.FC<HealthEntryModalProps> = ({
                     type="date"
                     value={formData.deworming_1st_dose}
                     onChange={(e) => setFormData({ ...formData, deworming_1st_dose: e.target.value })}
+                    title="1st Dose Date"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -1052,6 +1066,7 @@ const HealthEntryModal: React.FC<HealthEntryModalProps> = ({
                     type="date"
                     value={formData.deworming_2nd_dose}
                     onChange={(e) => setFormData({ ...formData, deworming_2nd_dose: e.target.value })}
+                    title="2nd Dose Date"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -1098,14 +1113,15 @@ const HealthEntryModal: React.FC<HealthEntryModalProps> = ({
             </div>
             
             {/* Menarche (for female students) */}
-            {(student.sex === 'Female' || student.gender === 'Female') && (
+            {student.sex === 'Female' && (
               <div>
                 <h3 className="text-sm font-medium text-slate-700 mb-3">Menarche (Female Students)</h3>
                 <div>
                   <label className="block text-xs text-slate-500 mb-1">Menarche Status</label>
                   <select
                     value={formData.menarche_status}
-                    onChange={(e) => setFormData({ ...formData, menarche_status: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, menarche_status: e.target.value as 'N/A' | 'Yes' | 'No' })}
+                    title="Menarche Status"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="N/A">N/A</option>

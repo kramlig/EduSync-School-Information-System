@@ -6,6 +6,18 @@
   box-sizing: border-box;
 }
 
+/* Initial hidden state for JS-toggled sections */
+#actions-section,
+#current-student-section,
+#tab-extract {
+  display: none;
+}
+
+.help-text-centered {
+  margin-top: 12px;
+  text-align: center;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
   font-size: 14px;
