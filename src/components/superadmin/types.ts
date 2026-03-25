@@ -14,7 +14,7 @@ export interface School {
   email?: string;
   principal_name?: string;
   status: 'active' | 'inactive';
-  division_id?: string;
+  division_id?: string | null;
   division_name?: string;
   region?: string;
   district?: string;

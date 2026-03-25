@@ -49,6 +49,7 @@ async function sendEmail(emailData) {
         email: fromEmail,
         name: fromName,
       },
+      replyTo: emailData.replyTo || 'edusyncph@gmail.com',
       subject: emailData.subject,
       text: emailData.text || stripHtmlTags(emailData.html),
       html: emailData.html,
@@ -206,7 +207,7 @@ const EmailTemplates = {
             <p style="text-align: center; color: #6b7280;">Overall Average</p>
             
             <div style="text-align: center;">
-              <a href="https://edusync-sis.web.app/grades" class="button">
+              <a href="https://edusync.ph/grades" class="button">
                 View Full Report Card
               </a>
             </div>
@@ -227,7 +228,7 @@ const EmailTemplates = {
           <div class="footer">
             <p>This is an automated message from EduSync School Information System</p>
             <p>You are receiving this because you have enabled grade alert notifications</p>
-            <p><a href="https://edusync-sis.web.app/profile" style="color: #667eea;">
+            <p><a href="https://edusync.ph/profile" style="color: #667eea;">
                Update notification preferences
             </a></p>
           </div>
@@ -246,7 +247,7 @@ ${gradeSummary.subjects.map(s => `- ${s.name}: ${s.grade}`).join('\n')}
 
 Overall Average: ${averageGrade}
 
-View full report card: https://edusync-sis.web.app/grades
+View full report card: https://edusync.ph/grades
 
 Best regards,
 ${schoolName}
@@ -407,7 +408,7 @@ ${schoolName}
           
           <div class="footer">
             <p>This is an automated message from EduSync School Information System</p>
-            <p><a href="https://edusync-sis.web.app/profile" style="color: #667eea;">
+            <p><a href="https://edusync.ph/profile" style="color: #667eea;">
                Update notification preferences
             </a></p>
           </div>

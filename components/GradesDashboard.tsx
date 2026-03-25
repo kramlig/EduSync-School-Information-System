@@ -13,7 +13,7 @@ interface GradesDashboardProps {
   schoolData: SchoolDataHook;
 }
 
-const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData }) => {
+const GradesDashboard: React.FC<GradesDashboardProps> = ({ session, schoolData: _schoolData }) => {
   const navigate = useNavigate();
   const authUser = session.user as AuthUser;
   const schoolId = authUser.schoolId || '';

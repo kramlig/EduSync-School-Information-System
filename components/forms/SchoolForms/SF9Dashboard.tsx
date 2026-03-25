@@ -1,1001 +1,564 @@
-import { useState, useMemo, useCallback } from 'react';
+﻿/**
+ * SF9Dashboard.tsx
+ * School Form 9 (Report Card) Dashboard
+ *
+ * Student list dashboard for generating DepEd SF9 report cards.
+ * Mirrors Form138Dashboard but renders SF9-formatted report cards
+ * with MATATAG curriculum layout and Homeroom Guidance assessment.
+ */
+
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
 import { useStudentsPostgreSQL } from '../../../src/hooks/useStudentsPostgreSQL';
 import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
 import { useGradesPostgreSQL } from '../../../src/hooks/useGradesPostgreSQL';
 import { useLearningAreasPostgreSQL } from '../../../src/hooks/useLearningAreasPostgreSQL';
 import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
-import type { AuthUser, StudentUser, ParentUser, Student, Section, Grade, GradeSHS, GradeInput } from '../../../types';
-import BackButton from '../../BackButton';
-import { 
-  TrendingUpIcon,
-  AcademicCapIcon,
-  ArrowDownTrayIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon,
-  ChartBarIcon,
-  UsersIcon,
-  DocumentTextIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ClockIcon,
-  ExclamationTriangleIcon
-} from '../../icons';
+import { useCoreValuesPostgreSQL } from '../../../src/hooks/useCoreValuesPostgreSQL';
+import { useTeachersPostgreSQL } from '../../../src/hooks/useTeachersPostgreSQL';
+import { useHomeroomGuidancePostgreSQL } from '../../../src/hooks/useHomeroomGuidancePostgreSQL';
+import { supabase } from '../../../src/lib/supabase';
+import type { AuthUser, StudentUser, ParentUser } from '../../../types';
+import PrintableSF9Report from '../SF9/PrintableSF9Report';
+import { EmptyState } from '../shared/FormComponents';
+import { CardSkeleton } from '../shared/LoadingStates';
+
+// Staff roles that can see all students
+const ADMIN_ROLES = ['admin', 'principal', 'registrar', 'superadmin'];
+
+const getStudentDisplayName = (student: any): string => {
+  if (student.name?.trim()) return student.name.trim();
+  const full = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+  return full || 'Unnamed Student';
+};
+
+const getFinalGrade = (grade: any): number | undefined => {
+  if (!grade) return undefined;
+  if (grade.finalGrade !== undefined) return grade.finalGrade;
+  const quarters: ('q1' | 'q2' | 'q3' | 'q4')[] = ['q1', 'q2', 'q3', 'q4'];
+  const values: number[] = [];
+  for (const q of quarters) {
+    const v = grade[q];
+    if (typeof v === 'number') values.push(v);
+    else if (v && typeof v === 'object') {
+      const nums = Object.values(v as Record<string, any>).filter(n => typeof n === 'number') as number[];
+      if (nums.length) values.push(Math.round(nums.reduce((a, b) => a + b, 0) / nums.length));
+    }
+  }
+  if (!values.length) return undefined;
+  return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+};
 
 interface SF9DashboardProps {
-  session: { user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' };
+  session: { user: AuthUser | StudentUser | ParentUser; type: 'staff' | 'student' | 'parent' };
   onBack: () => void;
 }
 
-interface PromotionStats {
-  totalStudents: number;
-  promoted: number;
-  retained: number;
-  transferred: number;
-  graduated: number;
-  dropped: number;
-  promotionRate: number;
-  retentionRate: number;
-  byGradeLevel: { 
-    [key: number]: { 
-      total: number; 
-      promoted: number; 
-      retained: number; 
-      rate: number;
-      averageGrade: number;
-    } 
-  };
-  bySection: { 
-    [key: string]: { 
-      total: number; 
-      promoted: number; 
-      retained: number; 
-      rate: number;
-      sectionName: string;
-      gradeLevel: number;
-    } 
-  };
-}
+const STUDENTS_PER_PAGE = 30;
 
-interface StudentPromotionData {
-  student: Student;
-  section?: Section;
-  finalGrade: number;
-  subjectsPassed: number;
-  subjectsFailed: number;
-  attendanceRate: number;
-  promotionStatus: 'promoted' | 'retained' | 'transferred' | 'graduated' | 'dropped';
-  academicRank?: number;
-  learningAreas: {
-    name: string;
-    grade: number;
-    passed: boolean;
-  }[];
-}
-
-interface SchoolYearSummary {
-  schoolYear: string;
-  totalEnrolled: number;
-  totalCompleted: number;
-  promotionRate: number;
-  retentionRate: number;
-  transferRate: number;
-  dropoutRate: number;
-  academicPerformance: {
-    excellentPerformers: number; // 90-100
-    satisfactoryPerformers: number; // 75-89
-    needsImprovement: number; // 60-74
-    belowExpectations: number; // Below 60
-  };
-}
-
-// Constants
-const PASSING_GRADE = 75;
-const MAX_FAILING_SUBJECTS_FOR_PROMOTION = 2;
-const SCHOOL_YEARS = ['2024-2025', '2023-2024', '2022-2023'];
-const MOCK_SUBJECTS = ['Mathematics', 'Science', 'English', 'Filipino', 'Social Studies'];
-
-// Helper function for CSV export
-const exportToCSV = (data: any[], filename: string) => {
-  if (data.length === 0) return;
-  
-  const headers = Object.keys(data[0]);
-  const csvContent = [
-    headers.join(','),
-    ...data.map(row => headers.map(header => {
-      const value = row[header];
-      return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
-        ? `"${value.replace(/"/g, '""')}"` 
-        : value;
-    }).join(','))
-  ].join('\n');
-  
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  
-  if (link.download !== undefined) {
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-};
-
-// Generate mock grade for demonstration
-const generateMockGrade = (studentName: string): number => {
-  const hash = studentName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const baseGrade = 75 + ((hash % 20));
-  return Math.round((baseGrade + (hash % 10)) * 100) / 100;
-};
-
-const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session, onBack }) => {
+const SF9Dashboard: React.FC<SF9DashboardProps> = ({ session }) => {
+  const navigate = useNavigate();
   const { schoolId } = useSchoolContext();
-  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
-  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
-  const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
-  const { learningAreas, loading: learningAreasLoading } = useLearningAreasPostgreSQL(schoolId);
-  const { attendanceRecords, loading: attendanceLoading } = useAttendancePostgreSQL({ schoolId });
-  
-  const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('2024-2025');
+
+  const authUser = session.user;
+  const teacherId = (authUser as any).postgresqlId || authUser.id;
+  const userRole = (authUser as any).role?.toLowerCase() || '';
+  const isAdmin = ADMIN_ROLES.includes(userRole);
+
+  // Filter state
+  const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGradeLevel, setSelectedGradeLevel] = useState<number | null>(null);
-  const [selectedSection, setSelectedSection] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'overview' | 'detailed' | 'analytics'>('overview');
-  const [promotionFilter, setPromotionFilter] = useState<'all' | 'promoted' | 'retained' | 'transferred' | 'graduated' | 'dropped'>('all');
+  const [selectedGradeLevel, setSelectedGradeLevel] = useState<string>('all');
 
-  const loading = studentsLoading || sectionsLoading || gradesLoading || learningAreasLoading || attendanceLoading;
+  // Data hooks
+  const sid = schoolId ?? undefined;
 
-  // Calculate final grades for students
-  const calculateStudentFinalGrade = (studentId: string): number => {
-    const studentGrades = grades.filter((grade: GradeInput) => grade.studentId === studentId);
-    
-    if (studentGrades.length === 0) {
-      // If no grades exist, generate a mock grade for demonstration
-      const student = students.find((s: Student) => s.id === studentId);
-      return student ? generateMockGrade(student.name) : 0;
-    }
-    
-    let totalGrade = 0;
-    let subjectCount = 0;
-    
-    studentGrades.forEach((grade: GradeInput) => {
-      let subjectFinalGrade = 0;
-      
-      // If finalGrade is explicitly set, use it
-      if (grade.finalGrade !== undefined && grade.finalGrade > 0) {
-        subjectFinalGrade = grade.finalGrade;
-      } else {
-        // Calculate from quarterly/semester grades
-        if ('q1' in grade && 'q2' in grade && 'q3' in grade && 'q4' in grade) {
-          // Quarterly system (Elementary/JHS)
-          const quarters = [grade.q1, grade.q2, grade.q3, grade.q4];
-          const validQuarters = quarters.filter(q => typeof q === 'number' && q > 0) as number[];
-          
-          if (validQuarters.length > 0) {
-            subjectFinalGrade = validQuarters.reduce((sum, q) => sum + q, 0) / validQuarters.length;
-          }
-        } else if ('semester1' in grade && 'semester2' in grade) {
-          // Semester system (SHS)
-          const semesters = [];
-          if (grade.semester1?.average) semesters.push(grade.semester1.average);
-          if (grade.semester2?.average) semesters.push(grade.semester2.average);
-          
-          if (semesters.length > 0) {
-            subjectFinalGrade = semesters.reduce((sum, s) => sum + s, 0) / semesters.length;
-          }
-        }
-      }
-      
-      if (subjectFinalGrade > 0) {
-        totalGrade += subjectFinalGrade;
-        subjectCount++;
-      }
-    });
-    
-    return subjectCount > 0 ? Math.round((totalGrade / subjectCount) * 100) / 100 : 0;
-  };
+  const studentFetchOptions = useMemo(() => {
+    const options: any = { schoolId: sid, includeSection: true };
+    if (selectedSectionId !== 'all') options.sectionId = selectedSectionId;
+    return options;
+  }, [sid, selectedSectionId]);
 
-  // Determine promotion status based on grades and school policies
-  const determinePromotionStatus = (student: Student, finalGrade: number): 'promoted' | 'retained' | 'transferred' | 'graduated' | 'dropped' => {
-    // Check explicit student status first
-    if (student.status === 'transferred') return 'transferred';
-    if (student.status === 'graduated') return 'graduated';
-    if (student.status === 'dropped') return 'dropped';
-    
-    // Determine based on academic performance
-    const studentGrades = grades.filter((grade: GradeInput) => grade.studentId === student.id);
-    let failedSubjects = 0;
-    
-    studentGrades.forEach((grade: GradeInput) => {
-      if (grade.finalGrade !== undefined && grade.finalGrade < PASSING_GRADE) {
-        failedSubjects++;
-      }
-    });
-    
-    // DepEd promotion criteria: No failing grades in major subjects, or not more than 2 failing grades
-    if (failedSubjects === 0 || (failedSubjects <= 2 && finalGrade >= 75)) {
-      return 'promoted';
-    }
-    
-    return 'retained';
-  };
+  const { students, loading: studentsLoading } = useStudentsPostgreSQL(studentFetchOptions);
+  const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId: sid });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId: sid });
+  const { learningAreas, loading: learningAreasLoading } = useLearningAreasPostgreSQL();
+  const { coreValues, coreValueGrades, loading: coreValuesLoading } = useCoreValuesPostgreSQL(true, sid);
+  const { attendanceRecords, loading: attendanceLoading } = useAttendancePostgreSQL({ schoolId: sid || '' });
+  const { teachers, loading: teachersLoading } = useTeachersPostgreSQL({ schoolId: sid });
+  const { grades: homeroomGuidanceGrades, loading: hgLoading } = useHomeroomGuidancePostgreSQL(true, sid);
 
-  // Calculate comprehensive promotion statistics
-  const promotionStats = useMemo((): PromotionStats => {
-    const activeStudents = students.filter((student: Student) => 
-      student.status !== 'inactive'
-    );
+  const [settings, setSettings] = useState<any>({ schoolYear: '2025-2026' });
+  const [settingsLoading, setSettingsLoading] = useState(true);
 
-    const stats: PromotionStats = {
-      totalStudents: activeStudents.length,
-      promoted: 0,
-      retained: 0,
-      transferred: 0,
-      graduated: 0,
-      dropped: 0,
-      promotionRate: 0,
-      retentionRate: 0,
-      byGradeLevel: {},
-      bySection: {}
-    };
+  const loading = studentsLoading || gradesLoading || sectionsLoading || learningAreasLoading || coreValuesLoading || attendanceLoading || teachersLoading || hgLoading || settingsLoading;
 
-    activeStudents.forEach((student: Student) => {
-      const finalGrade = calculateStudentFinalGrade(student.id);
-      const promotionStatus = determinePromotionStatus(student, finalGrade);
-      const section = sections.find((s: Section) => s.id === student.sectionId);
-      
-      // Count by status
-      switch (promotionStatus) {
-        case 'promoted': stats.promoted++; break;
-        case 'retained': stats.retained++; break;
-        case 'transferred': stats.transferred++; break;
-        case 'graduated': stats.graduated++; break;
-        case 'dropped': stats.dropped++; break;
-      }
-
-      // Group by grade level
-      if (section) {
-        const gradeLevel = section.gradeLevel;
-        if (!stats.byGradeLevel[gradeLevel]) {
-          stats.byGradeLevel[gradeLevel] = { 
-            total: 0, 
-            promoted: 0, 
-            retained: 0, 
-            rate: 0,
-            averageGrade: 0 
-          };
-        }
-        
-        stats.byGradeLevel[gradeLevel].total++;
-        if (promotionStatus === 'promoted' || promotionStatus === 'graduated') {
-          stats.byGradeLevel[gradeLevel].promoted++;
-        } else if (promotionStatus === 'retained') {
-          stats.byGradeLevel[gradeLevel].retained++;
-        }
-
-        // Group by section
-        const sectionKey = `${gradeLevel}-${section.name}`;
-        if (!stats.bySection[sectionKey]) {
-          stats.bySection[sectionKey] = {
-            total: 0,
-            promoted: 0,
-            retained: 0,
-            rate: 0,
-            sectionName: section.name,
-            gradeLevel: gradeLevel
-          };
-        }
-        
-        stats.bySection[sectionKey].total++;
-        if (promotionStatus === 'promoted' || promotionStatus === 'graduated') {
-          stats.bySection[sectionKey].promoted++;
-        } else if (promotionStatus === 'retained') {
-          stats.bySection[sectionKey].retained++;
-        }
-      }
-    });
-
-    // Calculate rates
-    const completedStudents = stats.promoted + stats.retained;
-    stats.promotionRate = completedStudents > 0 ? Math.round((stats.promoted / completedStudents) * 100) : 0;
-    stats.retentionRate = completedStudents > 0 ? Math.round((stats.retained / completedStudents) * 100) : 0;
-
-    // Calculate grade level rates and averages
-    Object.keys(stats.byGradeLevel).forEach(gradeLevel => {
-      const grade = stats.byGradeLevel[parseInt(gradeLevel)];
-      const completedInGrade = grade.promoted + grade.retained;
-      grade.rate = completedInGrade > 0 ? Math.round((grade.promoted / completedInGrade) * 100) : 0;
-      
-      // Calculate average grade for the level
-      const studentsInGrade = activeStudents.filter((student: Student) => {
-        const section = sections.find((s: Section) => s.id === student.sectionId);
-        return section?.gradeLevel === parseInt(gradeLevel);
-      });
-      
-      let totalGradeSum = 0;
-      let gradeCount = 0;
-      
-      studentsInGrade.forEach((student: Student) => {
-        const finalGrade = calculateStudentFinalGrade(student.id);
-        if (finalGrade > 0) {
-          totalGradeSum += finalGrade;
-          gradeCount++;
-        }
-      });
-      
-      grade.averageGrade = gradeCount > 0 ? Math.round((totalGradeSum / gradeCount) * 100) / 100 : 0;
-    });
-
-    // Calculate section rates
-    Object.keys(stats.bySection).forEach(sectionKey => {
-      const section = stats.bySection[sectionKey];
-      const completedInSection = section.promoted + section.retained;
-      section.rate = completedInSection > 0 ? Math.round((section.promoted / completedInSection) * 100) : 0;
-    });
-
-    return stats;
-  }, [students, sections, grades]);
-
-  // Generate student promotion data
-  const studentPromotionData = useMemo((): StudentPromotionData[] => {
-    return students
-      .filter((student: Student) => student.status !== 'inactive')
-      .map((student: Student) => {
-        const finalGrade = calculateStudentFinalGrade(student.id);
-        const promotionStatus = determinePromotionStatus(student, finalGrade);
-        const section = sections.find((s: Section) => s.id === student.sectionId);
-        
-        // Calculate subject performance
-        const studentGrades = grades.filter((grade: GradeInput) => grade.studentId === student.id);
-        let subjectsPassed = 0;
-        let subjectsFailed = 0;
-        let studentLearningAreas: { name: string; grade: number; passed: boolean; }[] = [];
-        
-        if (studentGrades.length > 0) {
-          // Use actual grade data
-          studentLearningAreas = studentGrades.map((grade: GradeInput) => {
-            const learningArea = learningAreas.find(la => la.id === grade.learningAreaId);
-            const passed = (grade.finalGrade || 0) >= PASSING_GRADE;
-            
-            if (passed) {
-              subjectsPassed++;
-            } else {
-              subjectsFailed++;
-            }
-            
-            return {
-              name: learningArea?.name || 'Unknown Subject',
-              grade: grade.finalGrade || 0,
-              passed
-            };
-          });
-        } else {
-          // Generate mock subject data for demonstration
-          const mockGrade = finalGrade > 0 ? finalGrade : generateMockGrade(student.name);
-          
-          studentLearningAreas = MOCK_SUBJECTS.map(subjectName => {
-            // Generate slight variations around the final grade
-            const variation = (Math.random() - 0.5) * 10; // ±5 points variation
-            const subjectGrade = Math.max(60, Math.min(100, mockGrade + variation));
-            const passed = subjectGrade >= PASSING_GRADE;
-            
-            if (passed) {
-              subjectsPassed++;
-            } else {
-              subjectsFailed++;
-            }
-            
-            return {
-              name: subjectName,
-              grade: Math.round(subjectGrade * 100) / 100,
-              passed
-            };
+  // Fetch school settings
+  const fetchSettings = useCallback(async () => {
+    setSettingsLoading(true);
+    try {
+      if (sid && sid !== 'default') {
+        const { data, error } = await supabase
+          .from('schools')
+          .select('current_school_year, settings, name, division, region, district, principal_name, school_id_number')
+          .eq('id', sid)
+          .single();
+        if (!error && data) {
+          setSettings({
+            schoolYear: data.current_school_year,
+            schoolName: data.name,
+            schoolId: data.school_id_number || '',
+            division: data.division,
+            region: data.region,
+            district: data.district,
+            principalName: data.principal_name,
+            ...data.settings,
           });
         }
-
-        // Calculate attendance rate (simplified)
-        const attendanceRecord = attendanceRecords.find(record => record.studentId === student.id);
-        let attendanceRate = 100; // Default if no attendance data
-        
-        if (attendanceRecord) {
-          const attendanceDays = Object.values(attendanceRecord.dailyStatus);
-          const presentDays = attendanceDays.filter(status => status === 'P' || status === 'L' || status === 'E').length;
-          attendanceRate = attendanceDays.length > 0 ? Math.round((presentDays / attendanceDays.length) * 100) : 100;
-        }
-
-        return {
-          student,
-          section,
-          finalGrade,
-          subjectsPassed,
-          subjectsFailed,
-          attendanceRate,
-          promotionStatus,
-          learningAreas: studentLearningAreas
-        };
-      });
-  }, [students, sections, grades, learningAreas, attendanceRecords]);
-
-  // Filter students for display
-  const filteredStudentData = useMemo(() => {
-    return studentPromotionData.filter((data: StudentPromotionData) => {
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesSearch = 
-          data.student.name.toLowerCase().includes(query) ||
-          data.student.lrn?.toLowerCase().includes(query) ||
-          data.student.email.toLowerCase().includes(query);
-        if (!matchesSearch) return false;
       }
-
-      // Grade level filter
-      if (selectedGradeLevel !== null && data.section?.gradeLevel !== selectedGradeLevel) {
-        return false;
-      }
-
-      // Section filter
-      if (selectedSection && data.student.sectionId !== selectedSection) {
-        return false;
-      }
-
-      // Promotion status filter
-      if (promotionFilter !== 'all' && data.promotionStatus !== promotionFilter) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [studentPromotionData, searchQuery, selectedGradeLevel, selectedSection, promotionFilter]);
-
-  const gradeLevels = useMemo(() => 
-    [...new Set(sections.map((s: Section) => s.gradeLevel))].sort() as number[],
-    [sections]
-  );
-
-  const schoolYears = SCHOOL_YEARS;
-
-  // Export SF9 promotion/retention report
-  const exportSF9Report = () => {
-    const exportData = filteredStudentData.map(data => ({
-      'School Year': selectedSchoolYear,
-      'Student Name': data.student.name,
-      'LRN': data.student.lrn || 'Not set',
-      'Grade Level': data.section?.gradeLevel || 'Unassigned',
-      'Section': data.section?.name || 'Unassigned',
-      'Final Grade': data.finalGrade > 0 ? data.finalGrade.toFixed(1) : 'No grades',
-      'Subjects Passed': data.subjectsPassed,
-      'Subjects Failed': data.subjectsFailed,
-      'Attendance Rate': `${data.attendanceRate}%`,
-      'Promotion Status': data.promotionStatus.charAt(0).toUpperCase() + data.promotionStatus.slice(1),
-      'Learning Areas': data.learningAreas.length,
-      'Academic Performance': data.finalGrade >= 90 ? 'Excellent' :
-                             data.finalGrade >= 85 ? 'Very Good' :
-                             data.finalGrade >= 80 ? 'Good' :
-                             data.finalGrade >= 75 ? 'Satisfactory' :
-                             data.finalGrade > 0 ? 'Needs Improvement' : 'Not Assessed'
-    }));
-
-    const currentDate = new Date().toISOString().split('T')[0];
-    const filename = `SF9_Promotion_Retention_Report_${selectedSchoolYear}_${currentDate}.csv`;
-    exportToCSV(exportData, filename);
-  };
-
-  // View trend analysis
-  const viewTrendAnalysis = () => {
-    alert(`Trend Analysis for ${selectedSchoolYear}\n\nThis feature would provide:\n- Historical promotion rates comparison\n- Grade-level performance trends\n- Predictive analytics for at-risk students\n- Academic improvement recommendations\n\nImplementation would include interactive charts and detailed analytics.`);
-  };
-
-  // Generate comparative report
-  const generateComparativeReport = () => {
-    alert(`Comparative Report Generation\n\nThis would create comprehensive comparisons including:\n- Multi-year promotion rate analysis\n- Section-by-section performance comparison\n- Grade-level benchmarking\n- School-wide academic trend analysis\n\nOutput formats: PDF, Excel, CSV with charts and visualizations.`);
-  };
-
-  // Get promotion status icon and color
-  const getPromotionStatusDisplay = useCallback((status: string) => {
-    switch (status) {
-      case 'promoted':
-        return {
-          icon: <CheckCircleIcon />,
-          color: 'text-green-600 dark:text-green-400',
-          bgColor: 'bg-green-100 dark:bg-green-900/30',
-          label: 'Promoted'
-        };
-      case 'retained':
-        return {
-          icon: <ClockIcon />,
-          color: 'text-yellow-600 dark:text-yellow-400',
-          bgColor: 'bg-yellow-100 dark:bg-yellow-900/30',
-          label: 'Retained'
-        };
-      case 'transferred':
-        return {
-          icon: <TrendingUpIcon />,
-          color: 'text-blue-600 dark:text-blue-400',
-          bgColor: 'bg-blue-100 dark:blue-900/30',
-          label: 'Transferred'
-        };
-      case 'graduated':
-        return {
-          icon: <AcademicCapIcon />,
-          color: 'text-purple-600 dark:text-purple-400',
-          bgColor: 'bg-purple-100 dark:bg-purple-900/30',
-          label: 'Graduated'
-        };
-      case 'dropped':
-        return {
-          icon: <XCircleIcon />,
-          color: 'text-red-600 dark:text-red-400',
-          bgColor: 'bg-red-100 dark:bg-red-900/30',
-          label: 'Dropped'
-        };
-      default:
-        return {
-          icon: <ExclamationTriangleIcon />,
-          color: 'text-gray-600 dark:text-gray-400',
-          bgColor: 'bg-gray-100 dark:bg-gray-900/30',
-          label: 'Unknown'
-        };
+    } catch (err) {
+      console.error('[SF9Dashboard] Error fetching settings:', err);
+    } finally {
+      setSettingsLoading(false);
     }
+  }, [sid]);
+
+  useEffect(() => {
+    if (sid) fetchSettings();
+  }, [sid, fetchSettings]);
+
+  // schoolData object for PrintableSF9Report
+  const schoolData = useMemo(() => ({
+    students,
+    grades,
+    sections,
+    teachers,
+    settings,
+    learningAreas,
+    coreValues,
+    coreValueGrades,
+    attendanceRecords,
+    homeroomGuidanceGrades,
+    monthlySchoolDaysConfig: {
+      Jan: 22, Feb: 20, Mar: 22, Apr: 10, May: 0, Jun: 10,
+      Jul: 22, Aug: 22, Sep: 21, Oct: 22, Nov: 21, Dec: 10,
+    } as Record<string, number>,
+  }), [students, grades, sections, teachers, settings, learningAreas, coreValues, coreValueGrades, attendanceRecords, homeroomGuidanceGrades]);
+
+  // Selection & pagination
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewingStudent, setViewingStudent] = useState<any>(null);
+
+  // ── Filtering ──
+  const filteredStudents = useMemo(() => {
+    let filtered = [...students];
+    if (!isAdmin) {
+      const teacherSectionIds = new Set(sections.filter(s => s.adviserId === teacherId).map(s => s.id));
+      filtered = filtered.filter(s => s.sectionId && teacherSectionIds.has(s.sectionId));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(s =>
+        getStudentDisplayName(s).toLowerCase().includes(q) || (s.lrn || '').toLowerCase().includes(q),
+      );
+    }
+    if (selectedGradeLevel !== 'all') {
+      filtered = filtered.filter(s => {
+        const sec = sections.find(x => x.id === s.sectionId);
+        return sec && sec.gradeLevel.toString() === selectedGradeLevel;
+      });
+    }
+    if (selectedSectionId !== 'all') {
+      filtered = filtered.filter(s => s.sectionId === selectedSectionId);
+    }
+    return filtered;
+  }, [students, searchQuery, selectedGradeLevel, selectedSectionId, sections, teacherId, isAdmin]);
+
+  const paginatedStudents = useMemo(() => {
+    const start = (currentPage - 1) * STUDENTS_PER_PAGE;
+    return filteredStudents.slice(start, start + STUDENTS_PER_PAGE);
+  }, [filteredStudents, currentPage]);
+
+  const totalPages = Math.ceil(filteredStudents.length / STUDENTS_PER_PAGE);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedGradeLevel, selectedSectionId]);
+
+  const availableGradeLevels = useMemo(() => {
+    const src = isAdmin ? sections : sections.filter(s => s.adviserId === teacherId);
+    return Array.from(new Set(src.map(s => s.gradeLevel.toString()))).sort((a, b) => parseInt(a) - parseInt(b));
+  }, [sections, teacherId, isAdmin]);
+
+  const availableSections = useMemo(() => {
+    const src = isAdmin ? sections : sections.filter(s => s.adviserId === teacherId);
+    return selectedGradeLevel === 'all' ? src : src.filter(s => s.gradeLevel.toString() === selectedGradeLevel);
+  }, [sections, selectedGradeLevel, teacherId, isAdmin]);
+
+  // ── Actions ──
+  const handleSelectAll = useCallback(() => setSelectedStudents(filteredStudents.map(s => s.id)), [filteredStudents]);
+  const handleDeselectAll = useCallback(() => setSelectedStudents([]), []);
+  const handleStudentToggle = useCallback((id: string) => {
+    setSelectedStudents(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
   }, []);
 
+  const handlePrintSelected = useCallback(() => {
+    if (selectedStudents.length === 0) return;
+    navigate(`/reports/school-forms/sf9/print?students=${selectedStudents.join(',')}`);
+  }, [selectedStudents, navigate]);
+
+  const handlePrintStudent = useCallback((id: string) => {
+    navigate(`/reports/school-forms/sf9/print?students=${id}`);
+  }, [navigate]);
+
+  const handleViewStudent = useCallback((studentObj: any) => {
+    setViewingStudent(studentObj);
+    setShowViewModal(true);
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setSearchQuery('');
+    setSelectedGradeLevel('all');
+    setSelectedSectionId('all');
+  }, []);
+
+  const statistics = useMemo(() => {
+    const total = filteredStudents.length;
+    const honor = filteredStudents.filter(s => {
+      const sg = grades.filter((g: any) => g.studentId === s.id);
+      const finals = sg.map((g: any) => getFinalGrade(g)).filter((g: any): g is number => typeof g === 'number');
+      return finals.length > 0 && finals.reduce((a, b) => a + b, 0) / finals.length >= 90;
+    }).length;
+    return { totalStudents: total, honorStudents: honor, selectedCount: selectedStudents.length };
+  }, [filteredStudents, grades, selectedStudents]);
+
+  // ── Render ──
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-red-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
-          <p className="mt-4 text-slate-600 dark:text-slate-400">Loading promotion data...</p>
+      <div className="p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-red-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <BackButton />
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 via-red-600 to-pink-600 bg-clip-text text-transparent">
-                  SF9 - Promotion/Retention Report
-                </h1>
-                <p className="text-slate-600 dark:text-slate-300 mt-1">
-                  End-of-year academic performance and promotion analysis
-                </p>
-              </div>
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-teal-600 to-cyan-600 rounded-xl shadow-xl p-8 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">📝 School Form 9 - Report Card</h1>
+            <p className="text-teal-100 text-lg">Generate and print SF9 report cards (MATATAG Curriculum)</p>
+            <div className="mt-4 flex items-center gap-4 text-sm text-teal-200">
+              <span>📊 {statistics.totalStudents} Students Available</span>
+              {statistics.honorStudents > 0 && <span>🏆 {statistics.honorStudents} Honor Students</span>}
             </div>
           </div>
-
-
-        </div>
-
-        {/* View Mode Toggle */}
-        <div className="flex justify-center">
-          <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-2 border border-white/20 shadow-lg">
-            <div className="flex">
-              {[
-                { key: 'overview', label: 'Overview', icon: ChartBarIcon },
-                { key: 'detailed', label: 'Student Details', icon: UsersIcon },
-                { key: 'analytics', label: 'Analytics', icon: TrendingUpIcon }
-              ].map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => setViewMode(key as any)}
-                  className={`flex items-center space-x-2 px-6 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
-                    viewMode === key
-                      ? 'bg-orange-600 text-white shadow-lg'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-white/50'
-                  }`}
-                >
-                  <div className="w-4 h-4">
-                    <Icon />
-                  </div>
-                  <span>{label}</span>
-                </button>
-              ))}
-            </div>
+          <div className="text-right">
+            <div className="text-6xl font-bold opacity-90">{statistics.totalStudents}</div>
+            <div className="text-teal-200 text-sm">Students</div>
           </div>
         </div>
+      </div>
 
-        {/* School Year Selector */}
-        <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-lg">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
-                <div className="w-6 h-6 text-white">
-                  <TrendingUpIcon />
-                </div>
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-200">
-                  Academic Performance Analysis
-                </h3>
-                <p className="text-slate-600 dark:text-slate-300">
-                  Comprehensive promotion and retention statistics
-                </p>
-              </div>
+      {/* Stats cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-teal-500">
+          <p className="text-sm font-medium text-gray-600">Total Students</p>
+          <p className="text-2xl font-bold text-gray-900">{statistics.totalStudents}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
+          <p className="text-sm font-medium text-gray-600">Honor Students</p>
+          <p className="text-2xl font-bold text-gray-900">{statistics.honorStudents}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-500">
+          <p className="text-sm font-medium text-gray-600">Selected</p>
+          <p className="text-2xl font-bold text-gray-900">{statistics.selectedCount}</p>
+        </div>
+      </div>
+
+      {/* Filters & student list */}
+      <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">Student Report Cards</h2>
+          {selectedStudents.length > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-600">{selectedStudents.length} selected</span>
+              <button
+                onClick={handlePrintSelected}
+                className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              >
+                🖨️ Print Selected
+              </button>
+              <button
+                onClick={handleDeselectAll}
+                className="text-gray-600 hover:text-gray-800 px-3 py-2 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors"
+              >
+                Clear Selection
+              </button>
             </div>
-            
+          )}
+        </div>
+
+        {/* Filter controls */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div>
+            <label htmlFor="sf9-gradeLevel" className="block text-sm font-medium text-gray-700 mb-1">Grade Level</label>
             <select
-              aria-label="Select school year"
-              value={selectedSchoolYear}
-              onChange={(e) => setSelectedSchoolYear(e.target.value)}
-              className="px-4 py-2 bg-white/50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all duration-200"
+              id="sf9-gradeLevel"
+              value={selectedGradeLevel}
+              onChange={e => setSelectedGradeLevel(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
             >
-              {schoolYears.map(year => (
-                <option key={year} value={year}>School Year {year}</option>
+              <option value="all">All Grades</option>
+              {availableGradeLevels.map(g => (
+                <option key={g} value={g}>Grade {g}</option>
               ))}
             </select>
           </div>
+          <div>
+            <label htmlFor="sf9-section" className="block text-sm font-medium text-gray-700 mb-1">Section</label>
+            <select
+              id="sf9-section"
+              value={selectedSectionId}
+              onChange={e => setSelectedSectionId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            >
+              <option value="all">All Sections</option>
+              {availableSections.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="sf9-search" className="block text-sm font-medium text-gray-700 mb-1">Search Students</label>
+            <input
+              id="sf9-search"
+              type="text"
+              placeholder="Search by name or LRN"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            />
+          </div>
         </div>
 
-        {/* Overview Mode */}
-        {viewMode === 'overview' && (
-          <>
-            {/* Main Statistics */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-              {/* Total Students */}
-              <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-lg hover:shadow-xl transition-all duration-300">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Total Students</p>
-                    <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">
-                      {promotionStats.totalStudents.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-slate-500 to-gray-600 rounded-xl flex items-center justify-center">
-                    <div className="w-6 h-6 text-white">
-                      <UsersIcon />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Promoted */}
-              <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-lg hover:shadow-xl transition-all duration-300">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Promoted</p>
-                    <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-                      {promotionStats.promoted.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
-                    <div className="w-6 h-6 text-white">
-                      <CheckCircleIcon />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Retained */}
-              <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-lg hover:shadow-xl transition-all duration-300">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Retained</p>
-                    <p className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">
-                      {promotionStats.retained.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-xl flex items-center justify-center">
-                    <div className="w-6 h-6 text-white">
-                      <ClockIcon />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Promotion Rate */}
-              <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-lg hover:shadow-xl transition-all duration-300">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Promotion Rate</p>
-                    <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">
-                      {promotionStats.promotionRate}%
-                    </p>
-                  </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center">
-                    <div className="w-6 h-6 text-white">
-                      <TrendingUpIcon />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Other Status */}
-              <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-lg hover:shadow-xl transition-all duration-300">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Other Status</p>
-                    <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
-                      {(promotionStats.transferred + promotionStats.graduated + promotionStats.dropped).toLocaleString()}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      T:{promotionStats.transferred} G:{promotionStats.graduated} D:{promotionStats.dropped}
-                    </p>
-                  </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
-                    <div className="w-6 h-6 text-white">
-                      <TrendingUpIcon />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Grade Level Performance */}
-            <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-lg">
-              <h3 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center">
-                <div className="w-5 h-5 mr-2">
-                  <ChartBarIcon />
-                </div>
-                Performance by Grade Level - {selectedSchoolYear}
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                {gradeLevels.map((gradeLevel: number) => {
-                  const gradeData = promotionStats.byGradeLevel[gradeLevel];
-                  if (!gradeData) return null;
-                  
-                  return (
-                    <div key={gradeLevel} className="text-center p-4 bg-slate-50/50 dark:bg-slate-700/50 rounded-xl">
-                      <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                        {gradeData.rate}%
-                      </p>
-                      <p className="text-sm text-slate-600 dark:text-slate-300">Grade {gradeLevel}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {gradeData.promoted} / {gradeData.total}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        Avg: {gradeData.averageGrade.toFixed(1)}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Detailed View */}
-        {viewMode === 'detailed' && (
-          <>
-            {/* Search and Filters */}
-            <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-lg">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0 lg:space-x-4">
-                {/* Search */}
-                <div className="relative flex-1 max-w-md">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400">
-                    <MagnifyingGlassIcon />
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Search by name, LRN, or email..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white/50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
-                  />
-                </div>
-
-                {/* Filters */}
-                <div className="flex flex-wrap items-center gap-4">
-                  <select
-                    aria-label="Filter by promotion status"
-                    value={promotionFilter}
-                    onChange={(e) => setPromotionFilter(e.target.value as any)}
-                    className="px-3 py-2 bg-white/50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all duration-200"
-                  >
-                    <option value="all">All Students</option>
-                    <option value="promoted">Promoted Only</option>
-                    <option value="retained">Retained Only</option>
-                    <option value="transferred">Transferred</option>
-                    <option value="graduated">Graduated</option>
-                    <option value="dropped">Dropped</option>
-                  </select>
-
-                  <select
-                    aria-label="Filter by grade level"
-                    value={selectedGradeLevel || ''}
-                    onChange={(e) => setSelectedGradeLevel(e.target.value ? parseInt(e.target.value) : null)}
-                    className="px-3 py-2 bg-white/50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all duration-200"
-                  >
-                    <option value="">All Grades</option>
-                    {gradeLevels.map((grade: number) => (
-                      <option key={grade} value={grade}>Grade {grade}</option>
-                    ))}
-                  </select>
-
-                  <select
-                    aria-label="Filter by section"
-                    value={selectedSection || ''}
-                    onChange={(e) => setSelectedSection(e.target.value || null)}
-                    className="px-3 py-2 bg-white/50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all duration-200"
-                  >
-                    <option value="">All Sections</option>
-                    {sections
-                      .filter(section => !selectedGradeLevel || section.gradeLevel === selectedGradeLevel)
-                      .map(section => (
-                        <option key={section.id} value={section.id}>
-                          Grade {section.gradeLevel} - {section.name}
-                        </option>
-                      ))}
-                  </select>
-
-                  {/* Export Button */}
-                  <button
-                    onClick={exportSF9Report}
-                    className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-xl hover:from-orange-700 hover:to-red-700 transition-all duration-200 shadow-lg hover:shadow-xl"
-                  >
-                    <div className="w-4 h-4">
-                      <ArrowDownTrayIcon />
-                    </div>
-                    <span>Export Report</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
-                <span>Showing {filteredStudentData.length} of {promotionStats.totalStudents} students for {selectedSchoolYear}</span>
-                {(searchQuery || selectedGradeLevel || selectedSection || promotionFilter !== 'all') && (
-                  <button
-                    onClick={() => {
-                      setSearchQuery('');
-                      setSelectedGradeLevel(null);
-                      setSelectedSection(null);
-                      setPromotionFilter('all');
-                    }}
-                    className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Student Details Table */}
-            <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl border border-white/20 shadow-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-50/50 dark:bg-slate-700/50">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-600 dark:text-slate-300">
-                        Student Information
-                      </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-600 dark:text-slate-300">
-                        Section
-                      </th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-slate-600 dark:text-slate-300">
-                        Final Grade
-                      </th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-slate-600 dark:text-slate-300">
-                        Subjects
-                      </th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-slate-600 dark:text-slate-300">
-                        Attendance
-                      </th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-slate-600 dark:text-slate-300">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-600">
-                    {filteredStudentData.map((data: StudentPromotionData) => {
-                      const statusDisplay = getPromotionStatusDisplay(data.promotionStatus);
-                      
-                      return (
-                        <tr key={data.student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors duration-200">
-                          <td className="px-6 py-4">
-                            <div>
-                              <div className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                                {data.student.name}
-                              </div>
-                              <div className="text-xs text-slate-600 dark:text-slate-300">
-                                LRN: {data.student.lrn || 'Not set'}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
-                            {data.section ? `Grade ${data.section.gradeLevel} - ${data.section.name}` : 'Unassigned'}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`text-sm font-medium ${
-                              data.finalGrade >= 90 ? 'text-green-600 dark:text-green-400' :
-                              data.finalGrade >= 85 ? 'text-blue-600 dark:text-blue-400' :
-                              data.finalGrade >= 80 ? 'text-yellow-600 dark:text-yellow-400' :
-                              data.finalGrade >= 75 ? 'text-orange-600 dark:text-orange-400' :
-                              'text-red-600 dark:text-red-400'
-                            }`}>
-                              {data.finalGrade > 0 ? data.finalGrade.toFixed(1) : 'No grades'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-center text-sm text-slate-600 dark:text-slate-300">
-                            <span className="text-green-600 dark:text-green-400">{data.subjectsPassed}P</span>
-                            {data.subjectsFailed > 0 && (
-                              <span className="text-red-600 dark:text-red-400 ml-2">{data.subjectsFailed}F</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`text-sm font-medium ${
-                              data.attendanceRate >= 95 ? 'text-green-600 dark:text-green-400' :
-                              data.attendanceRate >= 90 ? 'text-blue-600 dark:text-blue-400' :
-                              data.attendanceRate >= 85 ? 'text-yellow-600 dark:text-yellow-400' :
-                              'text-red-600 dark:text-red-400'
-                            }`}>
-                              {data.attendanceRate}%
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <div className="flex items-center justify-center space-x-2">
-                              <div className={`w-4 h-4 ${statusDisplay.color}`}>
-                                {statusDisplay.icon}
-                              </div>
-                              <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusDisplay.bgColor} ${statusDisplay.color}`}>
-                                {statusDisplay.label}
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Analytics View */}
-        {viewMode === 'analytics' && (
-          <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-12 border border-white/20 shadow-lg text-center">
-            <div className="w-16 h-16 text-slate-400 dark:text-slate-500 mx-auto mb-4">
-              <DocumentTextIcon />
-            </div>
-            <h3 className="text-xl font-semibold text-slate-600 dark:text-slate-300 mb-2">
-              Advanced Analytics Coming Soon
-            </h3>
-            <p className="text-slate-500 dark:text-slate-400 mb-6">
-              Comprehensive trend analysis, predictive modeling, and comparative reports for academic performance tracking.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button
-                onClick={viewTrendAnalysis}
-                className="px-6 py-3 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-xl hover:from-orange-700 hover:to-red-700 transition-all duration-200 shadow-lg hover:shadow-xl"
-              >
-                View Trend Analysis
-              </button>
-              <button
-                onClick={generateComparativeReport}
-                className="px-6 py-3 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-xl hover:from-red-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl"
-              >
-                Generate Comparative Report
-              </button>
-            </div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSelectAll}
+              disabled={filteredStudents.length === 0}
+              className="text-teal-600 hover:text-teal-800 text-sm font-medium disabled:text-gray-400 disabled:cursor-not-allowed"
+            >
+              Select All ({filteredStudents.length})
+            </button>
+            <button onClick={clearFilters} className="text-gray-600 hover:text-gray-800 text-sm font-medium">
+              Clear Filters
+            </button>
           </div>
-        )}
-
-        {filteredStudentData.length === 0 && viewMode === 'detailed' && (
-          <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-lg rounded-2xl p-12 border border-white/20 shadow-lg text-center">
-            <div className="w-16 h-16 text-slate-400 dark:text-slate-500 mx-auto mb-4">
-              <UsersIcon />
+          {filteredStudents.length > STUDENTS_PER_PAGE && (
+            <div className="text-sm text-gray-600">
+              Showing {(currentPage - 1) * STUDENTS_PER_PAGE + 1} -{' '}
+              {Math.min(currentPage * STUDENTS_PER_PAGE, filteredStudents.length)} of {filteredStudents.length}
             </div>
-            <h3 className="text-xl font-semibold text-slate-600 dark:text-slate-300 mb-2">
-              No students found
-            </h3>
-            <p className="text-slate-500 dark:text-slate-400">
-              {searchQuery || selectedGradeLevel || selectedSection || promotionFilter !== 'all'
-                ? 'Try adjusting your search criteria or filters.'
-                : 'No student data available for the selected school year.'}
-            </p>
-          </div>
+          )}
+        </div>
+
+        {/* Student grid */}
+        {filteredStudents.length === 0 ? (
+          <EmptyState title="No Students Found" message="No students match your current filters. Try adjusting your search criteria." />
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {paginatedStudents.map(student => {
+                const sec = sections.find(s => s.id === student.sectionId);
+                const studentGradeList = grades.filter((g: any) => g.studentId === student.id);
+                const hasGrades = studentGradeList.length > 0;
+                const finals = studentGradeList.map((g: any) => getFinalGrade(g)).filter((g: any): g is number => typeof g === 'number');
+                const average = finals.length > 0 ? finals.reduce((a, b) => a + b, 0) / finals.length : 0;
+
+                return (
+                  <div key={student.id} className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-lg hover:border-gray-300 transition-all duration-200">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{getStudentDisplayName(student)}</h3>
+                            <p className="text-sm text-gray-600 font-medium">LRN: {student.lrn || 'Not Assigned'}</p>
+                            <p className="text-sm text-gray-500">
+                              {sec ? `${sec.name} (Grade ${sec.gradeLevel})` : 'No Section'}
+                            </p>
+                          </div>
+                          <span
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              student.enrollmentStatus === 'enrolled' || !student.enrollmentStatus
+                                ? 'bg-green-100 text-green-700'
+                                : student.enrollmentStatus === 'transferred'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : student.enrollmentStatus === 'graduated'
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {student.enrollmentStatus === 'enrolled' || !student.enrollmentStatus
+                              ? '✓ Enrolled'
+                              : student.enrollmentStatus === 'transferred'
+                                ? '📤 Transferred'
+                                : student.enrollmentStatus === 'graduated'
+                                  ? '🎓 Graduated'
+                                  : student.enrollmentStatus || 'Enrolled'}
+                          </span>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={selectedStudents.includes(student.id)}
+                        onChange={() => handleStudentToggle(student.id)}
+                        className="mt-1 ml-2"
+                        title="Select student"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        {hasGrades ? (
+                          <>
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-lg text-sm font-semibold ${
+                                average >= 90
+                                  ? 'bg-green-100 text-green-800 border border-green-200'
+                                  : average >= 85
+                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                    : average >= 75
+                                      ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                                      : 'bg-red-100 text-red-800 border border-red-200'
+                              }`}
+                            >
+                              {average.toFixed(1)}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {average >= 90
+                                ? '🏆 Advanced'
+                                : average >= 85
+                                  ? '⭐ Proficient'
+                                  : average >= 80
+                                    ? '📈 Approaching'
+                                    : average >= 75
+                                      ? '✓ Developing'
+                                      : '⚠️ Beginning'}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                            📋 No Grades
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleViewStudent(student)}
+                          className="flex items-center gap-1 px-2 py-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors text-xs font-medium border border-teal-200"
+                          title="Preview SF9"
+                        >
+                          👁️ Preview
+                        </button>
+                        <button
+                          onClick={() => handlePrintStudent(student.id)}
+                          className="flex items-center gap-1 px-2 py-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors text-xs font-medium border border-green-200"
+                          title="Print SF9 PDF"
+                        >
+                          🖨️ Print
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-6 flex items-center justify-between border-t pt-4">
+                <div className="text-sm text-gray-700">
+                  Page <span className="font-semibold">{currentPage}</span> of{' '}
+                  <span className="font-semibold">{totalPages}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">First</button>
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) pageNum = i + 1;
+                    else if (currentPage <= 3) pageNum = i + 1;
+                    else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                    else pageNum = currentPage - 2 + i;
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-3 py-1.5 text-sm border rounded-lg ${currentPage === pageNum ? 'bg-teal-600 text-white border-teal-600' : 'hover:bg-gray-50'}`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+                  <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Last</button>
+                </div>
+                <div className="text-sm text-gray-600">{filteredStudents.length} total students</div>
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      {/* View Modal */}
+      {showViewModal && viewingStudent && (
+        <div className="fixed inset-0 bg-black/50 z-50 overflow-auto">
+          <div className="min-h-screen p-4">
+            <div className="max-w-[95vw] lg:max-w-[1200px] mx-auto bg-white rounded-lg shadow-2xl">
+              <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-lg z-10">
+                <h3 className="text-lg font-semibold text-slate-800">
+                  📝 School Form 9 - {getStudentDisplayName(viewingStudent)}
+                </h3>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handlePrintStudent(viewingStudent.id)}
+                    className="group flex items-center gap-2 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    <span className="text-sm">Print PDF</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowViewModal(false);
+                      setViewingStudent(null);
+                    }}
+                    className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-[80vh] overflow-y-auto">
+                <PrintableSF9Report student={viewingStudent} schoolData={schoolData} hideDownloadButton={true} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default SF9Dashboard;
+

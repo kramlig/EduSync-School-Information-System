@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SF5-K PDF Generator - Kindergarten Proficiency Report
  * Generates official DepEd Form SF5-K with pagination and summary page
  * 
@@ -9,6 +9,7 @@
  */
 
 import jsPDF from 'jspdf';
+import { registerCalibriFont } from './registerCalibriFont';
 import type { PromotionRecordWithStudent } from '../../types/promotionRecords';
 import depedSealUrl from '../../assets/deped-logo.png';
 import depedLogoUrl from '../../assets/deped-seal.png';
@@ -57,6 +58,9 @@ export async function generateSF5KPDF(options: SF5KPDFOptions): Promise<void> {
     unit: 'mm',
     format: PAGE_FORMAT,
   });
+
+  // Register Calibri (Carlito) font
+  await registerCalibriFont(doc);
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -198,7 +202,7 @@ function renderSchoolInfoFields(
 ): void {
   const { schoolInfo, schoolYear, section, leftMargin, rightMargin, pageWidth } = params;
   
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   doc.setFontSize(9);
   doc.setLineWidth(0.3);
   
@@ -298,7 +302,7 @@ function renderStudentPage(doc: jsPDF, config: {
   } = config;
   
   doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Calibri', 'bold');
   doc.text('School Form 5  Report on Promotion & Level of Proficiency For Kinder (SF5-K)', pageWidth / 2, 10, { align: 'center' });
   doc.setFontSize(10);
   doc.text('End of School Year Kindergarten Appraisal Report', pageWidth / 2, 16, { align: 'center' });
@@ -334,7 +338,7 @@ function renderStudentPage(doc: jsPDF, config: {
   renderTableHeader(doc, { leftMargin, tableY, tableHeight, tableWidth, noWidth, lrnWidth, nameWidth, summativeWidth, interpretationWidth, appraisedWidth });
   
   // === DATA ROWS ===
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   doc.setFontSize(7);
   
   let dataY = tableY + 16; // Adjusted from 30 to align with new header separator at tableY + 12
@@ -379,13 +383,13 @@ function renderStudentPage(doc: jsPDF, config: {
   
   // Male total row (only on last student page)
   if (isLastStudentPage && pageMaleStudents.length > 0) {
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('Calibri', 'bold');
     x = leftMargin + 2;
     doc.text('MALE', x, dataY);
     // Display total count in the name column area
     doc.text(maleStudents.length.toString(), leftMargin + noWidth + lrnWidth + nameWidth / 2, dataY, { align: 'center' });
     dataY += rowHeight + 1;
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('Calibri', 'normal');
   }
   
   // Render female students on this page
@@ -420,7 +424,7 @@ function renderStudentPage(doc: jsPDF, config: {
   
   // Female total row (only on last student page)
   if (isLastStudentPage && pageFemaleStudents.length > 0) {
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('Calibri', 'bold');
     x = leftMargin + 2;
     doc.text('FEMALE', x, dataY);
     // Display total count in the name column area
@@ -431,7 +435,7 @@ function renderStudentPage(doc: jsPDF, config: {
   // Grand total (only on last student page) - removed as not in official format
   
   // === FOOTER ===
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   doc.setFontSize(8);
   doc.text(`School Form 5-K Page ${pageNumber} of ${totalPages}`, pageWidth - rightMargin - 60, pageHeight - 10);
 }
@@ -451,7 +455,7 @@ function renderTableHeader(doc: jsPDF, config: {
 }): void {
   const { leftMargin, tableY, tableHeight, noWidth, lrnWidth, nameWidth, summativeWidth, interpretationWidth, appraisedWidth } = config;
   
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Calibri', 'bold');
   doc.setFontSize(7);
   
   let x = leftMargin;
@@ -565,7 +569,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   const startY = 30;
   doc.setLineWidth(0.5);
   
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Calibri', 'bold');
   doc.setFontSize(9);
   
   const summaryTableHeight = 50;
@@ -592,7 +596,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   doc.line(leftColStart, startY + 15, leftColStart + leftColWidth, startY + 15);
   
   summaryY = startY + 22;
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   doc.setFontSize(7);
   
   doc.text('GRADE ONE (1)', leftColStart + 2, summaryY);
@@ -610,7 +614,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   doc.text(interventionFemale.toString(), leftColStart + colW * 2 + colW / 2, summaryY + 1.5, { align: 'center' });
   doc.text(interventionTotal.toString(), leftColStart + colW * 3 + colW / 2, summaryY + 1.5, { align: 'center' });
   
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Calibri', 'bold');
   doc.setFontSize(9);
   
   const progressTableHeight = 80;
@@ -639,7 +643,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   doc.line(rightColStart, startY + 15, rightColStart + rightColWidth, startY + 15);
   
   progressY = startY + 20;
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   doc.setFontSize(6);
   
   // S.H.A.D (130 and above)
@@ -692,7 +696,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   progressY += 9;
   
   // Total by Gender
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Calibri', 'bold');
   doc.setFontSize(7);
   doc.text('TOTAL BY GENDER', rightColStart + 2, progressY + 1.5);
   doc.text(maleStudents.length.toString(), rightColStart + interpretColW + dataColW / 2, progressY + 1.5, { align: 'center' });
@@ -703,7 +707,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   const sigY = startY + progressTableHeight + 15;
   const sigColWidth = (pageWidth - leftMargin - rightMargin - columnGap) / 2;
   
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   doc.setFontSize(8);
   
   // Row 1: Prepared By | Certified Correct & Submitted By
@@ -734,11 +738,11 @@ function renderSummaryPage(doc: jsPDF, config: {
   
   // === GUIDELINES ===
   const guideY = sig2Y + 25;
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Calibri', 'bold');
   doc.setFontSize(8);
   doc.text('GUIDELINES:', leftMargin, guideY);
   
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   doc.setFontSize(7);
   let guideTextY = guideY + 5;
   

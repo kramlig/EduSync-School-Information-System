@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
@@ -12,6 +12,11 @@ import { ArrowLeftIcon } from '@heroicons/react/24/outline';
  */
 const PrivacyPolicy: React.FC = () => {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.title = 'Privacy Policy | EduSync';
+    return () => { document.title = 'EduSync — School Information System for Filipino Educators'; };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-indigo-950 dark:to-purple-950">
@@ -239,7 +244,7 @@ const PrivacyPolicy: React.FC = () => {
                 Email: <a href="mailto:official@edusync.ph" className="text-indigo-600 dark:text-indigo-400 hover:underline">official@edusync.ph</a>
               </p>
               <p className="text-gray-700 dark:text-gray-300">
-                Support: <a href="mailto:support@edusync.ph" className="text-indigo-600 dark:text-indigo-400 hover:underline">support@edusync.ph</a>
+                Support: <a href="mailto:edusyncph@gmail.com" className="text-indigo-600 dark:text-indigo-400 hover:underline">edusyncph@gmail.com</a>
               </p>
               <p className="text-gray-700 dark:text-gray-300">
                 Website: <a href="https://edusync.ph" className="text-indigo-600 dark:text-indigo-400 hover:underline">https://edusync.ph</a>

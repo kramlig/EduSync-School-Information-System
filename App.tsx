@@ -1,7 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, signInAnonymously, signOut } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
-import { BrowserRouter as Router, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useSchoolDataPostgreSQL } from './src/hooks/useSchoolDataPostgreSQL';
 import { useStudentsPostgreSQL } from './src/hooks/useStudentsPostgreSQL';
 import { useParentsPostgreSQL } from './src/hooks/useParentsPostgreSQL';
@@ -9,6 +9,7 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useFirestoreSyncStatus } from './hooks/useFirestoreSyncStatus';
 import type { AuthUser, StudentUser, ParentUser } from './types';
 import type { DivisionAuthUser } from './src/services/authService';
+import type { SchoolDataHook } from './hooks/useSchoolData';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Breadcrumb from './components/Breadcrumb';
@@ -18,6 +19,7 @@ import OfflineBanner from './components/OfflineBanner';
 import UpdateNotification from './components/UpdateNotification';
 import './src/diagnostics'; // Run Firestore diagnostics in development
 import './src/utils/logger'; // Initialize logger (disables console in production)
+import { getPersonalWorkspace, getUserSubscription } from './src/services/personalWorkspaceService';
 
 // Lazy load heavy components for better code splitting
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -33,6 +35,7 @@ const GradesView = lazy(() => import('./components/GradesView'));
 const GradesSummary = lazy(() => import('./components/GradesSummaryNew'));
 const GradebookView = lazy(() => import('./components/GradebookView'));
 const CoreValuesGradebookView = lazy(() => import('./components/CoreValuesGradebookView'));
+const HomeroomGuidanceView = lazy(() => import('./components/HomeroomGuidanceView'));
 const AttendanceView = lazy(() => import('./components/AttendanceView'));
 const SchedulerView = lazy(() => import('./components/SchedulerView'));
 const SubstituteView = lazy(() => import('./components/SubstituteView'));
@@ -62,6 +65,8 @@ const SchoolFormsDashboard = lazy(() => import('./components/forms/SchoolForms/S
 const SF1Dashboard = lazy(() => import('./components/forms/SchoolForms/SF1Dashboard'));
 const SF2Dashboard = lazy(() => import('./components/forms/SchoolForms/SF2Dashboard'));
 const SF9Dashboard = lazy(() => import('./components/forms/SchoolForms/SF9Dashboard'));
+const SF9View = lazy(() => import('./components/forms/SF9/SF9View'));
+const SF9Print = lazy(() => import('./components/forms/SF9/SF9Print'));
 const SF8Dashboard = lazy(() => import('./components/forms/SchoolForms/SF8Dashboard'));
 const SF5ASHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF5ASHSDashboard'));
 const SF5BSHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF5BSHSDashboard'));
@@ -82,7 +87,7 @@ const SF6Dashboard = lazy(() => import('./src/components/deped-forms/SF6Dashboar
 const SF7Dashboard = lazy(() => import('./src/components/deped-forms/SF7Dashboard'));
 const TextbookManagementDashboard = lazy(() => import('./src/components/deped-forms/TextbookManagementDashboard'));
 const FacilitiesManagementDashboard = lazy(() => import('./src/components/deped-forms/FacilitiesManagementDashboard'));
-const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDashboard'));
+// const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDashboard')); // Unused
 // const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard')); // HIDDEN: Outdated
 const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
 
@@ -99,6 +104,21 @@ const ClassRecordSelector = lazy(() => import('./components/ClassRecordSelector'
 // New SuperAdmin Module
 const SuperAdminLayout = lazy(() => import('./src/components/superadmin/SuperAdminLayout'));
 
+// Free Tools (public, no auth required)
+const FormGeneratorPage = lazy(() => import('./src/components/tools/FormGeneratorPage'));
+
+// Personal Workspace (authenticated, simplified)
+const PersonalSignupScreen = lazy(() => import('./src/components/personal/PersonalSignupScreen'));
+const PersonalLayout = lazy(() => import('./src/components/personal/PersonalLayout'));
+const PersonalDashboard = lazy(() => import('./src/components/personal/PersonalDashboard'));
+const PersonalStudents = lazy(() => import('./src/components/personal/PersonalStudents'));
+const PersonalForms = lazy(() => import('./src/components/personal/PersonalForms'));
+const PersonalSettings = lazy(() => import('./src/components/personal/PersonalSettings'));
+const PersonalGradebook = lazy(() => import('./src/components/personal/PersonalGradebook'));
+const PersonalAnalytics = lazy(() => import('./src/components/personal/PersonalAnalytics'));
+const PersonalAttendance = lazy(() => import('./src/components/personal/PersonalAttendance'));
+const PersonalCoreValues = lazy(() => import('./src/components/personal/PersonalCoreValues'));
+
 // Enrollment components
 const EnrollmentPortal = lazy(() => import('./src/components/enrollment/portal/EnrollmentPortal'));
 const ApplicationForm = lazy(() => import('./src/components/enrollment/forms/ApplicationForm'));
@@ -111,8 +131,10 @@ const UserManagementPanel = lazy(() => import('./src/components/admin/UserManage
 
 // Marketing components
 const LandingPage = lazy(() => import('./src/components/marketing/LandingPage'));
+const TeachersLandingPage = lazy(() => import('./src/components/marketing/TeachersLandingPage'));
 const PrivacyPolicy = lazy(() => import('./src/components/marketing/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('./src/components/marketing/TermsOfService'));
+const NotFoundPage = lazy(() => import('./src/components/marketing/NotFoundPage'));
 
 // Division-level components
 const DivisionLayout = lazy(() => import('./src/components/division/DivisionLayout'));
@@ -132,7 +154,7 @@ const DivisionOnboarding = lazy(() => import('./src/components/division/Division
 const DivisionSF1Import = lazy(() => import('./src/components/division/DivisionSF1Import'));
 const DivisionSF5Import = lazy(() => import('./src/components/division/DivisionSF5Import'));
 const DivisionSF7Import = lazy(() => import('./src/components/division/DivisionSF7Import'));
-import { DivisionContextProvider, useDivisionContext } from './src/contexts/DivisionContext';
+import { DivisionContextProvider } from './src/contexts/DivisionContext';
 import DivisionGuard from './src/components/division/DivisionGuard';
 
 // Wrapper components to extract URL params
@@ -172,16 +194,18 @@ const App: React.FC = () => {
   // Check if we're on a public route FIRST (before any expensive operations)
   // NOTE: /admin is NOT in public routes - it's handled specially below
   // NOTE: / IS public for non-logged-in users (landing page), but becomes dashboard when logged in
-  const publicRoutes = ['/', '/home', '/landing', '/enrollment', '/enrollment/apply', '/enrollment/status', '/register/parent'];
+  const publicRoutes = ['/', '/home', '/landing', '/teachers', '/privacy', '/terms', '/enrollment', '/enrollment/apply', '/enrollment/status', '/register/parent', '/tools', '/tools/form-generator', '/personal/signup'];
   const isPublicRoute = publicRoutes.some(route => 
-    window.location.pathname === route || window.location.pathname.startsWith('/enrollment') || window.location.pathname.startsWith('/register')
+    window.location.pathname === route || window.location.pathname.startsWith('/enrollment') || window.location.pathname.startsWith('/register') || window.location.pathname.startsWith('/tools') || window.location.pathname === '/personal/signup' || window.location.pathname === '/teachers'
   );
-  
   // Special handling for /admin route
   const isAdminLoginRoute = window.location.pathname === '/admin';
+  // Treat unknown routes as public so the 404 page renders instead of the login screen
+  const isKnownPrivateRoute = window.location.pathname.startsWith('/personal') || window.location.pathname.startsWith('/division') || window.location.pathname.startsWith('/dashboard') || window.location.pathname === '/admin';
+  const isUnknownRoute = !isPublicRoute && !isKnownPrivateRoute && !isAdminLoginRoute;
   
   // Initialize session from localStorage BEFORE checking if we should skip Firebase operations
-  const [session, setSession] = useState<{ user: AuthUser | StudentUser | ParentUser, type: 'staff' | 'student' | 'parent' } | null>(() => {
+  const [session, setSession] = useState<{ user: AuthUser | StudentUser | ParentUser | DivisionAuthUser, type: 'staff' | 'student' | 'parent' | 'division' } | null>(() => {
     try {
       const raw = localStorage.getItem('edusync_session');
       if (raw) {
@@ -201,7 +225,23 @@ const App: React.FC = () => {
   // Skip ONLY if: (1) no session AND (2) on a public route
   // This allows logged-in users on / to load data, while anonymous users skip Firebase
   // NOTE: PostgreSQL mode still needs Firebase Auth for authentication!
-  const shouldSkipFirebase = !session && isPublicRoute;
+  const shouldSkipFirebase = !session && (isPublicRoute || isUnknownRoute);
+
+  // Sync subscription tier for personal workspace users on session restore
+  useEffect(() => {
+    if (!session) return;
+    const u = session.user as any;
+    if (u.workspaceType !== 'personal' || !u.firebaseUid) return;
+
+    let cancelled = false;
+    getUserSubscription(u.firebaseUid).then((sub) => {
+      if (cancelled || !sub?.tier || sub.tier === u.tier) return;
+      const updated = { ...session, user: { ...session.user, tier: sub.tier } };
+      localStorage.setItem('edusync_session', JSON.stringify(updated));
+      setSession(updated as any);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [session?.user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   
   // TIER 1B: Monitor online/offline status and pending writes (only for authenticated routes)
   const { isOnline, wasOffline } = useOnlineStatus();
@@ -218,14 +258,32 @@ const App: React.FC = () => {
   useEffect(() => {
     // Skip auth for public routes without session and login page - no Firebase needed
     if (shouldSkipFirebase || isAdminLoginRoute) {
+      setAuthError(null); // Clear any previous auth errors on public/login routes
       setAuthReady(true);
       return;
     }
     
+    let isCurrent = true; // Guard against stale closures from previous effect runs
+    
     const unsub = onAuthStateChanged(auth, (user) => {
+      if (!isCurrent) return;
       if (!user) {
+        // Personal workspace uses Supabase, not Firebase — skip anonymous auth entirely
+        try {
+          const raw = localStorage.getItem('edusync_session');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed?.user?.workspaceType === 'personal') {
+              devLog('[Auth] Personal workspace session found, skipping Firebase auth');
+              setAuthReady(true);
+              return;
+            }
+          }
+        } catch { /* ignore parse errors */ }
+
         // Trigger anonymous sign-in; wait for next auth state change before proceeding
         signInAnonymously(auth).catch((e) => {
+          if (!isCurrent) return; // Effect was cleaned up (route changed), ignore stale rejection
           devError('[Auth] Anonymous sign-in failed:', e);
           // If offline, don't show error - just set ready to allow offline mode
           if (!navigator.onLine) {
@@ -242,7 +300,10 @@ const App: React.FC = () => {
       setAuthReady(true);
       devLog('[Auth] ✅ Auth ready:', user.uid);
     });
-    return () => unsub();
+    return () => {
+      isCurrent = false;
+      unsub();
+    };
   }, [devLog, devError, shouldSkipFirebase, isAdminLoginRoute]);
   
   // Persist session changes
@@ -262,7 +323,7 @@ const App: React.FC = () => {
   
   // Add timeout mechanism to prevent infinite loading
   // DISABLED: Now using PostgreSQL, Firestore timeout is no longer needed
-  const [loadTimeout, setLoadTimeout] = useState(false);
+  const [_loadTimeout] = useState(false);
   useEffect(() => {
     // PostgreSQL migration: Skip Firestore loading timeout
     // Data is now loaded via PostgreSQL hooks, not Firestore subscriptions
@@ -293,101 +354,12 @@ const App: React.FC = () => {
   // This reduces initial load time from 11s to 2-3s while maintaining offline-first
   // Firestore SDK caches everything, so once loaded, works offline forever
   
-  const emptyCollections = useMemo(() => [], []);
-  const isSchoolManagementRoute = location.pathname === '/school-management';
-  const shouldLoadData = session && !shouldSkipFirebase && !isAdminLoginRoute && !isSchoolManagementRoute;
-  
-  // Determine which collections to load based on current route
-  const requiredCollections = useMemo(() => {
-    if (!shouldLoadData) return emptyCollections;
-    
-    const path = location.pathname;
-    
-    // Core collections needed for MOST routes (NOT all routes!)
-    // Only include settings, which is lightweight
-    const core = ['settings'];
-    
-    // Route-specific collections - ONLY load what's needed!
-    if (path === '/' || path === '/dashboard') {
-      console.log('[App] 📊 Loading Dashboard collections (optimized)');
-      // Dashboard uses students for statistics only (count, averages)
-      return [...core, 'students', 'sections', 'grades', 'substituteAssignments', 'classSchedules', 'learningAreas'];
-    }
-    if (path.startsWith('/students')) {
-      console.log('[App] 👨‍🎓 Loading Students collections');
-      return [...core, 'students', 'sections', 'grades', 'coreValueGrades', 'attendanceRecords', 'learningAreas'];
-    }
-    if (path.startsWith('/teachers')) {
-      console.log('[App] 👨‍🏫 Loading Teachers collections (optimized - no students)');
-      // Teachers page doesn't display student list
-      return [...core, 'teachers', 'learningAreas'];
-    }
-    if (path.startsWith('/sections')) {
-      console.log('[App] 🏫 Loading Sections collections');
-      return [...core, 'sections', 'students', 'teachers', 'learningAreas'];
-    }
-    if (path.startsWith('/parents')) {
-      console.log('[App] 👨‍👩‍👧 Loading Parents collections');
-      return [...core, 'parents', 'students'];
-    }
-    if (path.startsWith('/grades') || path.startsWith('/assessment')) {
-      console.log('[App] 📝 Loading Grades collections');
-      return [...core, 'students', 'sections', 'grades', 'learningAreas', 'coreValues', 'coreValueGrades'];
-    }
-    if (path.startsWith('/reports/school-forms')) {
-      console.log('[App] 📊 Loading School Forms (PostgreSQL - minimal Firestore)');
-      // SF2, SF9, ELLN use PostgreSQL hooks - only need settings from Firestore
-      return ['settings'];
-    }
-    if (path.startsWith('/reports/elln')) {
-      console.log('[App] 📊 Loading ELLN (PostgreSQL - minimal Firestore)');
-      // ELLN uses PostgreSQL hooks exclusively
-      return ['settings'];
-    }
-    if (path.startsWith('/reports')) {
-      console.log('[App] 📊 Loading Reports collections');
-      // Form137, Form138 still use Firestore
-      return [...core, 'students', 'sections', 'grades', 'learningAreas', 'coreValues', 'coreValueGrades', 'teachers', 'attendanceRecords'];
-    }
-    if (path.startsWith('/attendance')) {
-      console.log('[App] 📅 Loading Attendance collections');
-      return [...core, 'students', 'sections', 'attendanceRecords'];
-    }
-    if (path.startsWith('/schedule')) {
-      console.log('[App] 🗓️ Loading Schedule collections');
-      return [...core, 'students', 'sections', 'teachers', 'classSchedules', 'learningAreas'];
-    }
-    if (path.startsWith('/substitute')) {
-      console.log('[App] 🔄 Loading Substitute collections');
-      return [...core, 'students', 'sections', 'teachers', 'substituteAssignments', 'classSchedules'];
-    }
-    if (path.startsWith('/assignments')) {
-      console.log('[App] 📋 Loading Assignments collections');
-      return [...core, 'students', 'sections', 'assignments', 'studentAssignmentGrades', 'learningAreas'];
-    }
-    if (path.startsWith('/lessons')) {
-      console.log('[App] 📖 Loading Lessons collections (no students needed)');
-      // Lesson plans don't require student data
-      return [...core, 'sections', 'teachers', 'learningAreas', 'lessonPlans'];
-    }
-    if (path.startsWith('/announcements')) {
-      console.log('[App] 📢 Loading Announcements (minimal - no students)');
-      // Announcements page doesn't need student data
-      return ['settings', 'announcements'];
-    }
-    if (path.startsWith('/billing') || path.startsWith('/financial')) {
-      console.log('[App] 💰 Loading Billing collections');
-      return [...core, 'students', 'parents'];
-    }
-    
-    // Default: Load minimal data (settings only)
-    console.log('[App] ⚙️ Loading default collections (minimal)');
-    return ['settings'];
-  }, [shouldLoadData, location.pathname, emptyCollections]);
+  // LEGACY: Route-based collection loading removed after PostgreSQL migration
+  // Components now load their own data via PostgreSQL hooks
   
   // Load school settings from PostgreSQL
   const { settings: pgSettings, loading: settingsLoading } = useSchoolDataPostgreSQL({
-    schoolId: session?.user.schoolId || null,
+    schoolId: (session?.user as any)?.schoolId || null,
     enableRealtime: true
   });
   
@@ -426,15 +398,7 @@ const App: React.FC = () => {
     addTeacher: async () => ({ id: '', email: '', name: '', role: 'teacher' as const, schoolId: '' }),
     updateTeacher: async () => {},
     deleteTeacher: async () => {}
-  }), [pgSettings, settingsLoading]);
-  
-  const { 
-    settings, students, teachers, parents,
-    grades, coreValues, coreValueGrades, attendanceRecords,
-    sections, learningAreas, substituteAssignments, classSchedules,
-    assignments, studentAssignmentGrades, lessonPlans,
-    announcements
-  } = schoolData;
+  }) as unknown as SchoolDataHook, [pgSettings, settingsLoading]);
 
   // Track selected child for parent sessions
   const [parentSelectedChildId, setParentSelectedChildId] = useState<string | null>(null);
@@ -466,14 +430,70 @@ const App: React.FC = () => {
     }
   }, [session, pgStudentsForParent, currentParentFresh, parentSelectedChildId]);
 
-  const handleLogin = useCallback((user: AuthUser | StudentUser | ParentUser | DivisionAuthUser, type: 'staff' | 'student' | 'parent' | 'division') => {
+  const handleLogin = useCallback(async (user: AuthUser | StudentUser | ParentUser | DivisionAuthUser, type: 'staff' | 'student' | 'parent' | 'division') => {
     // Check if this is a division user
     const isDivisionUser = type === 'division' || ('division_id' in user && 'permissions' in user);
     
     devLog('[App] 🔐 Login successful for:', user.email, 'Type:', type, isDivisionUser ? '(Division User)' : '', 'SchoolID:', (user as AuthUser).schoolId);
     
+    // Check if user already has workspaceType set (from signup flow)
+    if ((user as any).workspaceType === 'personal') {
+      // Always fetch real subscription tier (schools.tier may be stale)
+      let personalUser = user;
+      if ((user as any).firebaseUid) {
+        try {
+          const sub = await getUserSubscription((user as any).firebaseUid);
+          if (sub?.tier) {
+            personalUser = { ...user, tier: sub.tier } as any;
+          }
+        } catch (err) {
+          devLog('[App] Failed to fetch subscription tier for personal user');
+        }
+      }
+      const sessionData = { user: personalUser, type: 'staff' as const };
+      localStorage.setItem('edusync_session', JSON.stringify(sessionData));
+      window.dispatchEvent(new Event('edusync-session-updated'));
+      setSession(sessionData);
+      window.history.pushState({}, '', '/personal');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      return;
+    }
+
+    // Check if this staff user has a personal workspace in PostgreSQL
+    if (type === 'staff' && !isDivisionUser && (user as any).firebaseUid) {
+      try {
+        const workspace = await getPersonalWorkspace((user as any).firebaseUid);
+        if (workspace) {
+          devLog('[App] 🏠 Personal workspace found, redirecting to /personal');
+          // Fetch real subscription tier (workspace.tier from schools table may be stale)
+          let subscriptionTier = workspace.tier;
+          try {
+            const sub = await getUserSubscription((user as any).firebaseUid);
+            if (sub?.tier) subscriptionTier = sub.tier;
+          } catch { /* fall back to workspace tier */ }
+          const personalUser = {
+            ...user,
+            id: workspace.teacherId,
+            schoolId: workspace.schoolId,
+            schoolName: workspace.schoolName,
+            workspaceType: 'personal' as const,
+            tier: subscriptionTier,
+          };
+          const sessionData = { user: personalUser, type: 'staff' as const };
+          localStorage.setItem('edusync_session', JSON.stringify(sessionData));
+          window.dispatchEvent(new Event('edusync-session-updated'));
+          setSession(sessionData);
+          window.history.pushState({}, '', '/personal');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+          return;
+        }
+      } catch (err) {
+        devLog('[App] Personal workspace check failed, proceeding with normal login');
+      }
+    }
+
     // CRITICAL: Save session to localStorage AND React state
-    const sessionData = { user, type: isDivisionUser ? 'division' : type };
+    const sessionData = { user, type: (isDivisionUser ? 'division' : type) as 'staff' | 'student' | 'parent' | 'division' };
     localStorage.setItem('edusync_session', JSON.stringify(sessionData));
     devLog('[App] 💾 Session saved to localStorage:', sessionData);
     
@@ -529,7 +549,7 @@ const App: React.FC = () => {
   // Once we've loaded at least SOME data (1+ collection), allow navigation
   const hasAnyData = schoolData.students.length > 0 || schoolData.teachers.length > 0 || schoolData.learningAreas.length > 0 || 
                       schoolData.sections.length > 0 || (schoolData.settings?.schoolName !== '' && schoolData.settings !== null);
-  const isInitializing = !authReady || (session && schoolData.loading && !loadTimeout && !hasAnyData);
+  const isInitializing = !authReady || (session && schoolData.loading && !_loadTimeout && !hasAnyData);
   
   if (isInitializing) {
     return <FullScreenLoader message="Loading school data..." />;
@@ -538,7 +558,7 @@ const App: React.FC = () => {
   // NEW: Removed hasMinimalData check - allow app to render with empty data
   // Components will show appropriate empty states
   // This fixes offline-first-visit blank page issue
-  if (false && loadTimeout) { // Disabled timeout error screen
+  if (false && _loadTimeout) { // Disabled timeout error screen
     return (
       <div className="flex items-center justify-center min-h-screen bg-orange-50 dark:bg-slate-900 text-orange-900 dark:text-orange-200">
         <div className="text-center p-8 max-w-md">
@@ -609,7 +629,7 @@ const App: React.FC = () => {
 
   // Render public routes without authentication (landing page + enrollment)
   // BUT skip if user is already logged in (session exists)
-  if (!session && isPublicRoute) {
+  if (!session && (isPublicRoute || isUnknownRoute)) {
     devLog('[App] 🌐 Public route - rendering without auth');
     return (
       <Router>
@@ -619,13 +639,17 @@ const App: React.FC = () => {
               <Route path="/" element={<LandingPage />} />
               <Route path="/home" element={<LandingPage />} />
               <Route path="/landing" element={<LandingPage />} />
+              <Route path="/teachers" element={<TeachersLandingPage />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
               <Route path="/enrollment" element={<EnrollmentPortal />} />
               <Route path="/enrollment/apply" element={<ApplicationForm />} />
               <Route path="/enrollment/status" element={<ApplicationStatus />} />
               <Route path="/register/parent" element={<ParentRegistration />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="/tools/form-generator" element={<FormGeneratorPage />} />
+              <Route path="/tools" element={<Navigate to="/tools/form-generator" replace />} />
+              <Route path="/personal/signup" element={<PersonalSignupScreen onLogin={handleLogin} />} />
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </Suspense>
         </div>
@@ -650,7 +674,7 @@ const App: React.FC = () => {
   // which will handle routing properly (doesn't need special case)
   
   // Fallback for any other routes without session
-  if (!session && !isPublicRoute && !isAdminLoginRoute) {
+  if (!session && !isPublicRoute && !isAdminLoginRoute && !isUnknownRoute) {
     devLog('[App] 🔓 No session - rendering LoginScreen (NO pre-loaded data)');
     return (
       <LoginScreen 
@@ -677,7 +701,97 @@ const App: React.FC = () => {
   const parentSession = session as { user: ParentUser, type: 'parent' };
 
   // Check if this is a division user - they get a completely different layout
-  const isDivisionSession = session.type === 'division';
+  const isDivisionSession = (session as any).type === 'division';
+
+  // Check if this is a personal workspace user
+  const isPersonalSession = (session.user as any).workspaceType === 'personal';
+
+  // Personal workspace users get their own simplified layout
+  if (isPersonalSession && !isDivisionSession) {
+    const pUser = session.user as any;
+    const pTier = pUser.tier || 'free';
+    const pSchoolId = pUser.schoolId || '';
+    const pMaxStudents = pTier === 'free' ? 50 : 99999;
+
+    return (
+      <Router key={session?.user.id || 'personal'}>
+        <Suspense fallback={<FullScreenLoader message="Loading workspace..." />}>
+          <Routes>
+            <Route path="/personal" element={
+              <PersonalLayout
+                userName={pUser.name || pUser.email}
+                tier={pTier}
+                onLogout={handleLogout}
+              />
+            }>
+              <Route index element={
+                <PersonalDashboard
+                  userName={pUser.name || pUser.email}
+                  tier={pTier}
+                  studentCount={0}
+                  maxStudents={pMaxStudents}
+                />
+              } />
+              <Route path="students" element={
+                <PersonalStudents
+                  schoolId={pSchoolId}
+                  maxStudents={pMaxStudents}
+                  tier={pTier}
+                />
+              } />
+              <Route path="grades" element={
+                <PersonalGradebook
+                  schoolId={pSchoolId}
+                  tier={pTier}
+                />
+              } />
+              <Route path="forms" element={
+                <PersonalForms
+                  schoolId={pSchoolId}
+                  tier={pTier}
+                />
+              } />
+              <Route path="settings" element={
+                <PersonalSettings
+                  userName={pUser.name || pUser.email}
+                  email={pUser.email}
+                  schoolName={pUser.schoolName || 'My School'}
+                  tier={pTier}
+                  schoolId={pSchoolId}
+                  userId={pUser.firebaseUid || pUser.id || ''}
+                />
+              } />
+              <Route path="analytics" element={
+                <PersonalAnalytics
+                  schoolId={pSchoolId}
+                  tier={pTier}
+                />
+              } />
+              <Route path="attendance" element={
+                <PersonalAttendance
+                  schoolId={pSchoolId}
+                  tier={pTier}
+                />
+              } />
+              <Route path="core-values" element={
+                <PersonalCoreValues
+                  schoolId={pSchoolId}
+                  tier={pTier}
+                />
+              } />
+              <Route path="homeroom-guidance" element={
+                <HomeroomGuidanceView
+                  schoolId={pSchoolId}
+                />
+              } />
+            </Route>
+            {/* Redirect all other routes to personal dashboard */}
+            <Route path="*" element={<Navigate to="/personal" replace />} />
+          </Routes>
+        </Suspense>
+      </Router>
+    );
+  }
 
   // Division users get their own separate layout
   if (isDivisionSession) {
@@ -746,14 +860,14 @@ const App: React.FC = () => {
       />
         <div className="flex h-screen bg-slate-100 dark:bg-slate-900">
         <Sidebar 
-          session={session} 
-          announcements={announcements}
+          session={session as any} 
+          announcements={schoolData.announcements}
         />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header
-            session={session}
+            session={session as any}
             onLogout={handleLogout}
-            students={students}
+            students={schoolData.students}
             parentSelectedChildId={parentSelectedChildId}
             onParentChildChange={(id) => setParentSelectedChildId(id)}
           />
@@ -773,7 +887,7 @@ const App: React.FC = () => {
                         <Route path="/teachers" element={
                           import.meta.env.VITE_USE_POSTGRESQL === 'true'
                             ? <TeachersViewPostgreSQL 
-                                schoolId={session.user.schoolId || ''} 
+                                schoolId={(session.user as any).schoolId || ''} 
                                 learningAreas={schoolData.learningAreas || []} 
                                 authUserId={session.user.id}
                                 authUserRole={(session.user as AuthUser).role || 'admin'}
@@ -782,7 +896,7 @@ const App: React.FC = () => {
                         } />
                         <Route path="/parents" element={
                           import.meta.env.VITE_USE_POSTGRESQL === 'true' 
-                            ? <ParentsViewPostgreSQL schoolId={session.user.schoolId || ''} />
+                            ? <ParentsViewPostgreSQL schoolId={(session.user as any).schoolId || ''} />
                             : <ParentsView schoolData={schoolData} session={staffSession} />
                         } />
                         <Route path="/sections" element={<SectionsView session={staffSession} />} />
@@ -793,24 +907,25 @@ const App: React.FC = () => {
                         <Route path="/grades/class-record-selector" element={
                           <ClassRecordSelector 
                             session={staffSession}
-                            schoolYear={settings.schoolYear}
+                            schoolYear={schoolData.settings.schoolYear}
                           />
                         } />
                         <Route path="/grades/class-record/:sectionId/:learningAreaId" element={
                           <ClassRecordViewWrapper 
-                            schoolYear={settings.schoolYear}
+                            schoolYear={schoolData.settings.schoolYear}
                             teacherId={(session.user as AuthUser).id}
-                            schoolId={session.user.schoolId || ''}
+                            schoolId={(session.user as any).schoolId || ''}
                           />
                         } />
                         <Route path="/grades/core-values" element={<CoreValuesGradebookView schoolData={schoolData} session={staffSession} />} />
+                        <Route path="/grades/homeroom-guidance" element={<HomeroomGuidanceView schoolData={schoolData} session={staffSession} />} />
                         <Route path="/grades/analytics" element={<UnifiedAssessmentView schoolData={schoolData} session={staffSession} defaultTab="deep-analytics" hideTabNavigation={true} />} />
                         
                         {/* ========== REPORTS & FORMS (NEW STRUCTURE) ========== */}
                         {/* Form 137 - Permanent Record */}
                         <Route path="/reports/form137" element={<Form137Dashboard />} />
-                        <Route path="/reports/form137/:studentId" element={<Form137ManagerWrapper schoolYear={settings.schoolYear} />} />
-                        <Route path="/reports/form137/new" element={<Form137CreateWrapper schoolYear={settings.schoolYear} />} />
+                        <Route path="/reports/form137/:studentId" element={<Form137ManagerWrapper schoolYear={schoolData.settings.schoolYear} />} />
+                        <Route path="/reports/form137/new" element={<Form137CreateWrapper schoolYear={schoolData.settings.schoolYear} />} />
                         
                         {/* Form 138 - Report Card */}
                         <Route path="/reports/form138" element={<Form138Dashboard session={staffSession} />} />
@@ -822,6 +937,8 @@ const App: React.FC = () => {
                         <Route path="/reports/school-forms/sf1" element={<SF1Dashboard session={staffSession} onBack={() => window.history.back()} />} />
                         <Route path="/reports/school-forms/sf2" element={<SF2Dashboard session={staffSession} onBack={() => window.history.back()} />} />
                         <Route path="/reports/school-forms/sf9" element={<SF9Dashboard session={staffSession} onBack={() => window.history.back()} />} />
+                        <Route path="/reports/school-forms/sf9/view/:studentId" element={<SF9View />} />
+                        <Route path="/reports/school-forms/sf9/print" element={<SF9Print />} />
                         <Route path="/reports/school-forms/sf8" element={<SF8Dashboard session={staffSession} onBack={() => window.history.back()} />} />
                         <Route path="/reports/school-forms/sf5a-shs" element={<SF5ASHSDashboard session={staffSession} onBack={() => window.history.back()} />} />
                         <Route path="/reports/school-forms/sf5b-shs" element={<SF5BSHSDashboard session={staffSession} onBack={() => window.history.back()} />} />
@@ -943,6 +1060,7 @@ const App: React.FC = () => {
             <Route path="/grades/overview" element={<GradesView schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades/academic" element={<GradebookView schoolData={schoolData} session={studentSession} />} />
             <Route path="/grades/core-values" element={<CoreValuesGradebookView schoolData={schoolData} session={studentSession} />} />
+            <Route path="/grades/homeroom-guidance" element={<HomeroomGuidanceView schoolData={schoolData} session={studentSession} />} />
             <Route path="/core-values" element={<Navigate to="/grades/core-values" replace />} />
             <Route path="/attendance" element={<AttendanceView session={studentSession} />} />
             <Route path="/schedule" element={<SchedulerView schoolData={schoolData} session={studentSession} />} />

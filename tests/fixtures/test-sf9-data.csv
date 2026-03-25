@@ -1,0 +1,25 @@
+LRN,Last Name,First Name,Middle Name,Gender,Subject,Q1,Q2,Q3,Q4
+123456789001,Dela Cruz,Juan,Santos,Male,Filipino,85,88,87,90
+123456789001,Dela Cruz,Juan,Santos,Male,English,90,88,92,89
+123456789001,Dela Cruz,Juan,Santos,Male,Mathematics,82,85,80,88
+123456789001,Dela Cruz,Juan,Santos,Male,Science,87,84,86,90
+123456789001,Dela Cruz,Juan,Santos,Male,Araling Panlipunan,86,83,85,88
+123456789001,Dela Cruz,Juan,Santos,Male,EPP/TLE,84,86,88,85
+123456789001,Dela Cruz,Juan,Santos,Male,MAPEH,89,91,87,93
+123456789001,Dela Cruz,Juan,Santos,Male,ESP,91,89,90,92
+123456789002,Garcia,Maria,Reyes,Female,Filipino,92,90,94,91
+123456789002,Garcia,Maria,Reyes,Female,English,88,91,89,93
+123456789002,Garcia,Maria,Reyes,Female,Mathematics,95,93,97,94
+123456789002,Garcia,Maria,Reyes,Female,Science,90,88,92,91
+123456789002,Garcia,Maria,Reyes,Female,Araling Panlipunan,87,89,86,90
+123456789002,Garcia,Maria,Reyes,Female,EPP/TLE,85,87,88,86
+123456789002,Garcia,Maria,Reyes,Female,MAPEH,93,91,95,94
+123456789002,Garcia,Maria,Reyes,Female,ESP,90,92,91,93
+123456789003,Reyes,Pedro,Luna,Male,Filipino,78,75,80,77
+123456789003,Reyes,Pedro,Luna,Male,English,72,74,71,76
+123456789003,Reyes,Pedro,Luna,Male,Mathematics,65,68,70,72
+123456789003,Reyes,Pedro,Luna,Male,Science,76,73,78,75
+123456789003,Reyes,Pedro,Luna,Male,Araling Panlipunan,80,78,82,79
+123456789003,Reyes,Pedro,Luna,Male,EPP/TLE,82,80,84,81
+123456789003,Reyes,Pedro,Luna,Male,MAPEH,79,81,77,83
+123456789003,Reyes,Pedro,Luna,Male,ESP,81,79,83,80

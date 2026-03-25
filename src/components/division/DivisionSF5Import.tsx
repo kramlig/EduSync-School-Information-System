@@ -13,7 +13,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { useDivisionContext } from '../../contexts/DivisionContext';
-import { parseSF5, type SF5ParseResult, PROMOTION_STATUS_LABELS, GRADING_PERIOD_LABELS } from '../../services/sf5Parser';
+import { parseSF5, type SF5ParseResult, GRADING_PERIOD_LABELS } from '../../services/sf5Parser';
 import { 
   previewSF5Import, 
   importSF5, 
@@ -335,6 +335,7 @@ const DivisionSF5Import: React.FC = () => {
             <select
               value={options.gradingPeriod}
               onChange={(e) => setOptions(prev => ({ ...prev, gradingPeriod: e.target.value as GradingPeriod }))}
+              title="Grading Period"
               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
             >
               {Object.entries(GRADING_PERIOD_LABELS).map(([value, label]) => (
@@ -567,6 +568,7 @@ const DivisionSF5Import: React.FC = () => {
                   setOptions(prev => ({ ...prev, gradingPeriod: e.target.value as GradingPeriod }));
                   setTimeout(refreshPreview, 100);
                 }}
+                title="Grading Period"
                 className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
               >
                 {Object.entries(GRADING_PERIOD_LABELS).map(([value, label]) => (

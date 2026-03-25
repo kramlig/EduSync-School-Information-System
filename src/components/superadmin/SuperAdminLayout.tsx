@@ -98,7 +98,7 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, icon, color }) => (
 const SuperAdminLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SuperAdminTab>('schools');
   const [stats, setStats] = useState<PlatformStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   // Load platform stats
   useEffect(() => {

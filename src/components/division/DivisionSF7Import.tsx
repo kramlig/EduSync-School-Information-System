@@ -122,7 +122,7 @@ const DivisionSF7Import: React.FC = () => {
 
   // Check permissions - Memoize to prevent infinite loops
   const canImport = useMemo(() => {
-    return hasPermission('teachers', 'write') || hasPermission('schools', 'write');
+    return hasPermission('personnel', 'write') || hasPermission('schools', 'write');
   }, [hasPermission]);
 
   // ========================================================================

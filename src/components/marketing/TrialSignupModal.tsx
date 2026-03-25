@@ -115,7 +115,7 @@ export const TrialSignupModal: React.FC<TrialSignupModalProps> = ({ isOpen, onCl
       setSubmitSuccess(true);
     } catch (error) {
       console.error('Error submitting trial signup:', error);
-      alert('Failed to submit request. Please try again or contact support@edusync.ph');
+      alert('Failed to submit request. Please try again or contact edusyncph@gmail.com');
     } finally {
       setIsSubmitting(false);
     }

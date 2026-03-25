@@ -1,0 +1,42 @@
+﻿
+Running 1 test using 1 worker
+
+  Γ£ÿ  1 [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:325:3 ΓÇ║ 2. Full Signup Flow ΓÇ║ completes full signup and lands on personal dashboard (17.8s)
+
+
+  1) [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:325:3 ΓÇ║ 2. Full Signup Flow ΓÇ║ completes full signup and lands on personal dashboard 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('text=Welcome back').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 15000ms[22m
+    [2m  - waiting for locator('text=Welcome back').first()[22m
+
+
+      100 |
+      101 |   // Wait for dashboard to render (confirms session is active and app is ready)
+    > 102 |   await expect(page.locator('text=Welcome back').first()).toBeVisible({ timeout: 15000 });
+          |                                                           ^
+      103 |
+      104 |   return { session: await getSession(page), user };
+      105 | }
+        at fullSignup (C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:102:59)
+        at C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:326:31
+
+    Error Context: test-results\tests-personal-workspace-p-bda5d-lands-on-personal-dashboard-chromium\error-context.md
+
+    attachment #2: trace (application/zip) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    test-results\tests-personal-workspace-p-bda5d-lands-on-personal-dashboard-chromium\trace.zip
+    Usage:
+
+        npx playwright show-trace test-results\tests-personal-workspace-p-bda5d-lands-on-personal-dashboard-chromium\trace.zip
+
+    ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+  1 failed
+    [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:325:3 ΓÇ║ 2. Full Signup Flow ΓÇ║ completes full signup and lands on personal dashboard 

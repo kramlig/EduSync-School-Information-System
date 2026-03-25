@@ -1,0 +1,31 @@
+﻿
+Running 3 tests using 1 worker
+
+  Γ£ô  1 [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:325:3 ΓÇ║ 2. Full Signup Flow ΓÇ║ completes full signup and lands on personal dashboard (4.8s)
+  Γ£ô  2 [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:340:3 ΓÇ║ 2. Full Signup Flow ΓÇ║ shows welcome message on dashboard after signup (4.3s)
+  Γ£ÿ  3 [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:347:3 ΓÇ║ 2. Full Signup Flow ΓÇ║ shows duplicate account error for same email (30.0s)
+
+
+  1) [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:347:3 ΓÇ║ 2. Full Signup Flow ΓÇ║ shows duplicate account error for same email 
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: page.fill: Test timeout of 30000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('#fullName')[22m
+
+
+      353 |     await page.waitForLoadState('networkidle');
+      354 |
+    > 355 |     await page.fill('#fullName', 'Duplicate User');
+          |                ^
+      356 |     await page.fill('#signupEmail', user.email);
+      357 |     await page.fill('#signupPassword', user.password);
+      358 |     await page.fill('#confirmPassword', user.password);
+        at C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:355:16
+
+    Error Context: test-results\tests-personal-workspace-p-e27d2-ccount-error-for-same-email-chromium\error-context.md
+
+  1 failed
+    [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:347:3 ΓÇ║ 2. Full Signup Flow ΓÇ║ shows duplicate account error for same email 
+  2 passed (40.0s)

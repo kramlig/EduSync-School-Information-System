@@ -586,3 +586,13 @@ exports.createAuthUser = syncPostgresToAuth.createAuthUser;
 // ========================================
 const createUserAccount = require('./src/createUserAccount');
 exports.createUserAccount = createUserAccount.createUserAccount;
+
+// ========================================
+// Payment / Subscription (PayMongo)
+// ========================================
+const payments = require('./src/payments');
+exports.createPayMongoCheckout = payments.createPayMongoCheckout;
+exports.paymongoWebhook = payments.paymongoWebhook;
+exports.getSubscriptionStatus = payments.getSubscriptionStatus;
+exports.cancelSubscription = payments.cancelSubscription;
+exports.getBillingHistory = payments.getBillingHistory;

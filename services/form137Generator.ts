@@ -143,19 +143,50 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
     }
 
     // Step 3: Get quarterly grades from PostgreSQL
-    const { data: gradesData } = await supabase
+    // First try with school_year filter, fall back to all grades if none found
+    let gradesData: any[] | null = null;
+    
+    const { data: filteredGrades } = await supabase
       .from('grades')
       .select('*')
-      .eq('student_id', options.studentId);
+      .eq('student_id', options.studentId)
+      .eq('school_year', schoolYear);
     
+    if (filteredGrades && filteredGrades.length > 0) {
+      gradesData = filteredGrades;
+    } else {
+      // Fall back to all grades for this student (school_year might not match)
+      const { data: allGrades } = await supabase
+        .from('grades')
+        .select('*')
+        .eq('student_id', options.studentId);
+      gradesData = allGrades;
+      if (allGrades && allGrades.length > 0) {
+        warnings.push(`No grades found for school year ${schoolYear}, using all available grades`);
+      }
+    }
+
+    // Parse numeric values safely — Supabase may return NUMERIC as string or number
+    const parseNum = (v: any): number | undefined => {
+      if (v === null || v === undefined) return undefined;
+      if (typeof v === 'number') return v;
+      if (typeof v === 'string') { const n = parseFloat(v); return isNaN(n) ? undefined : n; }
+      return undefined;
+    };
+
     const grades = (gradesData || []).map(g => ({
       id: g.id,
+      schoolId: g.school_id,
       studentId: g.student_id,
       learningAreaId: g.learning_area_id,
-      quarter: g.quarter,
-      grade: g.grade,
+      q1: parseNum(g.q1),
+      q2: parseNum(g.q2),
+      q3: parseNum(g.q3),
+      q4: parseNum(g.q4),
+      finalGrade: parseNum(g.final_grade),
+      remarks: g.remarks,
       schoolYear: g.school_year
-    })) as unknown as Grade[];
+    })) as Grade[];
 
     if (grades.length === 0) {
       warnings.push('No grades found for this student');
@@ -214,8 +245,7 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
     // Get core value names from PostgreSQL
     const { data: coreValuesData } = await supabase
       .from('core_values')
-      .select('id, name, code')
-      .is('deleted_at', null);
+      .select('id, name, code');
     
     const coreValuesMap = new Map<string, { name: string; code: string }>();
     (coreValuesData || []).forEach(cv => {
@@ -259,10 +289,12 @@ export async function generateForm137FromSystemData(options: GenerationOptions):
     const now = new Date().toISOString();
     const currentSchoolName = schoolName || 'Your School Name';
     const currentSchoolId = schoolIdNumber || '';
+    // Ensure gradeLevel is a number (Supabase may return string)
+    const gradeLevel = Number(sectionData?.gradeLevel || options.gradeLevel || 7);
     
     const schoolYearData: SchoolYearRecord = {
       schoolYear,
-      gradeLevel: sectionData?.gradeLevel || options.gradeLevel || 7,
+      gradeLevel,
       section: sectionData?.name || options.section || '',
       adviserName: adviserName,
       schoolName: currentSchoolName,
@@ -371,14 +403,20 @@ function transformGradesToForm137(
     // Get the grade record (PostgreSQL: one record per student per subject per year)
     const gradeRecord = subjectGradesList[0];
     
-    // PostgreSQL grades already have q1, q2, q3, q4 as numbers (not objects)
-    const q1 = typeof gradeRecord.q1 === 'number' ? gradeRecord.q1 : 0;
-    const q2 = typeof gradeRecord.q2 === 'number' ? gradeRecord.q2 : 0;
-    const q3 = typeof gradeRecord.q3 === 'number' ? gradeRecord.q3 : 0;
-    const q4 = typeof gradeRecord.q4 === 'number' ? gradeRecord.q4 : 0;
+    // Safe number extraction — handle both number and string types
+    const toNum = (v: any): number => {
+      if (typeof v === 'number') return v;
+      if (typeof v === 'string') { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+      return 0;
+    };
+    
+    const q1 = toNum(gradeRecord.q1);
+    const q2 = toNum(gradeRecord.q2);
+    const q3 = toNum(gradeRecord.q3);
+    const q4 = toNum(gradeRecord.q4);
     
     // Use finalGrade from record or compute it
-    const finalGrade = (typeof gradeRecord.finalGrade === 'number' ? gradeRecord.finalGrade : 0) || computeFinalGrade(q1, q2, q3, q4);
+    const finalGrade = toNum(gradeRecord.finalGrade) || computeFinalGrade(q1, q2, q3, q4);
     const remarks: 'Passed' | 'Failed' = finalGrade >= 75 ? 'Passed' : 'Failed';
     
     subjectGrades.push({

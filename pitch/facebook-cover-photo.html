@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EduSync Facebook Cover Photo</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a2e;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Segoe UI', 'Inter', -apple-system, sans-serif;
+    gap: 24px;
+  }
+
+  .label {
+    color: #888;
+    font-size: 13px;
+    letter-spacing: 0.05em;
+  }
+
+  /* Preview wrapper - shows scaled down version on screen */
+  .cover-wrapper {
+    width: 851px;
+    height: 315px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+
+  /* ─── FACEBOOK COVER: 2553 x 945 (3x HiDPI) ─── */
+  .cover {
+    width: 2553px;
+    height: 945px;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0B1D3A 0%, #0D2647 35%, #132D5E 65%, #0B1D3A 100%);
+    color: white;
+    display: flex;
+    align-items: center;
+    transform: scale(0.33333);
+    transform-origin: top left;
+  }
+
+  /* Decorative circles */
+  .cover::before {
+    content: '';
+    position: absolute;
+    top: -360px;
+    right: -240px;
+    width: 1200px;
+    height: 1200px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(30,111,217,0.18) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .cover::after {
+    content: '';
+    position: absolute;
+    bottom: -300px;
+    left: -180px;
+    width: 960px;
+    height: 960px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(212,168,67,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* Geometric accent lines */
+  .geo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .geo .ring1 {
+    position: absolute;
+    top: 90px;
+    right: 180px;
+    width: 600px;
+    height: 600px;
+    border: 4px solid rgba(255,255,255,0.04);
+    border-radius: 50%;
+  }
+  .geo .ring2 {
+    position: absolute;
+    bottom: 60px;
+    right: 600px;
+    width: 420px;
+    height: 420px;
+    border: 4px solid rgba(255,255,255,0.03);
+    border-radius: 50%;
+  }
+  .geo .diamond {
+    position: absolute;
+    top: 180px;
+    left: 960px;
+    width: 240px;
+    height: 240px;
+    border: 4px solid rgba(30,111,217,0.08);
+    transform: rotate(45deg);
+  }
+  .geo .line1 {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent 0%, transparent 40%, rgba(30,111,217,0.03) 40.5%, rgba(30,111,217,0.03) 41%, transparent 41.5%);
+  }
+  .geo .line2 {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent 0%, transparent 55%, rgba(212,168,67,0.03) 55.5%, rgba(212,168,67,0.03) 56%, transparent 56.5%);
+  }
+
+  /* Gold accent bar at top */
+  .gold-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 12px;
+    background: linear-gradient(90deg, #D4A843, #F0D78C, #D4A843);
+    z-index: 10;
+  }
+
+  /* Left content area */
+  .left-content {
+    position: relative;
+    z-index: 5;
+    padding: 0 0 0 168px;
+    flex: 1;
+  }
+
+  .brand-label {
+    font-size: 31.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    color: #D4A843;
+    margin-bottom: 30px;
+  }
+
+  .brand-name {
+    font-size: 156px;
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    margin-bottom: 18px;
+  }
+  .brand-name .sync {
+    color: #3B8AED;
+  }
+
+  .tagline {
+    font-size: 48px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.8);
+    letter-spacing: 0.02em;
+    margin-bottom: 60px;
+  }
+
+  .features-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .feature-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 36px;
+    background: rgba(30,111,217,0.15);
+    border: 3px solid rgba(30,111,217,0.25);
+    border-radius: 100px;
+    font-size: 31.5px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+    letter-spacing: 0.02em;
+  }
+  .feature-pill .dot {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #3B8AED;
+  }
+
+  .website {
+    position: absolute;
+    bottom: 60px;
+    left: 168px;
+    font-size: 36px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.05em;
+    z-index: 5;
+  }
+  .website span {
+    color: #D4A843;
+  }
+
+  /* Right side — shield/logo area */
+  .right-content {
+    position: relative;
+    z-index: 5;
+    width: 840px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-right: 120px;
+  }
+
+  .shield {
+    width: 480px;
+    height: 540px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .shield svg {
+    width: 480px;
+    height: 540px;
+    filter: drop-shadow(0 12px 60px rgba(30,111,217,0.3));
+  }
+
+  /* Stats bar at bottom-right */
+  .stats-bar {
+    position: absolute;
+    bottom: 54px;
+    right: 120px;
+    display: flex;
+    gap: 60px;
+    z-index: 5;
+  }
+  .stat {
+    text-align: center;
+  }
+  .stat-value {
+    font-size: 60px;
+    font-weight: 900;
+    color: #D4A843;
+    line-height: 1;
+  }
+  .stat-label {
+    font-size: 24px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(255,255,255,0.45);
+    margin-top: 6px;
+  }
+
+  /* Divider dots */
+  .stat-div {
+    width: 3px;
+    height: 84px;
+    background: rgba(255,255,255,0.1);
+    align-self: center;
+  }
+
+  /* ─── DOWNLOAD BUTTON ─── */
+  .download-btn {
+    padding: 12px 32px;
+    background: linear-gradient(135deg, #1E6FD9, #3B8AED);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .download-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(30,111,217,0.4);
+  }
+  .download-btn:active { transform: translateY(0); }
+
+  /* ─── INSTRUCTIONS ─── */
+  .instructions {
+    color: #aaa;
+    font-size: 13px;
+    max-width: 600px;
+    text-align: center;
+    line-height: 1.6;
+  }
+  .instructions strong { color: #ddd; }
+  .instructions code {
+    background: rgba(255,255,255,0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+
+<p class="label">FACEBOOK COVER PHOTO — 2553 &times; 945px (3&times; HiDPI)</p>
+
+<button class="download-btn" onclick="downloadCover()">&#11015; Download as PNG (High-Res)</button>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- COVER PHOTO START                              -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="cover-wrapper">
+<div class="cover" id="cover">
+
+  <!-- Gold bar -->
+  <div class="gold-bar"></div>
+
+  <!-- Geo decorations -->
+  <div class="geo">
+    <div class="ring1"></div>
+    <div class="ring2"></div>
+    <div class="diamond"></div>
+    <div class="line1"></div>
+    <div class="line2"></div>
+  </div>
+
+  <!-- Left: Branding & Features -->
+  <div class="left-content">
+    <div class="brand-label">School Information System</div>
+    <div class="brand-name">Edu<span class="sync">Sync</span></div>
+    <div class="tagline">The Future of School Management</div>
+    <div class="features-row">
+      <span class="feature-pill"><span class="dot"></span>DepEd Forms</span>
+      <span class="feature-pill"><span class="dot"></span>Smart Gradebook</span>
+      <span class="feature-pill"><span class="dot"></span>AI Lesson Plans</span>
+      <span class="feature-pill"><span class="dot"></span>Enrollment Portal</span>
+      <span class="feature-pill"><span class="dot"></span>Parent Portal</span>
+      <span class="feature-pill"><span class="dot"></span>Offline-Ready</span>
+    </div>
+  </div>
+
+  <!-- Right: Shield Logo -->
+  <div class="right-content">
+    <div class="shield">
+      <svg viewBox="0 0 160 180" xmlns="http://www.w3.org/2000/svg">
+        <!-- Shield shape -->
+        <defs>
+          <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#1E6FD9;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#132D5E;stop-opacity:1" />
+          </linearGradient>
+          <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#D4A843;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#F0D78C;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#D4A843;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <!-- Shield body -->
+        <path d="M80 8 L148 35 C148 35 150 100 130 130 C115 152 80 172 80 172 C80 172 45 152 30 130 C10 100 12 35 12 35 Z"
+              fill="url(#shieldGrad)" stroke="url(#goldGrad)" stroke-width="2.5"/>
+        <!-- Inner shield highlight -->
+        <path d="M80 20 L138 43 C138 43 140 98 123 124 C110 143 80 160 80 160 C80 160 50 143 37 124 C20 98 22 43 22 43 Z"
+              fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+        <!-- Graduation cap -->
+        <g transform="translate(80,78)">
+          <!-- Cap top (diamond) -->
+          <polygon points="0,-28 45,-10 0,8 -45,-10" fill="url(#goldGrad)" opacity="0.95"/>
+          <!-- Cap brim shadow -->
+          <polygon points="0,8 45,-10 45,-6 0,12 -45,-6 -45,-10" fill="#B8922F" opacity="0.6"/>
+          <!-- Tassel line -->
+          <line x1="45" y1="-10" x2="50" y2="18" stroke="#D4A843" stroke-width="2" stroke-linecap="round"/>
+          <!-- Tassel end -->
+          <circle cx="50" cy="21" r="4" fill="#D4A843"/>
+          <!-- Book/base under cap -->
+          <rect x="-22" y="14" width="44" height="6" rx="2" fill="rgba(255,255,255,0.15)"/>
+          <rect x="-18" y="22" width="36" height="5" rx="2" fill="rgba(255,255,255,0.1)"/>
+        </g>
+        <!-- Digital accent dots -->
+        <circle cx="38" cy="55" r="2" fill="rgba(255,255,255,0.15)"/>
+        <circle cx="122" cy="55" r="2" fill="rgba(255,255,255,0.15)"/>
+        <circle cx="30" cy="80" r="1.5" fill="rgba(59,138,237,0.3)"/>
+        <circle cx="130" cy="80" r="1.5" fill="rgba(59,138,237,0.3)"/>
+        <!-- Data stream lines -->
+        <line x1="44" y1="130" x2="55" y2="140" stroke="rgba(59,138,237,0.15)" stroke-width="1"/>
+        <line x1="116" y1="130" x2="105" y2="140" stroke="rgba(59,138,237,0.15)" stroke-width="1"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Bottom-left: Website -->
+  <div class="website">www.<span>edusync</span>.ph</div>
+
+  <!-- Bottom-right: Key stats -->
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-value">9</div>
+      <div class="stat-label">DepEd Forms</div>
+    </div>
+    <div class="stat-div"></div>
+    <div class="stat">
+      <div class="stat-value">K-12</div>
+      <div class="stat-label">Coverage</div>
+    </div>
+    <div class="stat-div"></div>
+    <div class="stat">
+      <div class="stat-value">100%</div>
+      <div class="stat-label">Offline</div>
+    </div>
+  </div>
+
+</div>
+</div>
+<!-- ═══════════════════════════════════════════════ -->
+<!-- COVER PHOTO END                                -->
+<!-- ═══════════════════════════════════════════════ -->
+
+<div class="instructions">
+  <strong>Click the button above to download a high-res PNG (2553&times;945).</strong><br>
+  Facebook recommends at least 1640&times;924 &mdash; this is well above that.<br>
+  Upload to Facebook &rarr; Edit Cover Photo &rarr; no more blur!
+</div>
+
+<script>
+function downloadCover() {
+  const el = document.getElementById('cover');
+  // Reset transform for full-res capture
+  el.style.transform = 'none';
+  html2canvas(el, {
+    scale: 1,
+    useCORS: true,
+    backgroundColor: null,
+    width: 2553,
+    height: 945
+  }).then(function(canvas) {
+    el.style.transform = 'scale(0.33333)';
+    const link = document.createElement('a');
+    link.download = 'EduSync-Facebook-Cover-2553x945.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }).catch(function() {
+    el.style.transform = 'scale(0.33333)';
+    alert('Download failed. Try: Right-click cover > Inspect > select .cover node > Capture node screenshot');
+  });
+}
+</script>
+
+</body>
+</html>

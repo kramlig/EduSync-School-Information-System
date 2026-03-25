@@ -155,7 +155,7 @@ export async function checkDuplicateTeachers(
 /**
  * Generate a temporary email for teachers without email
  */
-function generateTemporaryEmail(teacher: SF7Teacher, schoolId: string): string {
+function generateTemporaryEmail(teacher: SF7Teacher, _schoolId: string): string {
   const namePart = `${teacher.firstName.toLowerCase()}.${teacher.lastName.toLowerCase()}`
     .replace(/[^a-z.]/g, '')
     .substring(0, 30);

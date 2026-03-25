@@ -115,6 +115,7 @@ export interface HealthRecordInput {
   remarks?: string;
   assessed_by_id?: string;
   assessed_by_name?: string;
+  nutritional_status?: string;
 }
 
 export interface HealthStatistics {

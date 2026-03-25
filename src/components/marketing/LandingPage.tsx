@@ -113,7 +113,7 @@ const LandingPage: React.FC = () => {
               </button>
 
               <a
-                href="https://www.canva.com/design/DAG4o-xNzcg/Yc6nsXXFxzmCZufPv8xvPg/watch?utm_content=DAG4o-xNzcg&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h9cd0b5af63"
+                href="https://youtu.be/RFOSq6nwfio"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white rounded-xl font-bold text-lg hover:bg-white/20 transition-all flex items-center justify-center gap-2"
@@ -409,6 +409,51 @@ const LandingPage: React.FC = () => {
             </div>
           ))}
         </div>
+      </div>
+    </section>
+  );
+
+  // Free Tools CTA Section
+  const FreeToolsSection = () => (
+    <section className="py-20 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20" data-section="free-tools">
+      <div className="max-w-5xl mx-auto px-6 text-center">
+        <div className="inline-flex items-center gap-2 bg-emerald-100 dark:bg-emerald-800/40 px-4 py-2 rounded-full mb-6">
+          <DocumentTextIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">100% Free — No Account Needed</span>
+        </div>
+
+        <h2 className="text-3xl lg:text-4xl font-extrabold text-slate-900 dark:text-white mb-4">
+          Generate DepEd Forms <span className="text-emerald-600">Instantly</span>
+        </h2>
+        <p className="text-lg text-slate-600 dark:text-slate-300 mb-10 max-w-2xl mx-auto">
+          Upload your class data as CSV or Excel and download official SF2, SF5, and SF9 forms as PDF — right in your browser. No sign-up, no data leaves your device.
+        </p>
+
+        <div className="grid sm:grid-cols-3 gap-6 mb-10">
+          {[
+            { form: 'SF2', desc: 'Daily Attendance Report', icon: '📋' },
+            { form: 'SF5', desc: 'Promotion & Proficiency', icon: '📊' },
+            { form: 'SF9', desc: 'Learner Progress Report Card', icon: '📝' },
+          ].map(({ form, desc, icon }) => (
+            <div key={form} className="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+              <div className="text-3xl mb-3">{icon}</div>
+              <div className="font-bold text-slate-900 dark:text-white">{form}</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">{desc}</div>
+            </div>
+          ))}
+        </div>
+
+        <Link
+          to="/tools/form-generator"
+          className="inline-flex items-center gap-2 px-8 py-4 bg-emerald-600 text-white rounded-xl text-lg font-bold hover:bg-emerald-700 hover:shadow-lg hover:scale-105 transition-all"
+        >
+          Try the Free Form Generator
+          <ArrowRightIcon className="w-5 h-5" />
+        </Link>
+
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-4">
+          3 free downloads per day · All data stays in your browser
+        </p>
       </div>
     </section>
   );
@@ -758,8 +803,8 @@ const LandingPage: React.FC = () => {
         <div className="mt-12 pt-12 border-t border-white/20">
           <p className="text-sm text-indigo-200 mb-2">Questions? Contact us:</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-lg">
-            <a href="mailto:hello@edusync.ph" className="hover:text-yellow-300 transition-colors">
-              📧 hello@edusync.ph
+            <a href="mailto:edusyncph@gmail.com" className="hover:text-yellow-300 transition-colors">
+              📧 edusyncph@gmail.com
             </a>
             <span className="hidden sm:inline">•</span>
             <a href="tel:+639988438814" className="hover:text-yellow-300 transition-colors">
@@ -848,8 +893,10 @@ const LandingPage: React.FC = () => {
                   FAQ
                 </button>
               </li>
-              <li><a href="mailto:support@edusync.ph" className="hover:text-white transition-colors">Support</a></li>
-              <li><a href="mailto:hello@edusync.ph" className="hover:text-white transition-colors">Contact Sales</a></li>
+              <li><Link to="/teachers" className="hover:text-white transition-colors">For Teachers</Link></li>
+              <li><Link to="/tools/form-generator" className="hover:text-white transition-colors">Free Form Generator</Link></li>
+              <li><a href="mailto:edusyncph@gmail.com" className="hover:text-white transition-colors">Support</a></li>
+              <li><a href="mailto:edusyncph@gmail.com" className="hover:text-white transition-colors">Contact Sales</a></li>
             </ul>
           </div>
 
@@ -1040,6 +1087,7 @@ const LandingPage: React.FC = () => {
       <ProblemSection />
       <SolutionSection />
       <ImpactSection />
+      <FreeToolsSection />
       <TrustSection />
       <PricingSection />
       <FAQSection />

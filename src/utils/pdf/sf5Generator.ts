@@ -1,9 +1,10 @@
-/**
+﻿/**
  * SF5 PDF Generator - Promotion & Proficiency Report (Elementary & JHS)
  * Generates official DepEd Form SF5 matching the exact format with pagination
  */
 
 import jsPDF from 'jspdf';
+import { registerCalibriFont } from './registerCalibriFont';
 import type { PromotionRecordWithStudent } from '../../types/promotionRecords';
 // Import DepEd logo and seal (swapped because files are named incorrectly)
 import depedSealUrl from '../../assets/deped-logo.png';
@@ -23,9 +24,11 @@ interface SF5PDFOptions {
   section?: { name: string; grade_level: number };
   records: PromotionRecordWithStudent[];
   preparedBy: string;
+  /** If true, returns the jsPDF doc instead of saving. Used by standalone tool for watermark. */
+  returnDoc?: boolean;
 }
 
-export async function generateSF5PDF(options: SF5PDFOptions): Promise<void> {
+export async function generateSF5PDF(options: SF5PDFOptions): Promise<jsPDF | void> {
   const { schoolInfo, schoolYear, gradeLevel, section, records } = options;
 
   // Separate students by gender for totals
@@ -48,6 +51,9 @@ export async function generateSF5PDF(options: SF5PDFOptions): Promise<void> {
     unit: 'mm',
     format: 'legal', // 355.6 x 215.9 mm
   });
+
+  // Register Calibri (Carlito) font
+  await registerCalibriFont(doc);
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -111,7 +117,10 @@ export async function generateSF5PDF(options: SF5PDFOptions): Promise<void> {
     totalPages
   });
   
-  // Save
+  // Save or return
+  if (options.returnDoc) {
+    return doc;
+  }
   const fileName = `SF5_${schoolYear.replace(/\//g, '-')}_Grade${gradeLevel || 'All'}_${section?.name || 'All'}.pdf`;
   doc.save(fileName);
 }
@@ -232,15 +241,15 @@ function renderStudentPage(doc: jsPDF, config: {
     
     // === TITLE ===
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('Calibri', 'bold');
     doc.text('School Form 5 (SF5) Report on Promotion and Learning Progress & Achievement', pageWidth / 2, 8, { align: 'center' });
     
     doc.setFontSize(8);
-    doc.setFont('helvetica', 'italic');
+    doc.setFont('Calibri', 'italic');
     doc.text('Revised to conform with the instructions of DepEd Order 8, s. 2015', pageWidth / 2, 13, { align: 'center' });
     
     // === SCHOOL INFO FIELDS ===
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('Calibri', 'normal');
     doc.setFontSize(9);
     
     let fieldY = 24;
@@ -305,7 +314,7 @@ function renderStudentPage(doc: jsPDF, config: {
   const remarksWidth = tableWidth - lrnWidth - nameWidth - genAveWidth - actionWidth;
   
   // Header row
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Calibri', 'bold');
   doc.setFontSize(7);
   
   let x = leftMargin;
@@ -350,7 +359,7 @@ function renderStudentPage(doc: jsPDF, config: {
   doc.line(leftMargin, tableY + 16, pageWidth - rightMargin, tableY + 16);
   
   // === DATA ROWS ===
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   doc.setFontSize(7);
   
   let dataY = tableY + 21;
@@ -394,11 +403,11 @@ function renderStudentPage(doc: jsPDF, config: {
   
   // Male total row
   if (dataY <= tableY + tableHeight - 10) {
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('Calibri', 'bold');
     doc.text('TOTAL MALE', leftMargin + 2, dataY);
     doc.text(pageMaleStudents.length.toString(), leftMargin + lrnWidth + nameWidth / 2, dataY, { align: 'center' });
     dataY += rowHeight + 1;
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('Calibri', 'normal');
   }
   
   // Render female students
@@ -435,7 +444,7 @@ function renderStudentPage(doc: jsPDF, config: {
   
   // Female total row
   if (dataY <= tableY + tableHeight - 10) {
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('Calibri', 'bold');
     doc.text('FEMALE TOTAL', leftMargin + 2, dataY);
     doc.text(pageFemaleStudents.length.toString(), leftMargin + lrnWidth + nameWidth / 2, dataY, { align: 'center' });
     dataY += rowHeight + 1;
@@ -448,7 +457,7 @@ function renderStudentPage(doc: jsPDF, config: {
   }
   
   // Footer
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   doc.setFontSize(8);
   doc.text(`School Form 5 Page ${pageNumber} of ${totalPages}`, pageWidth - rightMargin - 50, pageHeight - 10);
 }
@@ -481,7 +490,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   // === SUMMARY TABLES ===
   const summaryY = 15;
   doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Calibri', 'bold');
   
   // Calculate promotion statistics
   const promotedMale = maleStudents.filter(r => r.promotion_status === 'promoted').length;
@@ -518,7 +527,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   
   // Header row
   doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Calibri', 'bold');
   let summaryX = leftMargin;
   let currentY = summaryTableY + 6;
   
@@ -541,7 +550,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   doc.line(leftMargin, summaryTableY + 8, leftMargin + summaryTableWidth, summaryTableY + 8);
   
   // Data rows
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   const summaryRowHeight = 12;
   
   // PROMOTED
@@ -574,7 +583,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   const learningTableWidth = 120;
   const learningTableHeight = 85;
   
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Calibri', 'bold');
   doc.setFontSize(7);
   doc.text("LEARNING PROGRESS AND ACHIEVEMENT (Based on Learners' General Average)", learningTableX, summaryY, { maxWidth: learningTableWidth });
   
@@ -614,7 +623,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   const outstandingFemale = femaleStudents.filter(r => r.general_average && r.general_average >= 90 && r.general_average <= 100).length;
   
   // Achievement levels
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   const achievementRows = [
     { label: 'Did Not Meet\nExpectations\n( 74 and below)', m: didNotMeetMale, f: didNotMeetFemale },
     { label: 'Fairly Satisfactory\n(75-79)', m: fairlyMale, f: fairlyFemale },
@@ -647,7 +656,7 @@ function renderSummaryPage(doc: jsPDF, config: {
   
   // === SIGNATURE BLOCKS ===
   const sigY = Math.max(summaryTableY + summaryTableHeight, learningTableY + learningTableHeight) + 15;
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   doc.setFontSize(8);
   
   // PREPARED BY
@@ -678,9 +687,9 @@ function renderSummaryPage(doc: jsPDF, config: {
   let guideY = sigY;
   
   doc.setFontSize(7);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('Calibri', 'bold');
   doc.text('GUIDELINES:', guideX, guideY);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('Calibri', 'normal');
   guideY += 4;
   
   const guidelines = [

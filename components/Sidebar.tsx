@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { AuthUser, StudentUser, ParentUser, Announcement } from '../types';
-import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronRightIcon, BuildingOfficeIcon, CheckBadgeIcon, UserCircleIcon, CreditCardIcon, CurrencyDollarIcon, ChartPieIcon, DocumentTextIcon } from './icons';
+import { HomeIcon, AcademicCapIcon, BriefcaseIcon, IdentificationIcon, UsersIcon, CalendarIcon, ClipboardUserIcon, BookOpenIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, ClipboardDocumentListIcon, TableCellsIcon, CalendarDaysIcon, CogIcon, MegaphoneIcon, ChevronRightIcon, BuildingOfficeIcon, CheckBadgeIcon, UserCircleIcon, CreditCardIcon, CurrencyDollarIcon, ChartPieIcon, DocumentTextIcon, HeartIcon } from './icons';
 import { useSchoolProfilePostgreSQL } from '../src/hooks/useSchoolProfilePostgreSQL';
 import { useAssignmentsPostgreSQL } from '../src/hooks/useAssignmentsPostgreSQL';
 import { useAnnouncementsPostgreSQL } from '../src/hooks/useAnnouncementsPostgreSQL';
@@ -97,6 +97,7 @@ const Sidebar: React.FC<SidebarProps> = ({ session, announcements = [] }) => {
         { path: '/assignments', label: 'Assignments', icon: <ClipboardDocumentCheckIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
         { path: '/grades', label: 'Grade Entry', icon: <TableCellsIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
         { path: '/attendance', label: 'Attendance', icon: <CalendarDaysIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
+        { path: '/grades/homeroom-guidance', label: 'Homeroom Guidance', icon: <HeartIcon />, roles: ['admin', 'teacher', 'principal', 'registrar'], badge: null },
       ]
     },
     {
