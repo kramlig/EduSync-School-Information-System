@@ -50,9 +50,9 @@ export interface Student {
   id: string;
   schoolId: string;  // MULTI-TENANT: Required for school isolation
   name: string;
-  email: string;
-  enrollmentDate: string;
-  dateOfBirth?: string;
+  email?: string;
+  enrollmentDate?: string;
+  dateOfBirth?: string | Date;
   sex?: 'Male' | 'Female';
   lrn?: string;
   sectionId?: string;
@@ -146,6 +146,7 @@ export interface Teacher {
   assignments?: TeacherAssignment[];
   role: 'admin' | 'teacher' | 'principal' | 'registrar' | 'superadmin';
   password?: string;
+  firebaseUid?: string;
 }
 
 export type AuthUser = Omit<Teacher, 'password'>;
@@ -174,9 +175,17 @@ export type ParentUser = Omit<Parent, 'password'>;
 export interface Section {
   id: string;
   schoolId: string;  // MULTI-TENANT: Required for school isolation
-  gradeLevel: number;
+  gradeLevel: number | string;
   name: string;
   adviserId?: string;
+  adviserName?: string;
+  schoolYear?: string;
+  capacity?: number;
+  studentCount?: number;
+  room?: string;
+  schedule?: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
 }
 
 export interface LearningArea {
@@ -247,9 +256,14 @@ export type GradeInput = Grade | GradeSHS;
 
 export interface CoreValue {
   id: string;
-  schoolId: string;  // MULTI-TENANT: Required for school isolation
+  schoolId: string | null;  // null for global core values
+  code?: string;
   name: string;
+  description?: string;
   behaviors: string[];
+  displayOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type CoreValueMarking = 'AO' | 'SO' | 'RO' | 'NO';
@@ -259,10 +273,14 @@ export interface CoreValueGrade {
   schoolId: string;  // MULTI-TENANT: Required for school isolation
   studentId: string;
   coreValueId: string;
+  schoolYear?: string;
   q1?: Record<string, CoreValueMarking>;
   q2?: Record<string, CoreValueMarking>;
   q3?: Record<string, CoreValueMarking>;
   q4?: Record<string, CoreValueMarking>;
+  gradedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type AttendanceStatus = 'P' | 'A' | 'L' | 'E'; // Present, Absent, Late, Excused

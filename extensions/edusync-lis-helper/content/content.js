@@ -680,4 +680,9 @@ function extractFromCardLayout(students) {
           students.push(student);
         }
       }
-      if
+      if (students.length > 0) return true;
+    }
+  }
+  
+  return false;
+}

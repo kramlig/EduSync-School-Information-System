@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Allow: /teachers
+Allow: /landing
+Allow: /tools/form-generator
+Allow: /privacy
+Allow: /terms
+
+Disallow: /personal/
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: https://edusync-sis.web.app/sitemap.xml

@@ -16,14 +16,12 @@ import {
   BuildingOffice2Icon,
   UserPlusIcon,
   PencilIcon,
-  EyeIcon,
   XMarkIcon,
   CheckCircleIcon,
   ExclamationCircleIcon,
-  FunnelIcon,
 } from '@heroicons/react/24/outline';
 import type { School, Division, CreateSchoolInput } from '../types';
-import { getAllSchools, getAllDivisions, createSchool, updateSchool, createUserForSchool } from '../services/superAdminService';
+import { getAllSchools, getAllDivisions, createSchool, createUserForSchool } from '../services/superAdminService';
 
 // ============================================================================
 // MODAL COMPONENTS
@@ -81,7 +79,7 @@ const CreateSchoolModal: React.FC<CreateSchoolModalProps> = ({ isOpen, onClose, 
         <div className="relative bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
           <div className="sticky top-0 bg-white dark:bg-slate-800 px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Create New School</h2>
-            <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+            <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Close">
               <XMarkIcon className="w-5 h-5" />
             </button>
           </div>
@@ -147,6 +145,7 @@ const CreateSchoolModal: React.FC<CreateSchoolModalProps> = ({ isOpen, onClose, 
                     required
                     value={formData.school_type}
                     onChange={(e) => setFormData({ ...formData, school_type: e.target.value as CreateSchoolInput['school_type'] })}
+                    title="School Type"
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="elementary">Elementary School</option>
@@ -163,6 +162,7 @@ const CreateSchoolModal: React.FC<CreateSchoolModalProps> = ({ isOpen, onClose, 
                   <select
                     value={formData.division_id}
                     onChange={(e) => setFormData({ ...formData, division_id: e.target.value })}
+                    title="Division"
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">-- No Division --</option>
@@ -206,6 +206,7 @@ const CreateSchoolModal: React.FC<CreateSchoolModalProps> = ({ isOpen, onClose, 
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="Phone number"
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -218,6 +219,7 @@ const CreateSchoolModal: React.FC<CreateSchoolModalProps> = ({ isOpen, onClose, 
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="school@email.com"
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -230,6 +232,7 @@ const CreateSchoolModal: React.FC<CreateSchoolModalProps> = ({ isOpen, onClose, 
                     type="text"
                     value={formData.principal_name}
                     onChange={(e) => setFormData({ ...formData, principal_name: e.target.value })}
+                    placeholder="Principal name"
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -364,7 +367,7 @@ const AddAdminModal: React.FC<AddAdminModalProps> = ({ isOpen, onClose, school, 
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Add Staff Account</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">{school.name}</p>
             </div>
-            <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+            <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Close">
               <XMarkIcon className="w-5 h-5" />
             </button>
           </div>
@@ -385,6 +388,7 @@ const AddAdminModal: React.FC<AddAdminModalProps> = ({ isOpen, onClose, school, 
                 required
                 value={formData.role}
                 onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                title="Role"
                 className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
               >
                 <option value="admin">Admin</option>
@@ -496,7 +500,7 @@ const SchoolsTab: React.FC = () => {
       setError(null);
       const [schoolsData, divisionsData] = await Promise.all([
         getAllSchools({
-          division_id: filterDivision || undefined,
+          division: filterDivision || undefined,
           status: filterStatus === 'all' ? undefined : filterStatus,
           search: searchQuery || undefined,
         }),
@@ -549,6 +553,7 @@ const SchoolsTab: React.FC = () => {
           <select
             value={filterDivision}
             onChange={(e) => setFilterDivision(e.target.value)}
+            title="Division filter"
             className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Divisions</option>
@@ -561,6 +566,7 @@ const SchoolsTab: React.FC = () => {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as any)}
+            title="Status filter"
             className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All Status</option>

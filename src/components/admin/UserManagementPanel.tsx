@@ -151,7 +151,7 @@ const UserManagementPanel: React.FC = () => {
   const auth = getAuth();
   
   // Track current user and admin email
-  const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
+  const [, setCurrentUser] = useState<User | null>(auth.currentUser);
   const [adminEmail, setAdminEmail] = useState<string>(auth.currentUser?.email || '');
   
   // Get role from custom claims (set by Cloud Function)
@@ -1085,6 +1085,7 @@ const UserManagementPanel: React.FC = () => {
                     <input
                       type="date"
                       required
+                      title="Birthdate"
                       value={studentForm.birthdate}
                       onChange={(e) => setStudentForm(f => ({...f, birthdate: e.target.value}))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"

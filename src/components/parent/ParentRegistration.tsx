@@ -263,7 +263,7 @@ const ParentRegistration: React.FC = () => {
                   </div>
                   
                   <div style="text-align: center; margin: 30px 0;">
-                    <a href="https://edusync-sis.web.app/login?type=parent" 
+                    <a href="https://edusync.ph/login?type=parent" 
                        style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
                       🚀 Login to Parent Portal
                     </a>
@@ -299,7 +299,7 @@ Your Account Details:
 Next Steps:
 You can now log in to the parent portal to view your child's grades, attendance, and announcements.
 
-Login here: https://edusync-sis.web.app/login?type=parent
+Login here: https://edusync.ph/login?type=parent
 
 Need help? Contact us at official@edusync.ph
 
@@ -422,6 +422,7 @@ Built for Philippine Schools • 100% DepEd Compliant
                 <input
                   type="date"
                   name="studentBirthdate"
+                  title="Student Birthdate"
                   value={formData.studentBirthdate}
                   onChange={handleChange}
                   className={`w-full px-4 py-2 rounded-lg border ${errors.studentBirthdate ? 'border-red-500' : 'border-slate-300 dark:border-slate-600'} dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
@@ -556,6 +557,7 @@ Built for Philippine Schools • 100% DepEd Compliant
             <input
               type="checkbox"
               name="acceptTerms"
+              title="Accept Terms and Conditions"
               checked={formData.acceptTerms}
               onChange={handleChange}
               className="mt-1 mr-3"

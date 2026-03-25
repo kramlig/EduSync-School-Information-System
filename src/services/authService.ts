@@ -16,6 +16,7 @@ import { getAuth, signInWithEmailAndPassword, signOut as firebaseSignOut, User a
 import { supabase } from '../lib/supabase';
 import type { AuthUser, StudentUser, ParentUser } from '../../types';
 import { getDivisionUserByFirebaseUid } from './divisionService';
+import { getPersonalWorkspace, getUserSubscription } from './personalWorkspaceService';
 import type { DivisionUser } from '../types/division';
 
 // =====================================================
@@ -23,7 +24,7 @@ import type { DivisionUser } from '../types/division';
 // =====================================================
 
 export type LoginType = 'staff' | 'student' | 'parent';
-export type UserType = 'teacher' | 'student' | 'parent' | 'admin' | 'division';
+export type UserType = 'teacher' | 'student' | 'parent' | 'admin' | 'division' | 'superadmin' | 'staff';
 
 // Division user auth type (returned when division user logs in)
 export interface DivisionAuthUser extends DivisionUser {
@@ -58,13 +59,13 @@ export interface UnifiedUserData {
   email: string;
   name: string;
   role: string;
-  school_id: string;
+  school_id: string | null;
   school_name: string;
   grade_level?: number;
   section_id?: string;
-  contact_number?: string;
-  employee_number?: string;
-  position?: string;
+  contact_number?: string | null;
+  employee_number?: string | null;
+  position?: string | null;
   first_name?: string;
   last_name?: string;
 }
@@ -610,6 +611,42 @@ export async function login(
   }
   
   if (!userData) {
+    // Check if this is a personal workspace user (created via personal signup, not in unified users)
+    if (loginType === 'staff') {
+      try {
+        const workspace = await getPersonalWorkspace(firebaseUser.uid);
+        if (workspace) {
+          console.log('[AuthService] ✅ Personal workspace user found, returning minimal user');
+          // Fetch real subscription tier (workspace.tier is from schools table and may be stale)
+          let subscriptionTier = workspace.tier;
+          try {
+            const sub = await getUserSubscription(firebaseUser.uid);
+            if (sub?.tier) subscriptionTier = sub.tier;
+          } catch { /* fall back to workspace tier */ }
+          const personalUser = {
+            id: workspace.teacherId,
+            postgresqlId: workspace.teacherId,
+            firebaseUid: firebaseUser.uid,
+            email: normalizedEmail,
+            name: workspace.teacherName,
+            role: 'teacher' as const,
+            schoolId: workspace.schoolId,
+            schoolName: workspace.schoolName,
+            workspaceType: 'personal' as const,
+            tier: subscriptionTier,
+          } as AuthUser;
+          await logLoginAttempt(normalizedEmail, 'success', loginType, {
+            firebaseUid: firebaseUser.uid,
+            userType: 'teacher',
+            schoolId: workspace.schoolId
+          });
+          return { success: true, user: personalUser, userType: 'teacher' };
+        }
+      } catch (err) {
+        console.error('[AuthService] Personal workspace check failed:', err);
+      }
+    }
+
     console.error('[AuthService] ❌ No user found in PostgreSQL');
     
     await logLoginAttempt(normalizedEmail, 'failed', loginType, {
@@ -648,7 +685,7 @@ export async function login(
     await logLoginAttempt(normalizedEmail, 'failed', loginType, {
       firebaseUid: firebaseUser.uid,
       userType: userData.user_type,
-      schoolId: userData.school_id,
+      schoolId: userData.school_id ?? undefined,
       errorCode: 'ROLE_MISMATCH',
       errorMessage: `Expected ${loginType}, got ${userData.user_type}`
     });
@@ -671,7 +708,7 @@ export async function login(
   await logLoginAttempt(normalizedEmail, 'success', loginType, {
     firebaseUid: firebaseUser.uid,
     userType: userData.user_type,
-    schoolId: userData.school_id
+    schoolId: userData.school_id ?? undefined
   });
   
   console.log('[AuthService] ✅ Login successful');

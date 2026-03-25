@@ -330,33 +330,33 @@ const DivisionLayout: React.FC<DivisionLayoutProps> = ({ onLogout }) => {
   }, [selectedSchoolId, accessibleSchools]);
 
   // Determine available school levels based on selected school
-  const availableSchoolLevels = useMemo(() => {
+  const availableSchoolLevels: string[] = useMemo(() => {
     // If no school selected, all levels are available
     if (!selectedSchool) {
-      return ['ALL', 'ELEMENTARY', 'JUNIOR HIGH SCHOOL', 'SENIOR HIGH SCHOOL'] as const;
+      return ['ALL', 'ELEMENTARY', 'JUNIOR HIGH SCHOOL', 'SENIOR HIGH SCHOOL'];
     }
     
     const schoolType = selectedSchool.school_type?.toLowerCase();
     
     // Map school_type to available levels
     if (schoolType === 'elementary') {
-      return ['ELEMENTARY'] as const;
+      return ['ELEMENTARY'];
     } else if (schoolType === 'high_school' || schoolType === 'secondary') {
-      return ['JUNIOR HIGH SCHOOL'] as const;
+      return ['JUNIOR HIGH SCHOOL'];
     } else if (schoolType === 'senior_high') {
-      return ['SENIOR HIGH SCHOOL'] as const;
+      return ['SENIOR HIGH SCHOOL'];
     } else if (schoolType === 'integrated') {
       // Integrated schools have all levels
-      return ['ALL', 'ELEMENTARY', 'JUNIOR HIGH SCHOOL', 'SENIOR HIGH SCHOOL'] as const;
+      return ['ALL', 'ELEMENTARY', 'JUNIOR HIGH SCHOOL', 'SENIOR HIGH SCHOOL'];
     }
     
     // Default: all levels
-    return ['ALL', 'ELEMENTARY', 'JUNIOR HIGH SCHOOL', 'SENIOR HIGH SCHOOL'] as const;
+    return ['ALL', 'ELEMENTARY', 'JUNIOR HIGH SCHOOL', 'SENIOR HIGH SCHOOL'];
   }, [selectedSchool]);
 
   // Auto-adjust school level when school selection changes
   useEffect(() => {
-    if (selectedSchool && !availableSchoolLevels.includes(schoolLevel as any)) {
+    if (selectedSchool && !availableSchoolLevels.includes(schoolLevel)) {
       // Auto-select the first available level for this school
       setSchoolLevel(availableSchoolLevels[0] as any);
     }

@@ -1,0 +1,239 @@
+﻿
+Running 65 tests using 1 worker
+
+[1A[2K[1/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:120:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ renders signup page with step 1 active
+[1A[2K[2/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:129:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ shows step indicator with Account active
+[1A[2K[3/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:134:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ shows Google sign-in button on step 1
+[1A[2K[4/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:138:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ shows free tier info box
+[1A[2K[5/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:145:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ shows footer links to sign-in and form generator
+[1A[2K[6/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:150:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ validates empty full name
+[1A[2K[7/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:160:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ validates empty email
+[1A[2K[8/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:170:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ validates short password
+[1A[2K[9/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:179:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ validates password mismatch
+[1A[2K[10/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:188:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ advances to step 2 with valid account info
+[1A[2K[11/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:203:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ step 2 shows Back button
+[1A[2K[12/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:213:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ Back button returns to step 1 with preserved data
+[1A[2K[13/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:226:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ step 2 validates required school name
+[1A[2K[14/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:243:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ step 2 validates required division
+[1A[2K[15/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:260:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ step 2 validates required region
+[1A[2K[16/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:277:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ step 2 validates required section name
+[1A[2K[17/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:294:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ region dropdown has all 17 DepEd regions
+[1A[2K[18/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:306:3 ΓÇ║ 1. Signup Wizard ΓÇö UI & Validation ΓÇ║ grade level dropdown has grades 1-12
+[1A[2K[19/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:325:3 ΓÇ║ 2. Full Signup Flow ΓÇ║ completes full signup and lands on personal dashboard
+[1A[2K[20/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:340:3 ΓÇ║ 2. Full Signup Flow ΓÇ║ shows welcome message on dashboard after signup
+[1A[2K[21/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:347:3 ΓÇ║ 2. Full Signup Flow ΓÇ║ shows duplicate account error for same email
+[1A[2K[22/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:383:3 ΓÇ║ 3. Re-login Flow ΓÇ║ re-login with email/password redirects to personal dashboard
+[1A[2K[23/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:405:3 ΓÇ║ 3. Re-login Flow ΓÇ║ session persists across page reload
+[1A[2K[24/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:429:3 ΓÇ║ 4. Personal Dashboard ΓÇ║ displays stats cards
+[1A[2K[25/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:435:3 ΓÇ║ 4. Personal Dashboard ΓÇ║ displays quick action links
+[1A[2K[26/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:441:3 ΓÇ║ 4. Personal Dashboard ΓÇ║ shows getting started guide when no students
+[1A[2K[27/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:445:3 ΓÇ║ 4. Personal Dashboard ΓÇ║ quick action Add Students navigates to students page
+[1A[2K[28/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:451:3 ΓÇ║ 4. Personal Dashboard ΓÇ║ quick action Generate Forms navigates to forms page
+[1A[2K[29/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:468:3 ΓÇ║ 5. Sidebar Navigation ΓÇ║ sidebar shows all navigation items
+[1A[2K[30/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:476:3 ΓÇ║ 5. Sidebar Navigation ΓÇ║ clicking My Students navigates correctly
+[1A[2K[31/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:482:3 ΓÇ║ 5. Sidebar Navigation ΓÇ║ clicking Gradebook navigates correctly
+[1A[2K[32/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:488:3 ΓÇ║ 5. Sidebar Navigation ΓÇ║ clicking Generate Forms navigates correctly
+[1A[2K[33/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:494:3 ΓÇ║ 5. Sidebar Navigation ΓÇ║ clicking Settings navigates correctly
+[1A[2K[34/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:500:3 ΓÇ║ 5. Sidebar Navigation ΓÇ║ clicking Dashboard returns to dashboard
+[1A[2K[35/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:521:3 ΓÇ║ 6. Student CRUD ΓÇ║ shows empty state message
+[1A[2K[36/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:525:3 ΓÇ║ 6. Student CRUD ΓÇ║ shows Add Student button
+[1A[2K[37/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:529:3 ΓÇ║ 6. Student CRUD ΓÇ║ shows student count with tier limit
+[1A[2K[38/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:533:3 ΓÇ║ 6. Student CRUD ΓÇ║ clicking Add Student opens inline form
+[1A[2K[39/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:542:3 ΓÇ║ 6. Student CRUD ΓÇ║ add a student and verify in table
+[1A[2K  1) [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:542:3 ΓÇ║ 6. Student CRUD ΓÇ║ add a student and verify in table 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('text=Dela Cruz, Juan Reyes')
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 10000ms[22m
+    [2m  - waiting for locator('text=Dela Cruz, Juan Reyes')[22m
+
+
+      550 |
+      551 |     // Student should appear in table
+    > 552 |     await expect(page.locator('text=Dela Cruz, Juan Reyes')).toBeVisible({ timeout: 10000 });
+          |                                                              ^
+      553 |     await expect(page.locator('text=100001234567')).toBeVisible();
+      554 |   });
+      555 |
+        at C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:552:62
+
+    Error Context: test-results\tests-personal-workspace-p-2ce50-student-and-verify-in-table-chromium\error-context.md
+
+
+[1A[2K[40/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:556:3 ΓÇ║ 6. Student CRUD ΓÇ║ add form Cancel button closes form
+[1A[2K[41/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:563:3 ΓÇ║ 6. Student CRUD ΓÇ║ search filters students
+[1A[2K  2) [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:563:3 ΓÇ║ 6. Student CRUD ΓÇ║ search filters students 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('text=Welcome back').first()
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 15000ms[22m
+    [2m  - waiting for locator('text=Welcome back').first()[22m
+
+
+      100 |
+      101 |   // Wait for dashboard to render (confirms session is active and app is ready)
+    > 102 |   await expect(page.locator('text=Welcome back').first()).toBeVisible({ timeout: 15000 });
+          |                                                           ^
+      103 |
+      104 |   return { session: await getSession(page), user };
+      105 | }
+        at fullSignup (C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:102:59)
+        at C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:516:5
+
+    Error Context: test-results\tests-personal-workspace-p-ef2e0-RUD-search-filters-students-chromium\error-context.md
+
+
+[1A[2K[42/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:587:3 ΓÇ║ 6. Student CRUD ΓÇ║ delete student removes from table
+[1A[2K  3) [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:587:3 ΓÇ║ 6. Student CRUD ΓÇ║ delete student removes from table 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('text=Student, ToDelete')
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 10000ms[22m
+    [2m  - waiting for locator('text=Student, ToDelete')[22m
+
+
+      591 |     await page.fill('input[placeholder="Last Name"]', 'Student');
+      592 |     await page.click('button:has-text("Save")');
+    > 593 |     await expect(page.locator('text=Student, ToDelete')).toBeVisible({ timeout: 10000 });
+          |                                                          ^
+      594 |
+      595 |     // Handle dialog (confirm delete)
+      596 |     page.on('dialog', (dialog) => dialog.accept());
+        at C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:593:58
+
+    Error Context: test-results\tests-personal-workspace-p-39b62--student-removes-from-table-chromium\error-context.md
+
+
+[1A[2K[43/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:618:3 ΓÇ║ 7. Forms Page ΓÇ║ displays page title
+[1A[2K[44/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:622:3 ΓÇ║ 7. Forms Page ΓÇ║ shows all three form cards
+[1A[2K[45/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:628:3 ΓÇ║ 7. Forms Page ΓÇ║ shows form descriptions
+[1A[2K[46/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:634:3 ΓÇ║ 7. Forms Page ΓÇ║ shows coming soon auto-fill feature
+[1A[2K[47/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:638:3 ΓÇ║ 7. Forms Page ΓÇ║ Generate links point to form generator tool
+[1A[2K  4) [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:638:3 ΓÇ║ 7. Forms Page ΓÇ║ Generate links point to form generator tool 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeGreaterThanOrEqual[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: >= [32m1[39m
+    Received:    [31m0[39m
+
+      639 |     const links = page.locator('a[href="/tools/form-generator"]');
+      640 |     const count = await links.count();
+    > 641 |     expect(count).toBeGreaterThanOrEqual(1);
+          |                   ^
+      642 |   });
+      643 | });
+      644 |
+        at C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:641:19
+
+    Error Context: test-results\tests-personal-workspace-p-29b41-oint-to-form-generator-tool-chromium\error-context.md
+
+
+[1A[2K[48/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:659:3 ΓÇ║ 8. Settings Page ΓÇ║ displays account information
+[1A[2K  5) [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:659:3 ΓÇ║ 8. Settings Page ΓÇ║ displays account information 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('text=Test Teacher 1774273619258-1')
+    Expected: visible
+    Error: strict mode violation: locator('text=Test Teacher 1774273619258-1') resolved to 2 elements:
+        1) <span class="text-sm font-medium text-slate-700 dark:text-slate-200">Test Teacher 1774273619258-1</span> aka getByRole('banner').getByText('Test Teacher 1774273619258-')
+        2) <dd class="font-medium text-slate-800 dark:text-white">Test Teacher 1774273619258-1</dd> aka getByRole('main').getByText('Test Teacher 1774273619258-')
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('text=Test Teacher 1774273619258-1')[22m
+
+
+      659 |   test('displays account information', async ({ page }) => {
+      660 |     await expect(page.locator('text=Account').first()).toBeVisible();
+    > 661 |     await expect(page.locator(`text=${currentUser.fullName}`)).toBeVisible();
+          |                                                                ^
+      662 |     await expect(page.locator(`text=${currentUser.email}`)).toBeVisible();
+      663 |   });
+      664 |
+        at C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:661:64
+
+    Error Context: test-results\tests-personal-workspace-p-9b867-isplays-account-information-chromium\error-context.md
+
+
+[1A[2K[49/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:665:3 ΓÇ║ 8. Settings Page ΓÇ║ displays school information
+[1A[2K  6) [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:665:3 ΓÇ║ 8. Settings Page ΓÇ║ displays school information 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('text=Test School 1774273624604-1')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('text=Test School 1774273624604-1')[22m
+
+
+      665 |   test('displays school information', async ({ page }) => {
+      666 |     await expect(page.locator('text=School Information')).toBeVisible();
+    > 667 |     await expect(page.locator(`text=${currentUser.schoolName}`)).toBeVisible();
+          |                                                                  ^
+      668 |   });
+      669 |
+      670 |   test('displays subscription info', async ({ page }) => {
+        at C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:667:66
+
+    Error Context: test-results\tests-personal-workspace-p-0d55d-displays-school-information-chromium\error-context.md
+
+
+[1A[2K[50/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:670:3 ΓÇ║ 8. Settings Page ΓÇ║ displays subscription info
+[1A[2K[51/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:675:3 ΓÇ║ 8. Settings Page ΓÇ║ shows upgrade button for free tier
+[1A[2K[52/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:692:3 ΓÇ║ 9. Layout & Header ΓÇ║ header shows user name
+[1A[2K[53/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:696:3 ΓÇ║ 9. Layout & Header ΓÇ║ header shows tier badge
+[1A[2K[54/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:700:3 ΓÇ║ 9. Layout & Header ΓÇ║ header shows Sign out button
+[1A[2K[55/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:704:3 ΓÇ║ 9. Layout & Header ΓÇ║ sidebar Upgrade to Pro CTA is visible on free tier
+[1A[2K[56/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:715:3 ΓÇ║ 10. Logout & Session ΓÇ║ logout clears session and redirects to login
+[1A[2K[57/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:729:3 ΓÇ║ 10. Logout & Session ΓÇ║ after logout, visiting /personal redirects to login
+[1A[2K[58/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:756:3 ΓÇ║ 11. Login Screen ΓÇö Google & Personal Workspace ΓÇ║ shows Google sign-in button on staff tab
+[1A[2K[59/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:760:3 ΓÇ║ 11. Login Screen ΓÇö Google & Personal Workspace ΓÇ║ shows "or" divider between form and Google button
+[1A[2K[60/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:764:3 ΓÇ║ 11. Login Screen ΓÇö Google & Personal Workspace ΓÇ║ shows personal workspace link
+[1A[2K[61/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:769:3 ΓÇ║ 11. Login Screen ΓÇö Google & Personal Workspace ΓÇ║ personal workspace link navigates to signup
+[1A[2K[62/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:775:3 ΓÇ║ 11. Login Screen ΓÇö Google & Personal Workspace ΓÇ║ Google button is not shown on student tab
+[1A[2K[63/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:780:3 ΓÇ║ 11. Login Screen ΓÇö Google & Personal Workspace ΓÇ║ Google button is not shown on parent tab
+[1A[2K[64/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:792:3 ΓÇ║ 12. Route Protection ΓÇ║ unknown /personal/* routes redirect to /personal
+[1A[2K[65/65] [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:803:3 ΓÇ║ 12. Route Protection ΓÇ║ /personal/signup is accessible without auth
+[1A[2K  7) [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:803:3 ΓÇ║ 12. Route Protection ΓÇ║ /personal/signup is accessible without auth 
+
+    Error: page.evaluate: SecurityError: Failed to read the 'localStorage' property from 'Window': Access is denied for this document.
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at clearSession (C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:54:14)
+        at C:\Users\Mark Gil Dotillos\Workspaces\EduSyncSIS\EduSync-School-Information-System\tests\personal-workspace\personal-workspace.spec.ts:804:11
+
+
+[1A[2K  7 failed
+    [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:542:3 ΓÇ║ 6. Student CRUD ΓÇ║ add a student and verify in table 
+    [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:563:3 ΓÇ║ 6. Student CRUD ΓÇ║ search filters students 
+    [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:587:3 ΓÇ║ 6. Student CRUD ΓÇ║ delete student removes from table 
+    [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:638:3 ΓÇ║ 7. Forms Page ΓÇ║ Generate links point to form generator tool 
+    [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:659:3 ΓÇ║ 8. Settings Page ΓÇ║ displays account information 
+    [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:665:3 ΓÇ║ 8. Settings Page ΓÇ║ displays school information 
+    [chromium] ΓÇ║ tests\personal-workspace\personal-workspace.spec.ts:803:3 ΓÇ║ 12. Route Protection ΓÇ║ /personal/signup is accessible without auth 
+  58 passed (5.3m)

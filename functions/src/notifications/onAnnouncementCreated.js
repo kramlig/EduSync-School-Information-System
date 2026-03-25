@@ -63,7 +63,7 @@ exports.onAnnouncementCreated = functions.firestore
           phone: p.phone,
           message: SMSTemplates.announcement(
             announcement.title,
-            `https://edusync-sis.web.app/announcements`
+            `https://edusync.ph/announcements`
           ),
           parentId: p.id,
           parentName: p.name
@@ -278,7 +278,7 @@ exports.resendAnnouncementNotification = functions.https.onCall(async (data, con
           notif.recipientPhone,
           notif.message || SMSTemplates.announcement(
             announcement.title,
-            'https://edusync-sis.web.app/announcements'
+            'https://edusync.ph/announcements'
           )
         );
       } else if (notif.channel === 'email') {
@@ -375,7 +375,7 @@ exports.testAnnouncementNotification = functions.https.onCall(async (data, conte
     if (testPhone) {
       const smsMessage = SMSTemplates.announcement(
         announcement.title,
-        'https://edusync-sis.web.app/announcements'
+        'https://edusync.ph/announcements'
       );
       
       results.sms = await sendSMS(testPhone, smsMessage);

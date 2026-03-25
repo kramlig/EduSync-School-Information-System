@@ -20,7 +20,7 @@ import {
   createParentRecords,
   type SF1ImportResult
 } from '../../services/sf1ImportService';
-import type { SF1Student } from '../../services/sf1Parser';
+// import type { SF1Student } from '../../services/sf1Parser';
 
 // ============================================================================
 // TYPES
@@ -313,6 +313,7 @@ const SchoolSF1Import: React.FC<SchoolSF1ImportProps> = ({
             </div>
             <button
               onClick={onClose}
+              title="Close"
               className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors"
             >
               <XCircleIcon className="w-6 h-6" />
@@ -355,6 +356,7 @@ const SchoolSF1Import: React.FC<SchoolSF1ImportProps> = ({
                     const file = e.target.files?.[0];
                     if (file) handleFileSelect(file);
                   }}
+                  title="Upload SF1 CSV"
                   className="hidden"
                 />
               </div>

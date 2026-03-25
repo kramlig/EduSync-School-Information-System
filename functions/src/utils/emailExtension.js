@@ -198,7 +198,7 @@ const EmailTemplates = {
           <div class="footer">
             <p>This is an automated message from EduSync School Information System</p>
             <p>You are receiving this because you have enabled grade alert notifications</p>
-            <p><a href="https://edusync-sis.web.app/profile" style="color: #667eea;">
+            <p><a href="https://edusync.ph/profile" style="color: #667eea;">
                Update notification preferences
             </a></p>
           </div>
@@ -282,7 +282,7 @@ ${schoolName}
           
           <div class="footer">
             <p>This is an automated message from EduSync School Information System</p>
-            <p><a href="https://edusync-sis.web.app/profile" style="color: #667eea;">
+            <p><a href="https://edusync.ph/profile" style="color: #667eea;">
                Update notification preferences
             </a></p>
           </div>
@@ -402,7 +402,7 @@ ${schoolName}
           
           <div class="footer">
             <p>This is an automated attendance notification from EduSync School Information System</p>
-            <p><a href="https://edusync-sis.web.app/attendance" style="color: #667eea;">
+            <p><a href="https://edusync.ph/attendance" style="color: #667eea;">
                View Full Attendance Record
             </a></p>
           </div>
@@ -435,7 +435,7 @@ Thank you for your attention to this matter. Regular attendance is crucial for y
 Best regards,
 ${schoolName}
 
-View attendance record: https://edusync-sis.web.app/attendance
+View attendance record: https://edusync.ph/attendance
     `.trim();
     
     return { html, text };

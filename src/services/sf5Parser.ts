@@ -380,7 +380,6 @@ export function parseSF5(csvContent: string): SF5ParseResult {
     // Search metadata in first 10 rows
     for (let i = 0; i < Math.min(10, rows.length); i++) {
       const row = rows[i];
-      const rowText = row.join(' ').toLowerCase();
       
       for (let j = 0; j < row.length; j++) {
         const cell = row[j]?.trim() || '';

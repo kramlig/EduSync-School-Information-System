@@ -7,7 +7,7 @@
 
 export const CONTACT_INFO = {
   // TODO: Replace with your actual contact information
-  email: 'hello@edusync.ph',
+  email: 'edusyncph@gmail.com',
   phone: '+63 998 843 8815',
   phoneDisplay: '+63 998 843 8815',
   
@@ -17,8 +17,8 @@ export const CONTACT_INFO = {
   linkedin: 'https://linkedin.com/company/edusync',
   
   // Live chat / Support
-  liveChatUrl: 'https://edusync-sis.web.app', // Replace with actual chat widget URL
-  supportEmail: 'support@edusync.ph',
+  liveChatUrl: 'https://edusync.ph', // Replace with actual chat widget URL
+  supportEmail: 'edusyncph@gmail.com',
   
   // Calendly or booking link for demos
   demoBookingUrl: 'https://calendly.com/edusync/demo',

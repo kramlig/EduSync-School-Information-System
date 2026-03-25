@@ -1,0 +1,1856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EduSync — Division Partnership Proposal</title>
+<style>
+  /* ─── RESET & BASE ─── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  :root {
+    --navy: #0B1D3A;
+    --navy-light: #132D5E;
+    --blue: #1E6FD9;
+    --blue-light: #3B8AED;
+    --blue-pale: #E8F1FD;
+    --gold: #D4A843;
+    --gold-light: #F0D78C;
+    --green: #10B981;
+    --green-dark: #059669;
+    --red: #EF4444;
+    --white: #FFFFFF;
+    --gray-50: #F9FAFB;
+    --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-300: #D1D5DB;
+    --gray-500: #6B7280;
+    --gray-600: #4B5563;
+    --gray-700: #374151;
+    --gray-800: #1F2937;
+    --gray-900: #111827;
+  }
+
+  html { font-size: 11px; }
+
+  body {
+    font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--gray-800);
+    background: #E5E7EB;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ─── PAGE CONTAINER ─── */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 12px auto;
+    background: var(--white);
+    position: relative;
+    overflow: hidden;
+    page-break-after: always;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+  }
+
+  @media print {
+    body { background: white; }
+    .page { box-shadow: none; margin: 0 auto; }
+  }
+
+  /* ─── TYPOGRAPHY ─── */
+  h1 { font-size: 3.2rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; }
+  h2 { font-size: 2.2rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
+  h3 { font-size: 1.5rem; font-weight: 700; line-height: 1.3; }
+  h4 { font-size: 1.2rem; font-weight: 600; line-height: 1.4; }
+  p  { font-size: 1.05rem; line-height: 1.6; }
+  .small { font-size: 0.9rem; }
+  .tiny { font-size: 0.8rem; }
+
+  /* ─── UTILITIES ─── */
+  .text-navy { color: var(--navy); }
+  .text-blue { color: var(--blue); }
+  .text-gold { color: var(--gold); }
+  .text-green { color: var(--green); }
+  .text-white { color: var(--white); }
+  .text-gray { color: var(--gray-500); }
+  .text-center { text-align: center; }
+  .text-right { text-align: right; }
+  .uppercase { text-transform: uppercase; }
+  .tracking-wide { letter-spacing: 0.15em; }
+  .font-light { font-weight: 300; }
+  .font-bold { font-weight: 700; }
+  .font-black { font-weight: 900; }
+  .mt-1 { margin-top: 0.5rem; }
+  .mt-2 { margin-top: 1rem; }
+  .mt-3 { margin-top: 1.5rem; }
+  .mt-4 { margin-top: 2rem; }
+  .mb-1 { margin-bottom: 0.5rem; }
+  .mb-2 { margin-bottom: 1rem; }
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .gap-1 { gap: 0.5rem; }
+  .gap-2 { gap: 1rem; }
+  .gap-3 { gap: 1.5rem; }
+
+  /* ─── GRID SYSTEM ─── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.2rem; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; }
+
+  /* ─── DIVIDER ─── */
+  .divider {
+    height: 3px;
+    background: linear-gradient(90deg, var(--blue), var(--gold));
+    border-radius: 2px;
+    margin: 1rem 0;
+  }
+
+  .divider-thin {
+    height: 1px;
+    background: var(--gray-200);
+    margin: 0.8rem 0;
+  }
+
+  /* ─── BADGE ─── */
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.8rem;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .badge-blue { background: var(--blue-pale); color: var(--blue); }
+  .badge-gold { background: #FEF3C7; color: #92400E; }
+  .badge-green { background: #D1FAE5; color: #065F46; }
+  .badge-red { background: #FEE2E2; color: #991B1B; }
+
+  /* ─── STAT CARD ─── */
+  .stat-card {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 1.2rem;
+    text-align: center;
+    border: 1px solid var(--gray-200);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .stat-card .stat-value {
+    font-size: 2.4rem;
+    font-weight: 900;
+    line-height: 1;
+    color: var(--blue);
+  }
+  .stat-card .stat-label {
+    font-size: 0.85rem;
+    color: var(--gray-500);
+    margin-top: 0.3rem;
+    font-weight: 500;
+  }
+
+  /* ─── FEATURE CARD ─── */
+  .feature-card {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 1.2rem;
+    border: 1px solid var(--gray-200);
+    transition: box-shadow 0.2s;
+  }
+  .feature-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+  .feature-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    margin-bottom: 0.6rem;
+  }
+  .icon-blue { background: var(--blue-pale); }
+  .icon-green { background: #D1FAE5; }
+  .icon-gold { background: #FEF3C7; }
+  .icon-red { background: #FEE2E2; }
+  .icon-purple { background: #EDE9FE; }
+  .icon-indigo { background: #E0E7FF; }
+
+  /* ─── PILLAR ROW ─── */
+  .pillar-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .pillar-row:last-child { border-bottom: none; }
+  .pillar-num {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    border-radius: 50%;
+    background: var(--blue);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 800;
+  }
+
+  /* ─── COMPARISON TABLE ─── */
+  .comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+  }
+  .comparison-table th {
+    background: var(--navy);
+    color: white;
+    padding: 0.6rem 0.8rem;
+    text-align: left;
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+  .comparison-table th:first-child { border-radius: 8px 0 0 0; }
+  .comparison-table th:last-child { border-radius: 0 8px 0 0; }
+  .comparison-table td {
+    padding: 0.5rem 0.8rem;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .comparison-table tr:nth-child(even) { background: var(--gray-50); }
+  .check { color: var(--green); font-weight: 800; font-size: 1.1rem; }
+  .cross { color: var(--red); font-weight: 800; font-size: 1.1rem; }
+  .partial { color: #F59E0B; font-weight: 800; }
+
+  /* ─── TESTIMONIAL ─── */
+  .testimonial {
+    background: var(--gray-50);
+    border-radius: 12px;
+    padding: 1.2rem;
+    border-left: 4px solid var(--blue);
+    position: relative;
+  }
+  .testimonial::before {
+    content: '\201C';
+    font-size: 3rem;
+    color: var(--blue);
+    opacity: 0.2;
+    position: absolute;
+    top: 0rem;
+    left: 0.8rem;
+    font-family: Georgia, serif;
+    line-height: 1;
+  }
+  .testimonial-stars { color: #F59E0B; font-size: 0.9rem; letter-spacing: 2px; }
+
+  /* ─── TIMELINE ─── */
+  .timeline-item {
+    display: flex;
+    gap: 1rem;
+    position: relative;
+    padding-bottom: 1rem;
+  }
+  .timeline-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 34px;
+    bottom: 0;
+    width: 2px;
+    background: var(--blue);
+    opacity: 0.3;
+  }
+  .timeline-dot {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 50%;
+    background: var(--blue);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 800;
+    z-index: 1;
+  }
+
+  /* ─── PRICING CARD ─── */
+  .pricing-card {
+    border-radius: 16px;
+    padding: 1.5rem;
+    text-align: center;
+    border: 2px solid var(--gray-200);
+    position: relative;
+  }
+  .pricing-card.popular {
+    border-color: var(--blue);
+    box-shadow: 0 8px 24px rgba(30,111,217,0.15);
+  }
+  .pricing-card.popular::before {
+    content: 'MOST POPULAR';
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--blue);
+    color: white;
+    padding: 0.15rem 1rem;
+    border-radius: 100px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+  }
+  .price-value {
+    font-size: 2.4rem;
+    font-weight: 900;
+    color: var(--navy);
+  }
+  .price-currency { font-size: 1.2rem; font-weight: 600; vertical-align: top; }
+  .price-period { font-size: 0.85rem; color: var(--gray-500); }
+  .pricing-feature {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    padding: 0.25rem 0;
+    text-align: left;
+  }
+  .pricing-feature .check { font-size: 0.9rem; }
+
+  /* ─── SECTION HEADERS ─── */
+  .section-header {
+    padding: 2rem 2.5rem 0;
+  }
+  .section-label {
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--blue);
+    margin-bottom: 0.3rem;
+  }
+
+  /* ─── CTA BOX ─── */
+  .cta-box {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+    border-radius: 16px;
+    padding: 2rem;
+    color: white;
+    text-align: center;
+  }
+  .cta-button {
+    display: inline-block;
+    background: var(--gold);
+    color: var(--navy);
+    padding: 0.7rem 2rem;
+    border-radius: 100px;
+    font-weight: 800;
+    font-size: 1rem;
+    text-decoration: none;
+    margin-top: 1rem;
+  }
+
+  /* ─── WATERMARK PATTERN ─── */
+  .pattern-bg {
+    background-image:
+      radial-gradient(circle at 20% 80%, rgba(30,111,217,0.03) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(212,168,67,0.03) 0%, transparent 50%);
+  }
+
+  /* ─── PAGE-SPECIFIC ─── */
+  .cover-bg {
+    background: linear-gradient(155deg, var(--navy) 0%, #0D2647 40%, #112E58 100%);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 0;
+    position: relative;
+  }
+  .cover-bg::before {
+    content: '';
+    position: absolute;
+    top: -100px;
+    right: -100px;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(30,111,217,0.15) 0%, transparent 70%);
+  }
+  .cover-bg::after {
+    content: '';
+    position: absolute;
+    bottom: -80px;
+    left: -80px;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(212,168,67,0.1) 0%, transparent 70%);
+  }
+
+  .geo-lines {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    opacity: 0.06;
+    pointer-events: none;
+  }
+  .geo-lines::before {
+    content: '';
+    position: absolute;
+    top: 60px;
+    right: -20px;
+    width: 300px;
+    height: 300px;
+    border: 2px solid white;
+    border-radius: 50%;
+  }
+  .geo-lines::after {
+    content: '';
+    position: absolute;
+    bottom: 100px;
+    left: 40px;
+    width: 200px;
+    height: 200px;
+    border: 2px solid white;
+    transform: rotate(45deg);
+  }
+
+  .accent-bar {
+    height: 5px;
+    background: linear-gradient(90deg, var(--gold), var(--gold-light), var(--gold));
+  }
+
+  .footer-bar {
+    background: var(--navy);
+    color: rgba(255,255,255,0.6);
+    padding: 0.6rem 2.5rem;
+    font-size: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .footer-bar strong { color: white; }
+
+  /* ─── INNER CONTENT ─── */
+  .content { padding: 1.5rem 2.5rem; }
+  .content-tight { padding: 1rem 2.5rem; }
+
+  /* ─── PROBLEM CARD ─── */
+  .problem-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8rem;
+    padding: 0.7rem;
+    background: #FFF5F5;
+    border-radius: 10px;
+    border-left: 3px solid var(--red);
+  }
+  .problem-icon {
+    font-size: 1.3rem;
+    min-width: 24px;
+  }
+
+  /* ─── SOLUTION CARD ─── */
+  .solution-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8rem;
+    padding: 0.7rem;
+    background: #F0FDF4;
+    border-radius: 10px;
+    border-left: 3px solid var(--green);
+  }
+  .solution-icon {
+    font-size: 1.3rem;
+    min-width: 24px;
+  }
+
+  /* ─── DEPED FORM BADGE ─── */
+  .form-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.8rem;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .form-badge .form-label {
+    font-size: 0.7rem;
+    color: var(--gray-500);
+    font-weight: 500;
+  }
+
+  /* ─── NUMBER HIGHLIGHT ─── */
+  .number-highlight {
+    font-size: 3.5rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--blue), var(--blue-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+  }
+
+  /* ─── ROI METRIC ─── */
+  .roi-card {
+    text-align: center;
+    padding: 1rem;
+  }
+  .roi-arrow {
+    font-size: 1.5rem;
+    color: var(--green);
+  }
+  .roi-from {
+    font-size: 0.85rem;
+    color: var(--gray-500);
+    text-decoration: line-through;
+  }
+  .roi-to {
+    font-size: 1.8rem;
+    font-weight: 900;
+    color: var(--green-dark);
+  }
+  .roi-label {
+    font-size: 0.8rem;
+    color: var(--gray-600);
+    font-weight: 500;
+  }
+
+  /* ─── DIVISION SPECIFIC ─── */
+  .division-stat {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.8rem 1rem;
+    background: rgba(255,255,255,0.08);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .division-stat-icon {
+    font-size: 1.8rem;
+    min-width: 40px;
+    text-align: center;
+  }
+  .division-stat-value {
+    font-size: 1.6rem;
+    font-weight: 900;
+    color: var(--gold);
+  }
+  .division-stat-label {
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.7);
+  }
+
+  /* ─── FLOW STEP ─── */
+  .flow-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+  }
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0.6rem;
+    min-width: 90px;
+  }
+  .flow-step-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--blue-pale);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    margin-bottom: 0.3rem;
+  }
+  .flow-step-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--gray-700);
+  }
+  .flow-arrow {
+    font-size: 1.2rem;
+    color: var(--blue);
+    font-weight: 800;
+  }
+
+  /* ─── BEFORE/AFTER ─── */
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0.8rem;
+    align-items: stretch;
+  }
+  .before-col {
+    background: #FFF5F5;
+    border-radius: 12px;
+    padding: 1.2rem;
+    border: 1px solid #FECACA;
+  }
+  .after-col {
+    background: #F0FDF4;
+    border-radius: 12px;
+    padding: 1.2rem;
+    border: 1px solid #BBF7D0;
+  }
+  .vs-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--navy);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 800;
+    align-self: center;
+  }
+
+  /* ─── TRUST BADGE ROW ─── */
+  .trust-row {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    align-items: center;
+    padding: 1rem 0;
+  }
+  .trust-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--gray-600);
+  }
+  .trust-icon {
+    font-size: 1.1rem;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 1: COVER
+     ══════════════════════════════════════════════════════════════ -->
+<div class="page cover-bg">
+  <div class="geo-lines"></div>
+
+  <!-- Gold accent bar at top -->
+  <div class="accent-bar"></div>
+
+  <!-- Top header -->
+  <div style="padding: 2rem 2.5rem; display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 2;">
+    <div style="display: flex; align-items: center; gap: 0.6rem;">
+      <div style="width: 42px; height: 42px; background: linear-gradient(135deg, var(--blue), var(--blue-light)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 900; color: white;">E</div>
+      <div>
+        <div style="font-size: 1.2rem; font-weight: 800; letter-spacing: 0.05em;">EDUSYNC</div>
+        <div style="font-size: 0.6rem; letter-spacing: 0.15em; opacity: 0.6; text-transform: uppercase;">School Information System</div>
+      </div>
+    </div>
+    <div style="text-align: right;">
+      <div style="font-size: 0.7rem; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.1em;">Confidential</div>
+      <div style="font-size: 0.75rem; opacity: 0.7;">March 2026</div>
+    </div>
+  </div>
+
+  <!-- Main cover content -->
+  <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 2.5rem; position: relative; z-index: 2;">
+    <div style="margin-bottom: 1.5rem;">
+      <div class="badge" style="background: rgba(212,168,67,0.2); color: var(--gold); border: 1px solid rgba(212,168,67,0.3); margin-bottom: 1.2rem;">
+        ⚡ DIVISION PARTNERSHIP PROPOSAL
+      </div>
+      <h1 style="font-size: 3.6rem; margin-bottom: 0.8rem;">
+        The Future of<br>
+        <span style="background: linear-gradient(90deg, var(--gold), var(--gold-light)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">School Management</span>
+      </h1>
+      <p style="font-size: 1.15rem; opacity: 0.75; max-width: 480px; line-height: 1.6;">
+        A comprehensive, DepEd-compliant School Information System designed to modernize every school in your division — from enrollment to report cards, from attendance to AI-powered analytics.
+      </p>
+    </div>
+
+    <!-- Division quick stats -->
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; max-width: 520px; margin-top: 1rem;">
+      <div class="division-stat">
+        <div class="division-stat-icon">🏫</div>
+        <div>
+          <div class="division-stat-value">50+</div>
+          <div class="division-stat-label">Schools Per Division</div>
+        </div>
+      </div>
+      <div class="division-stat">
+        <div class="division-stat-icon">📋</div>
+        <div>
+          <div class="division-stat-value">9</div>
+          <div class="division-stat-label">DepEd Forms</div>
+        </div>
+      </div>
+      <div class="division-stat">
+        <div class="division-stat-icon">⚡</div>
+        <div>
+          <div class="division-stat-value">80%</div>
+          <div class="division-stat-label">Time Saved</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom section -->
+  <div style="padding: 2rem 2.5rem; position: relative; z-index: 2;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+      <div>
+        <div style="font-size: 0.7rem; opacity: 0.4; text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.3rem;">Prepared For</div>
+        <div style="font-size: 1.1rem; font-weight: 700;">Office of the Schools Division Superintendent</div>
+        <div style="font-size: 0.9rem; opacity: 0.7;">DepEd Division Office</div>
+      </div>
+      <div style="text-align: right;">
+        <div style="font-size: 0.7rem; opacity: 0.4; text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.3rem;">Presented By</div>
+        <div style="font-size: 1rem; font-weight: 700;">EduSync Technologies</div>
+        <div style="font-size: 0.85rem; opacity: 0.7;">official@edusync.ph</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="accent-bar"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 2: THE CHALLENGE
+     ══════════════════════════════════════════════════════════════ -->
+<div class="page pattern-bg">
+  <div class="accent-bar"></div>
+
+  <div class="section-header">
+    <div class="section-label">The Challenge</div>
+    <h2 class="text-navy">What Schools Are Facing Today</h2>
+    <p class="text-gray mt-1" style="max-width: 520px;">
+      Philippine public schools face overwhelming administrative burdens that consume 
+      hundreds of hours annually — time that should be spent on teaching and learning.
+    </p>
+  </div>
+
+  <div class="content">
+    <div class="grid-2" style="margin-bottom: 1.5rem;">
+      <div class="problem-card">
+        <div class="problem-icon">📝</div>
+        <div>
+          <h4 style="font-size: 1rem; color: #991B1B;">Manual Form Generation</h4>
+          <p class="small text-gray">Teachers spend 2-3 weeks preparing SF1, SF2, SF9, Form 137, Form 138 — all manually on paper or Excel.</p>
+        </div>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">🔄</div>
+        <div>
+          <h4 style="font-size: 1rem; color: #991B1B;">Duplicate Data Entry</h4>
+          <p class="small text-gray">The same student data is entered multiple times across different forms and systems — EBEIS, LIS, manual records.</p>
+        </div>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">📊</div>
+        <div>
+          <h4 style="font-size: 1rem; color: #991B1B;">No Real-Time Insights</h4>
+          <p class="small text-gray">Division officers wait weeks or months for aggregated reports. At-risk students go unidentified until it's too late.</p>
+        </div>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">🏫</div>
+        <div>
+          <h4 style="font-size: 1rem; color: #991B1B;">Fragmented Systems</h4>
+          <p class="small text-gray">Schools use different tools — Google Sheets, Facebook groups, paper — with no unified system across the division.</p>
+        </div>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">📶</div>
+        <div>
+          <h4 style="font-size: 1rem; color: #991B1B;">Connectivity Issues</h4>
+          <p class="small text-gray">Rural schools have unreliable internet. Cloud-only systems fail, causing data loss and frustration.</p>
+        </div>
+      </div>
+      <div class="problem-card">
+        <div class="problem-icon">👨‍👩‍👧</div>
+        <div>
+          <h4 style="font-size: 1rem; color: #991B1B;">Disconnected Parents</h4>
+          <p class="small text-gray">Parents have no visibility into their child's grades, attendance, or school activities until report card day.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Before vs After -->
+    <div class="before-after">
+      <div class="before-col">
+        <h4 style="color: #991B1B; margin-bottom: 0.6rem;">❌ &nbsp;Before EduSync</h4>
+        <div style="font-size: 0.85rem; color: var(--gray-700);">
+          <div style="padding: 0.25rem 0; border-bottom: 1px solid #FECACA;">⏱ 2 weeks to generate Form 138</div>
+          <div style="padding: 0.25rem 0; border-bottom: 1px solid #FECACA;">📑 Manual enrollment with long queues</div>
+          <div style="padding: 0.25rem 0; border-bottom: 1px solid #FECACA;">🔢 Calculation errors in grades</div>
+          <div style="padding: 0.25rem 0; border-bottom: 1px solid #FECACA;">📁 Physical file storage & retrieval</div>
+          <div style="padding: 0.25rem 0; border-bottom: 1px solid #FECACA;">🚫 No division-wide visibility</div>
+          <div style="padding: 0.25rem 0;">📵 System fails without internet</div>
+        </div>
+      </div>
+      <div class="vs-circle">VS</div>
+      <div class="after-col">
+        <h4 style="color: #065F46; margin-bottom: 0.6rem;">✅ &nbsp;With EduSync</h4>
+        <div style="font-size: 0.85rem; color: var(--gray-700);">
+          <div style="padding: 0.25rem 0; border-bottom: 1px solid #BBF7D0;">⚡ 30 seconds — 40 cards at once</div>
+          <div style="padding: 0.25rem 0; border-bottom: 1px solid #BBF7D0;">💻 Online enrollment portal</div>
+          <div style="padding: 0.25rem 0; border-bottom: 1px solid #BBF7D0;">🤖 Auto-computed, error-free grades</div>
+          <div style="padding: 0.25rem 0; border-bottom: 1px solid #BBF7D0;">☁️ Instant digital records & search</div>
+          <div style="padding: 0.25rem 0; border-bottom: 1px solid #BBF7D0;">📊 Real-time division dashboard</div>
+          <div style="padding: 0.25rem 0;">📶 Works 100% offline as PWA</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <span><strong>EduSync</strong> — School Information System</span>
+    <span>Page 2 &nbsp;|&nbsp; Confidential</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 3: THE SOLUTION — 9 PILLARS
+     ══════════════════════════════════════════════════════════════ -->
+<div class="page pattern-bg">
+  <div class="accent-bar"></div>
+
+  <div class="section-header">
+    <div class="section-label">The Solution</div>
+    <h2 class="text-navy">One Platform. Nine Pillars. Total Coverage.</h2>
+    <p class="text-gray mt-1" style="max-width: 520px;">
+      EduSync covers every critical function of school operations in a single, integrated platform — designed from the ground up for Philippine K-12 education.
+    </p>
+  </div>
+
+  <div class="content-tight">
+    <div class="pillar-row">
+      <div class="pillar-num">1</div>
+      <div style="flex: 1;">
+        <div class="flex items-center gap-1">
+          <h4 style="font-size: 1.05rem;">📚 Academic Management</h4>
+          <span class="badge badge-blue" style="font-size: 0.6rem;">CORE</span>
+        </div>
+        <p class="small text-gray">Complete gradebook with quarterly grading, automatic GPA computation, honor roll generation, behavioral assessment tracking, performance analytics, and at-risk student identification.</p>
+      </div>
+    </div>
+
+    <div class="pillar-row">
+      <div class="pillar-num">2</div>
+      <div style="flex: 1;">
+        <div class="flex items-center gap-1">
+          <h4 style="font-size: 1.05rem;">📋 DepEd Forms Automation</h4>
+          <span class="badge badge-green" style="font-size: 0.6rem;">9 FORMS</span>
+        </div>
+        <p class="small text-gray">Auto-generate Form 137, Form 138, SF1, SF2, SF4, SF5, SF9, SF10, and ELLN assessment forms — all pre-populated, DepEd-compliant, print-ready in seconds.</p>
+      </div>
+    </div>
+
+    <div class="pillar-row">
+      <div class="pillar-num">3</div>
+      <div style="flex: 1;">
+        <div class="flex items-center gap-1">
+          <h4 style="font-size: 1.05rem;">🎓 Digital Enrollment Portal</h4>
+          <span class="badge badge-blue" style="font-size: 0.6rem;">ONLINE</span>
+        </div>
+        <p class="small text-gray">7-step public enrollment wizard with document upload, admin review workflow, auto-student creation, and real-time status tracking for parents.</p>
+      </div>
+    </div>
+
+    <div class="pillar-row">
+      <div class="pillar-num">4</div>
+      <div style="flex: 1;">
+        <div class="flex items-center gap-1">
+          <h4 style="font-size: 1.05rem;">📊 Analytics & Insights</h4>
+          <span class="badge badge-gold" style="font-size: 0.6rem;">AI-POWERED</span>
+        </div>
+        <p class="small text-gray">15+ pre-built reports with drill-down capability, school comparison dashboards, Excel/PDF export, at-risk early warning system, and district-level aggregation.</p>
+      </div>
+    </div>
+
+    <div class="pillar-row">
+      <div class="pillar-num">5</div>
+      <div style="flex: 1;">
+        <div class="flex items-center gap-1">
+          <h4 style="font-size: 1.05rem;">📖 ELLN Assessment</h4>
+          <span class="badge badge-blue" style="font-size: 0.6rem;">K-3</span>
+        </div>
+        <p class="small text-gray">Digital Early Language, Literacy, and Numeracy tracking across 11 domains with auto-generated Individual Learning Monitoring Plans (ILMP).</p>
+      </div>
+    </div>
+
+    <div class="pillar-row">
+      <div class="pillar-num">6</div>
+      <div style="flex: 1;">
+        <div class="flex items-center gap-1">
+          <h4 style="font-size: 1.05rem;">🤖 AI-Powered Lesson Planning</h4>
+          <span class="badge badge-gold" style="font-size: 0.6rem;">GEMINI AI</span>
+        </div>
+        <p class="small text-gray">Google Gemini-powered lesson plan generator with specific learning objectives, activities, materials, and assessments — aligned to MELC curriculum standards.</p>
+      </div>
+    </div>
+
+    <div class="pillar-row">
+      <div class="pillar-num">7</div>
+      <div style="flex: 1;">
+        <div class="flex items-center gap-1">
+          <h4 style="font-size: 1.05rem;">👨‍👩‍👧 Parent Portal</h4>
+          <span class="badge badge-green" style="font-size: 0.6rem;">NEW</span>
+        </div>
+        <p class="small text-gray">Real-time grade viewing, attendance monitoring, announcement feeds, assignment tracking, and schedule access — all from a parent's mobile device.</p>
+      </div>
+    </div>
+
+    <div class="pillar-row">
+      <div class="pillar-num">8</div>
+      <div style="flex: 1;">
+        <div class="flex items-center gap-1">
+          <h4 style="font-size: 1.05rem;">💰 Financial Management</h4>
+          <span class="badge badge-green" style="font-size: 0.6rem;">NEW</span>
+        </div>
+        <p class="small text-gray">Fee structures, payment recording with photo-proof upload, instant digital receipts, financial reports — for private schools and special programs.</p>
+      </div>
+    </div>
+
+    <div class="pillar-row" style="border-bottom: none;">
+      <div class="pillar-num">9</div>
+      <div style="flex: 1;">
+        <div class="flex items-center gap-1">
+          <h4 style="font-size: 1.05rem;">🔔 Smart Notifications</h4>
+          <span class="badge badge-green" style="font-size: 0.6rem;">NEW</span>
+        </div>
+        <p class="small text-gray">Automated email and SMS alerts for grade posting, absence notifications, enrollment updates, payment reminders, and school announcements.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <span><strong>EduSync</strong> — School Information System</span>
+    <span>Page 3 &nbsp;|&nbsp; Confidential</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 4: DEPED FORMS + COMPLIANCE
+     ══════════════════════════════════════════════════════════════ -->
+<div class="page pattern-bg">
+  <div class="accent-bar"></div>
+
+  <div class="section-header">
+    <div class="section-label">DepEd Compliance</div>
+    <h2 class="text-navy">Built for DepEd. Not Adapted — <em>Designed</em>.</h2>
+    <p class="text-gray mt-1" style="max-width: 540px;">
+      Unlike generic school management systems retrofitted for Philippine use, EduSync was built from Day 1 around 
+      DepEd's official forms, curriculum standards, and reporting requirements.
+    </p>
+  </div>
+
+  <div class="content">
+    <!-- Forms Grid -->
+    <h4 class="mb-1">9 Official DepEd Forms — Auto-Generated</h4>
+    <div class="grid-3" style="margin-bottom: 1.5rem;">
+      <div class="form-badge">
+        <span style="font-size: 1.2rem;">📄</span>
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 700;">Form 137</div>
+          <div class="form-label">Permanent Record</div>
+        </div>
+      </div>
+      <div class="form-badge">
+        <span style="font-size: 1.2rem;">📊</span>
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 700;">Form 138</div>
+          <div class="form-label">Report Card</div>
+        </div>
+      </div>
+      <div class="form-badge">
+        <span style="font-size: 1.2rem;">📋</span>
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 700;">SF1</div>
+          <div class="form-label">School Register</div>
+        </div>
+      </div>
+      <div class="form-badge">
+        <span style="font-size: 1.2rem;">📝</span>
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 700;">SF2</div>
+          <div class="form-label">Daily Attendance</div>
+        </div>
+      </div>
+      <div class="form-badge">
+        <span style="font-size: 1.2rem;">📑</span>
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 700;">SF4</div>
+          <div class="form-label">Monthly Report</div>
+        </div>
+      </div>
+      <div class="form-badge">
+        <span style="font-size: 1.2rem;">📈</span>
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 700;">SF5</div>
+          <div class="form-label">Summary Report</div>
+        </div>
+      </div>
+      <div class="form-badge">
+        <span style="font-size: 1.2rem;">📊</span>
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 700;">SF9</div>
+          <div class="form-label">Learner Progress</div>
+        </div>
+      </div>
+      <div class="form-badge">
+        <span style="font-size: 1.2rem;">📂</span>
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 700;">SF10</div>
+          <div class="form-label">Learner Permanent</div>
+        </div>
+      </div>
+      <div class="form-badge">
+        <span style="font-size: 1.2rem;">✏️</span>
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 700;">ELLN</div>
+          <div class="form-label">K-3 Literacy/Numeracy</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comparison Table -->
+    <h4 class="mb-1">How We Compare</h4>
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th style="width: 40%;">Feature</th>
+          <th style="width: 20%; text-align: center;">EduSync</th>
+          <th style="width: 20%; text-align: center;">Generic LMS</th>
+          <th style="width: 20%; text-align: center;">Manual / Excel</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>DepEd Forms (SF1–SF10, 137, 138)</td>
+          <td style="text-align: center;"><span class="check">✓</span> 9 Forms</td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+          <td style="text-align: center;"><span class="partial">~</span> Manual</td>
+        </tr>
+        <tr>
+          <td>ELLN Assessment (K-3, 11 domains)</td>
+          <td style="text-align: center;"><span class="check">✓</span></td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+        </tr>
+        <tr>
+          <td>Works Offline (PWA)</td>
+          <td style="text-align: center;"><span class="check">✓</span></td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+          <td style="text-align: center;"><span class="partial">~</span></td>
+        </tr>
+        <tr>
+          <td>AI-Powered Lesson Plans</td>
+          <td style="text-align: center;"><span class="check">✓</span></td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+        </tr>
+        <tr>
+          <td>Division-Wide Dashboard</td>
+          <td style="text-align: center;"><span class="check">✓</span></td>
+          <td style="text-align: center;"><span class="partial">~</span></td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+        </tr>
+        <tr>
+          <td>Multi-School / Multi-Tenant</td>
+          <td style="text-align: center;"><span class="check">✓</span> 50+</td>
+          <td style="text-align: center;"><span class="partial">~</span></td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+        </tr>
+        <tr>
+          <td>Parent Portal</td>
+          <td style="text-align: center;"><span class="check">✓</span></td>
+          <td style="text-align: center;"><span class="check">✓</span></td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+        </tr>
+        <tr>
+          <td>At-Risk Student Detection</td>
+          <td style="text-align: center;"><span class="check">✓</span> AI</td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+        </tr>
+        <tr>
+          <td>Filipino / English Interface</td>
+          <td style="text-align: center;"><span class="check">✓</span></td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+          <td style="text-align: center;"><span class="check">✓</span></td>
+        </tr>
+        <tr>
+          <td>SHS Track Support (STEM, ABM, etc.)</td>
+          <td style="text-align: center;"><span class="check">✓</span></td>
+          <td style="text-align: center;"><span class="cross">✗</span></td>
+          <td style="text-align: center;"><span class="partial">~</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="trust-row" style="margin-top: 1rem;">
+      <div class="trust-item"><span class="trust-icon">🔒</span> Enterprise-Grade Security</div>
+      <div class="trust-item"><span class="trust-icon">☁️</span> Google Cloud Infrastructure</div>
+      <div class="trust-item"><span class="trust-icon">🌍</span> 99.9% Uptime SLA</div>
+      <div class="trust-item"><span class="trust-icon">🛡️</span> Data Privacy Compliant</div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <span><strong>EduSync</strong> — School Information System</span>
+    <span>Page 4 &nbsp;|&nbsp; Confidential</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 5: DIVISION PLATFORM & IMPACT
+     ══════════════════════════════════════════════════════════════ -->
+<div class="page pattern-bg">
+  <div class="accent-bar"></div>
+
+  <div class="section-header">
+    <div class="section-label">Division-Level Platform</div>
+    <h2 class="text-navy">Real-Time Oversight Across Your Entire Division</h2>
+    <p class="text-gray mt-1" style="max-width: 540px;">
+      The Division Dashboard gives superintendents and supervisors instant, aggregated visibility 
+      across every school, district, and grade level — eliminating weeks of manual data collection.
+    </p>
+  </div>
+
+  <div class="content">
+    <!-- Division Features -->
+    <div class="grid-3" style="margin-bottom: 1.5rem;">
+      <div class="feature-card" style="text-align: center;">
+        <div class="feature-icon icon-blue" style="margin: 0 auto 0.6rem;">📊</div>
+        <h4 style="font-size: 0.95rem;">Aggregated Analytics</h4>
+        <p class="small text-gray">View enrollment, grades, attendance, and performance across all schools in one dashboard.</p>
+      </div>
+      <div class="feature-card" style="text-align: center;">
+        <div class="feature-icon icon-green" style="margin: 0 auto 0.6rem;">🏆</div>
+        <h4 style="font-size: 0.95rem;">School Comparison</h4>
+        <p class="small text-gray">Compare MPS, promotion rates, and KPIs across schools and districts side-by-side.</p>
+      </div>
+      <div class="feature-card" style="text-align: center;">
+        <div class="feature-icon icon-gold" style="margin: 0 auto 0.6rem;">🗂️</div>
+        <h4 style="font-size: 0.95rem;">District Management</h4>
+        <p class="small text-gray">Organized by your districts with PSDS-level access and oversight capabilities.</p>
+      </div>
+      <div class="feature-card" style="text-align: center;">
+        <div class="feature-icon icon-purple" style="margin: 0 auto 0.6rem;">📤</div>
+        <h4 style="font-size: 0.95rem;">EBEIS/LIS Export</h4>
+        <p class="small text-gray">One-click export of division-wide data in DepEd-required formats for EBEIS reporting.</p>
+      </div>
+      <div class="feature-card" style="text-align: center;">
+        <div class="feature-icon icon-indigo" style="margin: 0 auto 0.6rem;">👥</div>
+        <h4 style="font-size: 0.95rem;">Personnel Overview</h4>
+        <p class="small text-gray">Complete teacher/staff database with assignments, specializations, and teaching loads.</p>
+      </div>
+      <div class="feature-card" style="text-align: center;">
+        <div class="feature-icon icon-red" style="margin: 0 auto 0.6rem;">🔔</div>
+        <h4 style="font-size: 0.95rem;">Alert System</h4>
+        <p class="small text-gray">Automated alerts for compliance deadlines, at-risk students, and enrollment anomalies.</p>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Impact Metrics -->
+    <h3 class="text-navy mb-2">Measurable Impact for Your Division</h3>
+    <div class="grid-4">
+      <div class="stat-card">
+        <div class="stat-value">80%</div>
+        <div class="stat-label">Time Savings on Administrative Work</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">95%</div>
+        <div class="stat-label">Faster DepEd Form Generation</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">300+</div>
+        <div class="stat-label">Hours Saved Per School Per Year</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">100%</div>
+        <div class="stat-label">DepEd Compliance Guaranteed</div>
+      </div>
+    </div>
+
+    <div style="margin-top: 1.5rem;">
+      <div class="grid-4">
+        <div class="roi-card">
+          <div class="roi-label">Form 138 Generation</div>
+          <div class="roi-from">2 weeks</div>
+          <div class="roi-arrow">↓</div>
+          <div class="roi-to">30 sec</div>
+        </div>
+        <div class="roi-card">
+          <div class="roi-label">Enrollment Lines</div>
+          <div class="roi-from">Hours of queuing</div>
+          <div class="roi-arrow">↓</div>
+          <div class="roi-to">90% ↓</div>
+        </div>
+        <div class="roi-card">
+          <div class="roi-label">Grade Errors</div>
+          <div class="roi-from">Common mistakes</div>
+          <div class="roi-arrow">↓</div>
+          <div class="roi-to">Zero</div>
+        </div>
+        <div class="roi-card">
+          <div class="roi-label">Division Reports</div>
+          <div class="roi-from">Weeks of collecting</div>
+          <div class="roi-arrow">↓</div>
+          <div class="roi-to">Real-Time</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <span><strong>EduSync</strong> — School Information System</span>
+    <span>Page 5 &nbsp;|&nbsp; Confidential</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 6: USER ROLES & WORKFLOW
+     ══════════════════════════════════════════════════════════════ -->
+<div class="page pattern-bg">
+  <div class="accent-bar"></div>
+
+  <div class="section-header">
+    <div class="section-label">Role-Based Access</div>
+    <h2 class="text-navy">Tailored Experience for Every User</h2>
+    <p class="text-gray mt-1" style="max-width: 540px;">
+      Six distinct roles with carefully designed interfaces — each user sees only 
+      what they need, ensuring security, simplicity, and efficiency.
+    </p>
+  </div>
+
+  <div class="content">
+    <!-- Roles Grid -->
+    <div class="grid-3" style="margin-bottom: 1.5rem;">
+      <div class="feature-card">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: #4F46E5; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">👤</div>
+          <div>
+            <h4 style="font-size: 0.95rem;">Division Officer</h4>
+            <span class="badge badge-blue" style="font-size: 0.55rem;">SUPER ADMIN</span>
+          </div>
+        </div>
+        <p class="small text-gray">Full division oversight: all schools, aggregated analytics, school comparison, district management, compliance monitoring.</p>
+      </div>
+      <div class="feature-card">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: #0891B2; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">🏫</div>
+          <div>
+            <h4 style="font-size: 0.95rem;">School Admin</h4>
+            <span class="badge badge-green" style="font-size: 0.55rem;">PRINCIPAL</span>
+          </div>
+        </div>
+        <p class="small text-gray">Full school management: students, teachers, sections, forms, enrollment, grades, reports, settings, announcements.</p>
+      </div>
+      <div class="feature-card">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: #059669; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">📋</div>
+          <div>
+            <h4 style="font-size: 0.95rem;">Registrar</h4>
+            <span class="badge badge-gold" style="font-size: 0.55rem;">RECORDS</span>
+          </div>
+        </div>
+        <p class="small text-gray">Enrollment processing, Form 137/138 generation, student records, SF1 management, transcript requests.</p>
+      </div>
+      <div class="feature-card">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: #D97706; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">📝</div>
+          <div>
+            <h4 style="font-size: 0.95rem;">Teacher</h4>
+            <span class="badge badge-gold" style="font-size: 0.55rem;">FACULTY</span>
+          </div>
+        </div>
+        <p class="small text-gray">Grade entry, attendance recording, lesson plans, class management, assignments, student progress tracking.</p>
+      </div>
+      <div class="feature-card">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: #7C3AED; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">🎒</div>
+          <div>
+            <h4 style="font-size: 0.95rem;">Student</h4>
+            <span class="badge badge-blue" style="font-size: 0.55rem;">LEARNER</span>
+          </div>
+        </div>
+        <p class="small text-gray">View grades, attendance, schedule, assignments, announcements — personal academic dashboard.</p>
+      </div>
+      <div class="feature-card">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: #DB2777; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">👨‍👩‍👧</div>
+          <div>
+            <h4 style="font-size: 0.95rem;">Parent / Guardian</h4>
+            <span class="badge badge-green" style="font-size: 0.55rem;">FAMILY</span>
+          </div>
+        </div>
+        <p class="small text-gray">Real-time child monitoring: grades, attendance, billing, announcements, schedule, and assignments.</p>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Data Flow -->
+    <h3 class="text-navy mb-2">How Data Flows from Classroom to Division</h3>
+    <div class="flow-container">
+      <div class="flow-step">
+        <div class="flow-step-icon">📝</div>
+        <div class="flow-step-label">Teacher<br>Enters Grades</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-icon">🤖</div>
+        <div class="flow-step-label">Auto-Compute<br>GPA & Rankings</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-icon">📋</div>
+        <div class="flow-step-label">Generate<br>DepEd Forms</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-icon">🏫</div>
+        <div class="flow-step-label">School Admin<br>Reviews</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-icon">📊</div>
+        <div class="flow-step-label">Division<br>Dashboard</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-icon">👨‍👩‍👧</div>
+        <div class="flow-step-label">Parents<br>Notified</div>
+      </div>
+    </div>
+
+    <div style="margin-top: 1.5rem; background: var(--blue-pale); border-radius: 12px; padding: 1.2rem; display: flex; gap: 1rem; align-items: center;">
+      <div style="font-size: 2.5rem;">📶</div>
+      <div>
+        <h4 style="color: var(--blue); font-size: 1rem;">Works 100% Offline — Syncs When Connected</h4>
+        <p class="small text-gray">As a Progressive Web App (PWA), EduSync installs on any device and works without internet. Teachers in remote barangays can enter grades offline — data syncs automatically when connectivity returns. No data loss, ever.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <span><strong>EduSync</strong> — School Information System</span>
+    <span>Page 6 &nbsp;|&nbsp; Confidential</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 7: SEE IT IN ACTION — LIVE DEMO INVITATION
+     ══════════════════════════════════════════════════════════════ -->
+<div class="page pattern-bg">
+  <div class="accent-bar"></div>
+
+  <div class="section-header">
+    <div class="section-label">See It In Action</div>
+    <h2 class="text-navy">Don't Take Our Word For It — Try It Yourself</h2>
+    <p class="text-gray mt-1" style="max-width: 540px;">
+      We believe the best pitch is a working product. EduSync is live and ready for hands-on 
+      evaluation — no slides, no promises, just a real system with real data you can explore.
+    </p>
+  </div>
+
+  <div class="content">
+    <!-- Live Demo Offer -->
+    <div style="background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%); border-radius: 16px; padding: 1.8rem; color: white; margin-bottom: 1.5rem;">
+      <div style="display: flex; align-items: flex-start; gap: 1.5rem;">
+        <div style="font-size: 3rem; min-width: 50px; text-align: center;">🖥️</div>
+        <div>
+          <h3 style="margin-bottom: 0.4rem; font-size: 1.3rem;">Live Demo Environment — Fully Loaded</h3>
+          <p style="font-size: 0.95rem; opacity: 0.8; margin-bottom: 1rem;">
+            We've prepared a complete demonstration environment pre-loaded with realistic school data. 
+            You and your team can log in, explore every feature, and evaluate the system at your own pace.
+          </p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;">
+            <div style="background: rgba(255,255,255,0.08); border-radius: 10px; padding: 0.8rem; border: 1px solid rgba(255,255,255,0.1);">
+              <div style="font-size: 0.7rem; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.1em;">Demo School</div>
+              <div style="font-size: 1rem; font-weight: 700;">Sample K-12 School</div>
+              <div style="font-size: 0.8rem; opacity: 0.7;">600+ students · 60+ teachers · 50+ sections</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.08); border-radius: 10px; padding: 0.8rem; border: 1px solid rgba(255,255,255,0.1);">
+              <div style="font-size: 0.7rem; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.1em;">Division Portal</div>
+              <div style="font-size: 1rem; font-weight: 700;">Full Division Dashboard</div>
+              <div style="font-size: 0.8rem; opacity: 0.7;">Multi-school · multi-district · all reports</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- What You'll See -->
+    <h4 class="text-navy mb-1">What You'll See During the Demo</h4>
+    <div class="grid-2" style="margin-bottom: 1.5rem;">
+      <div class="solution-card">
+        <div class="solution-icon">📋</div>
+        <div>
+          <h4 style="font-size: 0.95rem; color: #065F46;">Form 138 in 30 Seconds</h4>
+          <p class="small text-gray">Watch 40 student report cards generate automatically from a single click — complete, print-ready, DepEd-formatted.</p>
+        </div>
+      </div>
+      <div class="solution-card">
+        <div class="solution-icon">📊</div>
+        <div>
+          <h4 style="font-size: 0.95rem; color: #065F46;">Division Dashboard — Live</h4>
+          <p class="small text-gray">See aggregated statistics across all your schools, district comparisons, and performance analytics updating in real-time.</p>
+        </div>
+      </div>
+      <div class="solution-card">
+        <div class="solution-icon">📶</div>
+        <div>
+          <h4 style="font-size: 0.95rem; color: #065F46;">Offline Mode Test</h4>
+          <p class="small text-gray">We'll disconnect internet live and show you — grade entry, attendance, all still working. Data syncs when connectivity returns.</p>
+        </div>
+      </div>
+      <div class="solution-card">
+        <div class="solution-icon">🤖</div>
+        <div>
+          <h4 style="font-size: 0.95rem; color: #065F46;">AI Lesson Plan Generator</h4>
+          <p class="small text-gray">Enter a topic and grade level — AI creates a complete, MELC-aligned lesson plan with objectives, activities, and assessments.</p>
+        </div>
+      </div>
+      <div class="solution-card">
+        <div class="solution-icon">🎓</div>
+        <div>
+          <h4 style="font-size: 0.95rem; color: #065F46;">Enrollment Portal Walkthrough</h4>
+          <p class="small text-gray">Experience the parent-facing enrollment wizard — 7 steps, document upload, status tracking, admin approval workflow.</p>
+        </div>
+      </div>
+      <div class="solution-card">
+        <div class="solution-icon">👨‍👩‍👧</div>
+        <div>
+          <h4 style="font-size: 0.95rem; color: #065F46;">Parent Portal Access</h4>
+          <p class="small text-gray">Log in as a parent and see exactly what they see — real-time grades, attendance, announcements, and schedule.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pilot Program -->
+    <div style="background: #FFFBEB; border: 2px solid #FCD34D; border-radius: 16px; padding: 1.5rem;">
+      <div style="display: flex; align-items: flex-start; gap: 1rem;">
+        <div style="font-size: 2rem; min-width: 36px;">🤝</div>
+        <div>
+          <h4 style="color: #92400E; font-size: 1.1rem; margin-bottom: 0.3rem;">Our Offer: Free 30-Day Pilot Program</h4>
+          <p style="font-size: 0.9rem; color: var(--gray-700); margin-bottom: 0.8rem;">
+            We're confident enough in EduSync to let you evaluate it for free. Select 2–3 schools in your division for a 
+            no-commitment pilot. If it doesn't deliver measurable results, you owe nothing.
+          </p>
+          <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--gray-700);">
+              <span class="check">✓</span> <strong>Full feature access</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--gray-700);">
+              <span class="check">✓</span> <strong>Free data migration</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--gray-700);">
+              <span class="check">✓</span> <strong>On-site training</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--gray-700);">
+              <span class="check">✓</span> <strong>Dedicated support</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--gray-700);">
+              <span class="check">✓</span> <strong>No credit card required</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--gray-700);">
+              <span class="check">✓</span> <strong>Zero obligation</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <span><strong>EduSync</strong> — School Information System</span>
+    <span>Page 7 &nbsp;|&nbsp; Confidential</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 8: IMPLEMENTATION ROADMAP & PRICING
+     ══════════════════════════════════════════════════════════════ -->
+<div class="page pattern-bg">
+  <div class="accent-bar"></div>
+
+  <div class="section-header">
+    <div class="section-label">Implementation & Pricing</div>
+    <h2 class="text-navy">From Partnership to Full Deployment in 4 Weeks</h2>
+    <p class="text-gray mt-1" style="max-width: 540px;">
+      Our proven onboarding process ensures zero disruption to school operations. 
+      We handle everything — setup, data migration, training, and ongoing support.
+    </p>
+  </div>
+
+  <div class="content">
+    <!-- Timeline -->
+    <div style="margin-bottom: 1.5rem;">
+      <div class="timeline-item">
+        <div class="timeline-dot">1</div>
+        <div>
+          <div class="flex items-center gap-1">
+            <h4 style="font-size: 1rem;">Week 1 — Setup & Configuration</h4>
+            <span class="badge badge-blue" style="font-size: 0.55rem;">DAYS 1-7</span>
+          </div>
+          <p class="small text-gray">Division account creation, school onboarding, district structure setup, user account provisioning, branding customization.</p>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot">2</div>
+        <div>
+          <div class="flex items-center gap-1">
+            <h4 style="font-size: 1rem;">Week 2 — Data Migration & Import</h4>
+            <span class="badge badge-gold" style="font-size: 0.55rem;">DAYS 8-14</span>
+          </div>
+          <p class="small text-gray">SF1 CSV import for student data, teacher assignments, section configuration, learning areas setup, historical grade migration.</p>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot">3</div>
+        <div>
+          <div class="flex items-center gap-1">
+            <h4 style="font-size: 1rem;">Week 3 — Training & Testing</h4>
+            <span class="badge badge-green" style="font-size: 0.55rem;">DAYS 15-21</span>
+          </div>
+          <p class="small text-gray">Virtual / on-site training sessions for principals, teachers, registrars. Hands-on workshops with real data. Q&A and troubleshooting sessions.</p>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background: var(--green);">✓</div>
+        <div>
+          <div class="flex items-center gap-1">
+            <h4 style="font-size: 1rem;">Week 4 — Go Live & Support</h4>
+            <span class="badge badge-green" style="font-size: 0.55rem;">LAUNCH</span>
+          </div>
+          <p class="small text-gray">Phased rollout across districts, live monitoring, dedicated support channel, daily check-ins during first week of operations.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Pricing -->
+    <h3 class="text-navy text-center mb-2">Investment Tiers</h3>
+    <p class="text-center text-gray small mb-2">Less than ₱4 per student per month. <strong>Unlimited teachers included.</strong></p>
+
+    <div class="grid-3">
+      <!-- Starter -->
+      <div class="pricing-card">
+        <h4 class="text-blue" style="margin-bottom: 0.3rem;">Starter</h4>
+        <p class="tiny text-gray" style="margin-bottom: 0.8rem;">Ideal for small schools</p>
+        <div class="price-value"><span class="price-currency">₱</span>3,999</div>
+        <div class="price-period">/month</div>
+        <div class="divider-thin" style="margin: 0.8rem 0;"></div>
+        <div class="pricing-feature"><span class="check">✓</span> Up to 500 students</div>
+        <div class="pricing-feature"><span class="check">✓</span> Unlimited teachers</div>
+        <div class="pricing-feature"><span class="check">✓</span> All 9 DepEd forms</div>
+        <div class="pricing-feature"><span class="check">✓</span> Gradebook & attendance</div>
+        <div class="pricing-feature"><span class="check">✓</span> Parent portal access</div>
+        <div class="pricing-feature"><span class="check">✓</span> Email support</div>
+        <div class="pricing-feature"><span class="check">✓</span> Offline PWA</div>
+      </div>
+
+      <!-- Professional -->
+      <div class="pricing-card popular">
+        <h4 class="text-blue" style="margin-bottom: 0.3rem;">Professional</h4>
+        <p class="tiny text-gray" style="margin-bottom: 0.8rem;">Best for medium schools</p>
+        <div class="price-value"><span class="price-currency">₱</span>7,999</div>
+        <div class="price-period">/month</div>
+        <div class="divider-thin" style="margin: 0.8rem 0;"></div>
+        <div class="pricing-feature"><span class="check">✓</span> Up to 1,500 students</div>
+        <div class="pricing-feature"><span class="check">✓</span> Unlimited teachers</div>
+        <div class="pricing-feature"><span class="check">✓</span> All Starter features</div>
+        <div class="pricing-feature"><span class="check">✓</span> <strong>AI analytics & predictions</strong></div>
+        <div class="pricing-feature"><span class="check">✓</span> <strong>AI lesson plan generator</strong></div>
+        <div class="pricing-feature"><span class="check">✓</span> <strong>Email & SMS notifications</strong></div>
+        <div class="pricing-feature"><span class="check">✓</span> <strong>Financial management</strong></div>
+        <div class="pricing-feature"><span class="check">✓</span> Priority support</div>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="pricing-card">
+        <h4 class="text-blue" style="margin-bottom: 0.3rem;">Enterprise</h4>
+        <p class="tiny text-gray" style="margin-bottom: 0.8rem;">Division-wide deployment</p>
+        <div class="price-value" style="font-size: 1.8rem;">Custom</div>
+        <div class="price-period">Contact us for pricing</div>
+        <div class="divider-thin" style="margin: 0.8rem 0;"></div>
+        <div class="pricing-feature"><span class="check">✓</span> <strong>Unlimited students</strong></div>
+        <div class="pricing-feature"><span class="check">✓</span> <strong>Unlimited schools</strong></div>
+        <div class="pricing-feature"><span class="check">✓</span> All Professional features</div>
+        <div class="pricing-feature"><span class="check">✓</span> <strong>Division dashboard</strong></div>
+        <div class="pricing-feature"><span class="check">✓</span> <strong>Dedicated account manager</strong></div>
+        <div class="pricing-feature"><span class="check">✓</span> <strong>On-site training</strong></div>
+        <div class="pricing-feature"><span class="check">✓</span> SLA guarantee (99.9%)</div>
+        <div class="pricing-feature"><span class="check">✓</span> Custom integrations</div>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 1rem;">
+      <span class="badge badge-gold" style="font-size: 0.7rem;">💡 SAVE 20%</span>
+      <span class="small text-gray" style="margin-left: 0.5rem;">Annual payment discount available. 30-day free trial — no credit card required.</span>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <span><strong>EduSync</strong> — School Information System</span>
+    <span>Page 8 &nbsp;|&nbsp; Confidential</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 9: TECHNOLOGY + SECURITY
+     ══════════════════════════════════════════════════════════════ -->
+<div class="page pattern-bg">
+  <div class="accent-bar"></div>
+
+  <div class="section-header">
+    <div class="section-label">Technology & Security</div>
+    <h2 class="text-navy">Enterprise-Grade. Philippine-Ready.</h2>
+    <p class="text-gray mt-1" style="max-width: 540px;">
+      Built on Google Cloud's world-class infrastructure with a modern tech stack 
+      designed for reliability, security, and the unique connectivity challenges of Philippine schools.
+    </p>
+  </div>
+
+  <div class="content">
+    <div class="grid-2" style="margin-bottom: 1.5rem;">
+      <!-- Tech Stack -->
+      <div>
+        <h4 class="text-navy mb-1">🛠 Modern Technology Stack</h4>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem; background: var(--gray-50); border-radius: 8px;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: #61DAFB20; display: flex; align-items: center; justify-content: center; font-size: 1rem;">⚛️</div>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 700;">React + TypeScript</div>
+              <div class="tiny text-gray">Type-safe, component-based UI</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem; background: var(--gray-50); border-radius: 8px;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: #FFCA2820; display: flex; align-items: center; justify-content: center; font-size: 1rem;">🔥</div>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 700;">Firebase + PostgreSQL</div>
+              <div class="tiny text-gray">Hybrid database for real-time sync & analytics</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem; background: var(--gray-50); border-radius: 8px;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: #4285F420; display: flex; align-items: center; justify-content: center; font-size: 1rem;">☁️</div>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 700;">Google Cloud Platform</div>
+              <div class="tiny text-gray">Asia-Pacific servers, CDN, auto-scaling</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem; background: var(--gray-50); border-radius: 8px;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: #8B5CF620; display: flex; align-items: center; justify-content: center; font-size: 1rem;">🤖</div>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 700;">Google Gemini AI</div>
+              <div class="tiny text-gray">AI lesson plans & predictive analytics</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem; background: var(--gray-50); border-radius: 8px;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: #06B6D420; display: flex; align-items: center; justify-content: center; font-size: 1rem;">📱</div>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 700;">Progressive Web App (PWA)</div>
+              <div class="tiny text-gray">Install on any device, works offline</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Security -->
+      <div>
+        <h4 class="text-navy mb-1">🔒 Security & Compliance</h4>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+          <div style="display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.5rem; background: #F0FDF4; border-radius: 8px;">
+            <span class="check" style="margin-top: 2px;">✓</span>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 700;">Multi-Tenant Data Isolation</div>
+              <div class="tiny text-gray">Complete data separation between schools — zero leakage possibility</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.5rem; background: #F0FDF4; border-radius: 8px;">
+            <span class="check" style="margin-top: 2px;">✓</span>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 700;">Row-Level Security (RLS)</div>
+              <div class="tiny text-gray">Database-enforced access control — users can only access their own data</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.5rem; background: #F0FDF4; border-radius: 8px;">
+            <span class="check" style="margin-top: 2px;">✓</span>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 700;">SSL/TLS Encryption</div>
+              <div class="tiny text-gray">All data encrypted in transit and at rest with AES-256</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.5rem; background: #F0FDF4; border-radius: 8px;">
+            <span class="check" style="margin-top: 2px;">✓</span>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 700;">Role-Based Access Control</div>
+              <div class="tiny text-gray">6 distinct roles with granular permissions and audit logging</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.5rem; background: #F0FDF4; border-radius: 8px;">
+            <span class="check" style="margin-top: 2px;">✓</span>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 700;">Automated Backups</div>
+              <div class="tiny text-gray">Daily automated backups with point-in-time recovery</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.5rem; background: #F0FDF4; border-radius: 8px;">
+            <span class="check" style="margin-top: 2px;">✓</span>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 700;">Data Privacy Act Compliance</div>
+              <div class="tiny text-gray">Fully compliant with RA 10173 (Data Privacy Act of 2012)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Why EduSync for Division -->
+    <div style="background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%); border-radius: 16px; padding: 1.5rem; color: white;">
+      <h3 style="text-align: center; margin-bottom: 1rem;">Why EduSync for Your Division?</h3>
+      <div class="grid-3" style="gap: 1rem;">
+        <div style="text-align: center;">
+          <div style="font-size: 2rem; margin-bottom: 0.3rem;">🇵🇭</div>
+          <h4 style="font-size: 0.95rem;">DepEd-First Design</h4>
+          <p style="font-size: 0.75rem; opacity: 0.7;">Not a foreign LMS. Built from Day 1 around Philippine K-12 curriculum, DepEd forms, and MELC standards.</p>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 2rem; margin-bottom: 0.3rem;">📶</div>
+          <h4 style="font-size: 0.95rem;">Philippine Connectivity</h4>
+          <p style="font-size: 0.75rem; opacity: 0.7;">Designed for poor/unreliable internet. Full offline capability — no data loss, ever. Even in GIDA areas.</p>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-size: 2rem; margin-bottom: 0.3rem;">🏫</div>
+          <h4 style="font-size: 0.95rem;">Division Scale</h4>
+          <p style="font-size: 0.75rem; opacity: 0.7;">Manage all your schools from one dashboard. Aggregated insights, school comparison, district-level oversight.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <span><strong>EduSync</strong> — School Information System</span>
+    <span>Page 9 &nbsp;|&nbsp; Confidential</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAGE 10: CALL TO ACTION / CLOSING
+     ══════════════════════════════════════════════════════════════ -->
+<div class="page cover-bg" style="justify-content: space-between;">
+  <div class="geo-lines"></div>
+  <div class="accent-bar"></div>
+
+  <div style="padding: 2rem 2.5rem; position: relative; z-index: 2;">
+    <div style="display: flex; align-items: center; gap: 0.6rem;">
+      <div style="width: 42px; height: 42px; background: linear-gradient(135deg, var(--blue), var(--blue-light)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 900; color: white;">E</div>
+      <div>
+        <div style="font-size: 1.2rem; font-weight: 800; letter-spacing: 0.05em;">EDUSYNC</div>
+        <div style="font-size: 0.6rem; letter-spacing: 0.15em; opacity: 0.6; text-transform: uppercase;">School Information System</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Center content -->
+  <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 0 2.5rem; position: relative; z-index: 2;">
+    <div class="badge" style="background: rgba(212,168,67,0.2); color: var(--gold); border: 1px solid rgba(212,168,67,0.3); margin-bottom: 1.5rem; font-size: 0.7rem;">
+      ⚡ LET'S TRANSFORM EDUCATION TOGETHER
+    </div>
+    <h1 style="font-size: 3rem; margin-bottom: 1rem;">
+      Ready to Modernize<br>
+      <span style="background: linear-gradient(90deg, var(--gold), var(--gold-light)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Your Division?</span>
+    </h1>
+    <p style="font-size: 1.15rem; opacity: 0.7; max-width: 460px; line-height: 1.6; margin-bottom: 2rem;">
+      Join the growing number of divisions embracing digital transformation. Start with a free 30-day pilot — no commitment, no credit card required.
+    </p>
+
+    <!-- Next Steps -->
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; max-width: 520px; margin-bottom: 2rem;">
+      <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 1.2rem; text-align: center;">
+        <div style="font-size: 1.8rem; margin-bottom: 0.3rem;">📅</div>
+        <h4 style="font-size: 0.9rem; margin-bottom: 0.2rem;">Step 1</h4>
+        <p style="font-size: 0.75rem; opacity: 0.6;">Schedule a live demo with your team</p>
+      </div>
+      <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 1.2rem; text-align: center;">
+        <div style="font-size: 1.8rem; margin-bottom: 0.3rem;">🏫</div>
+        <h4 style="font-size: 0.9rem; margin-bottom: 0.2rem;">Step 2</h4>
+        <p style="font-size: 0.75rem; opacity: 0.6;">Pilot with 2-3 schools for 30 days</p>
+      </div>
+      <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 1.2rem; text-align: center;">
+        <div style="font-size: 1.8rem; margin-bottom: 0.3rem;">🚀</div>
+        <h4 style="font-size: 0.9rem; margin-bottom: 0.2rem;">Step 3</h4>
+        <p style="font-size: 0.75rem; opacity: 0.6;">Roll out division-wide</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Info -->
+  <div style="padding: 2rem 2.5rem; position: relative; z-index: 2;">
+    <div style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <div style="font-size: 0.7rem; opacity: 0.4; text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.3rem;">Get in Touch</div>
+        <div style="font-size: 1.4rem; font-weight: 800; margin-bottom: 0.2rem;">Let's Talk.</div>
+        <div style="font-size: 0.85rem; opacity: 0.7;">We'll set up a personalized demo for your division.</div>
+      </div>
+      <div style="text-align: right;">
+        <div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; justify-content: flex-end;">
+          <span style="opacity: 0.5; font-size: 0.9rem;">🌐</span>
+          <span style="font-size: 0.9rem; font-weight: 600;">edusync.ph</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; justify-content: flex-end;">
+          <span style="opacity: 0.5; font-size: 0.9rem;">📧</span>
+          <span style="font-size: 0.9rem;">official@edusync.ph</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; justify-content: flex-end;">
+          <span style="opacity: 0.5; font-size: 0.9rem;">📱</span>
+          <span style="font-size: 0.9rem;">+63 998 843 8814</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.4rem; justify-content: flex-end;">
+          <span style="opacity: 0.5; font-size: 0.9rem;">📅</span>
+          <span style="font-size: 0.9rem;">calendly.com/edusync/demo</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 1rem; font-size: 0.7rem; opacity: 0.3;">
+      &copy; 2026 EduSync Technologies. All rights reserved. This document is confidential and intended solely for the addressee.
+    </div>
+  </div>
+
+  <div class="accent-bar"></div>
+</div>
+
+</body>
+</html>

@@ -2,12 +2,36 @@
  * Trial Signup Functions
  * 
  * Handles school trial signup requests from the landing page.
- * Sends notification emails using SendGrid and stores lead information in Firestore.
+ * Sends notification & confirmation emails via Gmail SMTP (Nodemailer).
  */
 
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-const sgMail = require('@sendgrid/mail');
+const nodemailer = require('nodemailer');
+
+// Gmail SMTP transporter (created once, reused across invocations)
+let transporter = null;
+
+function getTransporter() {
+  if (transporter) return transporter;
+
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
+
+  if (!gmailUser || !gmailAppPassword) {
+    throw new Error('GMAIL_USER or GMAIL_APP_PASSWORD not configured in .env');
+  }
+
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: gmailUser,
+      pass: gmailAppPassword,
+    },
+  });
+
+  return transporter;
+}
 
 /**
  * Process trial signup request
@@ -91,28 +115,18 @@ exports.processTrialSignup = functions.https.onRequest(async (req, res) => {
 });
 
 /**
- * Send notification email to EduSync team using SendGrid
+ * Send notification email to EduSync team via Gmail SMTP
  */
 async function sendNotificationEmail({ schoolName, adminName, email, phone, studentCount, message, leadId }) {
   try {
-    // Get SendGrid API key from environment
-    const sendGridKey = process.env.SENDGRID_API_KEY || functions.config()?.sendgrid?.api_key;
-    const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@edusync.ph';
-
-    if (!sendGridKey) {
-      console.warn('SendGrid API key not configured. Skipping notification email.');
-      return;
-    }
-
-    sgMail.setApiKey(sendGridKey);
+    const transport = getTransporter();
+    const gmailUser = process.env.GMAIL_USER;
 
     const mailOptions = {
-      to: 'hello@edusync.ph', // Your sales email
-      from: {
-        email: fromEmail,
-        name: 'EduSync Trial System'
-      },
-      subject: `🎉 New Trial Signup: ${schoolName}`,
+      from: `"EduSync Trial System" <${gmailUser}>`,
+      to: gmailUser,
+      replyTo: email, // Reply goes to the lead who signed up
+      subject: `New Trial Signup: ${schoolName}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #4F46E5;">New Trial Signup Request</h2>
@@ -147,43 +161,31 @@ async function sendNotificationEmail({ schoolName, adminName, email, phone, stud
       `
     };
 
-    await sgMail.send(mailOptions);
-    console.log(`Notification email sent for lead ${leadId} to hello@edusync.ph`);
+    const info = await transport.sendMail(mailOptions);
+    console.log(`Notification email sent for lead ${leadId} to ${gmailUser} (messageId: ${info.messageId})`);
   } catch (error) {
     console.error('Error sending notification email:', error);
-    if (error.response) {
-      console.error('SendGrid error details:', error.response.body);
-    }
     // Don't throw - we don't want to fail the entire request if email fails
   }
 }
 
 /**
- * Send confirmation email to the user using SendGrid
+ * Send confirmation email to the user via Gmail SMTP
  */
 async function sendConfirmationEmail({ schoolName, adminName, email }) {
   try {
-    const sendGridKey = process.env.SENDGRID_API_KEY || functions.config()?.sendgrid?.api_key;
-    const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@edusync.ph';
-
-    if (!sendGridKey) {
-      console.warn('SendGrid API key not configured. Skipping confirmation email.');
-      return;
-    }
-
-    sgMail.setApiKey(sendGridKey);
+    const transport = getTransporter();
+    const gmailUser = process.env.GMAIL_USER;
 
     const mailOptions = {
+      from: `"EduSync Team" <${gmailUser}>`,
       to: email,
-      from: {
-        email: fromEmail,
-        name: 'EduSync Team'
-      },
+      replyTo: gmailUser,
       subject: `Welcome to EduSync! Your Trial Request is Received`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 32px;">🎉 Welcome to EduSync!</h1>
+            <h1 style="color: white; margin: 0; font-size: 32px;">Welcome to EduSync!</h1>
           </div>
 
           <div style="padding: 40px 20px; background: white;">
@@ -207,18 +209,18 @@ async function sendConfirmationEmail({ schoolName, adminName, email }) {
             </div>
 
             <div style="background: #DBEAFE; padding: 20px; border-radius: 8px; margin: 30px 0;">
-              <h3 style="margin-top: 0; color: #1E40AF;">💡 In the Meantime</h3>
+              <h3 style="margin-top: 0; color: #1E40AF;">In the Meantime</h3>
               <p style="color: #374151; margin: 10px 0;">
-                Check out our <a href="https://edusync-sis.web.app" style="color: #4F46E5; text-decoration: none; font-weight: bold;">video tutorials</a> 
+                Check out our <a href="https://edusync.ph" style="color: #4F46E5; text-decoration: none; font-weight: bold;">video tutorials</a> 
                 to see EduSync in action.
               </p>
               <p style="color: #374151; margin: 10px 0;">
-                Have questions? Reply to this email or call us at <strong>+63 917 123 4567</strong>.
+                Have questions? Reply to this email or contact us at <strong>edusyncph@gmail.com</strong>.
               </p>
             </div>
 
             <div style="text-align: center; margin-top: 40px;">
-              <a href="https://edusync-sis.web.app" 
+              <a href="https://edusync.ph" 
                  style="display: inline-block; background: #4F46E5; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
                 Visit EduSync Website
               </a>
@@ -235,20 +237,17 @@ async function sendConfirmationEmail({ schoolName, adminName, email }) {
               EduSync - School Information System
             </p>
             <p style="color: #6B7280; font-size: 12px; margin: 5px 0;">
-              📧 hello@edusync.ph | 📱 +63 917 123 4567
+              edusyncph@gmail.com | +63 998 843 8815
             </p>
           </div>
         </div>
       `
     };
 
-    await sgMail.send(mailOptions);
-    console.log(`Confirmation email sent to ${email}`);
+    const info = await transport.sendMail(mailOptions);
+    console.log(`Confirmation email sent to ${email} (messageId: ${info.messageId})`);
   } catch (error) {
     console.error('Error sending confirmation email:', error);
-    if (error.response) {
-      console.error('SendGrid error details:', error.response.body);
-    }
     // Don't throw - we don't want to fail the entire request if email fails
   }
 }
@@ -258,10 +257,10 @@ async function sendConfirmationEmail({ schoolName, adminName, email }) {
  */
 function getRecommendedPlan(studentCount) {
   if (studentCount === '1-200' || studentCount === '201-500') {
-    return '🟢 Starter Plan (₱1,999/month)';
+    return 'Starter Plan';
   } else if (studentCount === '501-1000' || studentCount === '1001-1500') {
-    return '🟣 Professional Plan (₱4,999/month)';
+    return 'Professional Plan';
   } else {
-    return '⭐ Enterprise Plan (Custom Pricing)';
+    return 'Enterprise Plan (Custom Pricing)';
   }
 }

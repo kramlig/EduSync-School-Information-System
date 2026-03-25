@@ -7,7 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../src/lib/supabase';
-import type { AuthUser, StudentUser, ParentUser, SchoolSettings } from '../types';
+import type { AuthUser, StudentUser, ParentUser } from '../types';
 import Spinner from './Spinner';
 
 interface GradesSummaryProps {

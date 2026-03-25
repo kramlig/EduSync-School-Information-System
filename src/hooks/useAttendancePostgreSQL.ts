@@ -35,19 +35,19 @@ const mapStatusToFirestore = (status: string): string => {
   return STATUS_REVERSE_MAP[status] || status;
 };
 
-// PostgreSQL row structure
-interface AttendanceRow {
-  id: string;
-  schoolId: string;
-  studentId: string;
-  sectionId: string;
-  date: string;
-  status: 'Present' | 'Absent' | 'Late' | 'Excused';
-  remarks?: string;
-  recordedBy?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+// PostgreSQL row structure (used internally by Supabase queries)
+// interface AttendanceRow {
+//   id: string;
+//   schoolId: string;
+//   studentId: string;
+//   sectionId: string;
+//   date: string;
+//   status: 'Present' | 'Absent' | 'Late' | 'Excused';
+//   remarks?: string;
+//   recordedBy?: string;
+//   createdAt: string;
+//   updatedAt: string;
+// }
 
 // Firestore-compatible structure (expected by SF2Dashboard)
 export interface AttendanceRecord {
@@ -140,7 +140,7 @@ export function useAttendancePostgreSQL(options: UseAttendanceOptions) {
           }
           
           const record = studentAttendanceMap.get(studentId)!;
-          record.dailyStatus[date] = status;
+          record.dailyStatus[date] = status as 'P' | 'A' | 'L' | 'E';
         });
 
         const transformedRecords = Array.from(studentAttendanceMap.values());

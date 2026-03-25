@@ -205,13 +205,34 @@ if (!authInitialized) {
       }
     });
     
-    // Perform anonymous sign-in if needed
+    // Perform anonymous sign-in if needed (skip for personal workspace users who use Firebase email auth)
     (async () => {
       try {
         if (!auth.currentUser) {
-          console.log('[Firebase] 🔑 Performing anonymous sign-in...');
-          await signInAnonymously(auth);
-          console.log('[Firebase] ✅ Anonymous sign-in successful:', auth.currentUser?.uid || 'unknown');
+          // Check if this is a personal workspace user — they sign in via email/password, not anonymously
+          let isPersonalWorkspace = false;
+          try {
+            const raw = localStorage.getItem('edusync_session');
+            if (raw) {
+              const session = JSON.parse(raw);
+              isPersonalWorkspace = session?.user?.workspaceType === 'personal';
+            }
+          } catch { /* ignore */ }
+
+          if (isPersonalWorkspace) {
+            console.log('[Firebase] 🏠 Personal workspace user — waiting for Firebase Auth to restore (not signing in anonymously)');
+            // Give Firebase Auth a moment to restore the real session
+            await new Promise(r => setTimeout(r, 2000));
+            if (auth.currentUser) {
+              console.log('[Firebase] ✅ Firebase Auth restored:', auth.currentUser.uid);
+            } else {
+              console.warn('[Firebase] ⚠️ Firebase Auth not restored for personal user. User may need to re-login.');
+            }
+          } else {
+            console.log('[Firebase] 🔑 Performing anonymous sign-in...');
+            await signInAnonymously(auth);
+            console.log('[Firebase] ✅ Anonymous sign-in successful:', auth.currentUser?.uid || 'unknown');
+          }
         } else {
           console.log('[Firebase] ℹ️ User already authenticated:', auth.currentUser.uid);
         }
