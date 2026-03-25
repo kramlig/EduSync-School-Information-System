@@ -10,7 +10,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
-import { useSHSStudents, SHS_TRACKS, SHS_STRANDS, getStrandsByTrack, getTrackName, getStrandName } from '../../../src/hooks/useSHSPostgreSQL';
+import { useSHSStudents, SHS_TRACKS, SHS_STRANDS, getStrandsByTrack } from '../../../src/hooks/useSHSPostgreSQL';
 import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
 import type { AuthUser, StudentUser, ParentUser } from '../../../types';
 import BackButton from '../../BackButton';
@@ -18,9 +18,6 @@ import {
   UsersIcon,
   ChartBarIcon,
   ArrowDownTrayIcon,
-  DocumentTextIcon,
-  CheckCircleIcon,
-  AcademicCapIcon,
 } from '../../icons';
 
 interface SF5ASHSDashboardProps {
@@ -73,9 +70,9 @@ const exportToCSV = (data: any[], filename: string) => {
   document.body.removeChild(link);
 };
 
-const SF5ASHSDashboard: React.FC<SF5ASHSDashboardProps> = ({ session, onBack }) => {
-  const { schoolId, settings, school } = useSchoolContext();
-  const currentSchoolYear = settings?.currentSchoolYear || '2025-2026';
+const SF5ASHSDashboard: React.FC<SF5ASHSDashboardProps> = ({ session: _session, onBack: _onBack }) => {
+  const { schoolId } = useSchoolContext();
+  const currentSchoolYear = '2025-2026';
 
   // State
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>(currentSchoolYear);
@@ -90,21 +87,21 @@ const SF5ASHSDashboard: React.FC<SF5ASHSDashboardProps> = ({ session, onBack }) 
   const PAGE_SIZE = 50;
 
   // Data hooks
-  const { students, statistics, loading: studentsLoading, refresh } = useSHSStudents({
-    schoolId,
+  const { students, statistics, loading: studentsLoading, refresh: _refresh } = useSHSStudents({
+    schoolId: schoolId || undefined,
     gradeLevel: selectedGradeLevel || undefined,
     track: selectedTrack || undefined,
     strand: selectedStrand || undefined,
     sectionId: selectedSection || undefined,
   });
 
-  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId: schoolId || undefined });
 
   const loading = studentsLoading || sectionsLoading;
 
   // Filter SHS sections only
   const shsSections = useMemo(() => {
-    return sections.filter(s => s.grade_level && (s.grade_level === 11 || s.grade_level === 12));
+    return sections.filter(s => s.gradeLevel && (s.gradeLevel === 11 || s.gradeLevel === 12));
   }, [sections]);
 
   // Available strands based on selected track
@@ -206,7 +203,7 @@ const SF5ASHSDashboard: React.FC<SF5ASHSDashboardProps> = ({ session, onBack }) 
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <BackButton onClick={onBack} />
+            <BackButton />
             <div>
               <h1 className="text-2xl font-bold text-slate-800">SF5A-SHS</h1>
               <p className="text-sm text-slate-600">End of Semester and School Year Learner Status</p>
@@ -267,6 +264,7 @@ const SF5ASHSDashboard: React.FC<SF5ASHSDashboardProps> = ({ session, onBack }) 
               <select
                 value={selectedSchoolYear}
                 onChange={(e) => setSelectedSchoolYear(e.target.value)}
+                title="School Year"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               >
                 {schoolYears.map(year => (
@@ -281,6 +279,7 @@ const SF5ASHSDashboard: React.FC<SF5ASHSDashboardProps> = ({ session, onBack }) 
               <select
                 value={selectedSemester}
                 onChange={(e) => setSelectedSemester(Number(e.target.value) as 1 | 2)}
+                title="Semester"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               >
                 <option value={1}>1st Semester</option>
@@ -294,6 +293,7 @@ const SF5ASHSDashboard: React.FC<SF5ASHSDashboardProps> = ({ session, onBack }) 
               <select
                 value={selectedGradeLevel ?? ''}
                 onChange={(e) => setSelectedGradeLevel(e.target.value ? Number(e.target.value) as 11 | 12 : null)}
+                title="Grade Level"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All Grades</option>
@@ -308,6 +308,7 @@ const SF5ASHSDashboard: React.FC<SF5ASHSDashboardProps> = ({ session, onBack }) 
               <select
                 value={selectedTrack ?? ''}
                 onChange={(e) => setSelectedTrack(e.target.value || null)}
+                title="Track"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All Tracks</option>
@@ -323,6 +324,7 @@ const SF5ASHSDashboard: React.FC<SF5ASHSDashboardProps> = ({ session, onBack }) 
               <select
                 value={selectedStrand ?? ''}
                 onChange={(e) => setSelectedStrand(e.target.value || null)}
+                title="Strand"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All Strands</option>
@@ -338,12 +340,13 @@ const SF5ASHSDashboard: React.FC<SF5ASHSDashboardProps> = ({ session, onBack }) 
               <select
                 value={selectedSection ?? ''}
                 onChange={(e) => setSelectedSection(e.target.value || null)}
+                title="Section"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All Sections</option>
                 {shsSections.map(section => (
                   <option key={section.id} value={section.id}>
-                    {section.name} (G{section.grade_level})
+                    {section.name} (G{section.gradeLevel})
                   </option>
                 ))}
               </select>
@@ -457,7 +460,7 @@ const SF5ASHSDashboard: React.FC<SF5ASHSDashboardProps> = ({ session, onBack }) 
                   Students ({filteredStudents.length})
                 </span>
               </div>
-              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 500px)' }}>
+              <div className="overflow-auto max-h-[calc(100vh-500px)]">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 sticky top-0 z-10">
                     <tr>

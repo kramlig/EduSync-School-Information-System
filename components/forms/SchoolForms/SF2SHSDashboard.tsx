@@ -9,7 +9,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSchoolContext } from '../../../src/contexts/SchoolContext';
-import { useSHSStudents, SHS_TRACKS, SHS_STRANDS } from '../../../src/hooks/useSHSPostgreSQL';
+import { useSHSStudents, SHS_TRACKS } from '../../../src/hooks/useSHSPostgreSQL';
 import { useAttendancePostgreSQL } from '../../../src/hooks/useAttendancePostgreSQL';
 import { useSectionsPostgreSQL } from '../../../src/hooks/useSectionsPostgreSQL';
 import type { AuthUser, StudentUser, ParentUser } from '../../../types';
@@ -65,16 +65,16 @@ const getMonthName = (month: number) => {
   return new Date(2000, month, 1).toLocaleDateString('en-US', { month: 'long' });
 };
 
-const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) => {
-  const { schoolId, settings, school } = useSchoolContext();
-  const currentSchoolYear = settings?.currentSchoolYear || '2025-2026';
+const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session: _session, onBack: _onBack }) => {
+  const { schoolId } = useSchoolContext();
+  const currentSchoolYear = '2025-2026';
 
   // State
   const today = new Date();
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>(currentSchoolYear);
   const [selectedSemester, setSelectedSemester] = useState<1 | 2>(1);
   const [selectedMonth, setSelectedMonth] = useState<number>(today.getMonth());
-  const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
+  const [selectedYear, _setSelectedYear] = useState<number>(today.getFullYear());
   const [selectedGradeLevel, setSelectedGradeLevel] = useState<11 | 12 | null>(null);
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
@@ -83,26 +83,25 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
 
   // Data hooks
   const { students, loading: studentsLoading } = useSHSStudents({
-    schoolId,
+    schoolId: schoolId || undefined,
     gradeLevel: selectedGradeLevel || undefined,
     track: selectedTrack || undefined,
     sectionId: selectedSection || undefined,
   });
 
   const { attendanceRecords, loading: attendanceLoading } = useAttendancePostgreSQL({
-    schoolId,
-    date: viewMode === 'daily' ? selectedDate : undefined,
+    schoolId: schoolId || '',
   });
 
-  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId: schoolId || undefined });
 
   const loading = studentsLoading || attendanceLoading || sectionsLoading;
 
   // Filter SHS sections only
   const shsSections = useMemo(() => {
-    let filtered = sections.filter(s => s.grade_level >= 11);
+    let filtered = sections.filter(s => Number(s.gradeLevel) >= 11);
     if (selectedGradeLevel) {
-      filtered = filtered.filter(s => s.grade_level === selectedGradeLevel);
+      filtered = filtered.filter(s => Number(s.gradeLevel) === selectedGradeLevel);
     }
     return filtered;
   }, [sections, selectedGradeLevel]);
@@ -134,13 +133,14 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
   // Merge students with attendance for selected date
   const studentsWithAttendance = useMemo(() => {
     return students.map(student => {
-      const attendance = attendanceRecords.find(
-        a => a.student_id === student.id && a.date === selectedDate
+      const record = attendanceRecords.find(
+        a => a.studentId === student.id
       );
+      const status = record?.dailyStatus[selectedDate] || 'No Record';
       return {
         ...student,
-        status: attendance?.status || 'No Record',
-        remarks: attendance?.remarks || '',
+        status,
+        remarks: '',
       };
     });
   }, [students, attendanceRecords, selectedDate]);
@@ -177,17 +177,22 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
     const monthStart = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
     const monthEnd = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${daysInMonth}`;
 
-    // Filter attendance for the month
-    const monthAttendance = attendanceRecords.filter(a => 
-      a.date >= monthStart && a.date <= monthEnd
-    );
+    // Flatten attendance for month range
+    const flatRecords: { studentId: string; date: string; status: string }[] = [];
+    attendanceRecords.forEach(a => {
+      Object.entries(a.dailyStatus).forEach(([date, status]) => {
+        if (date >= monthStart && date <= monthEnd) {
+          flatRecords.push({ studentId: a.studentId, date, status });
+        }
+      });
+    });
 
     // Calculate per-student monthly attendance
     const studentMonthly = students.map(student => {
-      const studentRecords = monthAttendance.filter(a => a.student_id === student.id);
-      const presentDays = studentRecords.filter(r => r.status === 'Present' || r.status === 'P').length;
-      const absentDays = studentRecords.filter(r => r.status === 'Absent' || r.status === 'A').length;
-      const lateDays = studentRecords.filter(r => r.status === 'Late' || r.status === 'L').length;
+      const studentRecords = flatRecords.filter(a => a.studentId === student.id);
+      const presentDays = studentRecords.filter(r => r.status === 'P').length;
+      const absentDays = studentRecords.filter(r => r.status === 'A').length;
+      const lateDays = studentRecords.filter(r => r.status === 'L').length;
       const totalDays = studentRecords.length;
 
       return {
@@ -201,10 +206,10 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
     });
 
     // Summary
-    const totalPresent = monthAttendance.filter(r => r.status === 'Present' || r.status === 'P').length;
-    const totalAbsent = monthAttendance.filter(r => r.status === 'Absent' || r.status === 'A').length;
-    const totalLate = monthAttendance.filter(r => r.status === 'Late' || r.status === 'L').length;
-    const totalRecords = monthAttendance.length;
+    const totalPresent = flatRecords.filter(r => r.status === 'P').length;
+    const totalAbsent = flatRecords.filter(r => r.status === 'A').length;
+    const totalLate = flatRecords.filter(r => r.status === 'L').length;
+    const totalRecords = flatRecords.length;
 
     return {
       students: studentMonthly,
@@ -282,7 +287,7 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <BackButton onClick={onBack} />
+            <BackButton />
             <div>
               <h1 className="text-2xl font-bold text-slate-800">SF2-SHS</h1>
               <p className="text-sm text-slate-600">Daily Attendance Report - Senior High School</p>
@@ -369,6 +374,7 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">School Year</label>
               <select
+                title="School Year"
                 value={selectedSchoolYear}
                 onChange={(e) => setSelectedSchoolYear(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -383,6 +389,7 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Semester</label>
               <select
+                title="Semester"
                 value={selectedSemester}
                 onChange={(e) => setSelectedSemester(Number(e.target.value) as 1 | 2)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -398,6 +405,7 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Date</label>
                 <input
                   type="date"
+                  title="Date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -410,6 +418,7 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Month</label>
                 <select
+                  title="Month"
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(Number(e.target.value))}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -425,6 +434,7 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Grade Level</label>
               <select
+                title="Grade Level"
                 value={selectedGradeLevel ?? ''}
                 onChange={(e) => setSelectedGradeLevel(e.target.value ? Number(e.target.value) as 11 | 12 : null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -439,6 +449,7 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Track</label>
               <select
+                title="Track"
                 value={selectedTrack ?? ''}
                 onChange={(e) => setSelectedTrack(e.target.value || null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -454,6 +465,7 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Section</label>
               <select
+                title="Section"
                 value={selectedSection ?? ''}
                 onChange={(e) => setSelectedSection(e.target.value || null)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -461,7 +473,7 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
                 <option value="">All Sections</option>
                 {shsSections.map(section => (
                   <option key={section.id} value={section.id}>
-                    {section.name} (G{section.grade_level})
+                    {section.name} (G{section.gradeLevel})
                   </option>
                 ))}
               </select>
@@ -511,7 +523,7 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
                   })}
                 </span>
               </div>
-              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 500px)' }}>
+              <div className="overflow-auto max-h-[calc(100vh-500px)]">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 sticky top-0 z-10">
                     <tr>
@@ -567,7 +579,7 @@ const SF2SHSDashboard: React.FC<SF2SHSDashboardProps> = ({ session, onBack }) =>
                   </span>
                 </div>
               </div>
-              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 500px)' }}>
+              <div className="overflow-auto max-h-[calc(100vh-500px)]">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 sticky top-0 z-10">
                     <tr>

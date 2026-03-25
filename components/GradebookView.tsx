@@ -238,6 +238,31 @@ const GradebookView: React.FC<{
 
   const authUser = session.user as AuthUser;
   const isReadOnly = authUser.role === 'principal';
+  const teacherId = (authUser as any).postgresqlId || authUser.id;
+
+  // Determine if teacher is the adviser for the currently selected section
+  const isAdviserForSection = useMemo(() => {
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) return false;
+    if (!selectedSectionId || selectedSectionId === 'all') return false;
+    const section = activeSections.find(s => s.id === selectedSectionId);
+    return section?.adviserId === teacherId;
+  }, [authUser.role, selectedSectionId, activeSections, teacherId]);
+
+  // Get set of learning area IDs this teacher is assigned to for the selected section
+  const teacherAssignedLearningAreaIds = useMemo(() => {
+    if (['admin', 'principal', 'registrar'].includes(authUser.role)) return null; // null = no restriction
+    if (!authUser.assignments || authUser.assignments.length === 0) return null;
+    if (!selectedSectionId || selectedSectionId === 'all') return null;
+    // Advisers can edit all subjects for their section
+    if (isAdviserForSection) return null;
+    const ids = new Set<string>();
+    authUser.assignments.forEach(a => {
+      if (a.sectionId === selectedSectionId && a.learningAreaId) {
+        ids.add(a.learningAreaId);
+      }
+    });
+    return ids.size > 0 ? ids : null;
+  }, [authUser.role, authUser.assignments, selectedSectionId, isAdviserForSection]);
 
   const visibleSections = useMemo(() => {
     if (['admin', 'principal', 'registrar'].includes(authUser.role)) return activeSections;
@@ -275,7 +300,7 @@ const GradebookView: React.FC<{
                 authorizedSectionIds.add(s.id);
             }
         });
-        activeClassSchedules.forEach(schedule => {
+        activeClassSchedules.forEach((schedule: any) => {
             if (schedule.teacherId && schedule.sectionId && originalTeacherIds.includes(schedule.teacherId)) {
                 authorizedSectionIds.add(schedule.sectionId);
             }
@@ -283,7 +308,7 @@ const GradebookView: React.FC<{
     }
 
     // PRIORITY 4: Check class schedules (fallback)
-    activeClassSchedules.forEach(schedule => {
+    activeClassSchedules.forEach((schedule: any) => {
       if (schedule.teacherId === teacherId && schedule.sectionId) {
         authorizedSectionIds.add(schedule.sectionId);
       }
@@ -355,15 +380,15 @@ const GradebookView: React.FC<{
     };
 
     visibleSections.forEach(section => {
-      if (section.gradeLevel <= 6) groups.elementary.push(section);
-      else if (section.gradeLevel <= 10) groups.juniorHigh.push(section);
+      if (Number(section.gradeLevel) <= 6) groups.elementary.push(section);
+      else if (Number(section.gradeLevel) <= 10) groups.juniorHigh.push(section);
       else groups.seniorHigh.push(section);
     });
 
     // Sort within each group by grade level
-    groups.elementary.sort((a, b) => a.gradeLevel - b.gradeLevel);
-    groups.juniorHigh.sort((a, b) => a.gradeLevel - b.gradeLevel);
-    groups.seniorHigh.sort((a, b) => a.gradeLevel - b.gradeLevel);
+    groups.elementary.sort((a, b) => Number(a.gradeLevel) - Number(b.gradeLevel));
+    groups.juniorHigh.sort((a, b) => Number(a.gradeLevel) - Number(b.gradeLevel));
+    groups.seniorHigh.sort((a, b) => Number(a.gradeLevel) - Number(b.gradeLevel));
 
     return groups;
   }, [visibleSections]);
@@ -788,6 +813,18 @@ const GradebookView: React.FC<{
           onClose={() => setToast(null)}
         />
       )}
+
+      {/* Subject restriction notice for teachers */}
+      {teacherAssignedLearningAreaIds !== null && (
+        <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
+          <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            You can only edit grades for your assigned subjects. Other subjects are shown as read-only.
+          </p>
+        </div>
+      )}
       
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold text-slate-800 dark:text-white">Gradebook</h1>
@@ -1092,6 +1129,7 @@ const GradebookView: React.FC<{
             <div className="flex items-center gap-2 ml-auto">
               <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Sort:</span>
               <select
+                title="Sort by"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
                 className="px-3 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white"
@@ -1167,7 +1205,7 @@ const GradebookView: React.FC<{
       )}
 
       {selectedSectionId && (
-        <div className="overflow-x-auto shadow-md rounded-lg" style={{ maxHeight: '70vh' }}>
+        <div className="overflow-x-auto shadow-md rounded-lg max-h-[70vh]">
           <table className="min-w-full text-sm text-left text-slate-500 dark:text-slate-400 border-collapse">
       <thead className="bg-slate-100 dark:bg-slate-900 sticky top-0 z-20">
               <tr>
@@ -1229,6 +1267,7 @@ const GradebookView: React.FC<{
                     <td className="px-2 py-2 sticky left-0 z-10 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                       <input
                         type="checkbox"
+                        title="Select student"
                         checked={selectedStudents.has(student.id)}
                         onChange={(e) => {
                           const newSelected = new Set(selectedStudents);
@@ -1248,6 +1287,8 @@ const GradebookView: React.FC<{
                     const studentGrades = gradeMap.get(student.id);
                     const currentGrade = studentGrades?.get(col.learningArea.id);
                     const gradeValue: number | string = (currentGrade?.[col.quarter] as number) ?? '';
+                    // Per-cell read-only: principal OR teacher not assigned to this subject
+                    const cellReadOnly = isReadOnly || (teacherAssignedLearningAreaIds !== null && !teacherAssignedLearningAreaIds.has(col.learningArea.id));
                     
                     if (col.learningArea.isComposite) {
                         const quarterAvg = calculateQuarterAverage(currentGrade?.[col.quarter]);
@@ -1259,7 +1300,7 @@ const GradebookView: React.FC<{
                                 </span>
                                 <button 
                                   onClick={() => setMapehModalState({isOpen: true, student, quarter: col.quarter, la: col.learningArea })} 
-                                  disabled={isReadOnly} 
+                                  disabled={cellReadOnly} 
                                   className="px-2 py-1 text-xs font-semibold text-white bg-indigo-600 rounded hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-400"
                                 >
                                   Edit
@@ -1269,7 +1310,7 @@ const GradebookView: React.FC<{
                         );
                     }
                     
-                    const isEmpty = gradeValue === undefined || gradeValue === '' || (typeof gradeValue === 'number' && isNaN(gradeValue));
+                    const isEmpty = gradeValue === undefined || gradeValue === '' as any || (typeof gradeValue === 'number' && isNaN(gradeValue));
                     
                     return (
                       <td 
@@ -1283,7 +1324,7 @@ const GradebookView: React.FC<{
                         `}
                       >
                         {/* Phase 2: Empty state helper text */}
-                        {isEmpty && !isReadOnly && (
+                        {isEmpty && !cellReadOnly && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Click to enter</span>
                           </div>
@@ -1295,7 +1336,7 @@ const GradebookView: React.FC<{
                           defaultValue={gradeValue}
                           onBlur={(e) => handleGradeChange(student.id, col.learningArea.id, col.quarter, e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
-                          disabled={isReadOnly}
+                          disabled={cellReadOnly}
                           placeholder="—"
                           className={`
                             w-full px-2 py-1.5 border-2 rounded-lg text-center font-bold text-sm transition-all

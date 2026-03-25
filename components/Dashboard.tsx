@@ -29,16 +29,16 @@ const Dashboard: React.FC<DashboardProps> = ({ schoolData, session }) => {
   const schoolId = authUser.schoolId || '';
 
   // Load real data from PostgreSQL
-  const { students, loading: studentsLoading } = useStudentsPostgreSQL({ schoolId });
+  const { students, loading: _studentsLoading } = useStudentsPostgreSQL({ schoolId });
   // Load sections without school year filter to get all sections with students
-  const { sections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId });
-  const { grades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
+  const { sections, loading: _sectionsLoading } = useSectionsPostgreSQL({ schoolId });
+  const { grades, loading: _gradesLoading } = useGradesPostgreSQL({ schoolId });
   
   const {
-    learningAreas,
+    learningAreas: _learningAreas,
     substituteAssignments = [],
     classSchedules = [],
-    settings,
+    settings: _settings,
   } = schoolData;
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   const navigate = useNavigate();

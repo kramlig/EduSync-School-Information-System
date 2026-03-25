@@ -120,7 +120,7 @@ const CreateDivisionModal: React.FC<CreateDivisionModalProps> = ({ open, onClose
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Create New Division</h2>
-          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Close">
             <XMarkIcon className="w-5 h-5 text-slate-500" />
           </button>
         </div>
@@ -168,6 +168,7 @@ const CreateDivisionModal: React.FC<CreateDivisionModalProps> = ({ open, onClose
               value={region}
               onChange={(e) => setRegion(e.target.value)}
               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500"
+              title="Select region"
             >
               <option value="">Select region...</option>
               {REGIONS.map((r) => (
@@ -328,7 +329,7 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ open, division, onClose, on
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Add Division User</h2>
             <p className="text-sm text-slate-500">{division.name}</p>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Close">
             <XMarkIcon className="w-5 h-5 text-slate-500" />
           </button>
         </div>
@@ -348,6 +349,7 @@ const AddUserModal: React.FC<AddUserModalProps> = ({ open, division, onClose, on
               value={role}
               onChange={(e) => setRole(e.target.value)}
               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+              title="Select role"
             >
               {DIVISION_ROLES.map((r) => (
                 <option key={r.value} value={r.value}>{r.label}</option>
@@ -509,6 +511,7 @@ const DivisionsTab: React.FC = () => {
           value={regionFilter}
           onChange={(e) => setRegionFilter(e.target.value)}
           className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+          title="Filter by region"
         >
           <option value="all">All Regions</option>
           {regions.map((r) => (

@@ -106,17 +106,17 @@ function ScholasticBlock({ yearData, schoolInfo }: { yearData?: SchoolYearRecord
       <table className="sf10-grade-table">
         <thead>
           <tr>
-            <th style={{ width: '35%' }}>LEARNING AREAS</th>
+            <th className="w-[35%]">LEARNING AREAS</th>
             <th colSpan={4}>Quarterly Rating</th>
-            <th style={{ width: '10%' }}>Final<br />Rating</th>
-            <th style={{ width: '14%' }}>Remarks</th>
+            <th className="w-[10%]">Final<br />Rating</th>
+            <th className="w-[14%]">Remarks</th>
           </tr>
           <tr>
             <th></th>
-            <th style={{ width: '8%' }}>1</th>
-            <th style={{ width: '8%' }}>2</th>
-            <th style={{ width: '8%' }}>3</th>
-            <th style={{ width: '8%' }}>4</th>
+            <th className="w-[8%]">1</th>
+            <th className="w-[8%]">2</th>
+            <th className="w-[8%]">3</th>
+            <th className="w-[8%]">4</th>
             <th></th>
             <th></th>
           </tr>
@@ -159,7 +159,7 @@ function ScholasticBlock({ yearData, schoolInfo }: { yearData?: SchoolYearRecord
             const g = gradeMap.get(subject);
             return (
               <tr key={subject}>
-                <td className="sf10-subject-name" style={{ fontStyle: subject.startsWith('*') ? 'italic' : undefined }}>
+                <td className={`sf10-subject-name ${subject.startsWith('*') ? 'italic' : ''}`}>
                   {subject}
                 </td>
                 <td>{getGradeValue(g?.q1)}</td>
@@ -207,10 +207,12 @@ function ScholasticBlock({ yearData, schoolInfo }: { yearData?: SchoolYearRecord
 export const SF10JHSView: React.FC<SF10JHSViewProps> = ({ record, schoolInfo }) => {
   const yearsByGrade = new Map<number, SchoolYearRecord>();
   for (const yr of record.schoolYears) {
-    if (yr.gradeLevel >= 7 && yr.gradeLevel <= 10) {
-      yearsByGrade.set(yr.gradeLevel, yr);
+    const gl = typeof yr.gradeLevel === 'string' ? parseInt(yr.gradeLevel, 10) : yr.gradeLevel;
+    if (gl >= 7 && gl <= 10) {
+      yearsByGrade.set(gl, yr);
     }
   }
+
 
   const pairs: [SchoolYearRecord | undefined, SchoolYearRecord | undefined][] = [
     [yearsByGrade.get(7), yearsByGrade.get(8)],
@@ -297,7 +299,7 @@ export const SF10JHSView: React.FC<SF10JHSViewProps> = ({ record, schoolInfo }) 
       {/* PAGE 2: Grades 9-10 + Certification */}
       <div className="sf10-page">
         <div className="sf10-form">
-          <div className="sf10-scholastic-section-header" style={{ marginTop: 0 }}>SCHOLASTIC RECORD</div>
+          <div className="sf10-scholastic-section-header mt-0">SCHOLASTIC RECORD</div>
           <div className="sf10-scholastic-pair">
             <ScholasticBlock yearData={pairs[1][0]} schoolInfo={schoolInfo} />
             <ScholasticBlock yearData={pairs[1][1]} schoolInfo={schoolInfo} />
@@ -313,21 +315,21 @@ export const SF10JHSView: React.FC<SF10JHSViewProps> = ({ record, schoolInfo }) 
               and that he/she is eligible for admission to Grade{' '}
               <span className="sf10-certification-underline">____</span>.
             </div>
-            <div style={{ marginTop: 8, fontSize: 8 }}>
-              <div className="sf10-info-row" style={{ border: 'none' }}>
-                <div className="sf10-info-cell" style={{ border: 'none' }}>
+            <div className="mt-2 text-[8px]">
+              <div className="sf10-info-row border-none">
+                <div className="sf10-info-cell border-none">
                   <span className="sf10-info-label">School Name:</span>
                   <span className="sf10-info-value">{record.currentSchoolName || ''}</span>
                 </div>
-                <div className="sf10-info-cell" style={{ border: 'none' }}>
+                <div className="sf10-info-cell border-none">
                   <span className="sf10-info-label">School ID:</span>
                   <span className="sf10-info-value">{record.currentSchoolId || ''}</span>
                 </div>
-                <div className="sf10-info-cell" style={{ border: 'none' }}>
+                <div className="sf10-info-cell border-none">
                   <span className="sf10-info-label">Division:</span>
                   <span className="sf10-info-value">{schoolInfo?.division || ''}</span>
                 </div>
-                <div className="sf10-info-cell" style={{ border: 'none' }}>
+                <div className="sf10-info-cell border-none">
                   <span className="sf10-info-label">Last School Year Attended:</span>
                   <span className="sf10-info-value">
                     {record.schoolYears.length > 0
@@ -347,7 +349,7 @@ export const SF10JHSView: React.FC<SF10JHSViewProps> = ({ record, schoolInfo }) 
                 <div className="sf10-signature-line"></div>
                 <div className="sf10-signature-label">Signature of Principal/School Head over Printed Name</div>
               </div>
-              <div className="sf10-signature-block" style={{ fontStyle: 'italic', fontSize: 7 }}>
+              <div className="sf10-signature-block italic text-[7px]">
                 (Affix School Seal here)
               </div>
             </div>

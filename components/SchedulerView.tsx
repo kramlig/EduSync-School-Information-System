@@ -787,7 +787,7 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                                             <>
                                                 <div className="flex items-center space-x-2 whitespace-nowrap">
                                                         <label className="text-sm font-semibold whitespace-nowrap">View by:</label>
-                                                        <select value={viewType} onChange={e => { setViewType(e.target.value as 'section' | 'teacher'); }} className="input-style text-sm">
+                                                        <select value={viewType} onChange={e => { setViewType(e.target.value as 'section' | 'teacher'); }} className="input-style text-sm" title="View by">
                                                                 <option value="section">Class</option>
                                                                 <option value="teacher">Teacher</option>
                                                         </select>
@@ -809,7 +809,7 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                                                                         if (gl === '') return;
                                                                         const firstInGrade = sections.find(s => s.gradeLevel === gl);
                                                                         setSelectedId(firstInGrade?.id || null);
-                                                                }} className="input-style text-sm min-w-[100px]">
+                                                                }} className="input-style text-sm min-w-[100px]" title="Grade level">
                                                                         <option value="">All</option>
                                                                         {gradeLevels.map(gl => <option key={gl} value={gl}>Grade {gl}</option>)}
                                                                 </select>
@@ -843,7 +843,7 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                 </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg p-3 relative grid grid-cols-[auto_1fr] text-sm" style={{ height: 'calc(100vh - 320px)', minHeight: '500px' }}>
+            <div className="bg-white dark:bg-slate-800 shadow-md rounded-lg p-3 relative grid grid-cols-[auto_1fr] text-sm h-[calc(100vh-320px)] min-h-[500px]">
                 {/* Time Column */}
                 <div className="pr-2 text-right text-xs text-slate-500 dark:text-slate-400">
                     <div className="h-10"></div> {/* Spacer for day headers */}
@@ -947,7 +947,7 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
                  <form onSubmit={handleModalSave}>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><label className="block text-sm font-medium">Event Type</label>
-                            <select value={modalData.type ?? 'academic'} onChange={e => setModalData(p => ({...p, type: e.target.value as any, scope: e.target.value === 'academic' ? 'section' : 'all'}))} className="mt-1 w-full input-style">
+                            <select value={modalData.type ?? 'academic'} onChange={e => setModalData(p => ({...p, type: e.target.value as any, scope: e.target.value === 'academic' ? 'section' : 'all'}))} className="mt-1 w-full input-style" title="Event type">
                                 <option value="academic">Academic Class</option>
                                 <option value="extracurricular">Extracurricular Activity</option>
                             </select>
@@ -956,33 +956,33 @@ const SchedulerView: React.FC<{ schoolData: SchoolDataHook; session: { user: Aut
 
                         {modalData.type === 'extracurricular' && (
                             <>
-                            <div className="md:col-span-2"><label htmlFor="title" className="block text-sm font-medium">Title</label><input type="text" name="title" value={modalData.title ?? ''} onChange={e => setModalData(p => ({...p, title: e.target.value}))} className="mt-1 w-full input-style" required/></div>
+                            <div className="md:col-span-2"><label htmlFor="title" className="block text-sm font-medium">Title</label><input type="text" name="title" value={modalData.title ?? ''} onChange={e => setModalData(p => ({...p, title: e.target.value}))} className="mt-1 w-full input-style" required title="Schedule title"/></div>
                             <div><label className="block text-sm font-medium">Applies To (Scope)</label>
-                                <select value={modalData.scope ?? 'all'} onChange={e => setModalData(p => ({...p, scope: e.target.value as any}))} className="mt-1 w-full input-style">
+                                <select value={modalData.scope ?? 'all'} onChange={e => setModalData(p => ({...p, scope: e.target.value as any}))} className="mt-1 w-full input-style" title="Scope">
                                     <option value="all">Whole School</option>
                                     <option value="gradeLevel">Grade Level</option>
                                     <option value="section">Specific Section</option>
                                 </select>
                             </div>
-                             {modalData.scope === 'gradeLevel' && <div><label className="block text-sm font-medium">Grade Level</label><select value={modalData.gradeLevel ?? ''} onChange={e => setModalData(p => ({...p, gradeLevel: Number(e.target.value)}))} className="mt-1 w-full input-style"><option value="">Select...</option>{gradeLevels.map(gl => <option key={gl} value={gl}>{gl}</option>)}</select></div>}
-                             {modalData.scope === 'section' && <div><label className="block text-sm font-medium">Section</label><select value={modalData.sectionId ?? ''} onChange={e => setModalData(p => ({...p, sectionId: e.target.value}))} className="mt-1 w-full input-style"><option value="">Select...</option>{sections.map(s => <option key={s.id} value={s.id}>Grade {s.gradeLevel} - {s.name}</option>)}</select></div>}
+                             {modalData.scope === 'gradeLevel' && <div><label className="block text-sm font-medium">Grade Level</label><select value={modalData.gradeLevel ?? ''} onChange={e => setModalData(p => ({...p, gradeLevel: Number(e.target.value)}))} className="mt-1 w-full input-style" title="Grade level"><option value="">Select...</option>{gradeLevels.map(gl => <option key={gl} value={gl}>{gl}</option>)}</select></div>}
+                             {modalData.scope === 'section' && <div><label className="block text-sm font-medium">Section</label><select value={modalData.sectionId ?? ''} onChange={e => setModalData(p => ({...p, sectionId: e.target.value}))} className="mt-1 w-full input-style" title="Section"><option value="">Select...</option>{sections.map(s => <option key={s.id} value={s.id}>Grade {s.gradeLevel} - {s.name}</option>)}</select></div>}
                             </>
                         )}
                         
                         {modalData.type === 'academic' && (
                            <>
-                            <div className="md:col-span-2"><label className="block text-sm font-medium">Class</label><select name="sectionId" value={modalData.sectionId ?? ''} disabled={viewType==='section'} onChange={e => setModalData(p => ({...p, sectionId: e.target.value}))} className="mt-1 w-full input-style" required><option value="">Select...</option>{sections.map(s => <option key={s.id} value={s.id}>Grade {s.gradeLevel} - {s.name}</option>)}</select></div>
-                            <div className="md:col-span-2"><label className="block text-sm font-medium">Learning Area</label><select name="learningAreaId" value={modalData.learningAreaId ?? ''} onChange={e => setModalData(p => ({...p, learningAreaId: e.target.value}))} className="mt-1 w-full input-style" required><option value="">Select...</option>{learningAreas.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
-                            <div className="md:col-span-2"><label className="block text-sm font-medium">Teacher</label><select name="teacherId" value={modalData.teacherId ?? ''} disabled={viewType==='teacher'} onChange={e => setModalData(p => ({...p, teacherId: e.target.value}))} className="mt-1 w-full input-style" required><option value="">Select...</option>{teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+                            <div className="md:col-span-2"><label className="block text-sm font-medium">Class</label><select name="sectionId" value={modalData.sectionId ?? ''} disabled={viewType==='section'} onChange={e => setModalData(p => ({...p, sectionId: e.target.value}))} className="mt-1 w-full input-style" required title="Class"><option value="">Select...</option>{sections.map(s => <option key={s.id} value={s.id}>Grade {s.gradeLevel} - {s.name}</option>)}</select></div>
+                            <div className="md:col-span-2"><label className="block text-sm font-medium">Learning Area</label><select name="learningAreaId" value={modalData.learningAreaId ?? ''} onChange={e => setModalData(p => ({...p, learningAreaId: e.target.value}))} className="mt-1 w-full input-style" required title="Learning area"><option value="">Select...</option>{learningAreas.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
+                            <div className="md:col-span-2"><label className="block text-sm font-medium">Teacher</label><select name="teacherId" value={modalData.teacherId ?? ''} disabled={viewType==='teacher'} onChange={e => setModalData(p => ({...p, teacherId: e.target.value}))} className="mt-1 w-full input-style" required title="Teacher"><option value="">Select...</option>{teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
                            </>
                         )}
 
                         <hr className="md:col-span-2 my-2"/>
 
-                        <div><label className="block text-sm font-medium">Start Day</label><select name="dayOfWeek" value={modalData.dayOfWeek ?? ''} onChange={e => setModalData(p => ({...p, dayOfWeek: e.target.value as any, endDayOfWeek: e.target.value as any }))} className="mt-1 w-full input-style" required><option value="">Select...</option>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
-                        <div><label className="block text-sm font-medium">End Day</label><select name="endDayOfWeek" value={modalData.endDayOfWeek ?? modalData.dayOfWeek ?? ''} onChange={e => setModalData(p => ({...p, endDayOfWeek: e.target.value as any}))} className="mt-1 w-full input-style" required><option value="">Select...</option>{DAYS.slice(DAYS.indexOf(modalData.dayOfWeek!)).map(d => <option key={d} value={d}>{d}</option>)}</select></div>
-                        <div><label className="block text-sm font-medium">Start Time</label><input type="time" name="startTime" step="900" value={modalData.startTime ?? ''} onChange={e => setModalData(p => ({...p, startTime: e.target.value}))} className="mt-1 w-full input-style" required/></div>
-                        <div><label className="block text-sm font-medium">End Time</label><input type="time" name="endTime" step="900" value={modalData.endTime ?? ''} onChange={e => setModalData(p => ({...p, endTime: e.target.value}))} className="mt-1 w-full input-style" required/></div>
+                        <div><label className="block text-sm font-medium">Start Day</label><select name="dayOfWeek" value={modalData.dayOfWeek ?? ''} onChange={e => setModalData(p => ({...p, dayOfWeek: e.target.value as any, endDayOfWeek: e.target.value as any }))} className="mt-1 w-full input-style" required title="Start day"><option value="">Select...</option>{DAYS.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+                        <div><label className="block text-sm font-medium">End Day</label><select name="endDayOfWeek" value={modalData.endDayOfWeek ?? modalData.dayOfWeek ?? ''} onChange={e => setModalData(p => ({...p, endDayOfWeek: e.target.value as any}))} className="mt-1 w-full input-style" required title="End day"><option value="">Select...</option>{DAYS.slice(DAYS.indexOf(modalData.dayOfWeek!)).map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+                        <div><label className="block text-sm font-medium">Start Time</label><input type="time" name="startTime" step="900" value={modalData.startTime ?? ''} onChange={e => setModalData(p => ({...p, startTime: e.target.value}))} className="mt-1 w-full input-style" required title="Start time"/></div>
+                        <div><label className="block text-sm font-medium">End Time</label><input type="time" name="endTime" step="900" value={modalData.endTime ?? ''} onChange={e => setModalData(p => ({...p, endTime: e.target.value}))} className="mt-1 w-full input-style" required title="End time"/></div>
                      </div>
                      {modalError && <p className="text-red-500 text-sm mt-4">{modalError}</p>}
                      <div className="flex justify-between items-center mt-6">
