@@ -12,7 +12,7 @@ export function addWatermark(doc: jsPDF): void {
     doc.setFontSize(7);
     doc.setTextColor(170, 170, 170);
     doc.text(
-      'Generated with EduSync Free Tools — edusync-sis.web.app/tools',
+      'Generated with EduSync Free Tools — edusync.ph/tools',
       doc.internal.pageSize.getWidth() / 2,
       doc.internal.pageSize.getHeight() - 4,
       { align: 'center' }

@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 5_000 },
   use: {
-    baseURL: 'https://edusync-sis.web.app', // FORCE PRODUCTION
+    baseURL: 'https://edusync.ph', // FORCE PRODUCTION
   },
   // DISABLE webServer - don't start localhost
   // webServer: {
