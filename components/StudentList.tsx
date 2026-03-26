@@ -45,12 +45,13 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   const { sections: pgSections, loading: sectionsLoading } = useSectionsPostgreSQL({ schoolId }); // Removed hardcoded 2024-2025 filter
   const { grades: pgGrades, loading: gradesLoading } = useGradesPostgreSQL({ schoolId });
   const { attendanceRecords: pgAttendance } = useAttendancePostgreSQL({ schoolId });
-  const { coreValueGrades: pgCoreValues } = useCoreValuesPostgreSQL({ schoolId });
+  const { coreValues: pgCoreValueDefs, coreValueGrades: pgCoreValues } = useCoreValuesPostgreSQL({ schoolId });
   const { assignments: pgSubstituteAssignments } = useSubstituteAssignmentsPostgreSQL({ schoolId });
   const { learningAreas: pgLearningAreas } = useLearningAreasPostgreSQL({ schoolId });
   
   // Use PostgreSQL data, fallback to empty arrays
   const students = pgStudents || [];
+  const coreValueDefs = pgCoreValueDefs || [];
   const learningAreas = pgLearningAreas || [];
   const sections = pgSections || [];
   const grades = pgGrades || [];
@@ -2165,6 +2166,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             grades,
             sections,
             attendanceRecords,
+            coreValues: coreValueDefs,
             coreValueGrades,
             learningAreas
           } as any}

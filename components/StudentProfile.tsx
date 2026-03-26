@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import type { Student, Grade, Section, Teacher, AttendanceRecord, CoreValueGrade, AttendanceStatus } from '../types';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import type { Student, Grade, Section, Teacher, AttendanceRecord, CoreValue, CoreValueGrade, AttendanceStatus } from '../types';
 import type { SchoolDataHook } from '../hooks/useSchoolData';
 import PrintableReport from './PrintableReport';
 import { 
@@ -51,6 +51,69 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
 
   // Extract learning areas from schoolData for subject name lookups
   const { learningAreas = [] } = schoolData;
+
+  // --- Export & action helpers ---
+  const exportStudentJSON = useCallback(() => {
+    const payload = {
+      name: student.name,
+      lrn: student.lrn,
+      section: sections.find(s => s.id === student.sectionId)?.name,
+      schoolYear,
+      dateOfBirth: student.dateOfBirth,
+      sex: student.sex,
+      address: student.address,
+      guardian: student.guardianName,
+      guardianContact: student.guardianContactNumber,
+      grades: grades
+        .filter(g => g.studentId === student.id)
+        .map(g => {
+          const la = learningAreas.find(l => l.id === g.learningAreaId);
+          return { subject: la?.name || g.learningAreaId, finalGrade: g.finalGrade };
+        }),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${student.name.replace(/\s+/g, '_')}_profile.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [student, grades, sections, learningAreas, schoolYear]);
+
+  const exportTranscriptCSV = useCallback(() => {
+    const studentGrades = grades.filter(g => g.studentId === student.id);
+    const rows = [['Subject', 'Q1', 'Q2', 'Q3', 'Q4', 'Final Grade']];
+    const qVal = (v: unknown) => (typeof v === 'number' ? String(v) : '');
+    for (const g of studentGrades) {
+      const la = learningAreas.find(l => l.id === g.learningAreaId);
+      rows.push([
+        la?.name || g.learningAreaId || '',
+        qVal(g.q1),
+        qVal(g.q2),
+        qVal(g.q3),
+        qVal(g.q4),
+        String(g.finalGrade ?? ''),
+      ]);
+    }
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${student.name.replace(/\s+/g, '_')}_transcript.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [student, grades, learningAreas]);
+
+  const emailParent = useCallback(() => {
+    const email = student.guardianEmail || '';
+    if (!email) {
+      alert('No parent/guardian email address on file. Add one in the Family tab.');
+      return;
+    }
+    const subject = encodeURIComponent(`Regarding ${student.name} — ${schoolYear}`);
+    window.open(`mailto:${email}?subject=${subject}`, '_blank');
+  }, [student, schoolYear]);
 
   // Calculate student section and adviser
   const section = sections.find(s => s.id === student.sectionId);
@@ -126,6 +189,16 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
     // For now, return a placeholder or count of records
     return `${studentCoreValues.length} recorded`;
   }, [coreValueGrades, student.id]);
+
+  const emailSummary = useCallback(() => {
+    const sectionName = sections.find(s => s.id === student.sectionId)?.name || '';
+    const avg = academicMetrics.average;
+    const body = encodeURIComponent(
+      `Student: ${student.name}\nLRN: ${student.lrn || 'N/A'}\nSection: ${sectionName}\nSchool Year: ${schoolYear}\nGeneral Average: ${avg}%\nAttendance Rate: ${attendanceMetrics.rate}%`
+    );
+    const subject = encodeURIComponent(`Student Summary — ${student.name}`);
+    window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+  }, [student, sections, schoolYear, academicMetrics, attendanceMetrics]);
 
   // Subject-wise performance
   const subjectPerformance = useMemo(() => {
@@ -303,6 +376,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
             <BehaviorTab
               student={student}
               coreValueGrades={coreValueGrades}
+              coreValues={schoolData.coreValues || []}
               coreValuesAverage={coreValuesAverage}
             />
           )}
@@ -312,6 +386,8 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
               student={student} 
               schoolYear={schoolYear}
               onGenerateReportCard={() => setShowPrintableReport(true)}
+              onExportTranscript={exportTranscriptCSV}
+              onEmailSummary={emailSummary}
             />
           )}
 
@@ -324,7 +400,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
         <div className="border-t border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-900 flex justify-between">
           <div className="flex gap-2">
             <button 
-              onClick={() => alert(`Email functionality would send message to parent of ${student.name}`)}
+              onClick={emailParent}
               className="px-4 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
             >
               📧 Email Parent
@@ -336,10 +412,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
               🖨️ Print Profile
             </button>
             <button 
-              onClick={() => {
-                console.log('Exporting student data:', student);
-                alert(`Exporting data for ${student.name}. Check console for data.`);
-              }}
+              onClick={exportStudentJSON}
               className="px-4 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
             >
               📊 Export Data
@@ -691,8 +764,9 @@ const AttendanceTab: React.FC<{
 const BehaviorTab: React.FC<{
   student: Student;
   coreValueGrades: CoreValueGrade[];
+  coreValues: CoreValue[];
   coreValuesAverage: string;
-}> = ({ student, coreValueGrades, coreValuesAverage }) => {
+}> = ({ student, coreValueGrades, coreValues, coreValuesAverage }) => {
   const studentCoreValues = coreValueGrades.filter(cv => cv.studentId === student.id);
 
   return (
@@ -713,7 +787,7 @@ const BehaviorTab: React.FC<{
             {studentCoreValues.map((cv, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Core Value {cv.coreValueId?.substring(0, 10) || 'Unknown'}
+                  {coreValues.find(c => c.id === cv.coreValueId)?.name || `Core Value ${cv.coreValueId?.substring(0, 10) || 'Unknown'}`}
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -753,21 +827,27 @@ const DocumentsTab: React.FC<{
   student: Student;
   schoolYear: string;
   onGenerateReportCard: () => void;
-}> = ({ student, schoolYear, onGenerateReportCard }) => (
+  onExportTranscript: () => void;
+  onEmailSummary: () => void;
+}> = ({ student, schoolYear, onGenerateReportCard, onExportTranscript, onEmailSummary }) => (
   <div className="space-y-6">
     <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md p-6">
       <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Student Documents</h3>
       <div className="space-y-3">
-        <DocumentItem
-          title="Report Card - Q1"
-          description="First Quarter Report Card"
-          date="2025-09-15"
-        />
-        <DocumentItem
-          title="Report Card - Q2"
-          description="Second Quarter Report Card"
-          date="2025-11-15"
-        />
+        <button onClick={onGenerateReportCard} className="w-full text-left">
+          <DocumentItem
+            title="Report Card - Q1"
+            description="First Quarter Report Card"
+            date="2025-09-15"
+          />
+        </button>
+        <button onClick={onGenerateReportCard} className="w-full text-left">
+          <DocumentItem
+            title="Report Card - Q2"
+            description="Second Quarter Report Card"
+            date="2025-11-15"
+          />
+        </button>
         <DocumentItem
           title="Enrollment Form"
           description={`SY ${schoolYear} Enrollment`}
@@ -791,7 +871,7 @@ const DocumentsTab: React.FC<{
           📄 Generate Report Card
         </button>
         <button 
-          onClick={() => alert(`Exporting Transcript for ${student.name}`)}
+          onClick={onExportTranscript}
           className="px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
         >
           🎓 Export Transcript
@@ -803,7 +883,7 @@ const DocumentsTab: React.FC<{
           🪪 Print Student ID
         </button>
         <button 
-          onClick={() => alert(`Sending email summary for ${student.name}`)}
+          onClick={onEmailSummary}
           className="px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
         >
           📧 Email Summary

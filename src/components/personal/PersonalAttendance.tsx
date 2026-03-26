@@ -18,6 +18,7 @@ import { supabase } from '../../lib/supabase';
 
 interface Props {
   schoolId: string;
+  teacherId: string;
   tier: string;
 }
 
@@ -26,7 +27,17 @@ interface StudentRow {
   first_name: string;
   last_name: string;
   middle_name: string | null;
+  name: string | null;
   lrn: string | null;
+}
+
+function formatStudentName(s: StudentRow): string {
+  const first = (s.first_name || '').trim();
+  const last = (s.last_name || '').trim();
+  if (last && first) return `${last}, ${first}`;
+  if (s.name?.trim()) return s.name.trim();
+  if (last || first) return [last, first].filter(Boolean).join(', ');
+  return 'Unnamed Student';
 }
 
 interface AttendanceRecord {
@@ -74,7 +85,9 @@ function formatMonthLabel(ym: string): string {
   return date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
 }
 
-export default function PersonalAttendance({ schoolId, tier: _tier }: Props) {
+export default function PersonalAttendance({ schoolId, teacherId, tier: _tier }: Props) {
+  const [sections, setSections] = useState<SectionRow[]>([]);
+  const [selectedSectionId, setSelectedSectionId] = useState('');
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [section, setSection] = useState<SectionRow | null>(null);
   const [records, setRecords] = useState<Map<string, AttendanceRecord>>(new Map());
@@ -95,9 +108,47 @@ export default function PersonalAttendance({ schoolId, tier: _tier }: Props) {
   // Record key: "studentId:date"
   const recKey = (studentId: string, date: string) => `${studentId}:${date}`;
 
-  // ── Fetch data ──
+  // ── Fetch sections teacher is assigned to (or is adviser of) ──
+  useEffect(() => {
+    if (!schoolId || !teacherId) return;
+    (async () => {
+      // Get section_ids from teaching_assignments + sections where adviser
+      const [taRes, advRes] = await Promise.all([
+        supabase
+          .from('teaching_assignments')
+          .select('section_id')
+          .eq('school_id', schoolId)
+          .eq('teacher_id', teacherId)
+          .eq('is_active', true),
+        supabase
+          .from('sections')
+          .select('id')
+          .eq('school_id', schoolId)
+          .eq('adviser_id', teacherId)
+          .is('deleted_at', null),
+      ]);
+      const sectionIds = [...new Set([
+        ...(taRes.data || []).map((r: any) => r.section_id),
+        ...(advRes.data || []).map((r: any) => r.id),
+      ])];
+      if (sectionIds.length === 0) { setSections([]); return; }
+
+      const { data: secData } = await supabase
+        .from('sections')
+        .select('id, name, grade_level')
+        .in('id', sectionIds)
+        .is('deleted_at', null)
+        .order('grade_level')
+        .order('name');
+      const secs = secData || [];
+      setSections(secs);
+      if (secs.length > 0 && !selectedSectionId) setSelectedSectionId(secs[0].id);
+    })();
+  }, [schoolId, teacherId]);
+
+  // ── Fetch students + attendance for selected section ──
   const fetchData = useCallback(async () => {
-    if (!schoolId) return;
+    if (!schoolId || !selectedSectionId) return;
     setLoading(true);
     setError(null);
 
@@ -105,28 +156,26 @@ export default function PersonalAttendance({ schoolId, tier: _tier }: Props) {
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
       const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
 
-      const [studentsRes, sectionRes, attRes] = await Promise.all([
+      const sec = sections.find(s => s.id === selectedSectionId) || null;
+      setSection(sec);
+
+      const [studentsRes, attRes] = await Promise.all([
         supabase.from('students')
-          .select('id, first_name, last_name, middle_name, lrn')
+          .select('id, first_name, last_name, middle_name, name, lrn')
           .eq('school_id', schoolId)
+          .eq('section_id', selectedSectionId)
           .is('deleted_at', null)
           .order('last_name').order('first_name'),
-        supabase.from('sections')
-          .select('id, name, grade_level')
-          .eq('school_id', schoolId)
-          .is('deleted_at', null)
-          .limit(1)
-          .single(),
         supabase.from('attendance_records')
           .select('id, student_id, date, status')
           .eq('school_id', schoolId)
+          .eq('section_id', selectedSectionId)
           .gte('date', startDate)
           .lte('date', endDate),
       ]);
 
       if (studentsRes.error) throw studentsRes.error;
       setStudents(studentsRes.data || []);
-      if (sectionRes.data) setSection(sectionRes.data);
 
       const map = new Map<string, AttendanceRecord>();
       for (const r of (attRes.data || [])) {
@@ -138,7 +187,7 @@ export default function PersonalAttendance({ schoolId, tier: _tier }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [schoolId, year, month]);
+  }, [schoolId, selectedSectionId, sections, year, month]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -309,7 +358,7 @@ export default function PersonalAttendance({ schoolId, tier: _tier }: Props) {
   return (
     <div className="max-w-7xl mx-auto space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <CalendarDaysIcon className="w-6 h-6 text-teal-600" />
@@ -332,6 +381,21 @@ export default function PersonalAttendance({ schoolId, tier: _tier }: Props) {
             <ChevronRightIcon className="w-5 h-5" />
           </button>
         </div>
+      </div>
+
+      {/* Section Selector */}
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Section</label>
+        <select
+          value={selectedSectionId}
+          onChange={e => { setSelectedSectionId(e.target.value); setStudents([]); }}
+          className="w-full sm:w-64 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 dark:text-white focus:ring-indigo-500 focus:border-indigo-500"
+        >
+          {sections.length === 0 && <option value="">No sections assigned</option>}
+          {sections.map(s => (
+            <option key={s.id} value={s.id}>Grade {s.grade_level} - {s.name}</option>
+          ))}
+        </select>
       </div>
 
       {/* Messages */}
@@ -405,7 +469,7 @@ export default function PersonalAttendance({ schoolId, tier: _tier }: Props) {
                 {students.map((s, idx) => (
                   <tr key={s.id} className={idx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/50 dark:bg-slate-750/30'}>
                     <td className="sticky left-0 z-10 bg-inherit px-3 py-1.5 font-medium text-slate-700 dark:text-slate-200 border-r border-slate-200 dark:border-slate-600 whitespace-nowrap">
-                      {s.last_name}, {s.first_name}
+                      {formatStudentName(s)}
                     </td>
                     {weekdays.map(d => {
                       const key = recKey(s.id, d);

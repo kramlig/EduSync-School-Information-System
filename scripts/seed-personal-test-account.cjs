@@ -222,6 +222,26 @@ async function main() {
     console.log(`✅ ${learningAreas.length} learning areas found: ${learningAreas.map(a => a.code || a.name).join(', ')}`);
   }
 
+  // ── Step 4b: Seed teaching assignments (ECR support) ───
+  if (teacherId && sectionId) {
+    // Call auto_assign_personal_section RPC to create teaching_assignments
+    // for all learning areas at this grade level
+    const { data: assignCount, error: taErr } = await supabase.rpc('auto_assign_personal_section', {
+      p_school_id: schoolId,
+      p_teacher_id: teacherId,
+      p_section_id: sectionId,
+      p_grade_level: GRADE_LEVEL,
+      p_school_year: SCHOOL_YEAR,
+    });
+
+    if (taErr) {
+      console.error('⚠️  Teaching assignment seed error:', taErr.message);
+      console.log('   ECR may not be available. You can re-run after applying migration 006.');
+    } else {
+      console.log(`✅ ${assignCount || 0} teaching assignments created (ECR ready)`);
+    }
+  }
+
   // ── Step 5: Seed grades ────────────────────────────────
   if (allStudents && learningAreas && learningAreas.length > 0) {
     const gradeRows = [];

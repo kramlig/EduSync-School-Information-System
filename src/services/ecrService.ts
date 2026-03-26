@@ -132,10 +132,30 @@ export async function createActivity(
   teacherId: string,
   request: CreateECRActivityRequest
 ): Promise<ECRActivity | null> {
+  // Resolve teacherId if null/undefined — look up from school's teacher
+  let resolvedTeacherId = teacherId;
+  if (!resolvedTeacherId && schoolId) {
+    console.warn('[ECRService] teacherId is null, resolving from school:', schoolId);
+    const { data: teacher } = await supabase
+      .from('teachers')
+      .select('id')
+      .eq('school_id', schoolId)
+      .is('deleted_at', null)
+      .limit(1)
+      .single();
+    if (teacher) {
+      resolvedTeacherId = teacher.id;
+      console.log('[ECRService] Resolved teacherId:', resolvedTeacherId);
+    } else {
+      console.error('[ECRService] Could not resolve teacherId for school:', schoolId);
+      return null;
+    }
+  }
+
   // Debug: Log the request data
   console.log('[ECRService] Creating activity with:', {
     schoolId,
-    teacherId,
+    teacherId: resolvedTeacherId,
     quarter: request.quarter,
     quarterType: typeof request.quarter,
     request
@@ -145,7 +165,7 @@ export async function createActivity(
     .from('ecr_activities')
     .insert({
       school_id: schoolId,
-      teacher_id: teacherId,
+      teacher_id: resolvedTeacherId,
       section_id: request.sectionId,
       learning_area_id: request.learningAreaId,
       school_year: request.schoolYear,
@@ -164,6 +184,25 @@ export async function createActivity(
     .single();
 
   if (error) {
+    // 409 = unique constraint conflict — activity already exists, return existing one
+    if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+      console.warn('[ECRService] Activity already exists, fetching existing:', {
+        activityType: request.activityType,
+        activityNumber: request.activityNumber
+      });
+      const { data: existing } = await supabase
+        .from('ecr_activities')
+        .select('*')
+        .eq('section_id', request.sectionId)
+        .eq('learning_area_id', request.learningAreaId)
+        .eq('school_year', request.schoolYear)
+        .eq('quarter', request.quarter)
+        .eq('activity_type', request.activityType)
+        .eq('activity_number', request.activityNumber)
+        .is('deleted_at', null)
+        .single();
+      if (existing) return mapActivityFromDB(existing);
+    }
     console.error('[ECRService] Error creating activity:', error);
     return null;
   }
@@ -497,17 +536,19 @@ export async function getClassRecord(
     return null;
   }
 
-  // Get cached component grades for all students
-  const studentIds = students.map(s => s.id);
-  const { data: componentGrades } = await supabase
-    .from('ecr_component_grades')
-    .select('*')
-    .in('student_id', studentIds)
-    .eq('learning_area_id', learningAreaId)
-    .eq('school_year', schoolYear)
-    .eq('quarter', quarter);
+  // Helper: DepEd transmutation (0% → 60, 100% → 100, linear)
+  const transmute = (pct: number): number => {
+    if (pct <= 0) return 60;
+    if (pct >= 100) return 100;
+    return Math.round((60 + pct * 0.4) * 100) / 100;
+  };
 
-  // Build student rows
+  // Build activity lookup by type for client-side computation
+  const wwActivities = activities.filter(a => a.activityType === 'WW');
+  const ptActivities = activities.filter(a => a.activityType === 'PT');
+  const qaActivities = activities.filter(a => a.activityType === 'QA');
+
+  // Build student rows with client-side computation
   const studentRows: ECRStudentRow[] = students.map(student => {
     const studentScores = allScores?.filter(s => s.student_id === student.id) || [];
     const scoresMap: Record<string, ECRScore> = {};
@@ -515,7 +556,28 @@ export async function getClassRecord(
       scoresMap[s.activity_id] = mapScoreFromDB(s);
     });
 
-    const cached = componentGrades?.find(c => c.student_id === student.id);
+    // Client-side computation from raw scores
+    const computeComponent = (acts: ECRActivity[]) => {
+      let total = 0, max = 0;
+      for (const act of acts) {
+        const score = studentScores.find(s => s.activity_id === act.id && s.status === 'graded');
+        if (score && score.raw_score != null) {
+          total += Number(score.raw_score);
+          max += Number(act.maxScore);
+        }
+      }
+      const pct = max > 0 ? (total / max) * 100 : 0;
+      return { total, max, pct, transmuted: transmute(pct) };
+    };
+
+    const ww = computeComponent(wwActivities);
+    const pt = computeComponent(ptActivities);
+    const qa = computeComponent(qaActivities);
+
+    const wwWtd = Math.round(ww.transmuted * weights.wwWeight / 100 * 100) / 100;
+    const ptWtd = Math.round(pt.transmuted * weights.ptWeight / 100 * 100) / 100;
+    const qaWtd = Math.round(qa.transmuted * weights.qaWeight / 100 * 100) / 100;
+    const quarterlyGrade = Math.round(wwWtd + ptWtd + qaWtd);
 
     return {
       studentId: student.id,
@@ -523,26 +585,26 @@ export async function getClassRecord(
       lrn: student.lrn || '',
       scores: scoresMap,
       
-      wwTotal: cached?.ww_total_score || 0,
-      wwMax: cached?.ww_max_score || 0,
-      wwPercentage: cached?.ww_percentage || 0,
-      wwTransmuted: cached?.ww_transmuted || 0,
+      wwTotal: ww.total,
+      wwMax: ww.max,
+      wwPercentage: ww.pct,
+      wwTransmuted: ww.transmuted,
       
-      ptTotal: cached?.pt_total_score || 0,
-      ptMax: cached?.pt_max_score || 0,
-      ptPercentage: cached?.pt_percentage || 0,
-      ptTransmuted: cached?.pt_transmuted || 0,
+      ptTotal: pt.total,
+      ptMax: pt.max,
+      ptPercentage: pt.pct,
+      ptTransmuted: pt.transmuted,
       
-      qaTotal: cached?.qa_total_score || 0,
-      qaMax: cached?.qa_max_score || 0,
-      qaPercentage: cached?.qa_percentage || 0,
-      qaTransmuted: cached?.qa_transmuted || 0,
+      qaTotal: qa.total,
+      qaMax: qa.max,
+      qaPercentage: qa.pct,
+      qaTransmuted: qa.transmuted,
       
-      wwWeighted: cached?.ww_weighted || 0,
-      ptWeighted: cached?.pt_weighted || 0,
-      qaWeighted: cached?.qa_weighted || 0,
+      wwWeighted: wwWtd,
+      ptWeighted: ptWtd,
+      qaWeighted: qaWtd,
       
-      quarterlyGrade: cached?.quarterly_grade || 0
+      quarterlyGrade
     };
   });
 

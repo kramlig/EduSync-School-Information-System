@@ -1,9 +1,7 @@
 /**
  * PersonalForms — Generate DepEd forms from personal workspace data.
  *
- * Pulls students, grades, and attendance from Supabase and auto-fills
- * the standalone generators (SF5, SF9, SF2). No CSV upload needed.
- *
+ * Teacher picks a section, then generates SF5/SF9/SF2 for that section.
  * School info is auto-populated from the workspace's school record.
  */
 
@@ -15,6 +13,7 @@ import {
   CheckCircleIcon,
   ArrowPathIcon,
   CalendarDaysIcon,
+  ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline';
 import { supabase } from '../../lib/supabase';
 import { generateSF5Standalone } from '../../services/tools/sf5StandaloneGenerator';
@@ -25,6 +24,7 @@ import type { SF5ParsedRow, SF9ParsedRow, SF2ParsedRow } from '../../services/to
 
 interface Props {
   schoolId: string;
+  teacherId: string;
   tier: string;
 }
 
@@ -67,6 +67,8 @@ interface SectionRow {
   name: string;
   grade_level: number;
   school_year: string;
+  adviser_id?: string | null;
+  isAdvisory?: boolean;
 }
 
 interface TeacherRow {
@@ -101,7 +103,11 @@ interface HGGradeRow {
 
 type FormType = 'sf5' | 'sf9' | 'sf2';
 
-const PersonalForms: React.FC<Props> = ({ schoolId, tier }) => {
+const PersonalForms: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
+  // Section selector
+  const [allSections, setAllSections] = useState<SectionRow[]>([]);
+  const [selectedSectionId, setSelectedSectionId] = useState<string>('');
+
   // Data state
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [grades, setGrades] = useState<GradeRow[]>([]);
@@ -111,11 +117,11 @@ const PersonalForms: React.FC<Props> = ({ schoolId, tier }) => {
   const [coreValueGrades, setCoreValueGrades] = useState<CoreValueGradeRow[]>([]);
   const [hgGrades, setHgGrades] = useState<HGGradeRow[]>([]);
   const [school, setSchool] = useState<SchoolRow | null>(null);
-  const [section, setSection] = useState<SectionRow | null>(null);
   const [teacher, setTeacher] = useState<TeacherRow | null>(null);
 
   // UI state
-  const [loading, setLoading] = useState(true);
+  const [loadingSections, setLoadingSections] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState<FormType | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -124,20 +130,112 @@ const PersonalForms: React.FC<Props> = ({ schoolId, tier }) => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
 
-  // ─── Fetch all workspace data ────────────────────────────
+  const selectedSection = useMemo(
+    () => allSections.find(s => s.id === selectedSectionId) || null,
+    [allSections, selectedSectionId]
+  );
 
-  const fetchData = useCallback(async () => {
-    if (!schoolId) return;
+  // ─── Fetch teacher's sections ────────────────────────────
+
+  useEffect(() => {
+    if (!schoolId || !teacherId) { setLoadingSections(false); return; }
+    let cancelled = false;
+
+    (async () => {
+      // Get sections from teaching_assignments + adviser sections
+      const [taRes, advRes] = await Promise.all([
+        supabase
+          .from('teaching_assignments')
+          .select('section_id')
+          .eq('teacher_id', teacherId)
+          .eq('school_id', schoolId)
+          .eq('is_active', true),
+        supabase
+          .from('sections')
+          .select('id')
+          .eq('adviser_id', teacherId)
+          .eq('school_id', schoolId),
+      ]);
+      const taIds = (taRes.data || []).map(r => r.section_id);
+      const advIds = (advRes.data || []).map(r => r.id);
+      const allIds = [...new Set([...taIds, ...advIds])];
+
+      if (allIds.length > 0 && !cancelled) {
+        const { data } = await supabase
+          .from('sections')
+          .select('id, name, grade_level, school_year, adviser_id')
+          .in('id', allIds)
+          .is('deleted_at', null)
+          .order('grade_level')
+          .order('name');
+
+        if (!cancelled && data) {
+          const mapped = data.map(s => ({
+            ...s,
+            isAdvisory: s.adviser_id === teacherId,
+          }));
+          setAllSections(mapped);
+          if (mapped.length > 0) setSelectedSectionId(mapped[0].id);
+        }
+      }
+
+      // Also fetch school + teacher info (static)
+      const [schoolRes, teacherRes] = await Promise.all([
+        supabase
+          .from('schools')
+          .select('name, school_id_number, division, region, district, current_school_year')
+          .eq('id', schoolId)
+          .single(),
+        supabase
+          .from('teachers')
+          .select('name')
+          .eq('id', teacherId)
+          .single(),
+      ]);
+      if (!cancelled) {
+        if (schoolRes.data) setSchool(schoolRes.data);
+        if (teacherRes.data) setTeacher(teacherRes.data);
+        setLoadingSections(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [schoolId, teacherId]);
+
+  // ─── Fetch section-scoped data when section changes ──────
+
+  const fetchSectionData = useCallback(async () => {
+    if (!schoolId || !selectedSectionId) return;
     setLoading(true);
     setError('');
 
     try {
-      // Parallel-fetch all data needed for form generation
+      // 1) Fetch students for the selected section
+      const studentsRes = await supabase
+        .from('students')
+        .select('id, first_name, last_name, middle_name, lrn, gender')
+        .eq('school_id', schoolId)
+        .eq('section_id', selectedSectionId)
+        .is('deleted_at', null)
+        .order('last_name');
+
+      const stuData = studentsRes.data || [];
+      setStudents(stuData);
+
+      if (stuData.length === 0) {
+        setGrades([]);
+        setCoreValues([]);
+        setCoreValueGrades([]);
+        setFullYearAttendance([]);
+        setHgGrades([]);
+        setLoading(false);
+        return;
+      }
+
+      const studentIds = stuData.map(s => s.id);
+
+      // 2) Fetch grades, core values, attendance, HG grades scoped by student IDs
       const [
-        studentsRes,
-        schoolRes,
-        sectionRes,
-        teacherRes,
         gradesRes,
         coreValuesRes,
         coreValueGradesRes,
@@ -145,33 +243,10 @@ const PersonalForms: React.FC<Props> = ({ schoolId, tier }) => {
         hgGradesRes,
       ] = await Promise.all([
         supabase
-          .from('students')
-          .select('id, first_name, last_name, middle_name, lrn, gender')
-          .eq('school_id', schoolId)
-          .is('deleted_at', null)
-          .order('last_name'),
-        supabase
-          .from('schools')
-          .select('name, school_id_number, division, region, district, current_school_year')
-          .eq('id', schoolId)
-          .single(),
-        supabase
-          .from('sections')
-          .select('id, name, grade_level, school_year')
-          .eq('school_id', schoolId)
-          .is('deleted_at', null)
-          .limit(1)
-          .single(),
-        supabase
-          .from('teachers')
-          .select('name')
-          .eq('school_id', schoolId)
-          .limit(1)
-          .single(),
-        supabase
           .from('grades')
           .select('student_id, q1, q2, q3, q4, final_grade, learning_area:learning_areas!learning_area_id(name)')
-          .eq('school_id', schoolId),
+          .eq('school_id', schoolId)
+          .in('student_id', studentIds),
         supabase
           .from('core_values')
           .select('id, code, name, indicators')
@@ -180,37 +255,38 @@ const PersonalForms: React.FC<Props> = ({ schoolId, tier }) => {
           .from('core_value_grades')
           .select('student_id, core_value_id, q1, q2, q3, q4, indicator_ratings, core_value:core_values!core_value_id(code)')
           .eq('school_id', schoolId)
+          .in('student_id', studentIds)
           .is('deleted_at', null),
         supabase
           .from('attendance_records')
           .select('student_id, date, status')
-          .eq('school_id', schoolId),
+          .eq('school_id', schoolId)
+          .eq('section_id', selectedSectionId),
         supabase
           .from('homeroom_guidance_grades')
           .select('student_id, q1_ratings, q2_ratings, q3_ratings, q4_ratings')
           .eq('school_id', schoolId)
+          .in('student_id', studentIds)
           .is('deleted_at', null),
       ]);
 
-      if (studentsRes.data) setStudents(studentsRes.data);
-      if (schoolRes.data) setSchool(schoolRes.data);
-      if (sectionRes.data) setSection(sectionRes.data);
-      if (teacherRes.data) setTeacher(teacherRes.data);
-      if (gradesRes.data) setGrades(gradesRes.data as GradeRow[]);
+      if (gradesRes.data) setGrades(gradesRes.data as unknown as GradeRow[]);
       if (coreValuesRes.data) setCoreValues(coreValuesRes.data as CoreValueRow[]);
-      if (coreValueGradesRes.data) setCoreValueGrades(coreValueGradesRes.data as CoreValueGradeRow[]);
+      if (coreValueGradesRes.data) setCoreValueGrades(coreValueGradesRes.data as unknown as CoreValueGradeRow[]);
       if (fullYearAttRes.data) setFullYearAttendance(fullYearAttRes.data as AttendanceRow[]);
       if (hgGradesRes.data) setHgGrades(hgGradesRes.data as HGGradeRow[]);
-    } catch (err) {
-      setError('Failed to load workspace data.');
+    } catch {
+      setError('Failed to load section data.');
     } finally {
       setLoading(false);
     }
-  }, [schoolId]);
+  }, [schoolId, selectedSectionId]);
 
-  // Fetch attendance separately when reportMonth changes
-  const fetchAttendance = useCallback(async () => {
-    if (!schoolId || !section) return;
+  useEffect(() => { fetchSectionData(); }, [fetchSectionData]);
+
+  // Fetch attendance separately for the selected month
+  const fetchMonthAttendance = useCallback(async () => {
+    if (!schoolId || !selectedSectionId) return;
     const [year, month] = reportMonth.split('-').map(Number);
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
@@ -219,17 +295,14 @@ const PersonalForms: React.FC<Props> = ({ schoolId, tier }) => {
       .from('attendance_records')
       .select('student_id, date, status')
       .eq('school_id', schoolId)
-      .eq('section_id', section.id)
+      .eq('section_id', selectedSectionId)
       .gte('date', startDate)
       .lte('date', endDate);
 
     if (data) setAttendance(data);
-  }, [schoolId, section, reportMonth]);
+  }, [schoolId, selectedSectionId, reportMonth]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
-
-  // ─── Data readiness checks ───────────────────────────────
+  useEffect(() => { fetchMonthAttendance(); }, [fetchMonthAttendance]);
 
   const hasStudents = students.length > 0;
   const hasGrades = grades.length > 0;
@@ -252,10 +325,10 @@ const PersonalForms: React.FC<Props> = ({ schoolId, tier }) => {
   // Track form generation in usage_tracking (fire-and-forget)
   const trackForm = (formType: string) => {
     supabase.from('usage_tracking').insert({
-      user_id: teacher?.firebase_uid || null,
+      user_id: teacherId || null,
       action: 'form_download',
       form_type: formType,
-      metadata: { school_id: schoolId, student_count: students.length },
+      metadata: { school_id: schoolId, section_id: selectedSectionId, student_count: students.length },
     }).then(() => {});
   };
 
@@ -268,8 +341,8 @@ const PersonalForms: React.FC<Props> = ({ schoolId, tier }) => {
   }), [school]);
 
   const schoolYear = school?.current_school_year || '2025-2026';
-  const gradeLevel = section?.grade_level || 6;
-  const sectionName = section?.name || 'My Class';
+  const gradeLevel = selectedSection?.grade_level || 6;
+  const sectionName = selectedSection?.name || 'My Class';
   const adviserName = teacher?.name || '';
   const noWatermark = tier === 'pro' || tier === 'school';
 
@@ -457,11 +530,31 @@ const PersonalForms: React.FC<Props> = ({ schoolId, tier }) => {
 
   // ─── Render ──────────────────────────────────────────────
 
-  if (loading) {
+  if (loadingSections) {
     return (
       <div className="max-w-5xl mx-auto py-12 text-center text-slate-500 dark:text-slate-400">
         <ArrowPathIcon className="w-6 h-6 animate-spin mx-auto mb-2" />
         Loading workspace data...
+      </div>
+    );
+  }
+
+  if (allSections.length === 0) {
+    return (
+      <div className="max-w-5xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+            <DocumentTextIcon className="w-6 h-6 text-purple-600" />
+            Generate DepEd Forms
+          </h1>
+        </div>
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-6 text-center">
+          <ClipboardDocumentListIcon className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">No sections found</p>
+          <p className="text-xs text-amber-600 dark:text-amber-300 mt-1">
+            Create a section first from <a href="/personal/sections" className="underline font-medium">My Sections</a>, then come back to generate forms.
+          </p>
+        </div>
       </div>
     );
   }
@@ -478,6 +571,41 @@ const PersonalForms: React.FC<Props> = ({ schoolId, tier }) => {
           Forms are auto-filled from your saved students and grades. No CSV upload needed.
         </p>
       </div>
+
+      {/* Section Selector */}
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
+          Select Section
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {allSections.map(sec => (
+            <button
+              key={sec.id}
+              onClick={() => { setSelectedSectionId(sec.id); setSuccess(''); setError(''); }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
+                sec.id === selectedSectionId
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:border-indigo-300 dark:hover:border-indigo-600'
+              }`}
+            >
+              Grade {sec.grade_level} - {sec.name}
+              {sec.isAdvisory && (
+                <span className={`ml-1.5 text-xs ${sec.id === selectedSectionId ? 'text-indigo-200' : 'text-indigo-500 dark:text-indigo-400'}`}>
+                  (Adviser)
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Loading section data */}
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 py-2">
+          <ArrowPathIcon className="w-4 h-4 animate-spin" />
+          Loading section data...
+        </div>
+      )}
 
       {/* Status Messages */}
       {error && (

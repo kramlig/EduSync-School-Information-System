@@ -111,13 +111,17 @@ const FormGeneratorPage = lazy(() => import('./src/components/tools/FormGenerato
 const PersonalSignupScreen = lazy(() => import('./src/components/personal/PersonalSignupScreen'));
 const PersonalLayout = lazy(() => import('./src/components/personal/PersonalLayout'));
 const PersonalDashboard = lazy(() => import('./src/components/personal/PersonalDashboard'));
-const PersonalStudents = lazy(() => import('./src/components/personal/PersonalStudents'));
+const PersonalStudentListWrapper = lazy(() => import('./src/components/personal/PersonalStudentListWrapper'));
 const PersonalForms = lazy(() => import('./src/components/personal/PersonalForms'));
 const PersonalSettings = lazy(() => import('./src/components/personal/PersonalSettings'));
 const PersonalGradebook = lazy(() => import('./src/components/personal/PersonalGradebook'));
+const PersonalClassRecordSelector = lazy(() => import('./src/components/personal/PersonalClassRecordSelector'));
+const PersonalClassRecordView = lazy(() => import('./src/components/personal/PersonalClassRecordView'));
 const PersonalAnalytics = lazy(() => import('./src/components/personal/PersonalAnalytics'));
+const PersonalSections = lazy(() => import('./src/components/personal/PersonalSections'));
 const PersonalAttendance = lazy(() => import('./src/components/personal/PersonalAttendance'));
 const PersonalCoreValues = lazy(() => import('./src/components/personal/PersonalCoreValues'));
+const PersonalHomeroomGuidance = lazy(() => import('./src/components/personal/PersonalHomeroomGuidance'));
 
 // Enrollment components
 const EnrollmentPortal = lazy(() => import('./src/components/enrollment/portal/EnrollmentPortal'));
@@ -711,6 +715,8 @@ const App: React.FC = () => {
     const pUser = session.user as any;
     const pTier = pUser.tier || 'free';
     const pSchoolId = pUser.schoolId || '';
+    // Use postgresqlId as fallback (some sessions store teacher UUID there)
+    const pTeacherId = pUser.id || pUser.postgresqlId || pUser.teacherId || '';
     const pMaxStudents = pTier === 'free' ? 50 : 99999;
 
     return (
@@ -730,24 +736,49 @@ const App: React.FC = () => {
                   tier={pTier}
                   studentCount={0}
                   maxStudents={pMaxStudents}
+                  schoolId={pSchoolId}
+                  teacherId={pTeacherId}
                 />
               } />
-              <Route path="students" element={
-                <PersonalStudents
+              <Route path="sections" element={
+                <PersonalSections
                   schoolId={pSchoolId}
-                  maxStudents={pMaxStudents}
+                  teacherId={pTeacherId}
                   tier={pTier}
                 />
               } />
+              <Route path="students" element={
+                <PersonalStudentListWrapper
+                  schoolId={pSchoolId}
+                  teacherId={pTeacherId}
+                  tier={pTier}
+                  userName={pUser.name || pUser.email}
+                />
+              } />
               <Route path="grades" element={
+                <PersonalClassRecordSelector
+                  schoolId={pSchoolId}
+                  teacherId={pTeacherId}
+                  tier={pTier}
+                />
+              } />
+              <Route path="grades/quick" element={
                 <PersonalGradebook
                   schoolId={pSchoolId}
+                  tier={pTier}
+                />
+              } />
+              <Route path="class-record/:sectionId/:learningAreaId" element={
+                <PersonalClassRecordView
+                  schoolId={pSchoolId}
+                  teacherId={pTeacherId}
                   tier={pTier}
                 />
               } />
               <Route path="forms" element={
                 <PersonalForms
                   schoolId={pSchoolId}
+                  teacherId={pTeacherId}
                   tier={pTier}
                 />
               } />
@@ -770,18 +801,22 @@ const App: React.FC = () => {
               <Route path="attendance" element={
                 <PersonalAttendance
                   schoolId={pSchoolId}
+                  teacherId={pTeacherId}
                   tier={pTier}
                 />
               } />
               <Route path="core-values" element={
                 <PersonalCoreValues
                   schoolId={pSchoolId}
+                  teacherId={pTeacherId}
                   tier={pTier}
                 />
               } />
               <Route path="homeroom-guidance" element={
-                <HomeroomGuidanceView
+                <PersonalHomeroomGuidance
                   schoolId={pSchoolId}
+                  teacherId={pTeacherId}
+                  tier={pTier}
                 />
               } />
             </Route>
@@ -913,7 +948,7 @@ const App: React.FC = () => {
                         <Route path="/grades/class-record/:sectionId/:learningAreaId" element={
                           <ClassRecordViewWrapper 
                             schoolYear={schoolData.settings.schoolYear}
-                            teacherId={(session.user as AuthUser).id}
+                            teacherId={(session.user as AuthUser).id || (session.user as any).postgresqlId || ''}
                             schoolId={(session.user as any).schoolId || ''}
                           />
                         } />
