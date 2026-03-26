@@ -66,7 +66,34 @@ interface UseECRReturn {
 // ============================================
 
 export function useECR(options: UseECROptions): UseECRReturn {
-  const { sectionId, learningAreaId, schoolYear, quarter, teacherId, schoolId } = options;
+  const { sectionId, learningAreaId, schoolYear, quarter, teacherId: rawTeacherId, schoolId } = options;
+
+  // Resolve teacherId from session if undefined (personal workspace edge case)
+  const [resolvedTeacherId, setResolvedTeacherId] = useState<string>(rawTeacherId || '');
+  useEffect(() => {
+    if (rawTeacherId) {
+      setResolvedTeacherId(rawTeacherId);
+      return;
+    }
+    if (!schoolId) return;
+    // Fallback: look up teacher from school
+    console.warn('[useECR] teacherId is empty, resolving from school:', schoolId);
+    supabase
+      .from('teachers')
+      .select('id')
+      .eq('school_id', schoolId)
+      .is('deleted_at', null)
+      .limit(1)
+      .single()
+      .then(({ data }) => {
+        if (data?.id) {
+          console.log('[useECR] Resolved teacherId:', data.id);
+          setResolvedTeacherId(data.id);
+        }
+      });
+  }, [rawTeacherId, schoolId]);
+
+  const teacherId = resolvedTeacherId;
   
   const [classRecord, setClassRecord] = useState<ECRClassRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -223,21 +250,52 @@ export function useECR(options: UseECROptions): UseECRReturn {
         const saved = await ECRService.saveScore(activityId, studentId, score, teacherId, 'graded', remarks);
         
         if (saved) {
-          // Optimistic update
+          // Optimistic update with recomputation
           setClassRecord(prev => {
             if (!prev) return prev;
             
+            const transmute = (pct: number) => {
+              if (pct <= 0) return 60;
+              if (pct >= 100) return 100;
+              return Math.round((60 + pct * 0.4) * 100) / 100;
+            };
+
             const students = prev.students.map(s => {
-              if (s.studentId === studentId) {
-                return {
-                  ...s,
-                  scores: {
-                    ...s.scores,
-                    [activityId]: saved
+              if (s.studentId !== studentId) return s;
+              
+              const updatedScores = { ...s.scores, [activityId]: saved };
+              
+              // Recompute totals from raw scores
+              const computeComp = (acts: typeof prev.activities.ww) => {
+                let total = 0, max = 0;
+                for (const act of acts) {
+                  const sc = updatedScores[act.id];
+                  if (sc && sc.rawScore != null) {
+                    total += sc.rawScore;
+                    max += act.maxScore;
                   }
-                };
-              }
-              return s;
+                }
+                const pct = max > 0 ? (total / max) * 100 : 0;
+                return { total, max, pct, transmuted: transmute(pct) };
+              };
+
+              const ww = computeComp(prev.activities.ww);
+              const pt = computeComp(prev.activities.pt);
+              const qa = computeComp(prev.activities.qa);
+
+              const wwWtd = Math.round(ww.transmuted * prev.weights.ww / 100 * 100) / 100;
+              const ptWtd = Math.round(pt.transmuted * prev.weights.pt / 100 * 100) / 100;
+              const qaWtd = Math.round(qa.transmuted * prev.weights.qa / 100 * 100) / 100;
+
+              return {
+                ...s,
+                scores: updatedScores,
+                wwTotal: ww.total, wwMax: ww.max, wwPercentage: ww.pct, wwTransmuted: ww.transmuted,
+                ptTotal: pt.total, ptMax: pt.max, ptPercentage: pt.pct, ptTransmuted: pt.transmuted,
+                qaTotal: qa.total, qaMax: qa.max, qaPercentage: qa.pct, qaTransmuted: qa.transmuted,
+                wwWeighted: wwWtd, ptWeighted: ptWtd, qaWeighted: qaWtd,
+                quarterlyGrade: Math.round(wwWtd + ptWtd + qaWtd)
+              };
             });
             
             return { ...prev, students };

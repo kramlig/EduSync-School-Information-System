@@ -7,11 +7,13 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AcademicCapIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import { supabase } from '../../lib/supabase';
 import UpgradeModal from './UpgradeModal';
@@ -74,6 +76,7 @@ function computeFinalGrade(g: { q1: number | null; q2: number | null; q3: number
 }
 
 export default function PersonalGradebook({ schoolId, tier }: Props) {
+  const navigate = useNavigate();
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [areas, setAreas] = useState<LearningAreaRow[]>([]);
   const [grades, setGrades] = useState<Map<string, GradeRow>>(new Map());
@@ -374,6 +377,18 @@ export default function PersonalGradebook({ schoolId, tier }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-sm" aria-label="Breadcrumb">
+        <button
+          onClick={() => navigate('/personal/grades')}
+          className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 font-medium hover:underline transition-colors"
+        >
+          Grade Entry
+        </button>
+        <ChevronRightIcon className="h-3.5 w-3.5 text-slate-400" />
+        <span className="text-slate-800 dark:text-slate-200 font-semibold">Gradebook</span>
+      </nav>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

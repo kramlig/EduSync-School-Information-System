@@ -240,6 +240,75 @@ export function limitsFromSubscription(sub: Subscription | null, isPersonal: boo
   };
 }
 
+// ─── Self-Assignment (ECR Support) ───────────────────────
+
+/**
+ * Create a teaching assignment for the personal workspace owner.
+ * This is the self-assignment pattern that aligns personal workspace
+ * data with institutional workspace so ECR queries work identically.
+ */
+export async function createPersonalTeachingAssignment(params: {
+  schoolId: string;
+  teacherId: string;
+  sectionId: string;
+  learningAreaId: string;
+  gradeLevel?: number;
+  isAdvisory?: boolean;
+  schoolYear?: string;
+}): Promise<string | null> {
+  const { data, error } = await supabase.rpc('create_personal_teaching_assignment', {
+    p_school_id: params.schoolId,
+    p_teacher_id: params.teacherId,
+    p_section_id: params.sectionId,
+    p_learning_area_id: params.learningAreaId,
+    p_grade_level: params.gradeLevel ?? 6,
+    p_is_advisory: params.isAdvisory ?? false,
+    p_school_year: params.schoolYear ?? getCurrentSchoolYear(),
+  });
+
+  if (error) {
+    console.error('[personalWorkspaceService] createPersonalTeachingAssignment error:', error);
+    return null;
+  }
+  return data as string;
+}
+
+/**
+ * Auto-assign all active learning areas for a grade level to a section.
+ * Used when a personal workspace teacher creates a new section.
+ */
+export async function autoAssignPersonalSection(params: {
+  schoolId: string;
+  teacherId: string;
+  sectionId: string;
+  gradeLevel?: number;
+  schoolYear?: string;
+}): Promise<number> {
+  const { data, error } = await supabase.rpc('auto_assign_personal_section', {
+    p_school_id: params.schoolId,
+    p_teacher_id: params.teacherId,
+    p_section_id: params.sectionId,
+    p_grade_level: params.gradeLevel ?? 6,
+    p_school_year: params.schoolYear ?? getCurrentSchoolYear(),
+  });
+
+  if (error) {
+    console.error('[personalWorkspaceService] autoAssignPersonalSection error:', error);
+    return 0;
+  }
+  return (data as number) || 0;
+}
+
+/**
+ * Check if ECR is enabled for a personal workspace subscription.
+ * Free tier = Quick Grade only; Pro = ECR enabled.
+ */
+export async function isECREnabled(firebaseUid: string): Promise<boolean> {
+  const sub = await getUserSubscription(firebaseUid);
+  if (!sub) return false;
+  return sub.tier === 'pro' || sub.tier === 'school';
+}
+
 // ─── Helpers ─────────────────────────────────────────────
 
 function getCurrentSchoolYear(): string {

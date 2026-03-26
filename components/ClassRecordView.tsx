@@ -12,7 +12,7 @@
  * - CSV and PDF export (Division format with DepEd logos)
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useECR, useECRActivityModal, useQuarterSelector } from '../src/hooks/useECR';
 import { downloadECRCSV, generateECRPDF, type ECRExportData } from '../src/utils/ecr/ecrExportService';
 import type {
@@ -112,14 +112,31 @@ const ScoreCell: React.FC<{
   maxScore: number;
   onSave: (score: number | null) => void;
   disabled?: boolean;
-}> = ({ activityId: _activityId, studentId: _studentId, currentScore, maxScore, onSave, disabled }) => {
+  isActive?: boolean;
+  onActivate?: () => void;
+  onNav?: (dir: 'right' | 'left' | 'down' | 'up') => void;
+}> = ({ activityId: _activityId, studentId: _studentId, currentScore, maxScore, onSave, disabled, isActive, onActivate, onNav }) => {
   // Note: activityId and studentId are passed for key/identification purposes but handled by parent
   void _activityId; void _studentId;
-  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState<string>(currentScore?.toString() || '');
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleBlur = useCallback(() => {
-    setEditing(false);
+  // Sync value when currentScore changes externally
+  useEffect(() => {
+    if (!isActive) {
+      setValue(currentScore?.toString() || '');
+    }
+  }, [currentScore, isActive]);
+
+  // Focus input when cell becomes active
+  useEffect(() => {
+    if (isActive && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isActive]);
+
+  const commitValue = useCallback(() => {
     const numValue = value === '' ? null : parseFloat(value);
     if (numValue !== currentScore) {
       if (numValue === null || (numValue >= 0 && numValue <= maxScore)) {
@@ -130,14 +147,40 @@ const ScoreCell: React.FC<{
     }
   }, [value, currentScore, maxScore, onSave]);
 
+  const handleBlur = useCallback(() => {
+    commitValue();
+  }, [commitValue]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleBlur();
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      commitValue();
+      onNav?.(e.shiftKey ? 'left' : 'right');
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      commitValue();
+      onNav?.('down');
     } else if (e.key === 'Escape') {
       setValue(currentScore?.toString() || '');
-      setEditing(false);
+      onActivate?.(); // deactivate by letting parent handle
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      commitValue();
+      onNav?.('up');
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      commitValue();
+      onNav?.('down');
+    } else if (e.key === 'ArrowLeft' && inputRef.current?.selectionStart === 0) {
+      e.preventDefault();
+      commitValue();
+      onNav?.('left');
+    } else if (e.key === 'ArrowRight' && inputRef.current?.selectionStart === value.length) {
+      e.preventDefault();
+      commitValue();
+      onNav?.('right');
     }
-  }, [handleBlur, currentScore]);
+  }, [commitValue, currentScore, onNav, onActivate, value.length]);
 
   if (disabled) {
     return (
@@ -147,10 +190,11 @@ const ScoreCell: React.FC<{
     );
   }
 
-  if (editing) {
+  if (isActive) {
     return (
-      <td className="px-1 py-0.5 border-b border-slate-100">
+      <td className="px-1 py-0.5 border-b border-slate-100 bg-indigo-50">
         <input
+          ref={inputRef}
           type="number"
           min="0"
           max={maxScore}
@@ -159,8 +203,7 @@ const ScoreCell: React.FC<{
           onChange={(e) => setValue(e.target.value)}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
-          autoFocus
-          className="w-12 px-1 py-0.5 text-center text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-12 px-1 py-0.5 text-center text-sm border border-indigo-400 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
         />
       </td>
     );
@@ -169,7 +212,7 @@ const ScoreCell: React.FC<{
   return (
     <td
       className="px-2 py-1 text-center text-sm text-slate-700 border-b border-slate-100 cursor-pointer hover:bg-indigo-50"
-      onClick={() => setEditing(true)}
+      onClick={() => onActivate?.()}
     >
       {currentScore ?? '-'}
     </td>
@@ -180,8 +223,6 @@ const ScoreCell: React.FC<{
  * Component Section (WW, PT, or QA)
  * Shows 10 activity columns by default (matching Division ECR format)
  */
-const DEFAULT_ACTIVITY_SLOTS = 10;
-
 const ComponentSection: React.FC<{
   type: ECRActivityType;
   label: string;
@@ -198,47 +239,72 @@ const ComponentSection: React.FC<{
   const percentKey = `${type.toLowerCase()}Percentage` as keyof ECRStudentRow;
   const wsKey = `${type.toLowerCase()}Weighted` as keyof ECRStudentRow;
 
-  // Create array of 10 slots, filled with activities or empty placeholders
-  const activitySlots = useMemo(() => {
-    const slots: (ECRActivity | null)[] = [];
-    for (let i = 0; i < DEFAULT_ACTIVITY_SLOTS; i++) {
-      const activity = activities.find(a => a.activityNumber === i + 1);
-      slots.push(activity || null);
+  // Active cell tracking: [activityIndex, studentIndex]
+  const [activeCell, setActiveCell] = useState<[number, number] | null>(null);
+
+  // Sort activities by number (stable reference)
+  const sortedActivities = useMemo(
+    () => activities.slice().sort((a, b) => a.activityNumber - b.activityNumber),
+    [activities]
+  );
+
+  const nextNumber = activities.length > 0
+    ? Math.max(...activities.map(a => a.activityNumber)) + 1
+    : 1;
+
+  const handleNav = useCallback((colIdx: number, rowIdx: number, dir: 'right' | 'left' | 'down' | 'up') => {
+    const maxCol = sortedActivities.length - 1;
+    const maxRow = students.length - 1;
+
+    if (dir === 'right') {
+      if (colIdx < maxCol) setActiveCell([colIdx + 1, rowIdx]);
+      else if (rowIdx < maxRow) setActiveCell([0, rowIdx + 1]); // wrap to next row
+      else setActiveCell(null);
+    } else if (dir === 'left') {
+      if (colIdx > 0) setActiveCell([colIdx - 1, rowIdx]);
+      else if (rowIdx > 0) setActiveCell([maxCol, rowIdx - 1]); // wrap to prev row
+      else setActiveCell(null);
+    } else if (dir === 'down') {
+      if (rowIdx < maxRow) setActiveCell([colIdx, rowIdx + 1]);
+      else setActiveCell(null);
+    } else if (dir === 'up') {
+      if (rowIdx > 0) setActiveCell([colIdx, rowIdx - 1]);
+      else setActiveCell(null);
     }
-    return slots;
-  }, [activities]);
+  }, [sortedActivities.length, students.length]);
 
   return (
     <div className="flex-shrink-0">
-      {/* Component Header - consistent height */}
+      {/* Component Header */}
       <div className={`px-3 py-2 ${colorClass} rounded-t-lg h-[42px] flex items-center justify-between sticky top-0 z-20`}>
         <span className="font-semibold text-white">{label}</span>
         <span className="text-xs text-white/80">{weight}%</span>
       </div>
       
-      {/* Activity Headers - 10 slots like Division ECR format */}
+      {/* Activity Headers */}
       <table className="border-collapse">
         <thead className="sticky top-[42px] z-20">
           <tr className="bg-slate-50 h-[42px]">
-            {activitySlots.map((activity, index) => (
-              activity ? (
+            {sortedActivities.map((activity) => (
                 <ActivityHeader
                   key={activity.id}
                   activity={activity}
                   onEdit={() => onEditActivity(activity)}
                 />
-              ) : (
-                <th
-                  key={`empty-${index}`}
-                  className="px-2 py-1 text-xs font-medium text-slate-400 border-b border-slate-200 cursor-pointer hover:bg-slate-100 min-w-[40px]"
-                  onClick={() => onAddActivity(index + 1)}
-                  title={`Add ${label} ${index + 1}`}
-                >
-                  <div className="truncate">{index + 1}</div>
-                  <div className="text-slate-300 font-normal">/-</div>
-                </th>
-              )
-            ))}
+              ))}
+            {/* Add column button */}
+            <th
+              className="px-2 py-1 text-xs font-medium text-slate-400 border-b border-slate-200 cursor-pointer hover:bg-indigo-50 hover:text-indigo-500 min-w-[40px] transition-colors"
+              onClick={() => onAddActivity(nextNumber)}
+              title={`Add ${label} ${nextNumber}`}
+            >
+              <div className="flex flex-col items-center">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="text-[10px]">Add</span>
+              </div>
+            </th>
             <th className="px-2 py-1 text-xs font-medium text-slate-600 border-b border-slate-200 bg-slate-100">
               Total
             </th>
@@ -251,10 +317,9 @@ const ComponentSection: React.FC<{
           </tr>
         </thead>
         <tbody>
-          {students.map((student) => (
+          {students.map((student, rowIdx) => (
             <tr key={student.studentId} className="hover:bg-slate-50 h-[33px]">
-              {activitySlots.map((activity, index) => (
-                activity ? (
+              {sortedActivities.map((activity, colIdx) => (
                   <ScoreCell
                     key={activity.id}
                     activityId={activity.id}
@@ -262,16 +327,15 @@ const ComponentSection: React.FC<{
                     currentScore={student.scores[activity.id]?.rawScore ?? null}
                     maxScore={activity.maxScore}
                     onSave={(score) => onSaveScore(activity.id, student.studentId, score)}
+                    isActive={activeCell?.[0] === colIdx && activeCell?.[1] === rowIdx}
+                    onActivate={() => setActiveCell([colIdx, rowIdx])}
+                    onNav={(dir) => handleNav(colIdx, rowIdx, dir)}
                   />
-                ) : (
-                  <td
-                    key={`empty-${index}`}
-                    className="px-2 py-1 text-center text-sm text-slate-300 border-b border-slate-100"
-                  >
-                    -
-                  </td>
-                )
-              ))}
+                ))}
+              {/* Empty cell under add column */}
+              <td className="px-2 py-1 text-center text-sm text-slate-200 border-b border-slate-100">
+                &middot;
+              </td>
               <td className="px-2 text-center text-sm font-medium text-slate-700 border-b border-slate-100 bg-slate-50">
                 {student[totalKey] as number}/{student[maxKey] as number}
               </td>

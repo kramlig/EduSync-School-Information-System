@@ -18,6 +18,7 @@ import { getCurrentSchoolYear } from '../../../services/dateHelpers';
 
 interface Props {
   schoolId: string;
+  teacherId: string;
   tier: string;
 }
 
@@ -98,7 +99,9 @@ const STANDARD_CORE_VALUES: Omit<CoreValue, 'id'>[] = [
   },
 ];
 
-export default function PersonalCoreValues({ schoolId, tier }: Props) {
+export default function PersonalCoreValues({ schoolId, teacherId, tier: _tier }: Props) {
+  const [advisorySections, setAdvisorySections] = useState<{ id: string; name: string; grade_level: number }[]>([]);
+  const [selectedSectionId, setSelectedSectionId] = useState('');
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [coreValues, setCoreValues] = useState<CoreValue[]>([]);
   const [grades, setGrades] = useState<Map<string, GradeRow>>(new Map()); // key: "studentId:coreValueId"
@@ -139,9 +142,27 @@ export default function PersonalCoreValues({ schoolId, tier }: Props) {
     return inserted || [];
   }, []);
 
-  // ── Fetch all data ──
+  // ── Fetch advisory sections ──
+  useEffect(() => {
+    if (!schoolId || !teacherId) return;
+    (async () => {
+      const { data } = await supabase
+        .from('sections')
+        .select('id, name, grade_level')
+        .eq('school_id', schoolId)
+        .eq('adviser_id', teacherId)
+        .is('deleted_at', null)
+        .order('grade_level')
+        .order('name');
+      const secs = data || [];
+      setAdvisorySections(secs);
+      if (secs.length > 0 && !selectedSectionId) setSelectedSectionId(secs[0].id);
+    })();
+  }, [schoolId, teacherId]);
+
+  // ── Fetch all data for selected section ──
   const fetchData = useCallback(async () => {
-    if (!schoolId) return;
+    if (!schoolId || !selectedSectionId) { setLoading(false); return; }
     setLoading(true);
     setError(null);
 
@@ -150,6 +171,7 @@ export default function PersonalCoreValues({ schoolId, tier }: Props) {
         supabase.from('students')
           .select('id, first_name, last_name, middle_name')
           .eq('school_id', schoolId)
+          .eq('section_id', selectedSectionId)
           .is('deleted_at', null)
           .order('last_name').order('first_name'),
         ensureCoreValues(),
@@ -185,7 +207,7 @@ export default function PersonalCoreValues({ schoolId, tier }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [schoolId, schoolYear, ensureCoreValues]);
+  }, [schoolId, selectedSectionId, schoolYear, ensureCoreValues]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -352,13 +374,33 @@ export default function PersonalCoreValues({ schoolId, tier }: Props) {
         </div>
       )}
 
+      {/* Section Selector (adviser sections only) */}
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Advisory Section</label>
+        {advisorySections.length === 0 ? (
+          <p className="text-sm text-amber-600 dark:text-amber-400">
+            You are not an adviser of any section. Core values are rated by the section adviser.
+          </p>
+        ) : (
+          <select
+            value={selectedSectionId}
+            onChange={e => { setSelectedSectionId(e.target.value); setStudents([]); }}
+            className="w-full sm:w-64 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 dark:text-white focus:ring-indigo-500 focus:border-indigo-500"
+          >
+            {advisorySections.map(s => (
+              <option key={s.id} value={s.id}>Grade {s.grade_level} - {s.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
       {/* School year */}
       <div className="text-xs text-slate-500 dark:text-slate-400">
         School Year: <span className="font-medium text-slate-700 dark:text-slate-200">{schoolYear}</span>
       </div>
 
       {/* No students */}
-      {students.length === 0 ? (
+      {advisorySections.length > 0 && students.length === 0 ? (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-sm text-amber-800 dark:text-amber-200">
           <p className="font-medium">No students in your workspace yet.</p>
           <p className="text-xs mt-1">

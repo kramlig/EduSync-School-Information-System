@@ -18,6 +18,7 @@ import {
   CalendarDaysIcon,
   HeartIcon,
   BookOpenIcon,
+  RectangleStackIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline';
@@ -31,8 +32,9 @@ interface Props {
 
 const NAV_ITEMS = [
   { to: '/personal', icon: HomeIcon, label: 'Dashboard', end: true },
+  { to: '/personal/sections', icon: RectangleStackIcon, label: 'My Sections' },
   { to: '/personal/students', icon: UserGroupIcon, label: 'My Students' },
-  { to: '/personal/grades', icon: AcademicCapIcon, label: 'Gradebook' },
+  { to: '/personal/grades', icon: AcademicCapIcon, label: 'Grade Entry' },
   { to: '/personal/attendance', icon: CalendarDaysIcon, label: 'Attendance' },
   { to: '/personal/core-values', icon: HeartIcon, label: 'Core Values' },
   { to: '/personal/homeroom-guidance', icon: BookOpenIcon, label: 'Homeroom Guidance' },

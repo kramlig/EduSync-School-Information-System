@@ -367,7 +367,7 @@ export function useStudentsPostgreSQL(options: UseStudentsOptions = {}): UseStud
         last_name: lastName,
         suffix: studentData.suffix || null,
         gender: gender,
-        date_of_birth: studentData.dateOfBirth || null,
+        date_of_birth: studentData.dateOfBirth || '2000-01-01',
         grade_level: gradeLevel || null,
         section_id: studentData.sectionId || null,
         enrollment_status: studentData.enrollmentStatus || 'enrolled',
