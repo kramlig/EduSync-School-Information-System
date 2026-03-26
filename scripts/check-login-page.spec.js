@@ -10,7 +10,7 @@ test('Check login page state', async ({ page }) => {
     await dialog.accept();
   });
   
-  await page.goto('https://edusync-sis.web.app/', { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.goto('https://edusync.ph/', { waitUntil: 'domcontentloaded', timeout: 90000 });
   
   // Wait for page to load
   await page.waitForTimeout(5000);

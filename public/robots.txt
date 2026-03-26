@@ -10,4 +10,4 @@ Disallow: /personal/
 Disallow: /admin
 Disallow: /api/
 
-Sitemap: https://edusync-sis.web.app/sitemap.xml
+Sitemap: https://edusync.ph/sitemap.xml

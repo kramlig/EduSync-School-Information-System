@@ -19,13 +19,13 @@ import { test, expect, Page } from '@playwright/test';
  * ✓ TC010: Console Errors Check
  * 
  * Test Environment: PRODUCTION
- * URL: https://edusync-sis.web.app
+ * URL: https://edusync.ph
  * Test Account: pedro.reyes@edusync.edu / teacher123
  */
 
 test.describe('Teachers View - Comprehensive Production Audit', () => {
   
-  const PRODUCTION_URL = 'https://edusync-sis.web.app';
+  const PRODUCTION_URL = 'https://edusync.ph';
   const TEST_EMAIL = 'pedro.reyes@edusync.edu';
   const TEST_PASSWORD = 'teacher123';
   

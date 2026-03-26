@@ -1,6 +1,6 @@
 [
   {
-    "origin": ["https://edusync-sis.web.app"],
+    "origin": ["https://edusync.ph", "https://edusync-sis.web.app"],
     "method": ["GET", "PUT", "POST", "DELETE"],
     "responseHeader": ["Content-Type", "Firebase-Storage-Resumable-Upload-Protocol"],
     "maxAgeSeconds": 3600

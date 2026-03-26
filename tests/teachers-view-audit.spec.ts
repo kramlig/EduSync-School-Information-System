@@ -18,14 +18,14 @@ import { test, expect } from '@playwright/test';
  * 9. Error Handling
  * 10. Performance Metrics
  * 
- * Test Environment: PRODUCTION (https://edusync-sis.web.app)
+ * Test Environment: PRODUCTION (https://edusync.ph)
  * Test Account: pedro.reyes@edusync.edu / teacher123
  */
 
 test.describe('Teachers View - Production Audit', () => {
   
   // Constants
-  const PRODUCTION_URL = 'https://edusync-sis.web.app';
+  const PRODUCTION_URL = 'https://edusync.ph';
   const TEST_EMAIL = 'pedro.reyes@edusync.edu';
   const TEST_PASSWORD = 'teacher123';
   
