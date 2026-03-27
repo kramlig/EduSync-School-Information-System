@@ -135,6 +135,7 @@ const UserManagementPanel = lazy(() => import('./src/components/admin/UserManage
 
 // Marketing components
 const LandingPage = lazy(() => import('./src/components/marketing/LandingPage'));
+const LandingPageV2 = lazy(() => import('./src/components/marketing/LandingPageV2'));
 const TeachersLandingPage = lazy(() => import('./src/components/marketing/TeachersLandingPage'));
 const PrivacyPolicy = lazy(() => import('./src/components/marketing/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('./src/components/marketing/TermsOfService'));
@@ -640,9 +641,10 @@ const App: React.FC = () => {
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900">
           <Suspense fallback={<FullScreenLoader message="Loading..." />}>
             <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/home" element={<LandingPage />} />
-              <Route path="/landing" element={<LandingPage />} />
+              <Route path="/" element={<LandingPageV2 />} />
+              <Route path="/home" element={<LandingPageV2 />} />
+              <Route path="/landing" element={<LandingPageV2 />} />
+              <Route path="/landing-v1" element={<LandingPage />} />
               <Route path="/teachers" element={<TeachersLandingPage />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />

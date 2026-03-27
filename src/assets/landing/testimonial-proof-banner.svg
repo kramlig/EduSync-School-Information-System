@@ -1,0 +1,53 @@
+<svg width="1440" height="520" viewBox="0 0 1440 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">EduSync Social Proof Banner</title>
+  <desc id="desc">Trust-oriented banner with testimonial cards and school partnership placeholders.</desc>
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="1440" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1020"/>
+      <stop offset="1" stop-color="#1F2937"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1440" height="520" fill="url(#bg3)"/>
+
+  <g transform="translate(100 70)">
+    <rect x="0" y="0" width="1240" height="380" rx="30" fill="#111827" stroke="#334155"/>
+
+    <text x="50" y="64" fill="#E2E8F0" font-size="34" font-weight="700" font-family="Segoe UI, sans-serif">Trusted by Educators Who Need Results</text>
+    <text x="50" y="96" fill="#94A3B8" font-size="18" font-family="Segoe UI, sans-serif">Use this area for authentic testimonials, school logos, and measured outcomes.</text>
+
+    <g transform="translate(50 128)">
+      <rect width="370" height="190" rx="18" fill="#0B1324" stroke="#334155"/>
+      <circle cx="46" cy="44" r="20" fill="#22D3EE"/>
+      <rect x="78" y="28" width="160" height="10" rx="5" fill="#E2E8F0"/>
+      <rect x="78" y="46" width="110" height="8" rx="4" fill="#94A3B8"/>
+      <rect x="24" y="84" width="322" height="10" rx="5" fill="#CBD5E1" fill-opacity="0.92"/>
+      <rect x="24" y="104" width="332" height="10" rx="5" fill="#CBD5E1" fill-opacity="0.82"/>
+      <rect x="24" y="124" width="278" height="10" rx="5" fill="#CBD5E1" fill-opacity="0.7"/>
+      <rect x="24" y="152" width="160" height="14" rx="7" fill="#10B981" fill-opacity="0.3"/>
+      <text x="34" y="164" fill="#6EE7B7" font-size="12" font-family="Segoe UI, sans-serif">Saved 2.5 hours daily</text>
+    </g>
+
+    <g transform="translate(435 128)">
+      <rect width="370" height="190" rx="18" fill="#0B1324" stroke="#334155"/>
+      <circle cx="46" cy="44" r="20" fill="#F59E0B"/>
+      <rect x="78" y="28" width="160" height="10" rx="5" fill="#E2E8F0"/>
+      <rect x="78" y="46" width="138" height="8" rx="4" fill="#94A3B8"/>
+      <rect x="24" y="84" width="324" height="10" rx="5" fill="#CBD5E1" fill-opacity="0.92"/>
+      <rect x="24" y="104" width="312" height="10" rx="5" fill="#CBD5E1" fill-opacity="0.82"/>
+      <rect x="24" y="124" width="252" height="10" rx="5" fill="#CBD5E1" fill-opacity="0.7"/>
+      <rect x="24" y="152" width="176" height="14" rx="7" fill="#22D3EE" fill-opacity="0.3"/>
+      <text x="34" y="164" fill="#67E8F9" font-size="12" font-family="Segoe UI, sans-serif">Forms generated in minutes</text>
+    </g>
+
+    <g transform="translate(820 128)">
+      <rect width="370" height="190" rx="18" fill="#0B1324" stroke="#334155"/>
+      <rect x="26" y="28" width="318" height="46" rx="10" fill="#172554"/>
+      <rect x="26" y="86" width="318" height="46" rx="10" fill="#052E2B"/>
+      <rect x="26" y="144" width="318" height="26" rx="10" fill="#3F1D2E"/>
+      <text x="36" y="56" fill="#BFDBFE" font-size="14" font-family="Segoe UI, sans-serif">School Partner Logos</text>
+      <text x="36" y="114" fill="#A7F3D0" font-size="14" font-family="Segoe UI, sans-serif">Compliance and Reliability Badges</text>
+      <text x="36" y="162" fill="#F9A8D4" font-size="14" font-family="Segoe UI, sans-serif">Outcome Metrics Strip</text>
+    </g>
+  </g>
+</svg>

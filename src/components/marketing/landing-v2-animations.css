@@ -1,0 +1,61 @@
+.lpv2-reveal {
+  opacity: 0;
+  transform: translateY(20px) scale(0.985);
+  transition: opacity 560ms ease, transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.lpv2-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.lpv2-stagger > * {
+  transition-delay: 0ms;
+}
+
+.lpv2-stagger > *:nth-child(1) { transition-delay: 40ms; }
+.lpv2-stagger > *:nth-child(2) { transition-delay: 90ms; }
+.lpv2-stagger > *:nth-child(3) { transition-delay: 140ms; }
+.lpv2-stagger > *:nth-child(4) { transition-delay: 190ms; }
+.lpv2-stagger > *:nth-child(5) { transition-delay: 240ms; }
+.lpv2-stagger > *:nth-child(6) { transition-delay: 290ms; }
+.lpv2-stagger > *:nth-child(7) { transition-delay: 340ms; }
+.lpv2-stagger > *:nth-child(8) { transition-delay: 390ms; }
+
+.lpv2-image-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.lpv2-image-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.02) 0%, rgba(2, 6, 23, 0.26) 100%);
+  pointer-events: none;
+}
+
+@media (max-width: 767px) {
+  .lpv2-image-hero {
+    min-height: 220px;
+    object-fit: cover;
+    object-position: center;
+  }
+
+  .lpv2-image-strip,
+  .lpv2-image-proof {
+    min-height: 160px;
+    object-fit: cover;
+    object-position: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lpv2-reveal,
+  .lpv2-reveal.is-visible {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
