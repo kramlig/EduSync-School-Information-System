@@ -1,0 +1,96 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">EduSync Personal Workspace Hero</title>
+  <desc id="desc">Abstract dashboard-inspired hero image for teacher-focused personal workspace.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1440" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1020"/>
+      <stop offset="0.5" stop-color="#0A1E2E"/>
+      <stop offset="1" stop-color="#102B1D"/>
+    </linearGradient>
+    <linearGradient id="cardA" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#10B981"/>
+    </linearGradient>
+    <linearGradient id="cardB" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#F59E0B"/>
+      <stop offset="1" stop-color="#FB7185"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="24" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="900" fill="url(#bg)"/>
+
+  <circle cx="180" cy="120" r="170" fill="#06B6D4" fill-opacity="0.18" filter="url(#glow)"/>
+  <circle cx="1260" cy="170" r="190" fill="#FB7185" fill-opacity="0.16" filter="url(#glow)"/>
+  <circle cx="1180" cy="760" r="220" fill="#34D399" fill-opacity="0.12" filter="url(#glow)"/>
+
+  <g opacity="0.22" stroke="#7DD3FC" stroke-width="1">
+    <path d="M0 750C280 700 420 840 720 780C1020 720 1120 820 1440 760"/>
+    <path d="M0 790C260 740 440 900 720 840C1000 780 1180 900 1440 830"/>
+    <path d="M0 710C220 660 420 780 720 720C1020 660 1240 760 1440 700"/>
+  </g>
+
+  <g transform="translate(220 165)">
+    <rect x="0" y="0" width="1000" height="570" rx="30" fill="#0F172A" fill-opacity="0.85" stroke="#94A3B8" stroke-opacity="0.24"/>
+    <rect x="0" y="0" width="1000" height="56" rx="30" fill="#111827"/>
+    <circle cx="30" cy="28" r="6" fill="#F87171"/>
+    <circle cx="50" cy="28" r="6" fill="#FBBF24"/>
+    <circle cx="70" cy="28" r="6" fill="#34D399"/>
+    <rect x="400" y="17" width="240" height="22" rx="11" fill="#1E293B"/>
+
+    <rect x="24" y="76" width="128" height="474" rx="18" fill="#0B1220" stroke="#334155"/>
+    <rect x="42" y="98" width="92" height="42" rx="12" fill="url(#cardA)"/>
+    <rect x="42" y="154" width="92" height="42" rx="12" fill="#1E293B"/>
+    <rect x="42" y="210" width="92" height="42" rx="12" fill="#1E293B"/>
+    <rect x="42" y="266" width="92" height="42" rx="12" fill="#1E293B"/>
+
+    <g transform="translate(176 92)">
+      <rect width="796" height="196" rx="18" fill="#0B1324" stroke="#334155"/>
+      <rect x="24" y="24" width="180" height="16" rx="8" fill="#CBD5E1" fill-opacity="0.66"/>
+      <rect x="24" y="48" width="230" height="12" rx="6" fill="#64748B"/>
+
+      <rect x="24" y="84" width="160" height="86" rx="12" fill="#072C3A" stroke="#0891B2"/>
+      <text x="36" y="108" fill="#A5F3FC" font-size="13" font-family="Segoe UI, sans-serif">Attendance</text>
+      <text x="36" y="144" fill="#67E8F9" font-size="30" font-weight="700" font-family="Segoe UI, sans-serif">96.1%</text>
+
+      <rect x="200" y="84" width="160" height="86" rx="12" fill="#052B22" stroke="#10B981"/>
+      <text x="212" y="108" fill="#A7F3D0" font-size="13" font-family="Segoe UI, sans-serif">Forms Ready</text>
+      <text x="212" y="144" fill="#6EE7B7" font-size="30" font-weight="700" font-family="Segoe UI, sans-serif">8</text>
+
+      <rect x="376" y="84" width="160" height="86" rx="12" fill="#2A1A05" stroke="#F59E0B"/>
+      <text x="388" y="108" fill="#FCD34D" font-size="13" font-family="Segoe UI, sans-serif">Pending</text>
+      <text x="388" y="144" fill="#FBBF24" font-size="30" font-weight="700" font-family="Segoe UI, sans-serif">12</text>
+
+      <rect x="552" y="84" width="220" height="86" rx="12" fill="#2A0F18" stroke="#FB7185"/>
+      <text x="564" y="108" fill="#FDA4AF" font-size="13" font-family="Segoe UI, sans-serif">Class Record</text>
+      <text x="564" y="144" fill="#FB7185" font-size="30" font-weight="700" font-family="Segoe UI, sans-serif">94%</text>
+    </g>
+
+    <g transform="translate(176 304)">
+      <rect width="796" height="246" rx="18" fill="#0B1324" stroke="#334155"/>
+      <rect x="22" y="20" width="196" height="14" rx="7" fill="#CBD5E1" fill-opacity="0.66"/>
+      <rect x="22" y="44" width="260" height="10" rx="5" fill="#64748B"/>
+
+      <g transform="translate(28 82)">
+        <rect width="500" height="136" rx="14" fill="#0B162E" stroke="#1D4ED8" stroke-opacity="0.5"/>
+        <polyline points="20,104 90,82 160,92 230,60 300,66 370,32 440,52" stroke="#22D3EE" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="440" cy="52" r="6" fill="#22D3EE"/>
+      </g>
+
+      <g transform="translate(544 82)">
+        <rect width="224" height="136" rx="14" fill="#101C3A" stroke="#334155"/>
+        <rect x="14" y="14" width="190" height="12" rx="6" fill="#A5B4FC" fill-opacity="0.75"/>
+        <rect x="14" y="40" width="166" height="9" rx="4.5" fill="#64748B"/>
+        <rect x="14" y="62" width="180" height="9" rx="4.5" fill="#64748B"/>
+        <rect x="14" y="84" width="152" height="9" rx="4.5" fill="#64748B"/>
+        <rect x="14" y="106" width="94" height="9" rx="4.5" fill="url(#cardB)"/>
+      </g>
+    </g>
+  </g>
+</svg>
