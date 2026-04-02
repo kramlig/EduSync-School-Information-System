@@ -185,8 +185,20 @@ const PersonalSignupScreen: React.FC<Props> = ({ onLogin }) => {
       setError('School name is required.');
       return;
     }
+    if (schoolName.trim().length < 5) {
+      setError('School name is too short. Please enter the full school name.');
+      return;
+    }
+    if (schoolIdNumber.trim() && !/^\d{6}$/.test(schoolIdNumber.trim())) {
+      setError('School ID must be a 6-digit DepEd school ID (e.g. 301234).');
+      return;
+    }
     if (!division.trim()) {
       setError('Division is required.');
+      return;
+    }
+    if (!/^division\s+of\s+/i.test(division.trim()) && division.trim().length < 8) {
+      setError('Please enter a valid DepEd division (e.g. "Division of Zamboanga City").');
       return;
     }
     if (!region) {
@@ -432,6 +444,8 @@ const PersonalSignupScreen: React.FC<Props> = ({ onLogin }) => {
                 id="schoolId" type="text"
                 value={schoolIdNumber} onChange={(e) => setSchoolIdNumber(e.target.value)}
                 placeholder="e.g. 301234"
+                maxLength={6}
+                pattern="\d{6}"
                 className={inputClass}
               />
             </div>

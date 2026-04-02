@@ -102,8 +102,9 @@ function transformLearningAreaToRow(area: Partial<LearningArea>): Partial<Learni
 export async function fetchLearningAreas(schoolId: string): Promise<LearningArea[]> {
   const { data, error } = await supabase
     .from('learning_areas')
-    .select('*')
+    .select('id, school_id, code, name, credits, category, grade_levels, is_active, department, display_order, k_to_twelve_code, semester_based, semester, track_required, is_composite, components, prerequisite_id, description, hours_per_week')
     .eq('school_id', schoolId)
+    .is('deleted_at', null)
     .order('display_order', { ascending: true })
     .order('name', { ascending: true });
 
@@ -112,7 +113,7 @@ export async function fetchLearningAreas(schoolId: string): Promise<LearningArea
     throw error;
   }
 
-  return (data || []).map(transformRowToLearningArea);
+  return (data || []).map((row: any) => transformRowToLearningArea(row));
 }
 
 /**
@@ -121,7 +122,7 @@ export async function fetchLearningAreas(schoolId: string): Promise<LearningArea
 export async function fetchLearningAreaById(areaId: string): Promise<LearningArea | null> {
   const { data, error } = await supabase
     .from('learning_areas')
-    .select('*')
+    .select('id, school_id, code, name, credits, category, grade_levels, is_active, department, display_order, k_to_twelve_code, semester_based, semester, track_required, is_composite, components, prerequisite_id, description, hours_per_week')
     .eq('id', areaId)
     .single();
 
@@ -133,7 +134,7 @@ export async function fetchLearningAreaById(areaId: string): Promise<LearningAre
     throw error;
   }
 
-  return transformRowToLearningArea(data);
+  return transformRowToLearningArea(data as any);
 }
 
 /**

@@ -19,7 +19,6 @@ import {
   SparklesIcon,
   ArrowRightIcon,
   DevicePhoneMobileIcon,
-  CloudIcon,
   LockClosedIcon,
 } from '@heroicons/react/24/outline';
 

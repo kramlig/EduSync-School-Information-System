@@ -6,7 +6,6 @@
  */
 
 const axios = require('axios');
-const functions = require('firebase-functions');
 
 /**
  * Send SMS via Semaphore API
@@ -18,11 +17,10 @@ const functions = require('firebase-functions');
  */
 async function sendSMS(phoneNumber, message, options = {}) {
   // Get API key from environment or Firebase config
-  const apiKey = process.env.SEMAPHORE_API_KEY || 
-                 functions.config()?.semaphore?.api_key;
+  const apiKey = process.env.SEMAPHORE_API_KEY;
   
   if (!apiKey) {
-    console.error('Semaphore API key not configured');
+    console.error('Semaphore API key not configured. Set SEMAPHORE_API_KEY in functions/.env');
     throw new Error('SMS service not configured');
   }
   
@@ -112,8 +110,7 @@ function formatPhilippineNumber(phoneNumber) {
  * @returns {Promise<object>} Account balance and credit info
  */
 async function checkSMSBalance() {
-  const apiKey = process.env.SEMAPHORE_API_KEY || 
-                 functions.config()?.semaphore?.api_key;
+  const apiKey = process.env.SEMAPHORE_API_KEY;
   
   if (!apiKey) {
     throw new Error('SMS service not configured');

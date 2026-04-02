@@ -10,6 +10,7 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import { getAuth } from 'firebase/auth';
 import { useSchoolContext } from './SchoolContext';
 import {
   getUserSubscription,
@@ -91,6 +92,17 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
         if (!firebaseUid) {
           // Institutional user — no personal workspace
+          setWorkspace(null);
+          setSubscription(null);
+          setLoading(false);
+          return;
+        }
+
+        // Verify localStorage UID matches the actual Firebase Auth user
+        // to prevent workspace hijacking via localStorage tampering
+        const authUser = getAuth().currentUser;
+        if (!authUser || authUser.uid !== firebaseUid) {
+          console.warn('[WorkspaceContext] Firebase UID mismatch — session may be stale or tampered');
           setWorkspace(null);
           setSubscription(null);
           setLoading(false);

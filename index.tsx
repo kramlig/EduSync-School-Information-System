@@ -20,6 +20,9 @@ window.addEventListener('unhandledrejection', (event) => {
   // console.error('🚨 Unhandled promise rejection:', event.reason);
 });
 
+// Clear stale-chunk reload flag on successful page load
+sessionStorage.removeItem('chunk_reload');
+
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");
@@ -40,8 +43,19 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // console.error('🚨 React Error Boundary caught error:', error);
-    // console.error('Error info:', errorInfo);
+    // Auto-reload on chunk load failures (stale deployment)
+    if (
+      error.message?.includes('Failed to fetch dynamically imported module') ||
+      error.message?.includes('Loading chunk') ||
+      error.message?.includes('Loading CSS chunk')
+    ) {
+      const hasReloaded = sessionStorage.getItem('chunk_reload');
+      if (!hasReloaded) {
+        sessionStorage.setItem('chunk_reload', '1');
+        window.location.reload();
+        return;
+      }
+    }
   }
 
   render() {

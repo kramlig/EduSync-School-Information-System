@@ -89,7 +89,7 @@ export function useAttendancePostgreSQL(options: UseAttendanceOptions) {
         // Build query
         let query = supabase
           .from('attendance_records')
-          .select('*')
+          .select('id, school_id, student_id, section_id, date, status, remarks, recorded_by')
           .eq('school_id', options.schoolId)
           .order('date', { ascending: false });
 

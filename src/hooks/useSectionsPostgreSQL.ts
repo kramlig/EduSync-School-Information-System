@@ -73,7 +73,7 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
       let query = supabase.from('sections').select(
         includeAdviser 
           ? 'id, school_id, name, grade_level, adviser_id, school_year, capacity, room_number, created_at, updated_at, teachers(name)'
-          : '*'
+          : 'id, school_id, name, grade_level, adviser_id, school_year, capacity, room_number, created_at, updated_at'
       );
 
       // Apply filters
@@ -175,33 +175,31 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
   useEffect(() => {
     let channel: RealtimeChannel | null = null;
 
-    const setupRealtimeSubscription = () => {
-      channel = supabase
-        .channel('sections-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
-            schema: 'public',
-            table: 'sections'
-            // Don't filter here - we'll filter in fetchSections instead
-          },
-          (payload: any) => {
-            // Refetch to ensure data consistency
-            fetchSections();
-          }
-        )
-        .subscribe();
-    };
+    // Only subscribe if we have a valid schoolId to filter by
+    if (!schoolId || schoolId === 'default') return;
 
-    setupRealtimeSubscription();
+    channel = supabase
+      .channel(`sections-changes-${schoolId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'sections',
+          filter: `school_id=eq.${schoolId}`
+        },
+        () => {
+          fetchSections();
+        }
+      )
+      .subscribe();
 
     return () => {
       if (channel) {
         supabase.removeChannel(channel);
       }
     };
-  }, [fetchSections]); // Only depend on fetchSections, not gradeLevel/schoolId/schoolYear
+  }, [fetchSections, schoolId]);
 
   // Create section
   const createSection = useCallback(async (sectionData: Partial<Section>): Promise<Section> => {
@@ -261,7 +259,7 @@ export function useSectionsPostgreSQL(options: UseSectionsOptions = {}): UseSect
       if (updates.capacity !== undefined) updateData.capacity = updates.capacity;
       if (updates.room !== undefined) updateData.room_number = updates.room || null; // Handle empty string
 
-      const { data, error: updateError } = await supabase
+      const { error: updateError } = await supabase
         .from('sections')
         .update(updateData)
         .eq('id', id)

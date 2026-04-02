@@ -44,12 +44,25 @@ const PersonalStudentListWrapper: React.FC<Props> = ({
       student: Omit<Student, 'id' | 'enrollmentDate'>
     ): Promise<{ success: boolean; message?: string }> => {
       try {
+        // Parse name into first/last if not explicitly provided
+        let firstName = student.firstName || '';
+        let lastName = student.lastName || '';
+        const fullName = student.name || '';
+        if (!firstName && !lastName && fullName) {
+          const parts = fullName.trim().split(/\s+/);
+          if (parts.length === 1) {
+            firstName = parts[0];
+          } else {
+            lastName = parts[parts.length - 1];
+            firstName = parts.slice(0, -1).join(' ');
+          }
+        }
         const { error } = await supabase.from('students').insert({
           school_id: schoolId,
-          first_name: student.firstName || '',
-          last_name: student.lastName || '',
+          first_name: firstName,
+          last_name: lastName,
           middle_name: student.middleName || null,
-          name: student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+          name: fullName || `${firstName} ${lastName}`.trim(),
           lrn: student.lrn || null,
           gender: student.sex || null,
           email: student.email || null,
@@ -130,7 +143,9 @@ const PersonalStudentListWrapper: React.FC<Props> = ({
     [teacherId, schoolId, userName]
   );
 
-  return <StudentList schoolData={schoolData} session={session} />;
+  const pMaxStudents = _tier === 'free' ? 50 : 99999;
+
+  return <StudentList schoolData={schoolData} session={session} isPersonalWorkspace={true} tier={_tier} maxStudents={pMaxStudents} />;
 };
 
 export default PersonalStudentListWrapper;

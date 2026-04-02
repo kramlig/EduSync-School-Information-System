@@ -17,6 +17,7 @@ import { useCoreValuesPostgreSQL } from '../src/hooks/useCoreValuesPostgreSQL';
 import { useSubstituteAssignmentsPostgreSQL } from '../src/hooks/useSubstituteAssignmentsPostgreSQL';
 import { useLearningAreasPostgreSQL } from '../src/hooks/useLearningAreasPostgreSQL';
 import SchoolSF1Import from '../src/components/students/SchoolSF1Import';
+import SimpleCSVImport from '../src/components/students/SimpleCSVImport';
 
 interface StudentListProps {
   schoolData: SchoolDataState & { 
@@ -33,9 +34,12 @@ interface StudentListProps {
     isSearching: boolean; // Added search state
   };
   session: { user: AuthUser | StudentUser, type: 'staff' | 'student' };
+  isPersonalWorkspace?: boolean;
+  tier?: string;
+  maxStudents?: number;
 }
 
-const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
+const StudentList: React.FC<StudentListProps> = ({ schoolData, session, isPersonalWorkspace = false, tier: _tier, maxStudents = 99999 }) => {
   const authUser = session.user as AuthUser;
   const schoolId = authUser.schoolId || '';
   
@@ -98,6 +102,9 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
   
   // SF1 Import state
   const [isSF1ImportOpen, setIsSF1ImportOpen] = useState(false);
+  
+  // Simple CSV Import state (personal workspaces)
+  const [isCSVImportOpen, setIsCSVImportOpen] = useState(false);
   
   // Show toast helper
   const showToast = (type: 'success' | 'error', message: string) => {
@@ -235,8 +242,8 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
         if (result.success) {
           setNewStudent({ name: '', email: '' });
           setIsAddModalOpen(false);
-          // Refresh paginated data
-          schoolData.refresh();
+          // Refresh student list from PostgreSQL (clears cache)
+          await refetchStudents();
         } else {
           setAddStudentError(result.message || 'An unknown error occurred.');
         }
@@ -441,7 +448,8 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     if (gradeFilter !== 'all') {
       filtered = filtered.filter(s => {
         const section = sections.find(sec => sec.id === s.sectionId);
-        return section && section.gradeLevel.toString() === gradeFilter;
+        const grade = section ? section.gradeLevel : s.gradeLevel;
+        return grade != null && grade.toString() === gradeFilter;
       });
     }
 
@@ -457,7 +465,9 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
       } else if (sortBy === 'grade') {
         const sectionA = sections.find(s => s.id === a.sectionId);
         const sectionB = sections.find(s => s.id === b.sectionId);
-        return (sectionA?.gradeLevel || 0) - (sectionB?.gradeLevel || 0);
+        const gradeA = Number(sectionA?.gradeLevel ?? a.gradeLevel ?? 0);
+        const gradeB = Number(sectionB?.gradeLevel ?? b.gradeLevel ?? 0);
+        return gradeA - gradeB;
       }
       return 0;
     });
@@ -492,7 +502,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
 
   const canManageStudents = ['admin', 'registrar'].includes(authUser.role);
 
-  // Get unique grade levels for filter - ONLY from authorized sections
+  // Get unique grade levels for filter - from sections AND student records
   const availableGrades = useMemo(() => {
     // Filter sections based on authorization
     let authorizedSections = sections;
@@ -501,8 +511,12 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
     }
     
     const grades = new Set(authorizedSections.map(s => s.gradeLevel.toString()));
+    // Also include grade levels from students without sections (e.g. imported via SF1)
+    visibleStudents.forEach(s => {
+      if (s.gradeLevel != null && !s.sectionId) grades.add(s.gradeLevel.toString());
+    });
     return Array.from(grades).sort((a, b) => parseInt(a) - parseInt(b));
-  }, [sections, authorizedSectionIds]);
+  }, [sections, authorizedSectionIds, visibleStudents]);
 
   return (
     <div className="space-y-6 pb-6">
@@ -543,8 +557,22 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {/* Import from SF1 Button */}
-            {canManageStudents && (
+            {/* Personal workspace: simple CSV Import button */}
+            {isPersonalWorkspace && canManageStudents && (
+              <button
+                onClick={() => setIsCSVImportOpen(true)}
+                className="bg-white/20 backdrop-blur-sm text-white font-semibold py-2.5 px-5 rounded-lg hover:bg-white/30 transition-all flex items-center gap-2 border border-white/30"
+                title="Import students from CSV or SF1 Excel file"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Import Students
+              </button>
+            )}
+
+            {/* School workspace: Import SF1 (DepEd institutional feature) */}
+            {!isPersonalWorkspace && canManageStudents && (
               <button
                 onClick={() => setIsSF1ImportOpen(true)}
                 className="bg-white/20 backdrop-blur-sm text-white font-semibold py-2.5 px-5 rounded-lg hover:bg-white/30 transition-all flex items-center gap-2 border border-white/30"
@@ -557,25 +585,27 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
               </button>
             )}
             
-            {/* Export for LIS Button */}
-            <button
-              onClick={handleExportForLIS}
-              disabled={lisExportLoading}
-              className="bg-white/20 backdrop-blur-sm text-white font-semibold py-2.5 px-5 rounded-lg hover:bg-white/30 transition-all flex items-center gap-2 border border-white/30"
-              title="Export data for DepEd LIS Helper extension"
-            >
-              {lisExportLoading ? (
-                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : (
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-              )}
-              Export for LIS
-            </button>
+            {/* School workspace: Export for LIS (admin/registrar only) */}
+            {!isPersonalWorkspace && canManageStudents && (
+              <button
+                onClick={handleExportForLIS}
+                disabled={lisExportLoading}
+                className="bg-white/20 backdrop-blur-sm text-white font-semibold py-2.5 px-5 rounded-lg hover:bg-white/30 transition-all flex items-center gap-2 border border-white/30"
+                title="Export data for DepEd LIS Helper extension"
+              >
+                {lisExportLoading ? (
+                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                )}
+                Export for LIS
+              </button>
+            )}
             
             {canManageStudents && (
               <button
@@ -925,7 +955,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
                       </svg>
                     </div>
                     <span className="text-slate-700 dark:text-slate-300 font-medium">
-                      {section ? `Grade ${typeof section.gradeLevel === 'object' ? JSON.stringify(section.gradeLevel) : section.gradeLevel} - ${section.name}` : 'N/A'}
+                      {section ? `Grade ${typeof section.gradeLevel === 'object' ? JSON.stringify(section.gradeLevel) : section.gradeLevel} - ${section.name}` : student.gradeLevel ? `Grade ${student.gradeLevel}` : 'N/A'}
                     </span>
                   </div>
                 </td>
@@ -1105,7 +1135,7 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                       </svg>
-                      <span className="font-semibold">{section ? `Grade ${typeof section.gradeLevel === 'object' ? JSON.stringify(section.gradeLevel) : section.gradeLevel} - ${section.name}` : 'No Section'}</span>
+                      <span className="font-semibold">{section ? `Grade ${typeof section.gradeLevel === 'object' ? JSON.stringify(section.gradeLevel) : section.gradeLevel} - ${section.name}` : student.gradeLevel ? `Grade ${student.gradeLevel}` : 'No Section'}</span>
                     </div>
                   </div>
 
@@ -2195,14 +2225,27 @@ const StudentList: React.FC<StudentListProps> = ({ schoolData, session }) => {
         />
       )}
 
-      {/* SF1 Import Modal */}
-      {isSF1ImportOpen && (
+      {/* SF1 Import Modal (school workspaces only) */}
+      {isSF1ImportOpen && !isPersonalWorkspace && (
         <SchoolSF1Import
           schoolId={schoolId}
           schoolName={settings?.schoolName || 'School'}
           onClose={() => setIsSF1ImportOpen(false)}
           onImportComplete={async () => {
-            // Refresh students list after import
+            await refetchStudents();
+            showToast('success', 'Students imported successfully! List refreshed.');
+          }}
+        />
+      )}
+
+      {/* Simple CSV Import Modal (personal workspaces) */}
+      {isCSVImportOpen && isPersonalWorkspace && (
+        <SimpleCSVImport
+          schoolId={schoolId}
+          maxStudents={maxStudents}
+          currentStudentCount={students.length}
+          onClose={() => setIsCSVImportOpen(false)}
+          onImportComplete={async () => {
             await refetchStudents();
             showToast('success', 'Students imported successfully! List refreshed.');
           }}

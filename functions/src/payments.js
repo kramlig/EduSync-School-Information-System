@@ -7,6 +7,7 @@
  * - getSubscriptionStatus: Returns current subscription info
  * - cancelSubscription: Cancels active subscription
  * - getBillingHistory: Returns real payment history from payment_history table
+ * - expireOverdueSubscriptions: Scheduled daily cron to expire past-due subscriptions
  *
  * Required env vars (set in functions/.env):
  * - PAYMONGO_SECRET_KEY: PayMongo API secret key (sk_live_... or sk_test_...)
@@ -186,7 +187,7 @@ exports.createPayMongoCheckout = functions.https.onCall(async (data, context) =>
             quantity: 1,
           },
         ],
-        payment_method_types: ['gcash', 'grab_pay', 'paymaya', 'card'],
+        payment_method_types: ['card', 'gcash', 'grab_pay', 'paymaya'],
         success_url: successUrl,
         cancel_url: cancelUrl,
         metadata: {
@@ -238,14 +239,25 @@ exports.paymongoWebhook = functions.https.onRequest(async (req, res) => {
   const supabase = getSupabase();
 
   if (eventType === 'checkout_session.payment.paid') {
-    // PayMongo puts metadata on the payment object, not the checkout session
+    // PayMongo puts metadata on the payment object, not the checkout session.
+    // Track where we found metadata for debugging.
     const payments = resource?.attributes?.payments || [];
     const paymentIntent = resource?.attributes?.payment_intent;
-    const metadata = resource?.attributes?.metadata
-      || payments[0]?.attributes?.metadata
-      || paymentIntent?.attributes?.metadata;
+    let metadata = null;
+    let metadataSource = 'none';
 
-    console.log('Resolved metadata:', JSON.stringify(metadata));
+    if (resource?.attributes?.metadata?.firebase_uid) {
+      metadata = resource.attributes.metadata;
+      metadataSource = 'checkout_session';
+    } else if (payments[0]?.attributes?.metadata?.firebase_uid) {
+      metadata = payments[0].attributes.metadata;
+      metadataSource = 'payment[0]';
+    } else if (paymentIntent?.attributes?.metadata?.firebase_uid) {
+      metadata = paymentIntent.attributes.metadata;
+      metadataSource = 'payment_intent';
+    }
+
+    console.log('Resolved metadata:', JSON.stringify(metadata), 'source:', metadataSource);
 
     if (!metadata?.firebase_uid) {
       console.error('Webhook missing firebase_uid in metadata. Full event:', JSON.stringify(event));
@@ -253,13 +265,19 @@ exports.paymongoWebhook = functions.https.onRequest(async (req, res) => {
     }
 
     const uid = metadata.firebase_uid;
-    const billingCycle = metadata.billing_cycle || 'monthly';
-    const pricing = PRICING[billingCycle] || PRICING.monthly;
+
+    // Validate billing_cycle from metadata (don't blindly trust)
+    const rawCycle = metadata.billing_cycle;
+    const billingCycle = (rawCycle === 'monthly' || rawCycle === 'yearly') ? rawCycle : 'monthly';
+    const pricing = PRICING[billingCycle];
     const checkoutSessionId = event?.data?.id;
 
     // Get payment ID and method from payments array
     const paymentId = (payments.length > 0 ? payments[0]?.id : null) || resource?.id;
-    const paymentMethodType = resource?.attributes?.payment_method_used || payments[0]?.attributes?.source?.type || 'unknown';
+    const paymentMethodType = resource?.attributes?.payment_method_used
+      || payments[0]?.attributes?.source?.type
+      || payments[0]?.attributes?.payment_method_used
+      || 'card';  // Default to 'card' — avoids 'unknown' in billing history
 
     // Calculate billing period
     const now = new Date();
@@ -282,6 +300,18 @@ exports.paymongoWebhook = functions.https.onRequest(async (req, res) => {
       return res.status(200).json({ received: true, duplicate: true });
     }
 
+    // Verify user has an existing subscription record before upgrading
+    const { data: existingSub } = await supabase
+      .from('subscriptions')
+      .select('id')
+      .eq('user_id', uid)
+      .single();
+
+    if (!existingSub) {
+      console.error(`Webhook: No subscription row found for user ${uid}. Cannot upgrade orphan.`);
+      return res.status(400).send('No subscription for user');
+    }
+
     // 1. Record payment in payment_history
     const { error: historyError } = await supabase
       .from('payment_history')
@@ -298,7 +328,7 @@ exports.paymongoWebhook = functions.https.onRequest(async (req, res) => {
         payment_method_type: paymentMethodType,
         period_start: now.toISOString(),
         period_end: periodEnd.toISOString(),
-        metadata: { event_type: eventType, raw_payment_id: paymentId },
+        metadata: { event_type: eventType, raw_payment_id: paymentId, metadata_source: metadataSource },
       });
 
     if (historyError) {
@@ -482,3 +512,32 @@ exports.getBillingHistory = functions.https.onCall(async (_data, context) => {
     periodEnd: p.period_end,
   }));
 });
+
+/**
+ * Scheduled cron — runs daily at 2:00 AM UTC.
+ * Expires all pro subscriptions whose current_period_end has passed.
+ * This prevents users from keeping Pro access after expiry without
+ * relying on lazy expiry in getSubscriptionStatus.
+ */
+exports.expireOverdueSubscriptions = functions.pubsub
+  .schedule('0 2 * * *')   // daily at 02:00 UTC
+  .timeZone('Asia/Manila')
+  .onRun(async () => {
+    const supabase = getSupabase();
+    const now = new Date().toISOString();
+
+    const { data: expired, error } = await supabase
+      .from('subscriptions')
+      .update({ status: 'expired', tier: 'free', updated_at: now })
+      .eq('tier', 'pro')
+      .eq('status', 'active')
+      .lt('current_period_end', now)
+      .select('user_id');
+
+    if (error) {
+      console.error('[expireOverdueSubscriptions] Error:', error);
+      return;
+    }
+
+    console.log(`[expireOverdueSubscriptions] Expired ${expired?.length || 0} subscriptions`);
+  });

@@ -9,6 +9,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   PlusIcon,
   TrashIcon,
+  PencilSquareIcon,
   AcademicCapIcon,
   UserGroupIcon,
   BookOpenIcon,
@@ -57,6 +58,13 @@ const PersonalSections: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Edit state
+  const [editSection, setEditSection] = useState<SectionRow | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editGradeLevel, setEditGradeLevel] = useState(7);
+  const [editIsAdviser, setEditIsAdviser] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
 
   const limits = TIER_LIMITS[tier] || TIER_LIMITS.free;
   const advisorySections = sections.filter(s => s.isAdviser).length;
@@ -266,6 +274,80 @@ const PersonalSections: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
       setError(err?.message || 'Failed to create section');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleEditClick = (sec: SectionRow) => {
+    setEditSection(sec);
+    setEditName(sec.name);
+    setEditGradeLevel(sec.gradeLevel);
+    setEditIsAdviser(sec.isAdviser);
+    setError('');
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editSection) return;
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+
+    // Advisory limit check: adding adviser on a non-adviser section
+    if (editIsAdviser && !editSection.isAdviser && atAdvisoryLimit) {
+      setError(
+        tier === 'free'
+          ? 'Free tier allows 1 advisory section. Remove adviser from another section first.'
+          : tier === 'pro'
+            ? 'Pro tier allows 2 advisory sections. Remove adviser from another section first.'
+            : 'Advisory limit reached.'
+      );
+      return;
+    }
+
+    setError('');
+    setEditSaving(true);
+
+    try {
+      // Update section record
+      const { error: updateErr } = await supabase
+        .from('sections')
+        .update({
+          name: trimmed,
+          grade_level: editGradeLevel,
+          adviser_id: editIsAdviser ? teacherId : null,
+        })
+        .eq('id', editSection.id);
+
+      if (updateErr) throw updateErr;
+
+      // Handle advisory teaching_assignment row
+      if (editIsAdviser && !editSection.isAdviser) {
+        // Becoming adviser — upsert advisory assignment
+        await supabase.from('teaching_assignments').upsert({
+          school_id: schoolId,
+          teacher_id: teacherId,
+          section_id: editSection.id,
+          subject: 'Advisory',
+          grade_level: editGradeLevel,
+          is_advisory: true,
+          is_active: true,
+          school_year: editSection.schoolYear,
+        }, { onConflict: 'school_id,teacher_id,section_id,subject' });
+      } else if (!editIsAdviser && editSection.isAdviser) {
+        // Removing adviser — deactivate advisory assignment
+        await supabase
+          .from('teaching_assignments')
+          .update({ is_active: false })
+          .eq('section_id', editSection.id)
+          .eq('teacher_id', teacherId)
+          .eq('is_advisory', true);
+      }
+
+      setEditSection(null);
+      fetchSections();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update section');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -520,15 +602,101 @@ const PersonalSections: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => handleDelete(sec)}
-                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                title="Delete section"
-              >
-                <TrashIcon className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleEditClick(sec)}
+                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                  title="Edit section"
+                >
+                  <PencilSquareIcon className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(sec)}
+                  className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  title="Delete section"
+                >
+                  <TrashIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Edit Section Modal */}
+      {editSection && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Edit Section</h2>
+              <button
+                onClick={() => setEditSection(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <form onSubmit={handleUpdate} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Grade Level</label>
+                  <select
+                    value={editGradeLevel}
+                    onChange={(e) => setEditGradeLevel(Number(e.target.value))}
+                    className={inputClass}
+                  >
+                    {GRADE_LEVELS.map((gl) => (
+                      <option key={gl} value={gl}>Grade {gl}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Section Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editIsAdviser}
+                  onChange={(e) => {
+                    if (e.target.checked && !editSection.isAdviser && atAdvisoryLimit) {
+                      setError('Advisory limit reached. Remove adviser from another section first.');
+                      return;
+                    }
+                    setError('');
+                    setEditIsAdviser(e.target.checked);
+                  }}
+                  className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-sm text-slate-700 dark:text-slate-300">I'm the adviser of this section</span>
+              </label>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setEditSection(null)}
+                  className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50"
+                >
+                  {editSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

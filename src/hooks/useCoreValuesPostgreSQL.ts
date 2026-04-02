@@ -44,7 +44,7 @@ export function useCoreValuesPostgreSQL(
 
         // Fetch core values - GLOBAL (no school_id filter needed)
         // Core values are shared across all schools (DepEd standard)
-        const cvQuery = supabase.from('core_values').select('*').order('display_order');
+        const cvQuery = supabase.from('core_values').select('id, code, name, description, indicators, display_order, created_at, updated_at').order('display_order');
         // NOTE: Removed school_id filter - core values are now global
 
         const { data: cvData, error: cvError } = await cvQuery;

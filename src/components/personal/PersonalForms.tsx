@@ -16,6 +16,7 @@ import {
   ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline';
 import { supabase } from '../../lib/supabase';
+import { canDownloadAuthenticated, recordDownloadAuthenticated } from '../../services/tools/rateLimiter';
 import { generateSF5Standalone } from '../../services/tools/sf5StandaloneGenerator';
 import { generateSF9Standalone } from '../../services/tools/sf9StandaloneGenerator';
 import type { SF9AttendanceRecord, SF9CoreValueGrade, SF9HomeroomGuidanceGrades } from '../../services/tools/sf9StandaloneGenerator';
@@ -33,8 +34,21 @@ interface StudentRow {
   first_name: string;
   last_name: string;
   middle_name: string | null;
+  name: string | null;
   lrn: string | null;
   gender: string | null;
+}
+
+// Parse name from first_name/last_name or fallback to name field
+function parseName(s: StudentRow): { firstName: string; lastName: string } {
+  if (s.first_name || s.last_name) {
+    return { firstName: s.first_name || '', lastName: s.last_name || '' };
+  }
+  const full = (s.name || '').trim();
+  if (!full) return { firstName: '', lastName: '' };
+  const parts = full.split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+  return { firstName: parts.slice(0, -1).join(' '), lastName: parts[parts.length - 1] };
 }
 
 interface GradeRow {
@@ -113,7 +127,7 @@ const PersonalForms: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
   const [grades, setGrades] = useState<GradeRow[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
   const [fullYearAttendance, setFullYearAttendance] = useState<AttendanceRow[]>([]);
-  const [coreValues, setCoreValues] = useState<CoreValueRow[]>([]);
+  const [, setCoreValues] = useState<CoreValueRow[]>([]);
   const [coreValueGrades, setCoreValueGrades] = useState<CoreValueGradeRow[]>([]);
   const [hgGrades, setHgGrades] = useState<HGGradeRow[]>([]);
   const [school, setSchool] = useState<SchoolRow | null>(null);
@@ -213,7 +227,7 @@ const PersonalForms: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
       // 1) Fetch students for the selected section
       const studentsRes = await supabase
         .from('students')
-        .select('id, first_name, last_name, middle_name, lrn, gender')
+        .select('id, first_name, last_name, middle_name, name, lrn, gender')
         .eq('school_id', schoolId)
         .eq('section_id', selectedSectionId)
         .is('deleted_at', null)
@@ -322,14 +336,13 @@ const PersonalForms: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
 
   // ─── Transform & Generate ────────────────────────────────
 
-  // Track form generation in usage_tracking (fire-and-forget)
+  // Track and enforce form download limits via usage_tracking
   const trackForm = (formType: string) => {
-    supabase.from('usage_tracking').insert({
-      user_id: teacherId || null,
-      action: 'form_download',
-      form_type: formType,
-      metadata: { school_id: schoolId, section_id: selectedSectionId, student_count: students.length },
-    }).then(() => {});
+    recordDownloadAuthenticated(teacherId, formType, {
+      school_id: schoolId,
+      section_id: selectedSectionId,
+      student_count: students.length,
+    }).catch(() => {});
   };
 
   const schoolInfo = useMemo(() => ({
@@ -352,6 +365,15 @@ const PersonalForms: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
     setError('');
     setSuccess('');
 
+    // Server-side rate limit check for free-tier users
+    const maxDownloads = tier === 'pro' || tier === 'school' ? 99999 : 10;
+    const { allowed } = await canDownloadAuthenticated(teacherId, maxDownloads);
+    if (!allowed) {
+      setError(`Daily download limit reached (${maxDownloads}/day). Upgrade to Pro for unlimited downloads.`);
+      setGenerating(null);
+      return;
+    }
+
     try {
       if (formType === 'sf5') {
         if (!hasGrades) {
@@ -365,11 +387,12 @@ const PersonalForms: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
           const studentGrades = grades.filter(g => g.student_id === s.id);
           const finals = studentGrades.map(g => g.final_grade).filter((v): v is number => v !== null);
           const generalAverage = finals.length > 0 ? finals.reduce((a, b) => a + b, 0) / finals.length : 0;
+          const nameParts = parseName(s);
 
           return {
             lrn: s.lrn || '',
-            lastName: s.last_name,
-            firstName: s.first_name,
+            lastName: nameParts.lastName,
+            firstName: nameParts.firstName,
             middleName: s.middle_name || '',
             gender: s.gender || '',
             subjects: Object.fromEntries(studentGrades
@@ -402,11 +425,12 @@ const PersonalForms: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
         const sf9Rows: SF9ParsedRow[] = [];
         for (const s of students) {
           const studentGrades = grades.filter(g => g.student_id === s.id && g.learning_area);
+          const nameParts = parseName(s);
           for (const g of studentGrades) {
             sf9Rows.push({
               lrn: s.lrn || '',
-              lastName: s.last_name,
-              firstName: s.first_name,
+              lastName: nameParts.lastName,
+              firstName: nameParts.firstName,
               middleName: s.middle_name || '',
               gender: s.gender || '',
               subject: (g.learning_area as { name: string }).name,
@@ -427,7 +451,8 @@ const PersonalForms: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
         // Build per-student attendance map (keyed by LRN or lastName-firstName)
         const sf9Attendance: Record<string, SF9AttendanceRecord> = {};
         for (const s of students) {
-          const key = s.lrn || `${s.last_name}-${s.first_name}`;
+          const np = parseName(s);
+          const key = s.lrn || `${np.lastName}-${np.firstName}`;
           const records = fullYearAttendance.filter(a => a.student_id === s.id);
           const dailyStatus: Record<string, string> = {};
           for (const r of records) {
@@ -441,7 +466,8 @@ const PersonalForms: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
         // Build per-student core value grades map
         const sf9CoreValueGrades: Record<string, SF9CoreValueGrade[]> = {};
         for (const s of students) {
-          const key = s.lrn || `${s.last_name}-${s.first_name}`;
+          const np = parseName(s);
+          const key = s.lrn || `${np.lastName}-${np.firstName}`;
           const studentCvGrades = coreValueGrades.filter(g => g.student_id === s.id);
           if (studentCvGrades.length > 0) {
             sf9CoreValueGrades[key] = studentCvGrades.map(g => ({
@@ -458,7 +484,8 @@ const PersonalForms: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
         // Build per-student homeroom guidance grades map
         const sf9HomeroomGuidance: Record<string, SF9HomeroomGuidanceGrades> = {};
         for (const s of students) {
-          const key = s.lrn || `${s.last_name}-${s.first_name}`;
+          const np = parseName(s);
+          const key = s.lrn || `${np.lastName}-${np.firstName}`;
           const hg = hgGrades.find(g => g.student_id === s.id);
           if (hg) {
             sf9HomeroomGuidance[key] = {
@@ -494,10 +521,11 @@ const PersonalForms: React.FC<Props> = ({ schoolId, teacherId, tier }) => {
             // Convert status to short form: Present→P, Absent→A, Late→L, Excused→E
             attendanceMap[r.date] = r.status.charAt(0).toUpperCase();
           }
+          const nameParts = parseName(s);
           return {
             lrn: s.lrn || '',
-            lastName: s.last_name,
-            firstName: s.first_name,
+            lastName: nameParts.lastName,
+            firstName: nameParts.firstName,
             middleName: s.middle_name || '',
             gender: s.gender || '',
             attendance: attendanceMap,

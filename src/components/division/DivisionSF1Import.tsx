@@ -12,7 +12,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { useDivisionContext } from '../../contexts/DivisionContext';
-import { parseSF1, type SF1ParseResult } from '../../services/sf1Parser';
+import { parseSF1File, type SF1ParseResult } from '../../services/sf1Parser';
 import { 
   previewSF1Import, 
   importSF1, 
@@ -128,8 +128,8 @@ const DivisionSF1Import: React.FC = () => {
     setState(prev => ({ ...prev, error: null }));
 
     // Validate file type
-    if (!file.name.endsWith('.csv')) {
-      setState(prev => ({ ...prev, error: 'Please select a CSV file' }));
+    if (!/\.(csv|xlsx?)$/i.test(file.name)) {
+      setState(prev => ({ ...prev, error: 'Please select an Excel (.xls, .xlsx) or CSV file' }));
       return;
     }
 
@@ -140,11 +140,16 @@ const DivisionSF1Import: React.FC = () => {
     }
 
     try {
-      // Read file content
-      const content = await file.text();
-      
-      // Parse CSV
-      const parseResult = parseSF1(content);
+      // Parse file (Excel or CSV)
+      const isExcel = /\.xlsx?$/i.test(file.name);
+      let parseResult: SF1ParseResult;
+      if (isExcel) {
+        const buffer = await file.arrayBuffer();
+        parseResult = parseSF1File({ name: file.name, buffer });
+      } else {
+        const content = await file.text();
+        parseResult = parseSF1File({ name: file.name, text: content });
+      }
       
       if (!parseResult.success) {
         setState(prev => ({
@@ -262,23 +267,23 @@ const DivisionSF1Import: React.FC = () => {
       >
         <UploadIcon className="w-16 h-16 mx-auto text-slate-400 mb-4" />
         <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-2">
-          Upload SF1 CSV File
+          Upload SF1 File
         </h3>
         <p className="text-slate-500 dark:text-slate-400 mb-4">
-          Drag and drop your DepEd LIS SF1 export file here, or click to browse
+          Drag and drop your DepEd SF1 file here (.xls, .xlsx, or .csv)
         </p>
         <label className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-colors">
           <DocumentIcon className="w-5 h-5 mr-2" />
           Select File
           <input
             type="file"
-            accept=".csv"
+            accept=".xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
             onChange={handleFileInput}
             className="hidden"
           />
         </label>
         <p className="text-xs text-slate-400 dark:text-slate-500 mt-4">
-          Supports CSV files up to 10MB from DepEd LIS SF1 export
+          Supports Excel (.xls, .xlsx) and CSV files up to 10MB
         </p>
       </div>
     </div>

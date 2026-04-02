@@ -31,9 +31,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     schema: 'public',
   },
   realtime: {
-    // Enable realtime subscriptions for live updates
+    // Throttle realtime events to reduce bandwidth
     params: {
-      eventsPerSecond: 10,
+      eventsPerSecond: 2,
     },
   },
 });

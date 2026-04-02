@@ -89,36 +89,39 @@ export function useParentsPostgreSQL(options: UseParentsOptions = {}): UseParent
         }
       }
 
-      // Fetch parents with student relationships
+      // If filtering by studentId, first resolve parent IDs from junction table
+      let parentIdsFromStudent: string[] | null = null;
+      if (studentId) {
+        const { data: junctionRows, error: junctionError } = await supabase
+          .from('parent_students')
+          .select('parent_id')
+          .eq('student_id', studentId);
+        if (junctionError) throw junctionError;
+        parentIdsFromStudent = (junctionRows || []).map((r: any) => r.parent_id);
+        if (parentIdsFromStudent.length === 0) {
+          // No parents for this student
+          setParents([]);
+          setTotalCount(0);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Fetch parents (without embedded parent_students join)
       let query = supabase.from('parents').select(
-        `
-          id,
-          school_id,
-          user_id,
-          name,
-          email,
-          relationship,
-          occupation,
-          contact_number,
-          address,
-          created_at,
-          updated_at,
-          parent_students(student_id)
-        `,
+        `id, school_id, user_id, name, email, relationship, occupation, contact_number, address, created_at, updated_at`,
         { count: 'exact' }
-      ).is('deleted_at', null); // Soft delete filter
+      ).is('deleted_at', null);
 
       // Apply filters
       if (schoolId) {
         query = query.eq('school_id', schoolId);
       }
       if (searchQuery) {
-        // Search by name or email (case-insensitive)
         query = query.or(`name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
       }
-      if (studentId) {
-        // Filter by student ID through junction table
-        query = query.eq('parent_students.student_id', studentId);
+      if (parentIdsFromStudent) {
+        query = query.in('id', parentIdsFromStudent);
       }
 
       // Order by name
@@ -136,6 +139,20 @@ export function useParentsPostgreSQL(options: UseParentsOptions = {}): UseParent
 
       if (fetchError) throw fetchError;
 
+      // Fetch student relationships separately from junction table
+      const parentIds = (data || []).map((r: any) => r.id);
+      let studentMap: Record<string, string[]> = {};
+      if (parentIds.length > 0) {
+        const { data: psRows } = await supabase
+          .from('parent_students')
+          .select('parent_id, student_id')
+          .in('parent_id', parentIds);
+        for (const ps of (psRows || [])) {
+          if (!studentMap[ps.parent_id]) studentMap[ps.parent_id] = [];
+          studentMap[ps.parent_id].push(ps.student_id);
+        }
+      }
+
       // Transform data to match Firestore format
       const transformedParents: Parent[] = (data || []).map((row: any) => ({
         id: row.id,
@@ -147,7 +164,7 @@ export function useParentsPostgreSQL(options: UseParentsOptions = {}): UseParent
         occupation: row.occupation,
         contactNumber: row.contact_number,
         address: row.address,
-        studentIds: row.parent_students?.map((ps: any) => ps.student_id) || [],
+        studentIds: studentMap[row.id] || [],
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       }));

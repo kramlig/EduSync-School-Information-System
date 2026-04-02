@@ -89,7 +89,7 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
           const studentIds = studentData.map(s => s.id);
           const result = await supabase
             .from('grades')
-            .select('*')
+            .select('id, school_id, student_id, learning_area_id, school_year, q1, q2, q3, q4, composite_grades, final_grade, remarks')
             .in('student_id', studentIds);
           
           data = result.data;
@@ -102,7 +102,7 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
         // No section filter - fetch with other filters
         let query = supabase
           .from('grades')
-          .select('*');
+          .select('id, school_id, student_id, learning_area_id, school_year, q1, q2, q3, q4, composite_grades, final_grade, remarks');
 
         // CRITICAL: Always filter by schoolId to avoid fetching grades from other schools
         if (schoolId) {
@@ -123,7 +123,7 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
       if (fetchError) throw fetchError;
 
       // Transform PostgreSQL data to match Firestore Grade interface
-      const transformedGrades: Grade[] = (data || []).map(row => ({
+      const transformedGrades: Grade[] = (data || []).map((row: any) => ({
         id: row.id,
         schoolId: row.school_id,
         studentId: row.student_id,
@@ -161,18 +161,21 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
     }
   }, [fetchGrades, skip, sectionId]); // Include sectionId to refetch when it changes
 
-  // Real-time subscription
+  // Real-time subscription — filtered by school_id to reduce egress
   useEffect(() => {
+    if (!schoolId) return;
+
     const channel = supabase
-      .channel('grades_changes')
+      .channel(`grades_changes_${schoolId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'grades'
+          table: 'grades',
+          filter: `school_id=eq.${schoolId}`
         },
-        (payload) => {
+        () => {
           fetchGrades(); // Refetch on any change
         }
       )
@@ -181,7 +184,7 @@ export function useGradesPostgreSQL(options: UseGradesOptions = {}): UseGradesRe
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchGrades]);
+  }, [fetchGrades, schoolId]);
 
   /**
    * Update or create a grade

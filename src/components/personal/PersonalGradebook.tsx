@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AcademicCapIcon,
   CheckCircleIcon,
@@ -25,8 +25,9 @@ interface Props {
 
 interface StudentRow {
   id: string;
-  first_name: string;
-  last_name: string;
+  name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   middle_name: string | null;
   lrn: string | null;
 }
@@ -75,8 +76,19 @@ function computeFinalGrade(g: { q1: number | null; q2: number | null; q3: number
   return { finalGrade: avg, remarks: avg >= 75 ? 'Passed' : 'Failed' };
 }
 
+function displayName(s: StudentRow): string {
+  // Prefer first_name/last_name; fall back to single 'name' field
+  if (s.last_name && s.first_name) return `${s.last_name}, ${s.first_name}`;
+  if (s.last_name) return s.last_name;
+  if (s.first_name) return s.first_name;
+  if (s.name) return s.name;
+  return s.lrn || 'Unnamed Student';
+}
+
 export default function PersonalGradebook({ schoolId, tier }: Props) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialSubject = searchParams.get('subject') || '';
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [areas, setAreas] = useState<LearningAreaRow[]>([]);
   const [grades, setGrades] = useState<Map<string, GradeRow>>(new Map());
@@ -84,7 +96,7 @@ export default function PersonalGradebook({ schoolId, tier }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const [selectedArea, setSelectedArea] = useState<string>('');
+  const [selectedArea, setSelectedArea] = useState<string>(initialSubject);
   const [searchQuery, setSearchQuery] = useState('');
   const [showUpgrade, setShowUpgrade] = useState(false);
 
@@ -105,7 +117,7 @@ export default function PersonalGradebook({ schoolId, tier }: Props) {
 
     try {
       const [studentsRes, areasRes, gradesRes, schoolRes] = await Promise.all([
-        supabase.from('students').select('id, first_name, last_name, middle_name, lrn')
+        supabase.from('students').select('id, name, first_name, last_name, middle_name, lrn')
           .eq('school_id', schoolId).order('last_name').order('first_name'),
         supabase.from('learning_areas').select('id, code, name, display_order, is_composite, components, grade_levels, is_active')
           .eq('school_id', schoolId).eq('is_active', true).order('display_order').order('name'),
@@ -155,6 +167,9 @@ export default function PersonalGradebook({ schoolId, tier }: Props) {
     quarter: Quarter,
     value: number | null,
   ) => {
+    // Validate range on save (allow null to clear)
+    if (value !== null && (value < 60 || value > 100)) return;
+
     const key = cellKey(studentId, areaId, quarter);
     setSaving(prev => new Set(prev).add(key));
 
@@ -162,7 +177,7 @@ export default function PersonalGradebook({ schoolId, tier }: Props) {
       const mapKey = gradeMapKey(studentId, areaId);
       const existing = grades.get(mapKey);
 
-      if (existing) {
+      if (existing && existing.id) {
         // Update existing record
         const updated = { ...existing, [quarter]: value };
         const { finalGrade, remarks } = computeFinalGrade(updated);
@@ -224,11 +239,12 @@ export default function PersonalGradebook({ schoolId, tier }: Props) {
   ) => {
     const key = cellKey(studentId, areaId, quarter);
 
-    // Parse and validate
+    // Parse — allow intermediate typing, validate range only on save
     let value: number | null = null;
     if (rawValue.trim() !== '') {
       const parsed = parseFloat(rawValue);
-      if (isNaN(parsed) || parsed < 60 || parsed > 100) return; // Invalid — ignore
+      if (isNaN(parsed) || parsed > 100) return; // Block clearly invalid
+      if (parsed < 0) return;
       value = Math.round(parsed * 100) / 100; // Keep 2 decimals max
     }
 
@@ -275,8 +291,9 @@ export default function PersonalGradebook({ schoolId, tier }: Props) {
     if (!searchQuery.trim()) return students;
     const q = searchQuery.toLowerCase();
     return students.filter(s =>
-      s.last_name.toLowerCase().includes(q) ||
-      s.first_name.toLowerCase().includes(q) ||
+      (s.last_name || '').toLowerCase().includes(q) ||
+      (s.first_name || '').toLowerCase().includes(q) ||
+      (s.name || '').toLowerCase().includes(q) ||
       (s.lrn && s.lrn.includes(q))
     );
   }, [students, searchQuery]);
@@ -486,7 +503,7 @@ export default function PersonalGradebook({ schoolId, tier }: Props) {
                 <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                   <td className="px-3 py-2 sticky left-0 bg-white dark:bg-slate-900">
                     <div className="font-medium text-slate-800 dark:text-white truncate">
-                      {student.last_name}, {student.first_name}
+                      {displayName(student)}
                     </div>
                     {student.lrn && (
                       <div className="text-xs text-slate-400">{student.lrn}</div>

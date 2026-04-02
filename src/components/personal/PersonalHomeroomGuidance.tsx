@@ -23,9 +23,18 @@ interface Props {
 
 interface StudentRow {
   id: string;
-  first_name: string;
-  last_name: string;
+  name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   middle_name: string | null;
+}
+
+function displayName(s: StudentRow): string {
+  if (s.last_name && s.first_name) return `${s.last_name}, ${s.first_name}`;
+  if (s.last_name) return s.last_name;
+  if (s.first_name) return s.first_name;
+  if (s.name) return s.name;
+  return 'Unnamed Student';
 }
 
 interface HGGradeRow {
@@ -141,7 +150,7 @@ export default function PersonalHomeroomGuidance({ schoolId, teacherId, tier: _t
     try {
       const [studentsRes, gradesRes] = await Promise.all([
         supabase.from('students')
-          .select('id, first_name, last_name, middle_name')
+          .select('id, name, first_name, last_name, middle_name')
           .eq('school_id', schoolId)
           .eq('section_id', selectedSectionId)
           .is('deleted_at', null)
@@ -236,12 +245,16 @@ export default function PersonalHomeroomGuidance({ schoolId, teacherId, tier: _t
         } else {
           const { data, error: insErr } = await supabase
             .from('homeroom_guidance_grades')
-            .upsert({
+            .insert({
               school_id: schoolId,
               student_id: studentId,
               school_year: schoolYear,
+              q1_ratings: {},
+              q2_ratings: {},
+              q3_ratings: {},
+              q4_ratings: {},
               [ratingsCol]: currentRatings,
-            }, { onConflict: 'student_id,school_year' })
+            })
             .select('id, student_id, q1_ratings, q2_ratings, q3_ratings, q4_ratings')
             .single();
           if (insErr) throw insErr;
@@ -422,7 +435,7 @@ export default function PersonalHomeroomGuidance({ schoolId, teacherId, tier: _t
                   return (
                     <tr key={s.id} className={idx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/50 dark:bg-slate-750/30'}>
                       <td className="sticky left-0 z-10 bg-inherit px-3 py-1.5 font-medium text-slate-700 dark:text-slate-200 border-r border-slate-200 dark:border-slate-600 whitespace-nowrap">
-                        {s.last_name}, {s.first_name}
+                        {displayName(s)}
                       </td>
                       {competencies.map((comp, cIdx) => {
                         const currentVal = qRatings[comp] as number | undefined;

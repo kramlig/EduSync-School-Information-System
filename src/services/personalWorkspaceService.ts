@@ -12,6 +12,7 @@ import {
   GoogleAuthProvider,
 } from 'firebase/auth';
 import { auth } from './firestoreService';
+import { seedDefaultLearningAreas } from './learningAreasServicePostgreSQL';
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -121,42 +122,132 @@ async function createPersonalWorkspace(
   firebaseUid: string,
   data: PersonalSignupData
 ): Promise<WorkspaceCreationResult> {
-  const { data: result, error } = await supabase.rpc('create_personal_workspace', {
-    p_firebase_uid: firebaseUid,
-    p_email: data.email,
-    p_full_name: data.fullName,
-    p_school_name: data.schoolName,
-    p_school_id_number: data.schoolIdNumber,
-    p_division: data.division,
-    p_region: data.region,
-    p_district: data.district || null,
-    p_grade_level: data.gradeLevel,
-    p_section_name: data.sectionName,
-    p_school_year: getCurrentSchoolYear(),
-  });
+  // Direct table inserts instead of RPC (create_personal_workspace function may not exist in DB)
+  const schoolYear = getCurrentSchoolYear();
+  const schoolType = data.gradeLevel <= 6 ? 'elementary' : data.gradeLevel <= 10 ? 'high_school' : 'senior_high';
 
-  if (error) {
-    throw new Error(`Failed to create workspace: ${error.message}`);
+  // 1. Create school
+  const { data: school, error: schoolErr } = await supabase
+    .from('schools')
+    .insert({
+      name: data.schoolName,
+      school_id_number: data.schoolIdNumber || null,
+      region: data.region,
+      division: data.division,
+      district: data.district || null,
+      type: 'personal',
+      school_type: schoolType,
+      owner_uid: firebaseUid,
+      current_school_year: schoolYear,
+    })
+    .select('id')
+    .single();
+
+  if (schoolErr || !school) {
+    throw new Error(`Failed to create school: ${schoolErr?.message || 'unknown error'}`);
   }
 
-  return result as WorkspaceCreationResult;
+  // 2. Create teacher
+  const nameParts = data.fullName.split(' ');
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
+  const { data: teacher, error: teacherErr } = await supabase
+    .from('teachers')
+    .insert({
+      school_id: school.id,
+      firebase_uid: firebaseUid,
+      email: data.email,
+      name: data.fullName,
+      first_name: firstName,
+      last_name: lastName,
+      role: 'teacher',
+    })
+    .select('id')
+    .single();
+
+  if (teacherErr || !teacher) {
+    throw new Error(`Failed to create teacher: ${teacherErr?.message || 'unknown error'}`);
+  }
+
+  // 3. Create section
+  const { data: section, error: sectionErr } = await supabase
+    .from('sections')
+    .insert({
+      school_id: school.id,
+      name: data.sectionName,
+      grade_level: data.gradeLevel,
+      school_year: schoolYear,
+      adviser_id: teacher.id,
+    })
+    .select('id')
+    .single();
+
+  if (sectionErr || !section) {
+    throw new Error(`Failed to create section: ${sectionErr?.message || 'unknown error'}`);
+  }
+
+  // 4. Create free subscription (non-fatal — app defaults to free tier if no subscription row)
+  let subscriptionId = '';
+  try {
+    const { data: subscription } = await supabase
+      .from('subscriptions')
+      .insert({
+        user_id: firebaseUid,
+        tier: 'free',
+        status: 'active',
+        max_students: 50,
+        max_teaching_sections: 1,
+        max_advisory_sections: 1,
+        max_downloads_per_day: 10,
+      })
+      .select('id')
+      .single();
+    subscriptionId = subscription?.id || '';
+  } catch (err) {
+    console.warn('[personalWorkspaceService] Subscription creation skipped (RLS):', err);
+  }
+
+  // 5. Seed default learning areas
+  try {
+    await seedDefaultLearningAreas(school.id, 'elementary');
+  } catch (err) {
+    console.warn('[personalWorkspaceService] Learning area seeding failed (non-fatal):', err);
+  }
+
+  return {
+    school_id: school.id,
+    teacher_id: teacher.id,
+    section_id: section.id,
+    subscription_id: subscriptionId,
+  };
 }
 
 export async function getPersonalWorkspace(
   firebaseUid: string
 ): Promise<PersonalWorkspace | null> {
-  const { data, error } = await supabase.rpc('get_personal_workspace', {
-    p_firebase_uid: firebaseUid,
-  });
+  // Direct queries instead of RPC (get_personal_workspace function may not exist in DB)
+  const { data: school, error: schoolError } = await supabase
+    .from('schools')
+    .select('id, name')
+    .eq('owner_uid', firebaseUid)
+    .eq('type', 'personal')
+    .maybeSingle();
 
-  if (error || !data) return null;
+  if (schoolError || !school) return null;
+
+  const { data: teacher } = await supabase
+    .from('teachers')
+    .select('id, name')
+    .eq('school_id', school.id)
+    .eq('firebase_uid', firebaseUid)
+    .maybeSingle();
 
   return {
-    schoolId: data.school_id,
-    schoolName: data.school_name,
-    teacherId: data.teacher_id,
-    teacherName: data.teacher_name,
-    tier: data.tier,
+    schoolId: school.id,
+    schoolName: school.name,
+    teacherId: teacher?.id || '',
+    teacherName: teacher?.name || '',
+    tier: 'free',
   };
 }
 
@@ -165,22 +256,40 @@ export async function getPersonalWorkspace(
 export async function getUserSubscription(
   firebaseUid: string
 ): Promise<Subscription | null> {
-  const { data, error } = await supabase.rpc('get_user_subscription', {
-    p_firebase_uid: firebaseUid,
-  });
+  // Direct query instead of RPC (get_user_subscription function may not exist in DB)
+  try {
+    // Find the teacher record for this firebase user
+    const { data: teacher } = await supabase
+      .from('teachers')
+      .select('id')
+      .eq('firebase_uid', firebaseUid)
+      .is('deleted_at', null)
+      .maybeSingle();
 
-  if (error || !data) return null;
+    if (!teacher) return null;
 
-  return {
-    id: data.id,
-    tier: data.tier,
-    status: data.status,
-    maxStudents: data.max_students,
-    maxTeachingSections: data.max_teaching_sections,
-    maxAdvisorySections: data.max_advisory_sections,
-    maxDownloadsPerDay: data.max_downloads_per_day,
-    currentPeriodEnd: data.current_period_end,
-  };
+    const { data } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', teacher.id)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      tier: data.tier,
+      status: data.status,
+      maxStudents: data.max_students,
+      maxTeachingSections: data.max_teaching_sections,
+      maxAdvisorySections: data.max_advisory_sections,
+      maxDownloadsPerDay: data.max_downloads_per_day,
+      currentPeriodEnd: data.current_period_end,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ─── Tier Enforcement ────────────────────────────────────
@@ -256,21 +365,34 @@ export async function createPersonalTeachingAssignment(params: {
   isAdvisory?: boolean;
   schoolYear?: string;
 }): Promise<string | null> {
-  const { data, error } = await supabase.rpc('create_personal_teaching_assignment', {
-    p_school_id: params.schoolId,
-    p_teacher_id: params.teacherId,
-    p_section_id: params.sectionId,
-    p_learning_area_id: params.learningAreaId,
-    p_grade_level: params.gradeLevel ?? 6,
-    p_is_advisory: params.isAdvisory ?? false,
-    p_school_year: params.schoolYear ?? getCurrentSchoolYear(),
-  });
+  // Fetch learning area name for the required 'subject' column
+  const { data: la } = await supabase
+    .from('learning_areas')
+    .select('name')
+    .eq('id', params.learningAreaId)
+    .maybeSingle();
+
+  const { data, error } = await supabase
+    .from('teaching_assignments')
+    .insert({
+      school_id: params.schoolId,
+      teacher_id: params.teacherId,
+      section_id: params.sectionId,
+      learning_area_id: params.learningAreaId,
+      subject: la?.name || 'Unknown',
+      grade_level: params.gradeLevel ?? 6,
+      is_advisory: params.isAdvisory ?? false,
+      school_year: params.schoolYear ?? getCurrentSchoolYear(),
+      is_active: true,
+    })
+    .select('id')
+    .single();
 
   if (error) {
     console.error('[personalWorkspaceService] createPersonalTeachingAssignment error:', error);
     return null;
   }
-  return data as string;
+  return data?.id || null;
 }
 
 /**
@@ -284,19 +406,43 @@ export async function autoAssignPersonalSection(params: {
   gradeLevel?: number;
   schoolYear?: string;
 }): Promise<number> {
-  const { data, error } = await supabase.rpc('auto_assign_personal_section', {
-    p_school_id: params.schoolId,
-    p_teacher_id: params.teacherId,
-    p_section_id: params.sectionId,
-    p_grade_level: params.gradeLevel ?? 6,
-    p_school_year: params.schoolYear ?? getCurrentSchoolYear(),
-  });
+  // Direct queries instead of RPC
+  const gl = params.gradeLevel ?? 6;
+  const sy = params.schoolYear ?? getCurrentSchoolYear();
+
+  // Fetch active learning areas for this grade (include name for 'subject' column)
+  const { data: areas } = await supabase
+    .from('learning_areas')
+    .select('id, name')
+    .eq('school_id', params.schoolId)
+    .eq('is_active', true)
+    .contains('grade_levels', [gl]);
+
+  if (!areas || areas.length === 0) return 0;
+
+  // Create teaching assignments for each
+  const rows = areas.map(la => ({
+    school_id: params.schoolId,
+    teacher_id: params.teacherId,
+    section_id: params.sectionId,
+    learning_area_id: la.id,
+    subject: la.name,
+    grade_level: gl,
+    school_year: sy,
+    is_advisory: false,
+    is_active: true,
+  }));
+
+  const { data: inserted, error } = await supabase
+    .from('teaching_assignments')
+    .insert(rows)
+    .select('id');
 
   if (error) {
     console.error('[personalWorkspaceService] autoAssignPersonalSection error:', error);
     return 0;
   }
-  return (data as number) || 0;
+  return inserted?.length || 0;
 }
 
 /**

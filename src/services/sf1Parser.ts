@@ -1,19 +1,23 @@
 /**
  * SF1 (School Form 1) Parser
  * 
- * Parses DepEd LIS SF1 CSV exports into structured data.
+ * Parses DepEd SF1 files (Excel .xls/.xlsx or CSV) into structured data.
  * SF1 is the School Register containing student enrollment data.
  * 
- * SF1 CSV Structure:
- * - Rows 1-2: Title headers
- * - Row 3: School ID, Region, Division, District
- * - Row 4: School Name, School Year, Grade Level, Section
- * - Rows 5-6: Column headers
+ * Supports the official DepEd format (Excel 97-2003 .xls and modern .xlsx)
+ * as well as CSV exports from DepEd LIS.
+ * 
+ * SF1 Layout (typical):
+ * - Row 1: Title "School Form 1 (SF 1) School Register"
+ * - Row 3: School ID | Region | Division | District (label + value pairs)
+ * - Row 4: School Name | School Year | Grade Level | Section
+ * - Rows 5-6: Column headers (may be merged)
  * - Row 7+: Student data
- * - Summary rows: "<=== TOTAL MALE", "<=== TOTAL FEMALE", "<=== COMBINED"
+ * - Summary rows: TOTAL MALE / TOTAL FEMALE / COMBINED
  */
 
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
 // ============================================================================
 // TYPES
@@ -82,20 +86,26 @@ export interface SF1ParseResult {
 
 /**
  * Parse name string in format "LASTNAME,FIRSTNAME, MIDDLENAME" or "LASTNAME,FIRSTNAME,MIDDLENAME,"
+ * Handles SF1 quirks: dash (-) as "no middle name", embedded quotes, extra commas.
  */
 function parseName(nameStr: string): { lastName: string; firstName: string; middleName: string } {
   if (!nameStr) return { lastName: '', firstName: '', middleName: '' };
   
-  // Remove extra quotes and trim
-  const cleaned = nameStr.replace(/^["']|["']$/g, '').trim();
+  // Remove ALL double/single quotes and trim
+  const cleaned = nameStr.replace(/["'\u201C\u201D\u2018\u2019]/g, '').trim();
   
   // Split by comma
-  const parts = cleaned.split(',').map(p => p.trim());
+  const parts = cleaned.split(',').map(p => p.trim()).filter(Boolean);
+  
+  // Middle name: remove "-" placeholder, whitespace-only, etc.
+  let middleName = (parts[2] || '').replace(/^-+$/, '').trim();
+  // If middle name is just punctuation or empty after cleanup, drop it
+  if (/^[-_.]+$/.test(middleName)) middleName = '';
   
   return {
     lastName: parts[0] || '',
     firstName: parts[1] || '',
-    middleName: (parts[2] || '').replace(/-/g, '').trim() // Remove "-" placeholder
+    middleName
   };
 }
 
@@ -473,6 +483,353 @@ export function parseSF1(csvContent: string): SF1ParseResult {
   }
 
   return result;
+}
+
+// ============================================================================
+// EXCEL (.xls / .xlsx) PARSER — handles official DepEd SF1 format
+// ============================================================================
+
+/**
+ * Search rows 0-5 (metadata area only) for a cell whose text matches `label`,
+ * then return the next non-empty cell to its right.
+ * For merged-cell Excel files, values may be several columns away.
+ */
+function findHeaderValue(rows: (string | number | null)[][], label: RegExp, maxRow = 6): string {
+  for (let r = 0; r < Math.min(maxRow, rows.length); r++) {
+    const rowLen = rows[r]?.length ?? 0;
+    for (let c = 0; c < rowLen; c++) {
+      const cell = String(rows[r][c] ?? '').trim();
+      if (label.test(cell)) {
+        // Look right — skip empty cells from merged regions (up to 20 cols)
+        for (let k = c + 1; k < Math.min(c + 20, rowLen); k++) {
+          const val = String(rows[r][k] ?? '').trim();
+          if (val && !label.test(val)) return val;
+        }
+        // Value might be embedded in the same cell: "School ID  129386"
+        const inline = cell.replace(label, '').replace(/[:]/g, '').trim();
+        if (inline) return inline;
+      }
+    }
+  }
+  return '';
+}
+
+/**
+ * Locate the column header row by looking for "LRN" in column A-C.
+ * Returns the 0-based row index, or -1 if not found.
+ */
+function findHeaderRow(rows: (string | number | null)[][]): number {
+  for (let r = 0; r < Math.min(12, rows.length); r++) {
+    for (let c = 0; c < Math.min(4, rows[r]?.length ?? 0); c++) {
+      if (/^lrn$/i.test(String(rows[r][c] ?? '').trim())) {
+        return r;
+      }
+    }
+  }
+  return -1;
+}
+
+/**
+ * Build a column-index map from the header row(s).
+ * Because DepEd SF1 uses merged cells spanning 2 header rows, we combine
+ * the text from headerRow and headerRow+1 to match known column labels.
+ */
+function buildColumnMap(rows: (string | number | null)[][], headerRow: number): Record<string, number> {
+  const map: Record<string, number> = {};
+  const row1 = rows[headerRow] ?? [];
+  const row2 = rows[headerRow + 1] ?? [];
+
+  // Combine text from both header rows for each column
+  const combined: string[] = [];
+  const maxCols = Math.max(row1.length, row2.length);
+  for (let c = 0; c < maxCols; c++) {
+    const a = String(row1[c] ?? '').trim();
+    const b = String(row2[c] ?? '').trim();
+    combined[c] = (a + ' ' + b).trim().toLowerCase();
+  }
+
+  // Map to known field names by scanning combined headers
+  for (let c = 0; c < combined.length; c++) {
+    const h = combined[c];
+    if (/^lrn/.test(h) && !map.lrn) { map.lrn = c; continue; }
+    // NAME column: "NAME (Last Name, First Name, Middle Name)" or just "NAME"
+    // Must come after LRN (col index > lrn) to avoid false matches
+    if (!map.name && map.lrn !== undefined && c > map.lrn && /^name\b/.test(h)) { map.name = c; continue; }
+    if (/\bsex\b/.test(h) && !map.sex) { map.sex = c; continue; }
+    if (/birth\s*date/.test(h) && !map.birthDate) { map.birthDate = c; continue; }
+    if (/^age/.test(h) && !map.age) { map.age = c; continue; }
+    if (/mother\s*tongue/.test(h) && !map.motherTongue) { map.motherTongue = c; continue; }
+    if (/ip.*ethnic|ethnic.*group/.test(h) && !map.ip) { map.ip = c; continue; }
+    if (/religio/i.test(h) && !map.religion) { map.religion = c; continue; }
+    if (/house|street|sitio|purok/.test(h) && !map.houseStreet) { map.houseStreet = c; continue; }
+    if (/barangay/.test(h) && !map.barangay) { map.barangay = c; continue; }
+    if (/municipality|city/.test(h) && !map.municipality) { map.municipality = c; continue; }
+    if (/province/.test(h) && !map.province) { map.province = c; continue; }
+    if (/father/.test(h) && !map.father) { map.father = c; continue; }
+    if (/mother.*maiden|mother.*name/.test(h) && !map.mother) { map.mother = c; continue; }
+    // Guardian columns — "Name" under "GUARDIAN" header
+    if (/guardian/.test(h) && !map.guardian) { map.guardian = c; continue; }
+    if (/relationship/.test(h) && !map.guardianRelationship) { map.guardianRelationship = c; continue; }
+    if (/contact.*number/.test(h) && !map.contact) { map.contact = c; continue; }
+    if (/learning.*modality|modality/.test(h) && !map.modality) { map.modality = c; continue; }
+    if (/remarks/.test(h) && !map.remarks) { map.remarks = c; continue; }
+  }
+
+  // Fallback: if guardian name not found, check if column after mother is guardian
+  if (!map.guardian && map.mother) {
+    // Scan forward from mother for guardian-like columns
+    for (let c = (map.mother ?? 0) + 1; c < combined.length; c++) {
+      const h = combined[c];
+      if (/guardian|^name$/.test(h) && !map.guardian) { map.guardian = c; break; }
+    }
+  }
+
+  console.log('[SF1Parser] Column map:', map);
+  return map;
+}
+
+/** Read a cell as string */
+function cellStr(rows: (string | number | null)[][], r: number, c: number | undefined): string {
+  if (c === undefined) return '';
+  return String(rows[r]?.[c] ?? '').trim();
+}
+
+/**
+ * Parse a DepEd SF1 Excel file (ArrayBuffer) into SF1ParseResult.
+ */
+export function parseSF1Excel(buffer: ArrayBuffer): SF1ParseResult {
+  const result: SF1ParseResult = {
+    success: false,
+    metadata: null,
+    students: [],
+    maleCount: 0,
+    femaleCount: 0,
+    totalCount: 0,
+    errors: [],
+    warnings: [],
+  };
+
+  try {
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const sheetName = wb.SheetNames[0];
+    if (!sheetName) {
+      result.errors.push('Excel file has no sheets');
+      return result;
+    }
+    const sheet = wb.Sheets[sheetName];
+    // Convert to 2-D array; defval keeps empty cells as ''
+    const rows: (string | number | null)[][] = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      defval: '',
+      raw: false,       // get formatted strings for dates
+      blankrows: true,
+    }) as any;
+
+    if (rows.length < 7) {
+      result.errors.push('File too short — expected at least 7 rows');
+      return result;
+    }
+
+    // ── Extract metadata from header area (rows 0-5) ────────────────────
+    // Debug: log first 6 rows to help diagnose column layout
+    for (let r = 0; r < Math.min(6, rows.length); r++) {
+      const cells = (rows[r] || []).map((c, i) => `[${i}]="${String(c ?? '')}"`)
+        .filter(c => !c.endsWith('""'));
+      if (cells.length > 0) console.log(`[SF1Parser] Row ${r}:`, cells.join(', '));
+    }
+
+    const schoolIdVal = findHeaderValue(rows, /school\s*id/i);
+    const regionVal   = findHeaderValue(rows, /region/i);
+    const divisionVal = findHeaderValue(rows, /division/i);
+    const districtVal = findHeaderValue(rows, /district/i);
+    const schoolNameVal = findHeaderValue(rows, /school\s*name/i);
+    const schoolYearRaw = findHeaderValue(rows, /school\s*year/i);
+    const gradeLevelRaw = findHeaderValue(rows, /grade\s*level/i);
+    const sectionName   = findHeaderValue(rows, /\bsection\b/i);
+
+    console.log('[SF1Parser] Metadata extracted:', {
+      schoolIdVal, regionVal, divisionVal, districtVal,
+      schoolNameVal, schoolYearRaw, gradeLevelRaw, sectionName,
+      sheetName,
+    });
+
+    const schoolYear = normalizeSchoolYear(schoolYearRaw);
+    let gradeLevel = parseGradeLevel(gradeLevelRaw);
+
+    // Fallback: extract grade level from sheet name (e.g. "SF1_2025_Grade-1-HOPE")
+    if (gradeLevel === 0 && sheetName) {
+      const sheetGrade = sheetName.match(/grade[\s-_]*(\d+)/i)
+        || sheetName.match(/kinder/i);
+      if (sheetGrade) {
+        gradeLevel = sheetGrade[1] ? parseInt(sheetGrade[1], 10) : 0; // 0 = Kinder
+      }
+    }
+
+    // Try to derive section from sheet name if not found in header
+    // e.g. "SF1_2025_Grade-1-HOPE" → section "HOPE"
+    let resolvedSection = sectionName;
+    if (!resolvedSection && sheetName) {
+      // Match last segment after grade: "Grade-1-HOPE" → "HOPE", "Kinder-CHARITY" → "CHARITY"
+      const sheetMatch = sheetName.match(/(?:grade[\s-_]*\d+|kinder|non[\s-_]*graded)[\s-_]+(.+)$/i);
+      if (sheetMatch) resolvedSection = sheetMatch[1].replace(/[-_]/g, ' ').trim();
+    }
+
+    if (!resolvedSection) {
+      result.errors.push('Could not determine section name from file');
+      return result;
+    }
+
+    result.metadata = {
+      schoolId: schoolIdVal,
+      schoolName: schoolNameVal,
+      region: regionVal,
+      division: divisionVal,
+      district: districtVal,
+      schoolYear,
+      gradeLevel,
+      gradeLevelRaw,
+      sectionName: resolvedSection,
+    };
+
+    // ── Locate column headers ────────────────────────────────────────────
+    const headerRow = findHeaderRow(rows);
+    if (headerRow < 0) {
+      result.errors.push('Could not find column header row (looking for "LRN")');
+      return result;
+    }
+    const colMap = buildColumnMap(rows, headerRow);
+
+    if (colMap.lrn === undefined) {
+      result.errors.push('Could not identify LRN column');
+      return result;
+    }
+
+    // ── Parse student data rows ──────────────────────────────────────────
+    const dataStart = headerRow + 2; // skip 2 header rows
+    for (let r = dataStart; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row || row.every(c => !String(c ?? '').trim())) continue;
+
+      // Skip summary rows
+      const rowText = row.slice(0, 5).map(c => String(c ?? '')).join(' ').toLowerCase();
+      if (/total\s*male|total\s*female|combined|<=== total|prepared by|generated|signature|list and code|indicator/.test(rowText)) continue;
+
+      const lrn = cellStr(rows, r, colMap.lrn);
+      // Only process rows that look like student data (LRN = 9-12 digits)
+      if (!/^\d{9,12}$/.test(lrn)) continue;
+
+      const validationErrors: string[] = [];
+      if (!/^\d{12}$/.test(lrn)) {
+        validationErrors.push(`LRN should be 12 digits, got ${lrn.length}`);
+      }
+
+      // Name parsing — column may contain "LASTNAME,FIRSTNAME, MIDDLENAME"
+      const nameRaw = cellStr(rows, r, colMap.name);
+      const { lastName, firstName, middleName } = parseName(nameRaw);
+      if (!lastName && !firstName) validationErrors.push('Missing name');
+
+      // Sex
+      const sexRaw = cellStr(rows, r, colMap.sex).toUpperCase();
+      const sex: 'M' | 'F' = (sexRaw === 'F') ? 'F' : 'M';
+      if (sexRaw !== 'M' && sexRaw !== 'F') validationErrors.push(`Invalid sex: ${sexRaw}`);
+
+      // Birth date
+      const birthDateRaw = cellStr(rows, r, colMap.birthDate);
+      const birthDate = parseDate(birthDateRaw);
+
+      // Age
+      const age = parseInt(cellStr(rows, r, colMap.age), 10) || null;
+
+      // Other fields
+      const motherTongue = cellStr(rows, r, colMap.motherTongue);
+      const indigenousGroup = cellStr(rows, r, colMap.ip);
+      const religion = cellStr(rows, r, colMap.religion);
+
+      const houseStreet = cellStr(rows, r, colMap.houseStreet);
+      const barangay = cellStr(rows, r, colMap.barangay);
+      const municipality = cellStr(rows, r, colMap.municipality);
+      const province = cellStr(rows, r, colMap.province);
+
+      const fatherName = cellStr(rows, r, colMap.father);
+      const motherName = cellStr(rows, r, colMap.mother);
+      const guardianName = cellStr(rows, r, colMap.guardian);
+      const guardianRelationship = cellStr(rows, r, colMap.guardianRelationship);
+      const contactNumber = cellStr(rows, r, colMap.contact);
+      const learningModality = cellStr(rows, r, colMap.modality);
+      const remarks = cellStr(rows, r, colMap.remarks);
+
+      const student: SF1Student = {
+        lrn,
+        lastName,
+        firstName,
+        middleName,
+        fullName: [lastName, firstName, middleName].filter(Boolean).join(', '),
+        sex,
+        birthDate,
+        birthDateRaw,
+        age,
+        motherTongue,
+        indigenousGroup,
+        religion,
+        address: {
+          houseStreet,
+          barangay,
+          municipality,
+          province,
+          full: [houseStreet, barangay, municipality, province].filter(Boolean).join(', '),
+        },
+        fatherName,
+        motherName,
+        guardianName,
+        guardianRelationship,
+        contactNumber,
+        learningModality,
+        remarks,
+        isValid: validationErrors.length === 0,
+        validationErrors,
+      };
+
+      result.students.push(student);
+      if (sex === 'M') result.maleCount++;
+      else if (sex === 'F') result.femaleCount++;
+    }
+
+    result.totalCount = result.students.length;
+    result.success = result.students.length > 0 && result.errors.length === 0;
+
+    if (result.students.length === 0) {
+      result.warnings.push('No valid student records found in file');
+    }
+    const invalidCount = result.students.filter(s => !s.isValid).length;
+    if (invalidCount > 0) {
+      result.warnings.push(`${invalidCount} student(s) have validation issues`);
+    }
+  } catch (error: any) {
+    result.errors.push(`Excel parse error: ${error.message}`);
+  }
+
+  return result;
+}
+
+/**
+ * Parse an SF1 file — auto-detects Excel vs CSV by extension or content.
+ * For Excel files pass the ArrayBuffer; for CSV pass the text content.
+ */
+export function parseSF1File(
+  file: { name: string; buffer?: ArrayBuffer; text?: string }
+): SF1ParseResult {
+  const ext = file.name.toLowerCase();
+  if (ext.endsWith('.xls') || ext.endsWith('.xlsx')) {
+    if (!file.buffer) {
+      return { success: false, metadata: null, students: [], maleCount: 0, femaleCount: 0, totalCount: 0, errors: ['Excel file buffer not provided'], warnings: [] };
+    }
+    return parseSF1Excel(file.buffer);
+  }
+  // Fallback to CSV parser
+  if (!file.text) {
+    return { success: false, metadata: null, students: [], maleCount: 0, femaleCount: 0, totalCount: 0, errors: ['File text not provided'], warnings: [] };
+  }
+  return parseSF1(file.text);
 }
 
 /**

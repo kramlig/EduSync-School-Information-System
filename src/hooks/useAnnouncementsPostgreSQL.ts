@@ -59,7 +59,7 @@ export function useAnnouncementsPostgreSQL(options: UseAnnouncementsOptions = {}
       // Build query
       let query = supabase
         .from('announcements')
-        .select('*')
+        .select('id, school_id, title, content, date, target, author_id, author_name, created_at, updated_at')
         .eq('school_id', schoolId)
         .order('date', { ascending: false });
 

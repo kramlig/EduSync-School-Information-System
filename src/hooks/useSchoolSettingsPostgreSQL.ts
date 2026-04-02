@@ -43,16 +43,16 @@ export function useSchoolSettingsPostgreSQL(
 
       const { data, error: fetchError } = await supabase
         .from('schools')
-        .select('*')
+        .select('id, name, region, division, district, current_school_year, settings')
         .eq('id', schoolId)
-        .single();
+        .maybeSingle();
 
       if (fetchError) throw fetchError;
 
       if (data) {
         // Map PostgreSQL columns to SchoolSettings interface
         const mappedSettings: SchoolSettings = {
-          schoolName: data.school_name || '',
+          schoolName: data.name || '',
           region: data.region || '',
           division: data.division || '',
           district: data.district || '',
@@ -90,7 +90,7 @@ export function useSchoolSettingsPostgreSQL(
           table: 'schools',
           filter: `id=eq.${schoolId}`
         },
-        (payload: any) => {
+        (_payload: any) => {
           fetchSettings();
         }
       )

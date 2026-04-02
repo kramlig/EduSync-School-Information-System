@@ -212,25 +212,8 @@ export async function logLoginAttempt(
  * Single query across teachers, students, and parents tables
  */
 export async function getUserByFirebaseUID(firebaseUid: string): Promise<UnifiedUserData | null> {
-  try {
-    const { data, error } = await supabase.rpc('get_user_by_firebase_uid', {
-      p_firebase_uid: firebaseUid
-    });
-
-    if (error) {
-      console.error('[AuthService] User lookup error:', error);
-      return null;
-    }
-
-    if (!data || data.length === 0) {
-      return null;
-    }
-
-    return data[0] as UnifiedUserData;
-  } catch (err) {
-    console.error('[AuthService] User lookup exception:', err);
-    return null;
-  }
+  // RPC function has type mismatch in new DB (42804); use direct queries instead
+  return getUserByFirebaseUIDLegacy(firebaseUid);
 }
 
 /**
