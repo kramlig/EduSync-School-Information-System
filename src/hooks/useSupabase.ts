@@ -91,18 +91,23 @@ export function useSupabase<T = any>(
   useEffect(() => {
     fetchData();
 
-    // Setup real-time subscription
+    // Setup real-time subscription — only if a filter is provided to avoid global listening
+    const hasFilters = options.filters && Object.keys(options.filters).length > 0;
+    const filterStr = hasFilters
+      ? Object.entries(options.filters!).map(([k, v]) => `${k}=eq.${v}`)[0]
+      : undefined;
+
     const channel: RealtimeChannel = supabase
       .channel(`${tableName}_changes`)
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          event: '*',
           schema: 'public',
           table: tableName,
+          filter: filterStr,
         },
-        (payload) => {
-          // Refetch data when changes occur
+        (_payload) => {
           fetchData();
         }
       )

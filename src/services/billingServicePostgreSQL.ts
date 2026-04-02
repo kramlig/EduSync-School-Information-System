@@ -44,6 +44,13 @@ export interface FeeStructure {
   createdAt: string;
   updatedAt: string;
   createdBy?: string;
+  totalRequired?: number;
+  totalOptional?: number;
+  paymentOptions?: {
+    fullPayment: { enabled: boolean; discount: number };
+    quarterly: { enabled: boolean; numberOfPayments: number };
+    monthly: { enabled: boolean; numberOfPayments: number };
+  };
 }
 
 export interface MiscFee {
@@ -101,16 +108,28 @@ export interface LedgerPayment {
 
 export interface Receipt {
   id: string;
-  schoolId: string;
+  schoolId?: string;
   receiptNumber: string;
   studentId: string;
-  paymentDate: string;
+  studentName?: string;
+  schoolYear?: string;
+  paymentId?: string;
+  paymentDate?: string;
+  date?: string;
   amount: number;
   paymentMethod: 'cash' | 'check' | 'bank_transfer' | 'gcash' | 'maya' | 'card' | 'online';
   checkNumber?: string;
+  bankName?: string;
   referenceNumber?: string;
+  description?: string;
   notes?: string;
-  issuedBy: string;
+  receivedBy?: string;
+  receivedByName?: string;
+  previousBalance?: number;
+  amountPaid?: number;
+  newBalance?: number;
+  schoolInfo?: any;
+  issuedBy?: string;
   isVoided: boolean;
   voidedAt?: string;
   voidedBy?: string;
@@ -300,7 +319,7 @@ export async function getStudentLedger(
   try {
     const { data, error } = await supabase
       .from('student_ledgers')
-      .select('*')
+      .select('id, school_id, student_id, school_year, total_charges, total_payments, balance, charges, payments, payment_status, last_payment_date, last_payment_amount, notes, created_at, updated_at')
       .eq('student_id', studentId)
       .eq('school_year', schoolYear)
       .is('deleted_at', null)
@@ -326,7 +345,7 @@ export async function initializeStudentLedger(
   studentId: string,
   schoolYear: string,
   feeStructureId: string,
-  gradeLevel: number
+  _gradeLevel: number
 ): Promise<string> {
   try {
     // Get fee structure
@@ -712,7 +731,7 @@ export async function getReceipt(receiptId: string): Promise<Receipt | null> {
  */
 export async function getStudentReceipts(
   studentId: string,
-  schoolYear?: string
+  _schoolYear?: string
 ): Promise<Receipt[]> {
   try {
     let query = supabase

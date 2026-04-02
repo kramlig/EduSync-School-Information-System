@@ -77,6 +77,14 @@ service cloud.firestore {
       return isAuthenticated() && !hasRole();
     }
     
+    // Legacy user scoped to their own school (personal workspace).
+    // Checks that the document's schoolId matches a school owned by this user.
+    function isLegacyOwnerOfSchool(resourceSchoolId) {
+      return isLegacyUser()
+        && exists(/databases/$(database)/documents/schools/$(resourceSchoolId))
+        && get(/databases/$(database)/documents/schools/$(resourceSchoolId)).data.owner_uid == request.auth.uid;
+    }
+    
     function isStaff() {
       return isAdmin() || isPrincipal() || isRegistrar() || isTeacher();
     }
@@ -160,18 +168,18 @@ service cloud.firestore {
       // STRICT: Must have valid schoolId and it must exist
       allow create: if (isAdminOrRegistrar() && hasValidSchoolId(request.resource.data) && schoolExists(request.resource.data.schoolId)) 
                     || isSuperAdmin() 
-                    || isLegacyUser();
+                    || isLegacyOwnerOfSchool(request.resource.data.schoolId);
       
       // Admin and registrar can update students in their school
       // STRICT: Cannot change schoolId
       allow update: if (isAdminOrRegistrar() && belongsToUserSchool(resource.data.schoolId) && schoolIdUnchanged()) 
                     || isSuperAdmin() 
-                    || isLegacyUser();
+                    || isLegacyOwnerOfSchool(resource.data.schoolId);
       
       // Only admin can delete students (in their school)
       allow delete: if (isAdmin() && belongsToUserSchool(resource.data.schoolId)) 
                     || isSuperAdmin() 
-                    || isLegacyUser();
+                    || isLegacyOwnerOfSchool(resource.data.schoolId);
     }
     
     // Teachers Collection
@@ -184,15 +192,15 @@ service cloud.firestore {
       // STRICT: Must have valid schoolId on create, cannot change on update
       allow create: if (isAdminOrPrincipal() && hasValidSchoolId(request.resource.data) && schoolExists(request.resource.data.schoolId))
                     || isSuperAdmin()
-                    || isLegacyUser();
+                    || isLegacyOwnerOfSchool(request.resource.data.schoolId);
       
       allow update: if (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId) && schoolIdUnchanged()) 
                     || isSuperAdmin() 
-                    || isLegacyUser();
+                    || isLegacyOwnerOfSchool(resource.data.schoolId);
       
       allow delete: if (isAdminOrPrincipal() && belongsToUserSchool(resource.data.schoolId))
                     || isSuperAdmin()
-                    || isLegacyUser();
+                    || isLegacyOwnerOfSchool(resource.data.schoolId);
     }
     
     // Sections Collection

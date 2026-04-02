@@ -6,12 +6,10 @@
  */
 
 const sgMail = require('@sendgrid/mail');
-const functions = require('firebase-functions');
 
 // Initialize SendGrid
 function initSendGrid() {
-  const apiKey = process.env.SENDGRID_API_KEY || 
-                 functions.config()?.sendgrid?.api_key;
+  const apiKey = process.env.SENDGRID_API_KEY;
   
   if (!apiKey) {
     console.error('SendGrid API key not configured');

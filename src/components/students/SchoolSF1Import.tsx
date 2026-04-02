@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useCallback, useRef } from 'react';
-import { parseSF1, type SF1ParseResult } from '../../services/sf1Parser';
+import { parseSF1File, type SF1ParseResult } from '../../services/sf1Parser';
 import { 
   lookupSection,
   createSectionFromSF1,
@@ -106,13 +106,21 @@ const SchoolSF1Import: React.FC<SchoolSF1ImportProps> = ({
     importParents: true
   });
 
-  // Handle file selection
+  // Handle file selection — supports .xls, .xlsx, and .csv
   const handleFileSelect = useCallback(async (file: File) => {
     setState(prev => ({ ...prev, file, error: null }));
     
     try {
-      const content = await file.text();
-      const result = parseSF1(content);
+      const isExcel = /\.xlsx?$/i.test(file.name);
+      let result: SF1ParseResult;
+
+      if (isExcel) {
+        const buffer = await file.arrayBuffer();
+        result = parseSF1File({ name: file.name, buffer });
+      } else {
+        const text = await file.text();
+        result = parseSF1File({ name: file.name, text });
+      }
       
       if (!result.success) {
         setState(prev => ({
@@ -148,10 +156,10 @@ const SchoolSF1Import: React.FC<SchoolSF1ImportProps> = ({
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
-    if (file && (file.name.endsWith('.csv') || file.type === 'text/csv')) {
+    if (file && /\.(csv|xlsx?)$/i.test(file.name)) {
       handleFileSelect(file);
     } else {
-      setState(prev => ({ ...prev, error: 'Please drop a CSV file' }));
+      setState(prev => ({ ...prev, error: 'Please drop a .xls, .xlsx, or .csv file' }));
     }
   }, [handleFileSelect]);
 
@@ -328,13 +336,12 @@ const SchoolSF1Import: React.FC<SchoolSF1ImportProps> = ({
             <div className="space-y-6">
               {/* Instructions */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h3 className="font-semibold text-blue-800 mb-2">📋 How to export SF1 from DepEd LIS:</h3>
+                <h3 className="font-semibold text-blue-800 mb-2">📋 How to get your SF1 file:</h3>
                 <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
-                  <li>Log in to DepEd LIS (lis.deped.gov.ph)</li>
-                  <li>Go to <strong>School Forms → SF1</strong></li>
-                  <li>Select the <strong>Grade Level</strong> and <strong>Section</strong></li>
-                  <li>Click <strong>"Export to CSV"</strong> or <strong>"Download"</strong></li>
-                  <li>Upload the downloaded CSV file here</li>
+                  <li>Get the SF1 Excel file from DepEd LIS or your Registrar</li>
+                  <li>Each file should be <strong>one grade level &amp; section</strong> (e.g. SF1_2025_Grade-1-HOPE.xls)</li>
+                  <li>Supports <strong>.xls</strong> (Excel 97-2003), <strong>.xlsx</strong>, and <strong>.csv</strong> formats</li>
+                  <li>Upload the file here — we'll extract all student data automatically</li>
                 </ol>
               </div>
 
@@ -346,12 +353,12 @@ const SchoolSF1Import: React.FC<SchoolSF1ImportProps> = ({
                 className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-blue-500 hover:bg-blue-50 transition-colors cursor-pointer"
               >
                 <UploadIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-lg font-medium text-gray-700">Drop SF1 CSV file here</p>
-                <p className="text-sm text-gray-500 mt-1">or click to browse</p>
+                <p className="text-lg font-medium text-gray-700">Drop SF1 file here</p>
+                <p className="text-sm text-gray-500 mt-1">Supports .xls, .xlsx, and .csv — or click to browse</p>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleFileSelect(file);

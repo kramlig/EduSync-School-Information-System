@@ -131,7 +131,7 @@ export default function PersonalAttendance({ schoolId, teacherId, tier: _tier }:
         ...(taRes.data || []).map((r: any) => r.section_id),
         ...(advRes.data || []).map((r: any) => r.id),
       ])];
-      if (sectionIds.length === 0) { setSections([]); return; }
+      if (sectionIds.length === 0) { setSections([]); setLoading(false); return; }
 
       const { data: secData } = await supabase
         .from('sections')
@@ -148,13 +148,18 @@ export default function PersonalAttendance({ schoolId, teacherId, tier: _tier }:
 
   // ── Fetch students + attendance for selected section ──
   const fetchData = useCallback(async () => {
-    if (!schoolId || !selectedSectionId) return;
+    if (!schoolId || !selectedSectionId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
 
     try {
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+      // Use actual last day of month (day 0 of next month = last day of current month)
+      const lastDay = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
       const sec = sections.find(s => s.id === selectedSectionId) || null;
       setSection(sec);
@@ -175,6 +180,7 @@ export default function PersonalAttendance({ schoolId, teacherId, tier: _tier }:
       ]);
 
       if (studentsRes.error) throw studentsRes.error;
+      if (attRes.error) throw attRes.error;
       setStudents(studentsRes.data || []);
 
       const map = new Map<string, AttendanceRecord>();
@@ -298,7 +304,7 @@ export default function PersonalAttendance({ schoolId, teacherId, tier: _tier }:
       if (toInsert.length > 0) {
         const { data, error: insErr } = await supabase
           .from('attendance_records')
-          .upsert(toInsert, { onConflict: 'student_id,date' })
+          .insert(toInsert)
           .select('id, student_id, date, status');
         if (insErr) throw insErr;
         if (data) {
@@ -310,12 +316,11 @@ export default function PersonalAttendance({ schoolId, teacherId, tier: _tier }:
         }
       }
       for (const u of toUpdate) {
-        await supabase.from('attendance_records').update({ status: u.status }).eq('id', u.id);
+        const { error: upErr } = await supabase.from('attendance_records').update({ status: u.status }).eq('id', u.id);
+        if (upErr) throw upErr;
       }
-      if (toUpdate.length > 0) {
-        // Refresh after batch updates
-        fetchData();
-      }
+      // Always refresh from DB to confirm persistence
+      await fetchData();
       setSuccessMsg(`Marked all students present for ${date}`);
       setTimeout(() => setSuccessMsg(''), 2000);
     } catch (err: any) {

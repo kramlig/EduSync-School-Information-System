@@ -10,7 +10,7 @@ const sm = new SecretManagerServiceClient();
 let _cachedGeminiKey = null;
 
 async function getGeminiKey() {
-  // Priority: 1) environment variable (process.env.GEMINI_KEY) 2) Secret Manager secret named 'gemini-key' 3) legacy functions.config().gemini.key
+  // Priority: 1) environment variable (process.env.GEMINI_KEY) 2) Secret Manager secret named 'gemini-key'
   if (_cachedGeminiKey) return _cachedGeminiKey;
   if (process.env.GEMINI_KEY) {
     _cachedGeminiKey = process.env.GEMINI_KEY;
@@ -29,22 +29,11 @@ async function getGeminiKey() {
       return _cachedGeminiKey;
     }
   } catch (smErr) {
-    // secret might not exist or access denied; we'll fall back to functions.config()
-    console.debug('Secret Manager lookup failed (will try functions.config()):', smErr && smErr.message);
+    // secret might not exist or access denied
+    console.debug('Secret Manager lookup failed:', smErr && smErr.message);
   }
 
-  // Fallback to legacy functions.config
-  try {
-    const cfg = functions.config();
-    const key = cfg?.gemini?.key;
-    if (key) {
-      _cachedGeminiKey = key;
-      return _cachedGeminiKey;
-    }
-  } catch (e) {
-    // ignore
-  }
-  // No API key found in env/Secret Manager/functions.config(). Return null so callers
+  // No API key found in env/Secret Manager. Return null so callers
   // can choose to fall back to Application Default Credentials (ADC) when available.
   return null;
 }
@@ -156,13 +145,7 @@ exports.generateStudentReport = functions.https.onRequest((req, res) => {
 
 // --- Protected utilities: seed and summarize ---
 function getSeedToken() {
-  try {
-    const cfg = functions.config();
-    const token = cfg?.seed?.token;
-    return token || null;
-  } catch {
-    return null;
-  }
+  return process.env.SEED_TOKEN || null;
 }
 
 function checkAuth(req) {
@@ -311,9 +294,9 @@ exports.seedCoreValuesSafe = functions.https.onRequest(async (req, res) => {
 
       // Simple token-based guard; token can be provided via header or query/body
       const provided = req.get('x-seed-token') || req.query.token || (req.body && req.body.token);
-      const expected = (functions.config() && functions.config().seed && functions.config().seed.token) || process.env.SEED_TOKEN || null;
+      const expected = process.env.SEED_TOKEN || null;
       if (!expected) {
-        return res.status(500).json({ error: 'Seed token not configured. Set functions config: seed.token=<value>' });
+        return res.status(500).json({ error: 'Seed token not configured. Set SEED_TOKEN in functions/.env' });
       }
       if (!provided || String(provided) !== String(expected)) {
         return res.status(401).json({ error: 'Unauthorized: missing or invalid token' });
@@ -596,3 +579,4 @@ exports.paymongoWebhook = payments.paymongoWebhook;
 exports.getSubscriptionStatus = payments.getSubscriptionStatus;
 exports.cancelSubscription = payments.cancelSubscription;
 exports.getBillingHistory = payments.getBillingHistory;
+exports.expireOverdueSubscriptions = payments.expireOverdueSubscriptions;

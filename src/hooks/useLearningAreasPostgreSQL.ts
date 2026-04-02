@@ -41,8 +41,8 @@ interface UseLearningAreasOptions {
 }
 
 const DEFAULT_OPTIONS: UseLearningAreasOptions = {
-  enablePolling: true,
-  pollingInterval: 30000, // 30 seconds - learning areas change rarely
+  enablePolling: false, // Disabled — learning areas rarely change; saves ~1.4 GB/mo egress
+  pollingInterval: 300000, // 5 minutes (if re-enabled)
   conditionalLoading: true,
 };
 

@@ -107,7 +107,7 @@ export async function getActivities(
 ): Promise<ECRActivity[]> {
   const { data, error } = await supabase
     .from('ecr_activities')
-    .select('*')
+    .select('id, school_id, teacher_id, section_id, learning_area_id, school_year, quarter, activity_type, activity_number, activity_name, description, max_score, activity_date, due_date, is_published, is_locked, created_at, updated_at')
     .eq('section_id', sectionId)
     .eq('learning_area_id', learningAreaId)
     .eq('school_year', schoolYear)
@@ -271,7 +271,7 @@ export async function deleteActivity(activityId: string): Promise<boolean> {
 export async function getScoresForActivity(activityId: string): Promise<ECRScore[]> {
   const { data, error } = await supabase
     .from('ecr_scores')
-    .select('*')
+    .select('id, activity_id, student_id, raw_score, status, remarks, graded_by, graded_at, created_at, updated_at')
     .eq('activity_id', activityId);
 
   if (error) {
@@ -528,7 +528,7 @@ export async function getClassRecord(
   const activityIds = activities.map(a => a.id);
   const { data: allScores, error: scoresError } = await supabase
     .from('ecr_scores')
-    .select('*')
+    .select('id, activity_id, student_id, raw_score, status, remarks, graded_by, graded_at')
     .in('activity_id', activityIds);
 
   if (scoresError) {

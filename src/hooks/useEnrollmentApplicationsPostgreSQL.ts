@@ -67,7 +67,7 @@ export function useEnrollmentApplicationsPostgreSQL(
 
       let query = supabase
         .from('enrollment_applications')
-        .select('*')
+        .select('id, school_id, application_number, student_data, parent_data, previous_school_data, grade_level_applied, school_year, status, submitted_by, submitted_at, reviewed_by, reviewed_at, review_notes, created_at, updated_at')
         .order('submitted_at', { ascending: false, nullsFirst: false });
 
       // Apply filters

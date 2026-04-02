@@ -16,7 +16,6 @@ import { supabase } from '../lib/supabase';
 import { ECRService } from '../services/ecrService';
 import type {
   ECRActivity,
-  ECRScore,
   ECRClassRecord,
   ECRActivityType,
   ECRQuarter,
@@ -148,26 +147,12 @@ export function useECR(options: UseECROptions): UseECRReturn {
       )
       .subscribe();
 
-    // Subscribe to score changes
-    const scoresChannel = supabase
-      .channel(`ecr_scores_${optionsKey}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'ecr_scores'
-        },
-        () => {
-          // Reload class record when scores change
-          loadClassRecord();
-        }
-      )
-      .subscribe();
+    // Removed ecr_scores realtime subscription — scores don't have section_id column,
+    // so unfiltered listening was causing excessive egress. Score updates are handled
+    // via optimistic UI updates. Manual refresh via loadClassRecord() when needed.
 
     return () => {
       supabase.removeChannel(activitiesChannel);
-      supabase.removeChannel(scoresChannel);
     };
   }, [optionsKey, loadClassRecord, sectionId]);
 

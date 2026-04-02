@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
 import { onAuthStateChanged, signInAnonymously, signOut } from 'firebase/auth';
 import { auth } from './src/services/firestoreService';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
@@ -20,145 +20,146 @@ import UpdateNotification from './components/UpdateNotification';
 import './src/diagnostics'; // Run Firestore diagnostics in development
 import './src/utils/logger'; // Initialize logger (disables console in production)
 import { getPersonalWorkspace, getUserSubscription } from './src/services/personalWorkspaceService';
+import { lazyWithRetry } from './src/utils/lazyWithRetry';
 
-// Lazy load heavy components for better code splitting
-const Dashboard = lazy(() => import('./components/Dashboard'));
-const StudentList = lazy(() => import('./components/StudentList'));
-const TeacherList = lazy(() => import('./components/TeacherList'));
-const ParentsView = lazy(() => import('./components/ParentsView'));
-const ParentsViewPostgreSQL = lazy(() => import('./src/components/ParentsViewPostgreSQL'));
-const TeachersViewPostgreSQL = lazy(() => import('./src/components/TeachersViewPostgreSQL'));
-const SectionsView = lazy(() => import('./components/SectionsViewOptimized'));
-const UnifiedAssessmentView = lazy(() => import('./components/UnifiedAssessmentView'));
-const GradesDashboard = lazy(() => import('./components/GradesDashboard'));
-const GradesView = lazy(() => import('./components/GradesView'));
-const GradesSummary = lazy(() => import('./components/GradesSummaryNew'));
-const GradebookView = lazy(() => import('./components/GradebookView'));
-const CoreValuesGradebookView = lazy(() => import('./components/CoreValuesGradebookView'));
-const HomeroomGuidanceView = lazy(() => import('./components/HomeroomGuidanceView'));
-const AttendanceView = lazy(() => import('./components/AttendanceView'));
-const SchedulerView = lazy(() => import('./components/SchedulerView'));
-const SubstituteView = lazy(() => import('./components/SubstituteView'));
-const AssignmentsView = lazy(() => import('./components/AssignmentsView'));
-const LessonPlanView = lazy(() => import('./components/LessonPlanView'));
-const AnnouncementsView = lazy(() => import('./components/AnnouncementsView'));
-const SettingsView = lazy(() => import('./components/SettingsView'));
-const SchoolSettingsPostgreSQL = lazy(() => import('./components/SchoolSettingsPostgreSQL'));
-const CourseList = lazy(() => import('./components/CourseList'));
-const StudentDashboard = lazy(() => import('./components/StudentDashboard'));
-const ParentDashboard = lazy(() => import('./components/ParentDashboard'));
-const ParentProfile = lazy(() => import('./components/ParentProfile'));
-const ParentBilling = lazy(() => import('./components/ParentBilling'));
-const ParentRegistration = lazy(() => import('./src/components/parent/ParentRegistration'));
-// const EmailVerification = lazy(() => import('./components/EmailVerification')); // Temporarily disabled
-const FeeStructureManager = lazy(() => import('./components/FeeStructureManager'));
-const PaymentRecording = lazy(() => import('./components/PaymentRecording'));
-const FinancialReports = lazy(() => import('./components/FinancialReports'));
-const ReceiptManagement = lazy(() => import('./components/ReceiptManagement'));
-// const FormsLibrary = lazy(() => import('./components/forms/FormsLibrary')); // Deprecated - using direct form routes now
-const Form137Dashboard = lazy(() => import('./components/forms/Form137/Form137Dashboard'));
-const Form137Manager = lazy(() => import('./components/forms/Form137/Form137Manager'));
-const Form138Dashboard = lazy(() => import('./components/forms/Form138/Form138Dashboard'));
-const Form138View = lazy(() => import('./components/forms/Form138/Form138View'));
-const Form138Print = lazy(() => import('./components/forms/Form138/Form138Print'));
-const SchoolFormsDashboard = lazy(() => import('./components/forms/SchoolForms/SchoolFormsDashboard'));
-const SF1Dashboard = lazy(() => import('./components/forms/SchoolForms/SF1Dashboard'));
-const SF2Dashboard = lazy(() => import('./components/forms/SchoolForms/SF2Dashboard'));
-const SF9Dashboard = lazy(() => import('./components/forms/SchoolForms/SF9Dashboard'));
-const SF9View = lazy(() => import('./components/forms/SF9/SF9View'));
-const SF9Print = lazy(() => import('./components/forms/SF9/SF9Print'));
-const SF8Dashboard = lazy(() => import('./components/forms/SchoolForms/SF8Dashboard'));
-const SF5ASHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF5ASHSDashboard'));
-const SF5BSHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF5BSHSDashboard'));
-const SF1SHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF1SHSDashboard'));
-const SF2SHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF2SHSDashboard'));
-const SF9SHSDashboard = lazy(() => import('./components/forms/SchoolForms/SF9SHSDashboard'));
-const SF10Dashboard = lazy(() => import('./components/forms/SF10/SF10Dashboard'));
-const ELLNDashboard = lazy(() => import('./components/forms/ELLN/ELLNDashboard'));
-const ELLNAssessment = lazy(() => import('./components/forms/ELLN/ELLNAssessment'));
-const ELLNResults = lazy(() => import('./components/forms/ELLN/ELLNResults'));
-const ELLNReports = lazy(() => import('./components/forms/ELLN/ELLNReports'));
-const ILMPTemplate = lazy(() => import('./components/forms/ELLN/ILMPTemplate'));
-const SF3Dashboard = lazy(() => import('./src/components/deped-forms/SF3Dashboard'));
-const SF4Dashboard = lazy(() => import('./src/components/deped-forms/SF4Dashboard'));
-const SF5Dashboard = lazy(() => import('./src/components/deped-forms/SF5Dashboard'));
-const SF5KDashboard = lazy(() => import('./src/components/deped-forms/SF5KDashboard'));
-const SF6Dashboard = lazy(() => import('./src/components/deped-forms/SF6Dashboard'));
-const SF7Dashboard = lazy(() => import('./src/components/deped-forms/SF7Dashboard'));
-const TextbookManagementDashboard = lazy(() => import('./src/components/deped-forms/TextbookManagementDashboard'));
-const FacilitiesManagementDashboard = lazy(() => import('./src/components/deped-forms/FacilitiesManagementDashboard'));
-// const GradesReportsDashboard = lazy(() => import('./components/GradesReportsDashboard')); // Unused
-// const TeacherValidationWizard = lazy(() => import('./components/TeacherValidationWizard')); // HIDDEN: Outdated
-const ValidationResultsDashboard = lazy(() => import('./components/ValidationResultsDashboard'));
+// Lazy load heavy components for better code splitting (using lazyWithRetry to handle stale chunks after deployments)
+const Dashboard = lazyWithRetry(() => import('./components/Dashboard'));
+const StudentList = lazyWithRetry(() => import('./components/StudentList'));
+const TeacherList = lazyWithRetry(() => import('./components/TeacherList'));
+const ParentsView = lazyWithRetry(() => import('./components/ParentsView'));
+const ParentsViewPostgreSQL = lazyWithRetry(() => import('./src/components/ParentsViewPostgreSQL'));
+const TeachersViewPostgreSQL = lazyWithRetry(() => import('./src/components/TeachersViewPostgreSQL'));
+const SectionsView = lazyWithRetry(() => import('./components/SectionsViewOptimized'));
+const UnifiedAssessmentView = lazyWithRetry(() => import('./components/UnifiedAssessmentView'));
+const GradesDashboard = lazyWithRetry(() => import('./components/GradesDashboard'));
+const GradesView = lazyWithRetry(() => import('./components/GradesView'));
+const GradesSummary = lazyWithRetry(() => import('./components/GradesSummaryNew'));
+const GradebookView = lazyWithRetry(() => import('./components/GradebookView'));
+const CoreValuesGradebookView = lazyWithRetry(() => import('./components/CoreValuesGradebookView'));
+const HomeroomGuidanceView = lazyWithRetry(() => import('./components/HomeroomGuidanceView'));
+const AttendanceView = lazyWithRetry(() => import('./components/AttendanceView'));
+const SchedulerView = lazyWithRetry(() => import('./components/SchedulerView'));
+const SubstituteView = lazyWithRetry(() => import('./components/SubstituteView'));
+const AssignmentsView = lazyWithRetry(() => import('./components/AssignmentsView'));
+const LessonPlanView = lazyWithRetry(() => import('./components/LessonPlanView'));
+const AnnouncementsView = lazyWithRetry(() => import('./components/AnnouncementsView'));
+const SettingsView = lazyWithRetry(() => import('./components/SettingsView'));
+const SchoolSettingsPostgreSQL = lazyWithRetry(() => import('./components/SchoolSettingsPostgreSQL'));
+const CourseList = lazyWithRetry(() => import('./components/CourseList'));
+const StudentDashboard = lazyWithRetry(() => import('./components/StudentDashboard'));
+const ParentDashboard = lazyWithRetry(() => import('./components/ParentDashboard'));
+const ParentProfile = lazyWithRetry(() => import('./components/ParentProfile'));
+const ParentBilling = lazyWithRetry(() => import('./components/ParentBilling'));
+const ParentRegistration = lazyWithRetry(() => import('./src/components/parent/ParentRegistration'));
+// const EmailVerification = lazyWithRetry(() => import('./components/EmailVerification')); // Temporarily disabled
+const FeeStructureManager = lazyWithRetry(() => import('./components/FeeStructureManager'));
+const PaymentRecording = lazyWithRetry(() => import('./components/PaymentRecording'));
+const FinancialReports = lazyWithRetry(() => import('./components/FinancialReports'));
+const ReceiptManagement = lazyWithRetry(() => import('./components/ReceiptManagement'));
+// const FormsLibrary = lazyWithRetry(() => import('./components/forms/FormsLibrary')); // Deprecated - using direct form routes now
+const Form137Dashboard = lazyWithRetry(() => import('./components/forms/Form137/Form137Dashboard'));
+const Form137Manager = lazyWithRetry(() => import('./components/forms/Form137/Form137Manager'));
+const Form138Dashboard = lazyWithRetry(() => import('./components/forms/Form138/Form138Dashboard'));
+const Form138View = lazyWithRetry(() => import('./components/forms/Form138/Form138View'));
+const Form138Print = lazyWithRetry(() => import('./components/forms/Form138/Form138Print'));
+const SchoolFormsDashboard = lazyWithRetry(() => import('./components/forms/SchoolForms/SchoolFormsDashboard'));
+const SF1Dashboard = lazyWithRetry(() => import('./components/forms/SchoolForms/SF1Dashboard'));
+const SF2Dashboard = lazyWithRetry(() => import('./components/forms/SchoolForms/SF2Dashboard'));
+const SF9Dashboard = lazyWithRetry(() => import('./components/forms/SchoolForms/SF9Dashboard'));
+const SF9View = lazyWithRetry(() => import('./components/forms/SF9/SF9View'));
+const SF9Print = lazyWithRetry(() => import('./components/forms/SF9/SF9Print'));
+const SF8Dashboard = lazyWithRetry(() => import('./components/forms/SchoolForms/SF8Dashboard'));
+const SF5ASHSDashboard = lazyWithRetry(() => import('./components/forms/SchoolForms/SF5ASHSDashboard'));
+const SF5BSHSDashboard = lazyWithRetry(() => import('./components/forms/SchoolForms/SF5BSHSDashboard'));
+const SF1SHSDashboard = lazyWithRetry(() => import('./components/forms/SchoolForms/SF1SHSDashboard'));
+const SF2SHSDashboard = lazyWithRetry(() => import('./components/forms/SchoolForms/SF2SHSDashboard'));
+const SF9SHSDashboard = lazyWithRetry(() => import('./components/forms/SchoolForms/SF9SHSDashboard'));
+const SF10Dashboard = lazyWithRetry(() => import('./components/forms/SF10/SF10Dashboard'));
+const ELLNDashboard = lazyWithRetry(() => import('./components/forms/ELLN/ELLNDashboard'));
+const ELLNAssessment = lazyWithRetry(() => import('./components/forms/ELLN/ELLNAssessment'));
+const ELLNResults = lazyWithRetry(() => import('./components/forms/ELLN/ELLNResults'));
+const ELLNReports = lazyWithRetry(() => import('./components/forms/ELLN/ELLNReports'));
+const ILMPTemplate = lazyWithRetry(() => import('./components/forms/ELLN/ILMPTemplate'));
+const SF3Dashboard = lazyWithRetry(() => import('./src/components/deped-forms/SF3Dashboard'));
+const SF4Dashboard = lazyWithRetry(() => import('./src/components/deped-forms/SF4Dashboard'));
+const SF5Dashboard = lazyWithRetry(() => import('./src/components/deped-forms/SF5Dashboard'));
+const SF5KDashboard = lazyWithRetry(() => import('./src/components/deped-forms/SF5KDashboard'));
+const SF6Dashboard = lazyWithRetry(() => import('./src/components/deped-forms/SF6Dashboard'));
+const SF7Dashboard = lazyWithRetry(() => import('./src/components/deped-forms/SF7Dashboard'));
+const TextbookManagementDashboard = lazyWithRetry(() => import('./src/components/deped-forms/TextbookManagementDashboard'));
+const FacilitiesManagementDashboard = lazyWithRetry(() => import('./src/components/deped-forms/FacilitiesManagementDashboard'));
+// const GradesReportsDashboard = lazyWithRetry(() => import('./components/GradesReportsDashboard')); // Unused
+// const TeacherValidationWizard = lazyWithRetry(() => import('./components/TeacherValidationWizard')); // HIDDEN: Outdated
+const ValidationResultsDashboard = lazyWithRetry(() => import('./components/ValidationResultsDashboard'));
 
 // PostgreSQL Migration Test Components
-const GradebookViewPostgreSQL = lazy(() => import('./components/GradebookViewPostgreSQL'));
+const GradebookViewPostgreSQL = lazyWithRetry(() => import('./components/GradebookViewPostgreSQL'));
 
 // Electronic Class Record (ECR) Components
-const ClassRecordView = lazy(() => import('./components/ClassRecordView'));
-const ClassRecordSelector = lazy(() => import('./components/ClassRecordSelector'));
+const ClassRecordView = lazyWithRetry(() => import('./components/ClassRecordView'));
+const ClassRecordSelector = lazyWithRetry(() => import('./components/ClassRecordSelector'));
 
 // School Management for Super Admins (Legacy - deprecated)
-// const SchoolManagementView = lazy(() => import('./components/SchoolManagementView'));
+// const SchoolManagementView = lazyWithRetry(() => import('./components/SchoolManagementView'));
 
 // New SuperAdmin Module
-const SuperAdminLayout = lazy(() => import('./src/components/superadmin/SuperAdminLayout'));
+const SuperAdminLayout = lazyWithRetry(() => import('./src/components/superadmin/SuperAdminLayout'));
 
 // Free Tools (public, no auth required)
-const FormGeneratorPage = lazy(() => import('./src/components/tools/FormGeneratorPage'));
+const FormGeneratorPage = lazyWithRetry(() => import('./src/components/tools/FormGeneratorPage'));
 
 // Personal Workspace (authenticated, simplified)
-const PersonalSignupScreen = lazy(() => import('./src/components/personal/PersonalSignupScreen'));
-const PersonalLayout = lazy(() => import('./src/components/personal/PersonalLayout'));
-const PersonalDashboard = lazy(() => import('./src/components/personal/PersonalDashboard'));
-const PersonalStudentListWrapper = lazy(() => import('./src/components/personal/PersonalStudentListWrapper'));
-const PersonalForms = lazy(() => import('./src/components/personal/PersonalForms'));
-const PersonalSettings = lazy(() => import('./src/components/personal/PersonalSettings'));
-const PersonalGradebook = lazy(() => import('./src/components/personal/PersonalGradebook'));
-const PersonalClassRecordSelector = lazy(() => import('./src/components/personal/PersonalClassRecordSelector'));
-const PersonalClassRecordView = lazy(() => import('./src/components/personal/PersonalClassRecordView'));
-const PersonalAnalytics = lazy(() => import('./src/components/personal/PersonalAnalytics'));
-const PersonalSections = lazy(() => import('./src/components/personal/PersonalSections'));
-const PersonalAttendance = lazy(() => import('./src/components/personal/PersonalAttendance'));
-const PersonalCoreValues = lazy(() => import('./src/components/personal/PersonalCoreValues'));
-const PersonalHomeroomGuidance = lazy(() => import('./src/components/personal/PersonalHomeroomGuidance'));
+const PersonalSignupScreen = lazyWithRetry(() => import('./src/components/personal/PersonalSignupScreen'));
+const PersonalLayout = lazyWithRetry(() => import('./src/components/personal/PersonalLayout'));
+const PersonalDashboard = lazyWithRetry(() => import('./src/components/personal/PersonalDashboard'));
+const PersonalStudentListWrapper = lazyWithRetry(() => import('./src/components/personal/PersonalStudentListWrapper'));
+const PersonalForms = lazyWithRetry(() => import('./src/components/personal/PersonalForms'));
+const PersonalSettings = lazyWithRetry(() => import('./src/components/personal/PersonalSettings'));
+const PersonalGradebook = lazyWithRetry(() => import('./src/components/personal/PersonalGradebook'));
+const PersonalClassRecordSelector = lazyWithRetry(() => import('./src/components/personal/PersonalClassRecordSelector'));
+const PersonalClassRecordView = lazyWithRetry(() => import('./src/components/personal/PersonalClassRecordView'));
+const PersonalAnalytics = lazyWithRetry(() => import('./src/components/personal/PersonalAnalytics'));
+const PersonalSections = lazyWithRetry(() => import('./src/components/personal/PersonalSections'));
+const PersonalAttendance = lazyWithRetry(() => import('./src/components/personal/PersonalAttendance'));
+const PersonalCoreValues = lazyWithRetry(() => import('./src/components/personal/PersonalCoreValues'));
+const PersonalHomeroomGuidance = lazyWithRetry(() => import('./src/components/personal/PersonalHomeroomGuidance'));
 
 // Enrollment components
-const EnrollmentPortal = lazy(() => import('./src/components/enrollment/portal/EnrollmentPortal'));
-const ApplicationForm = lazy(() => import('./src/components/enrollment/forms/ApplicationForm'));
-const ApplicationStatus = lazy(() => import('./src/components/enrollment/status/ApplicationStatus'));
-const AdminEnrollmentDashboard = lazy(() => import('./src/components/enrollment/admin/AdminEnrollmentDashboard'));
-const ApplicationReview = lazy(() => import('./src/components/enrollment/admin/ApplicationReview'));
+const EnrollmentPortal = lazyWithRetry(() => import('./src/components/enrollment/portal/EnrollmentPortal'));
+const ApplicationForm = lazyWithRetry(() => import('./src/components/enrollment/forms/ApplicationForm'));
+const ApplicationStatus = lazyWithRetry(() => import('./src/components/enrollment/status/ApplicationStatus'));
+const AdminEnrollmentDashboard = lazyWithRetry(() => import('./src/components/enrollment/admin/AdminEnrollmentDashboard'));
+const ApplicationReview = lazyWithRetry(() => import('./src/components/enrollment/admin/ApplicationReview'));
 
 // Admin components - Using V2 with Cloud Function (no admin password re-entry needed!)
-const UserManagementPanel = lazy(() => import('./src/components/admin/UserManagementPanelV2'));
+const UserManagementPanel = lazyWithRetry(() => import('./src/components/admin/UserManagementPanelV2'));
 
 // Marketing components
-const LandingPage = lazy(() => import('./src/components/marketing/LandingPage'));
-const LandingPageV2 = lazy(() => import('./src/components/marketing/LandingPageV2'));
-const TeachersLandingPage = lazy(() => import('./src/components/marketing/TeachersLandingPage'));
-const PrivacyPolicy = lazy(() => import('./src/components/marketing/PrivacyPolicy'));
-const TermsOfService = lazy(() => import('./src/components/marketing/TermsOfService'));
-const NotFoundPage = lazy(() => import('./src/components/marketing/NotFoundPage'));
+const LandingPage = lazyWithRetry(() => import('./src/components/marketing/LandingPage'));
+const LandingPageV2 = lazyWithRetry(() => import('./src/components/marketing/LandingPageV2'));
+const TeachersLandingPage = lazyWithRetry(() => import('./src/components/marketing/TeachersLandingPage'));
+const PrivacyPolicy = lazyWithRetry(() => import('./src/components/marketing/PrivacyPolicy'));
+const TermsOfService = lazyWithRetry(() => import('./src/components/marketing/TermsOfService'));
+const NotFoundPage = lazyWithRetry(() => import('./src/components/marketing/NotFoundPage'));
 
 // Division-level components
-const DivisionLayout = lazy(() => import('./src/components/division/DivisionLayout'));
-const DivisionDashboard = lazy(() => import('./src/components/division/DivisionDashboard'));
-const DivisionSchools = lazy(() => import('./src/components/division/DivisionSchools'));
-const DivisionPersonnel = lazy(() => import('./src/components/division/DivisionPersonnel'));
-const DivisionEnrollment = lazy(() => import('./src/components/division/DivisionEnrollment'));
-const DivisionReports = lazy(() => import('./src/components/division/DivisionReports'));
-const DivisionSettings = lazy(() => import('./src/components/division/DivisionSettingsEnhanced'));
-const DivisionUserManagement = lazy(() => import('./src/components/division/DivisionUserManagement'));
-const DivisionSF5Dashboard = lazy(() => import('./src/components/division/DivisionSF5Dashboard'));
-const DivisionSF6Dashboard = lazy(() => import('./src/components/division/DivisionSF6Dashboard'));
-const DivisionSF7Dashboard = lazy(() => import('./src/components/division/DivisionSF7Dashboard'));
-const DivisionProficiencyDashboard = lazy(() => import('./src/components/division/DivisionProficiencyDashboard'));
-const DivisionAuditLog = lazy(() => import('./src/components/division/DivisionAuditLog'));
-const DivisionOnboarding = lazy(() => import('./src/components/division/DivisionOnboarding'));
-const DivisionSF1Import = lazy(() => import('./src/components/division/DivisionSF1Import'));
-const DivisionSF5Import = lazy(() => import('./src/components/division/DivisionSF5Import'));
-const DivisionSF7Import = lazy(() => import('./src/components/division/DivisionSF7Import'));
+const DivisionLayout = lazyWithRetry(() => import('./src/components/division/DivisionLayout'));
+const DivisionDashboard = lazyWithRetry(() => import('./src/components/division/DivisionDashboard'));
+const DivisionSchools = lazyWithRetry(() => import('./src/components/division/DivisionSchools'));
+const DivisionPersonnel = lazyWithRetry(() => import('./src/components/division/DivisionPersonnel'));
+const DivisionEnrollment = lazyWithRetry(() => import('./src/components/division/DivisionEnrollment'));
+const DivisionReports = lazyWithRetry(() => import('./src/components/division/DivisionReports'));
+const DivisionSettings = lazyWithRetry(() => import('./src/components/division/DivisionSettingsEnhanced'));
+const DivisionUserManagement = lazyWithRetry(() => import('./src/components/division/DivisionUserManagement'));
+const DivisionSF5Dashboard = lazyWithRetry(() => import('./src/components/division/DivisionSF5Dashboard'));
+const DivisionSF6Dashboard = lazyWithRetry(() => import('./src/components/division/DivisionSF6Dashboard'));
+const DivisionSF7Dashboard = lazyWithRetry(() => import('./src/components/division/DivisionSF7Dashboard'));
+const DivisionProficiencyDashboard = lazyWithRetry(() => import('./src/components/division/DivisionProficiencyDashboard'));
+const DivisionAuditLog = lazyWithRetry(() => import('./src/components/division/DivisionAuditLog'));
+const DivisionOnboarding = lazyWithRetry(() => import('./src/components/division/DivisionOnboarding'));
+const DivisionSF1Import = lazyWithRetry(() => import('./src/components/division/DivisionSF1Import'));
+const DivisionSF5Import = lazyWithRetry(() => import('./src/components/division/DivisionSF5Import'));
+const DivisionSF7Import = lazyWithRetry(() => import('./src/components/division/DivisionSF7Import'));
 import { DivisionContextProvider } from './src/contexts/DivisionContext';
 import DivisionGuard from './src/components/division/DivisionGuard';
 
@@ -216,12 +217,12 @@ const App: React.FC = () => {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.user && parsed.type) {
-          devLog('[App] 🔄 Restored session from localStorage:', parsed.user.email);
+          devLog('[App] ðŸ”„ Restored session from localStorage:', parsed.user.email);
           return parsed;
         }
       }
     } catch (e) {
-      devError('[App] ❌ Failed to restore session:', e);
+      devError('[App] âŒ Failed to restore session:', e);
     }
     return null;
   });
@@ -245,6 +246,30 @@ const App: React.FC = () => {
       localStorage.setItem('edusync_session', JSON.stringify(updated));
       setSession(updated as any);
     }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [session?.user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refresh personal workspace schoolId/teacherId from DB to handle stale session after migration
+  const [personalWorkspaceReady, setPersonalWorkspaceReady] = useState(false);
+  useEffect(() => {
+    if (!session) { setPersonalWorkspaceReady(true); return; }
+    const u = session.user as any;
+    if (u.workspaceType !== 'personal' || !u.firebaseUid) { setPersonalWorkspaceReady(true); return; }
+
+    let cancelled = false;
+    getPersonalWorkspace(u.firebaseUid).then((ws) => {
+      if (cancelled || !ws) { if (!cancelled) setPersonalWorkspaceReady(true); return; }
+      // Only update if the schoolId or teacherId changed
+      if (ws.schoolId !== u.schoolId || ws.teacherId !== (u.id || u.postgresqlId)) {
+        const updated = {
+          ...session,
+          user: { ...session.user, schoolId: ws.schoolId, id: ws.teacherId, _freshSchoolId: ws.schoolId, _freshTeacherId: ws.teacherId }
+        };
+        localStorage.setItem('edusync_session', JSON.stringify(updated));
+        if (!cancelled) setSession(updated as any);
+      }
+      if (!cancelled) setPersonalWorkspaceReady(true);
+    }).catch(() => { if (!cancelled) setPersonalWorkspaceReady(true); });
     return () => { cancelled = true; };
   }, [session?.user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   
@@ -273,7 +298,7 @@ const App: React.FC = () => {
     const unsub = onAuthStateChanged(auth, (user) => {
       if (!isCurrent) return;
       if (!user) {
-        // Personal workspace uses Supabase, not Firebase — skip anonymous auth entirely
+        // Personal workspace uses Supabase, not Firebase â€” skip anonymous auth entirely
         try {
           const raw = localStorage.getItem('edusync_session');
           if (raw) {
@@ -292,7 +317,7 @@ const App: React.FC = () => {
           devError('[Auth] Anonymous sign-in failed:', e);
           // If offline, don't show error - just set ready to allow offline mode
           if (!navigator.onLine) {
-            devLog('[Auth] ⚠️ Offline mode - skipping anonymous auth');
+            devLog('[Auth] âš ï¸ Offline mode - skipping anonymous auth');
             setAuthReady(true);
           } else {
             setAuthError('Failed to initialize authentication. Please check your internet connection.');
@@ -303,7 +328,7 @@ const App: React.FC = () => {
       }
       setAuthError(null); // Clear any previous errors
       setAuthReady(true);
-      devLog('[Auth] ✅ Auth ready:', user.uid);
+      devLog('[Auth] âœ… Auth ready:', user.uid);
     });
     return () => {
       isCurrent = false;
@@ -313,16 +338,16 @@ const App: React.FC = () => {
   
   // Persist session changes
   useEffect(() => {
-    // devLog('[App] 📦 Session changed:', session ? `${session.user.email} (${session.type})` : 'null');
+    // devLog('[App] ðŸ“¦ Session changed:', session ? `${session.user.email} (${session.type})` : 'null');
     if (session) {
       localStorage.setItem('edusync_session', JSON.stringify(session));
-      // devLog('[App] 💾 Session saved to localStorage');
+      // devLog('[App] ðŸ’¾ Session saved to localStorage');
     } else {
       localStorage.removeItem('edusync_session');
-      devLog('[App] 🗑️ Session removed from localStorage');
+      devLog('[App] ðŸ—‘ï¸ Session removed from localStorage');
       // TIER 1B: Clear cached user credentials on logout
       localStorage.removeItem('edusync_cached_user');
-      devLog('[App] 🗑️ Cached user credentials cleared');
+      devLog('[App] ðŸ—‘ï¸ Cached user credentials cleared');
     }
   }, [session, devLog]);
   
@@ -344,7 +369,7 @@ const App: React.FC = () => {
     }
     
     const timer = setTimeout(() => {
-      devWarn('[App] ⏰ Load timeout reached (30 seconds)');
+      devWarn('[App] â° Load timeout reached (30 seconds)');
       setLoadTimeout(true);
     }, 30000); // 30 second timeout for mobile compatibility
     
@@ -354,7 +379,7 @@ const App: React.FC = () => {
   
   const [loginType, setLoginType] = useState<'staff' | 'student' | 'parent'>('staff');
   
-  // 🚀 PERFORMANCE OPTIMIZATION: Route-based lazy loading
+  // ðŸš€ PERFORMANCE OPTIMIZATION: Route-based lazy loading
   // Only load collections needed for the current route
   // This reduces initial load time from 11s to 2-3s while maintaining offline-first
   // Firestore SDK caches everything, so once loaded, works offline forever
@@ -439,7 +464,7 @@ const App: React.FC = () => {
     // Check if this is a division user
     const isDivisionUser = type === 'division' || ('division_id' in user && 'permissions' in user);
     
-    devLog('[App] 🔐 Login successful for:', user.email, 'Type:', type, isDivisionUser ? '(Division User)' : '', 'SchoolID:', (user as AuthUser).schoolId);
+    devLog('[App] ðŸ” Login successful for:', user.email, 'Type:', type, isDivisionUser ? '(Division User)' : '', 'SchoolID:', (user as AuthUser).schoolId);
     
     // Check if user already has workspaceType set (from signup flow)
     if ((user as any).workspaceType === 'personal') {
@@ -469,7 +494,7 @@ const App: React.FC = () => {
       try {
         const workspace = await getPersonalWorkspace((user as any).firebaseUid);
         if (workspace) {
-          devLog('[App] 🏠 Personal workspace found, redirecting to /personal');
+          devLog('[App] ðŸ  Personal workspace found, redirecting to /personal');
           // Fetch real subscription tier (workspace.tier from schools table may be stale)
           let subscriptionTier = workspace.tier;
           try {
@@ -500,24 +525,24 @@ const App: React.FC = () => {
     // CRITICAL: Save session to localStorage AND React state
     const sessionData = { user, type: (isDivisionUser ? 'division' : type) as 'staff' | 'student' | 'parent' | 'division' };
     localStorage.setItem('edusync_session', JSON.stringify(sessionData));
-    devLog('[App] 💾 Session saved to localStorage:', sessionData);
+    devLog('[App] ðŸ’¾ Session saved to localStorage:', sessionData);
     
     // Notify SchoolContext that session was updated
     window.dispatchEvent(new Event('edusync-session-updated'));
     
     // Set React state FIRST (this triggers re-render with session)
     setSession(sessionData);
-    devLog('[App] ✅ Session state updated');
+    devLog('[App] âœ… Session state updated');
     
     // Navigate based on user type
     if (window.location.pathname === '/admin') {
       if (isDivisionUser) {
         // Division users go to /division dashboard
-        devLog('[App] 🔄 Navigating from /admin to /division (Division User)');
+        devLog('[App] ðŸ”„ Navigating from /admin to /division (Division User)');
         window.history.pushState({}, '', '/division');
       } else {
         // Regular users go to / dashboard
-        devLog('[App] 🔄 Navigating from /admin to dashboard');
+        devLog('[App] ðŸ”„ Navigating from /admin to dashboard');
         window.history.pushState({}, '', '/');
       }
       // Force a re-render by dispatching a popstate event
@@ -567,7 +592,7 @@ const App: React.FC = () => {
     return (
       <div className="flex items-center justify-center min-h-screen bg-orange-50 dark:bg-slate-900 text-orange-900 dark:text-orange-200">
         <div className="text-center p-8 max-w-md">
-          <div className="text-6xl mb-4">⚠️</div>
+          <div className="text-6xl mb-4">âš ï¸</div>
           <h1 className="text-2xl font-bold mb-4">Connection Timeout</h1>
           <p className="mb-4">
             Unable to load school data from the server. This could be due to:
@@ -582,7 +607,7 @@ const App: React.FC = () => {
             onClick={() => window.location.reload()}
             className="bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
           >
-            🔄 Retry Connection
+            ðŸ”„ Retry Connection
           </button>
           <p className="mt-4 text-sm text-orange-700 dark:text-orange-400">
             If the problem persists, please check your internet connection and try again.
@@ -596,14 +621,14 @@ const App: React.FC = () => {
     return (
       <div className="flex items-center justify-center min-h-screen bg-red-50 dark:bg-slate-900 text-red-900 dark:text-red-200">
         <div className="text-center p-8 max-w-md">
-          <div className="text-6xl mb-4">🔒</div>
+          <div className="text-6xl mb-4">ðŸ”’</div>
           <h1 className="text-2xl font-bold mb-4">Authentication Error</h1>
           <p className="mb-6">{authError}</p>
           <button
             onClick={() => window.location.reload()}
             className="bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
           >
-            🔄 Retry
+            ðŸ”„ Retry
           </button>
         </div>
       </div>
@@ -614,7 +639,7 @@ const App: React.FC = () => {
     return (
       <div className="flex items-center justify-center min-h-screen bg-red-50 dark:bg-slate-900 text-red-800 dark:text-red-200">
         <div className="text-center p-8 max-w-2xl">
-          <div className="text-6xl mb-4">❌</div>
+          <div className="text-6xl mb-4">âŒ</div>
           <h1 className="text-2xl font-bold mb-4">Failed to Load Application Data</h1>
           <p className="mb-4">There was a critical error fetching data from the server.</p>
           <details className="mb-6">
@@ -625,7 +650,7 @@ const App: React.FC = () => {
             onClick={() => window.location.reload()}
             className="bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
           >
-            🔄 Reload Page
+            ðŸ”„ Reload Page
           </button>
         </div>
       </div>
@@ -635,7 +660,7 @@ const App: React.FC = () => {
   // Render public routes without authentication (landing page + enrollment)
   // BUT skip if user is already logged in (session exists)
   if (!session && (isPublicRoute || isUnknownRoute)) {
-    devLog('[App] 🌐 Public route - rendering without auth');
+    devLog('[App] ðŸŒ Public route - rendering without auth');
     return (
       <Router>
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900">
@@ -666,7 +691,7 @@ const App: React.FC = () => {
   // Handle /admin login route specially (before checking session)
   // Show login screen if not logged in
   if (isAdminLoginRoute && !session) {
-    devLog('[App] 🔓 /admin route - rendering LoginScreen');
+    devLog('[App] ðŸ”“ /admin route - rendering LoginScreen');
     return (
       <LoginScreen 
         onLogin={handleLogin} 
@@ -681,7 +706,7 @@ const App: React.FC = () => {
   
   // Fallback for any other routes without session
   if (!session && !isPublicRoute && !isAdminLoginRoute && !isUnknownRoute) {
-    devLog('[App] 🔓 No session - rendering LoginScreen (NO pre-loaded data)');
+    devLog('[App] ðŸ”“ No session - rendering LoginScreen (NO pre-loaded data)');
     return (
       <LoginScreen 
         onLogin={handleLogin} 
@@ -714,11 +739,17 @@ const App: React.FC = () => {
 
   // Personal workspace users get their own simplified layout
   if (isPersonalSession && !isDivisionSession) {
+    // Block rendering until workspace refresh is complete (prevents stale schoolId from cached session)
+    if (!personalWorkspaceReady) {
+      return <FullScreenLoader message="Refreshing workspace..." />;
+    }
     const pUser = session.user as any;
     const pTier = pUser.tier || 'free';
-    const pSchoolId = pUser.schoolId || '';
+    // Prefer workspace schoolId from fresh RPC over cached session
+    // (handles stale localStorage after database migration)
+    const pSchoolId = pUser._freshSchoolId || pUser.schoolId || '';
     // Use postgresqlId as fallback (some sessions store teacher UUID there)
-    const pTeacherId = pUser.id || pUser.postgresqlId || pUser.teacherId || '';
+    const pTeacherId = pUser._freshTeacherId || pUser.id || pUser.postgresqlId || pUser.teacherId || '';
     const pMaxStudents = pTier === 'free' ? 50 : 99999;
 
     return (
@@ -1002,7 +1033,7 @@ const App: React.FC = () => {
                         <Route path="/management/facilities-inventory" element={<FacilitiesManagementDashboard />} />
                         
                         {/* ========== BACKWARD COMPATIBILITY REDIRECTS ========== */}
-                        {/* Old /forms/* paths → /reports/* */}
+                        {/* Old /forms/* paths â†’ /reports/* */}
                         <Route path="/forms" element={<Navigate to="/reports/form137" replace />} />
                         <Route path="/forms/137" element={<Navigate to="/reports/form137" replace />} />
                         <Route path="/forms/137/:studentId" element={<Navigate to="/reports/form137/:studentId" replace />} />
@@ -1013,7 +1044,7 @@ const App: React.FC = () => {
                         <Route path="/forms/elln/reports" element={<Navigate to="/reports/elln/reports" replace />} />
                         <Route path="/forms/elln/ilmp" element={<Navigate to="/reports/elln/ilmp" replace />} />
                         
-                        {/* Old /grades/form* paths → /reports/* */}
+                        {/* Old /grades/form* paths â†’ /reports/* */}
                         <Route path="/grades/entry" element={<Navigate to="/grades" replace />} />
                         <Route path="/grades/form137" element={<Navigate to="/reports/form137" replace />} />
                         <Route path="/grades/form137/:studentId" element={<Navigate to="/reports/form137/:studentId" replace />} />
