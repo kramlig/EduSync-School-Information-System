@@ -86,17 +86,37 @@ const ActivityHeader: React.FC<{
   activity: ECRActivity;
   onEdit: () => void;
 }> = ({ activity, onEdit }) => {
+  const tooltipLines = [
+    `${activity.activityType.toUpperCase()} ${activity.activityNumber}`,
+    activity.activityName ? `Name: ${activity.activityName}` : null,
+    `Max Score: ${activity.maxScore}`,
+    activity.activityDate
+      ? `Date: ${new Date(activity.activityDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}`
+      : null,
+  ].filter(Boolean).join('\n');
+
   return (
     <th
-      className="px-2 py-1 text-xs font-medium text-slate-600 border-b border-slate-200 cursor-pointer hover:bg-slate-50"
+      className="px-1 py-1.5 text-center cursor-pointer hover:bg-indigo-50/50 transition-colors align-bottom group"
       onClick={onEdit}
-      title={activity.activityName || `${activity.activityType} ${activity.activityNumber}`}
+      title={tooltipLines}
+      style={{ minWidth: 48 }}
     >
-      <div className="truncate max-w-[60px]">
-        {activity.activityNumber}
-      </div>
-      <div className="text-slate-400 font-normal">
-        /{activity.maxScore}
+      <div className="flex flex-col items-center gap-0.5">
+        {/* Activity number */}
+        <span className="text-xs font-semibold text-slate-700 leading-none group-hover:text-indigo-600 transition-colors">
+          {activity.activityNumber}
+        </span>
+        {/* Truncated activity name */}
+        {activity.activityName && (
+          <span className="text-[9px] text-slate-400 font-normal leading-tight truncate max-w-[52px] block">
+            {activity.activityName}
+          </span>
+        )}
+        {/* Max score */}
+        <span className="text-[10px] text-slate-400 font-normal leading-none">
+          /{activity.maxScore}
+        </span>
       </div>
     </th>
   );
@@ -273,47 +293,92 @@ const ComponentSection: React.FC<{
     }
   }, [sortedActivities.length, students.length]);
 
+  // Color mapping for the two-row header (top label + sub-header bg)
+  const colorMap: Record<string, { top: string; sub: string; summaryBg: string }> = {
+    'bg-blue-600': { top: 'bg-blue-600', sub: 'bg-blue-700', summaryBg: 'bg-blue-800' },
+    'bg-green-600': { top: 'bg-green-600', sub: 'bg-green-700', summaryBg: 'bg-green-800' },
+    'bg-purple-600': { top: 'bg-purple-600', sub: 'bg-purple-700', summaryBg: 'bg-purple-800' },
+    'bg-blue-500': { top: 'bg-blue-500', sub: 'bg-blue-600', summaryBg: 'bg-blue-700' },
+    'bg-green-500': { top: 'bg-green-500', sub: 'bg-green-600', summaryBg: 'bg-green-700' },
+    'bg-purple-500': { top: 'bg-purple-500', sub: 'bg-purple-600', summaryBg: 'bg-purple-700' },
+  };
+  const colors = colorMap[colorClass] || { top: colorClass, sub: 'bg-slate-600', summaryBg: 'bg-slate-700' };
+
+  // Total columns = activity slots + Add + Total + PS + WS
+  const totalCols = sortedActivities.length + 4;
+
   return (
     <div className="flex-shrink-0">
-      {/* Component Header */}
-      <div className={`px-3 py-2 ${colorClass} rounded-t-lg h-[42px] flex items-center justify-between sticky top-0 z-20`}>
-        <span className="font-semibold text-white">{label}</span>
-        <span className="text-xs text-white/80">{weight}%</span>
-      </div>
-      
-      {/* Activity Headers */}
       <table className="border-collapse">
-        <thead className="sticky top-[42px] z-20">
-          <tr className="bg-slate-50 h-[42px]">
-            {sortedActivities.map((activity) => (
-                <ActivityHeader
-                  key={activity.id}
-                  activity={activity}
-                  onEdit={() => onEditActivity(activity)}
-                />
-              ))}
-            {/* Add column button */}
+        <thead className="sticky top-0 z-20">
+          {/* Row 1: Component label spanning all columns — h-[42px] to match Learner's Name */}
+          <tr className="h-[42px]">
             <th
-              className="px-2 py-1 text-xs font-medium text-slate-400 border-b border-slate-200 cursor-pointer hover:bg-indigo-50 hover:text-indigo-500 min-w-[40px] transition-colors"
-              onClick={() => onAddActivity(nextNumber)}
-              title={`Add ${label} ${nextNumber}`}
+              colSpan={totalCols}
+              className={`${colors.top} text-white text-sm font-semibold px-3 text-left`}
             >
-              <div className="flex flex-col items-center">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span className="text-[10px]">Add</span>
+              <div className="flex items-center justify-between">
+                <span>{label}</span>
+                <span className="text-xs font-normal text-white/80">({weight}%)</span>
               </div>
             </th>
-            <th className="px-2 py-1 text-xs font-medium text-slate-600 border-b border-slate-200 bg-slate-100">
-              Total
+          </tr>
+          {/* Row 2: Activity numbers + summary columns — h-[42px] to match sub-header */}
+          <tr className={`${colors.sub} h-[42px]`}>
+            {sortedActivities.map((activity) => {
+              const tooltipLines = [
+                `${activity.activityType.toUpperCase()} ${activity.activityNumber}`,
+                activity.activityName ? `Name: ${activity.activityName}` : null,
+                `Max Score: ${activity.maxScore}`,
+                activity.activityDate
+                  ? `Date: ${new Date(activity.activityDate).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}`
+                  : null,
+              ].filter(Boolean).join('\n');
+
+              return (
+                <th
+                  key={activity.id}
+                  className="px-1 py-0 text-center cursor-pointer hover:brightness-110 transition-all align-middle"
+                  onClick={() => onEditActivity(activity)}
+                  title={tooltipLines}
+                  style={{ minWidth: 48 }}
+                >
+                  <div className="flex flex-col items-center gap-0">
+                    <span className="text-xs font-bold text-white leading-none">
+                      {activity.activityNumber}
+                    </span>
+                    {activity.activityName && (
+                      <span className="text-[8px] text-white/70 font-normal truncate max-w-[52px] block leading-tight">
+                        {activity.activityName}
+                      </span>
+                    )}
+                    <span className="text-[9px] text-white/60 font-normal leading-none">
+                      /{activity.maxScore}
+                    </span>
+                  </div>
+                </th>
+              );
+            })}
+            {/* Add column */}
+            <th
+              className="px-2 py-0 text-white/60 cursor-pointer hover:text-white hover:brightness-110 transition-colors align-middle"
+              onClick={() => onAddActivity(nextNumber)}
+              title={`Add ${label} ${nextNumber}`}
+              style={{ minWidth: 36 }}
+            >
+              <div className="flex flex-col items-center">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="text-[8px]">Add</span>
+              </div>
             </th>
-            <th className="px-2 py-1 text-xs font-medium text-slate-600 border-b border-slate-200 bg-slate-100">
-              PS
-            </th>
-            <th className="px-2 py-1 text-xs font-medium text-slate-600 border-b border-slate-200 bg-slate-100">
-              WS
-            </th>
+            {/* Summary columns */}
+            {['Total', 'PS', 'WS'].map(slabel => (
+              <th key={slabel} className={`px-2 py-0 text-[10px] font-semibold text-white ${colors.summaryBg} align-middle`}>
+                {slabel}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -363,13 +428,14 @@ const ActivityModal: React.FC<{
   activity?: ECRActivity | null;
   nextNumber: number;
   onClose: () => void;
-  onCreate: (data: { activityNumber: number; activityName?: string; maxScore: number; description?: string }) => void;
-  onUpdate: (data: { activityName?: string; maxScore: number; description?: string }) => void;
+  onCreate: (data: { activityNumber: number; activityName?: string; maxScore: number; description?: string; activityDate?: string }) => void;
+  onUpdate: (data: { activityName?: string; maxScore: number; description?: string; activityDate?: string }) => void;
   onDelete: () => void;
 }> = ({ isOpen, isEditing, activityType, activity, nextNumber, onClose, onCreate, onUpdate, onDelete }) => {
   const [activityNumber, setActivityNumber] = useState(activity?.activityNumber || nextNumber);
   const [activityName, setActivityName] = useState(activity?.activityName || '');
   const [maxScore, setMaxScore] = useState(activity?.maxScore || 10);
+  const [activityDate, setActivityDate] = useState(activity?.activityDate?.slice(0, 10) || '');
   const [description, setDescription] = useState(activity?.description || '');
 
   const typeLabels: Record<ECRActivityType, string> = {
@@ -381,9 +447,9 @@ const ActivityModal: React.FC<{
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isEditing) {
-      onUpdate({ activityName: activityName || undefined, maxScore, description: description || undefined });
+      onUpdate({ activityName: activityName || undefined, maxScore, description: description || undefined, activityDate: activityDate || undefined });
     } else {
-      onCreate({ activityNumber, activityName: activityName || undefined, maxScore, description: description || undefined });
+      onCreate({ activityNumber, activityName: activityName || undefined, maxScore, description: description || undefined, activityDate: activityDate || undefined });
     }
     onClose();
   };
@@ -416,13 +482,25 @@ const ActivityModal: React.FC<{
           
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              Activity Name (Optional)
+              Activity Name <span className="text-slate-400 font-normal">(e.g. Summary Test, Unit Quiz 1)</span>
             </label>
             <input
               type="text"
               value={activityName}
               onChange={(e) => setActivityName(e.target.value)}
               placeholder={`${typeLabels[activityType]} ${activityNumber}`}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Date Given <span className="text-slate-400 font-normal">(Optional)</span>
+            </label>
+            <input
+              type="date"
+              value={activityDate}
+              onChange={(e) => setActivityDate(e.target.value)}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
@@ -599,9 +677,9 @@ const ClassRecordView: React.FC<ClassRecordViewProps> = ({
       schoolName: classRecord.schoolName || schoolName || 'School',
       schoolId: classRecord.schoolId || schoolId,
       schoolIdNumber: classRecord.schoolIdNumber || schoolIdNumber || '', // From schools.school_id_number
-      region,
-      division,
-      district,
+      region: classRecord.region || region,
+      division: classRecord.division || division,
+      district: classRecord.district || district,
       schoolYear,
       quarter,
       gradeLevel: classRecord.gradeLevel || gradeLevel || 0,
@@ -640,20 +718,21 @@ const ClassRecordView: React.FC<ClassRecordViewProps> = ({
 
   // Handlers
   const handleCreateActivity = useCallback(
-    async (data: { activityNumber: number; activityName?: string; maxScore: number; description?: string }) => {
+    async (data: { activityNumber: number; activityName?: string; maxScore: number; description?: string; activityDate?: string }) => {
       await createActivity({
         activityType: activityModal.activityType,
         activityNumber: data.activityNumber,
         activityName: data.activityName,
         maxScore: data.maxScore,
-        description: data.description
+        description: data.description,
+        activityDate: data.activityDate
       });
     },
     [createActivity, activityModal.activityType]
   );
 
   const handleUpdateActivity = useCallback(
-    async (data: { activityName?: string; maxScore: number; description?: string }) => {
+    async (data: { activityName?: string; maxScore: number; description?: string; activityDate?: string }) => {
       if (activityModal.editingActivity) {
         await updateActivity(activityModal.editingActivity.id, data);
       }

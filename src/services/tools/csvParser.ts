@@ -32,6 +32,21 @@ export interface SF2ParsedRow extends ParsedStudent {
   attendance: Record<string, string>;
 }
 
+export interface CoreValuesParsedRow extends ParsedStudent {
+  coreValue: string;    // "Maka-Diyos", "Makatao", "Makakalikasan", "Makabansa"
+  behavior: string;     // behavior statement
+  q1: string;           // "AO"|"SO"|"RO"|"NO"|""
+  q2: string;
+  q3: string;
+  q4: string;
+}
+
+export interface HomeroomGuidanceParsedRow extends ParsedStudent {
+  quarter: string;      // "First Quarter", "Second Quarter", "Third Quarter", "Fourth Quarter"
+  competency: string;
+  rating: number | null; // 0–4
+}
+
 export interface ParseResult<T> {
   data: T[];
   errors: ParseError[];
@@ -60,6 +75,11 @@ const HEADER_MAP: Record<string, string[]> = {
   q3: ['q3', 'quarter 3', 'quarter_3', '3rd quarter', 'third quarter'],
   q4: ['q4', 'quarter 4', 'quarter_4', '4th quarter', 'fourth quarter'],
   generalAverage: ['final average', 'final_average', 'general average', 'general_average', 'average'],
+  coreValue: ['core value', 'core_value', 'corevalue', 'value'],
+  behavior: ['behavior', 'behavior statement', 'behavior_statement', 'indicator'],
+  quarter: ['quarter', 'qtr'],
+  competency: ['competency', 'competencies', 'skill'],
+  rating: ['rating', 'score', 'mark'],
 };
 
 function mapHeader(header: string): string | null {
@@ -292,4 +312,123 @@ export async function parseSF2File(file: File, reportMonth: string): Promise<Par
   }
 
   return { data, errors, totalRows: data.length };
+}
+
+/**
+ * Parse Core Values data from a file.
+ * Expected: LRN, Last Name, First Name, Middle Name, Gender, Core Value, Behavior, Q1, Q2, Q3, Q4
+ * Each student appears on MULTIPLE rows (one per behavior per core value).
+ * Q1-Q4 values should be AO, SO, RO, or NO.
+ */
+export async function parseCoreValuesFile(file: File): Promise<ParseResult<CoreValuesParsedRow>> {
+  const rows = await parseFile(file);
+  if (rows.length < 2) {
+    return { data: [], errors: [{ row: 0, field: '', message: 'File is empty or has no data rows.' }], totalRows: 0 };
+  }
+
+  const headers = rows[0].map(h => String(h).trim());
+  const colMap = buildColumnMap(headers);
+  const errors: ParseError[] = [];
+  const data: CoreValuesParsedRow[] = [];
+
+  if (colMap.coreValue === undefined) {
+    errors.push({ row: 0, field: 'Core Value', message: 'Missing "Core Value" column header.' });
+    return { data, errors, totalRows: 0 };
+  }
+  if (colMap.behavior === undefined) {
+    errors.push({ row: 0, field: 'Behavior', message: 'Missing "Behavior" column header.' });
+    return { data, errors, totalRows: 0 };
+  }
+
+  const VALID_RATINGS = ['AO', 'SO', 'RO', 'NO', ''];
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r].map(c => String(c ?? '').trim());
+    if (row.every(c => c === '')) continue;
+
+    const parseRating = (idx: number | undefined): string => {
+      if (idx === undefined) return '';
+      const val = row[idx]?.toUpperCase().trim() || '';
+      return VALID_RATINGS.includes(val) ? val : '';
+    };
+
+    data.push({
+      lrn: row[colMap.lrn] || '',
+      lastName: row[colMap.lastName] || '',
+      firstName: row[colMap.firstName] || '',
+      middleName: row[colMap.middleName] || '',
+      gender: row[colMap.gender] || '',
+      coreValue: row[colMap.coreValue] || '',
+      behavior: row[colMap.behavior] || '',
+      q1: parseRating(colMap.q1),
+      q2: parseRating(colMap.q2),
+      q3: parseRating(colMap.q3),
+      q4: parseRating(colMap.q4),
+    });
+  }
+
+  return { data, errors, totalRows: data.length };
+}
+
+/**
+ * Parse Homeroom Guidance data from a file.
+ * Expected: LRN, Last Name, First Name, Middle Name, Gender, Quarter, Competency, Rating
+ * Each student appears on MULTIPLE rows (one per competency per quarter).
+ * Rating values: 0–4.
+ */
+export async function parseHomeroomGuidanceFile(file: File): Promise<ParseResult<HomeroomGuidanceParsedRow>> {
+  const rows = await parseFile(file);
+  if (rows.length < 2) {
+    return { data: [], errors: [{ row: 0, field: '', message: 'File is empty or has no data rows.' }], totalRows: 0 };
+  }
+
+  const headers = rows[0].map(h => String(h).trim());
+  const colMap = buildColumnMap(headers);
+  const errors: ParseError[] = [];
+  const data: HomeroomGuidanceParsedRow[] = [];
+
+  if (colMap.quarter === undefined) {
+    errors.push({ row: 0, field: 'Quarter', message: 'Missing "Quarter" column header.' });
+    return { data, errors, totalRows: 0 };
+  }
+  if (colMap.competency === undefined) {
+    errors.push({ row: 0, field: 'Competency', message: 'Missing "Competency" column header.' });
+    return { data, errors, totalRows: 0 };
+  }
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r].map(c => String(c ?? '').trim());
+    if (row.every(c => c === '')) continue;
+
+    let ratingVal: number | null = null;
+    if (colMap.rating !== undefined) {
+      const parsed = parseInt(row[colMap.rating], 10);
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) ratingVal = parsed;
+    }
+
+    const rawQuarter = row[colMap.quarter] || '';
+    const normalizedQuarter = normalizeQuarter(rawQuarter);
+
+    data.push({
+      lrn: row[colMap.lrn] || '',
+      lastName: row[colMap.lastName] || '',
+      firstName: row[colMap.firstName] || '',
+      middleName: row[colMap.middleName] || '',
+      gender: row[colMap.gender] || '',
+      quarter: normalizedQuarter || rawQuarter,
+      competency: row[colMap.competency] || '',
+      rating: ratingVal,
+    });
+  }
+
+  return { data, errors, totalRows: data.length };
+}
+
+function normalizeQuarter(q: string): string {
+  const lower = q.toLowerCase().trim();
+  if (lower === '1' || lower === 'q1' || lower === '1st' || lower.includes('first')) return 'FIRST QUARTER';
+  if (lower === '2' || lower === 'q2' || lower === '2nd' || lower.includes('second')) return 'SECOND QUARTER';
+  if (lower === '3' || lower === 'q3' || lower === '3rd' || lower.includes('third')) return 'THIRD QUARTER';
+  if (lower === '4' || lower === 'q4' || lower === '4th' || lower.includes('fourth')) return 'FOURTH QUARTER';
+  return q.toUpperCase();
 }

@@ -42,6 +42,35 @@ function getSupabase() {
   return createClient(url, key);
 }
 
+/**
+ * Look up a user by firebase_uid across teachers and superadmins tables.
+ * Returns { role, school_id } or null.
+ */
+async function resolveSchoolUser(supabase, firebaseUid) {
+  // 1. Try teachers table (admin, principal, registrar, teacher roles)
+  const { data: teacher } = await supabase
+    .from('teachers')
+    .select('role, school_id')
+    .eq('firebase_uid', firebaseUid)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (teacher) return { role: teacher.role, school_id: teacher.school_id };
+
+  // 2. Try superadmins table (platform-level superadmin)
+  const { data: sa } = await supabase
+    .from('superadmins')
+    .select('id')
+    .eq('firebase_uid', firebaseUid)
+    .is('deleted_at', null)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (sa) return { role: 'superadmin', school_id: null };
+
+  return null;
+}
+
 // ─── Pricing ─────────────────────────────────────────────────────
 
 const PRICING = {
@@ -54,6 +83,41 @@ const PRICING = {
     amountCents: 39900,
     description: 'EduSync Pro — Yearly',
     interval: 'year',
+  },
+};
+
+const SCHOOL_PRICING = {
+  starter_monthly: {
+    amountCents: 199900,
+    description: 'EduSync Starter — Monthly',
+    interval: 'month',
+    plan: 'starter',
+    limits: { max_students: 500, max_teachers: 99999, max_sections: 99999 },
+    features: { ai_enabled: false, parent_portal_enabled: true, division_reporting: false, advanced_analytics: false, priority_support: false },
+  },
+  starter_yearly: {
+    amountCents: 1999000,
+    description: 'EduSync Starter — Yearly',
+    interval: 'year',
+    plan: 'starter',
+    limits: { max_students: 500, max_teachers: 99999, max_sections: 99999 },
+    features: { ai_enabled: false, parent_portal_enabled: true, division_reporting: false, advanced_analytics: false, priority_support: false },
+  },
+  professional_monthly: {
+    amountCents: 499900,
+    description: 'EduSync Professional — Monthly',
+    interval: 'month',
+    plan: 'professional',
+    limits: { max_students: 1500, max_teachers: 99999, max_sections: 99999 },
+    features: { ai_enabled: true, parent_portal_enabled: true, division_reporting: true, advanced_analytics: true, priority_support: true },
+  },
+  professional_yearly: {
+    amountCents: 4999000,
+    description: 'EduSync Professional — Yearly',
+    interval: 'year',
+    plan: 'professional',
+    limits: { max_students: 1500, max_teachers: 99999, max_sections: 99999 },
+    features: { ai_enabled: true, parent_portal_enabled: true, division_reporting: true, advanced_analytics: true, priority_support: true },
   },
 };
 
@@ -187,7 +251,7 @@ exports.createPayMongoCheckout = functions.https.onCall(async (data, context) =>
             quantity: 1,
           },
         ],
-        payment_method_types: ['card', 'gcash', 'grab_pay', 'paymaya'],
+        payment_method_types: ['card', 'gcash', 'grab_pay', 'paymaya', 'qrph'],
         success_url: successUrl,
         cancel_url: cancelUrl,
         metadata: {
@@ -269,7 +333,6 @@ exports.paymongoWebhook = functions.https.onRequest(async (req, res) => {
     // Validate billing_cycle from metadata (don't blindly trust)
     const rawCycle = metadata.billing_cycle;
     const billingCycle = (rawCycle === 'monthly' || rawCycle === 'yearly') ? rawCycle : 'monthly';
-    const pricing = PRICING[billingCycle];
     const checkoutSessionId = event?.data?.id;
 
     // Get payment ID and method from payments array
@@ -278,15 +341,6 @@ exports.paymongoWebhook = functions.https.onRequest(async (req, res) => {
       || payments[0]?.attributes?.source?.type
       || payments[0]?.attributes?.payment_method_used
       || 'card';  // Default to 'card' — avoids 'unknown' in billing history
-
-    // Calculate billing period
-    const now = new Date();
-    const periodEnd = new Date(now);
-    if (billingCycle === 'yearly') {
-      periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-    } else {
-      periodEnd.setMonth(periodEnd.getMonth() + 1);
-    }
 
     // Idempotency: check if we already processed this payment
     const { data: existing } = await supabase
@@ -300,7 +354,86 @@ exports.paymongoWebhook = functions.https.onRequest(async (req, res) => {
       return res.status(200).json({ received: true, duplicate: true });
     }
 
-    // Verify user has an existing subscription record before upgrading
+    // ─── SCHOOL PLAN PAYMENT ─────────────────────────────────
+    if (metadata.type === 'school' && metadata.school_id) {
+      const schoolId = metadata.school_id;
+      const plan = metadata.plan;
+      const priceKey = `${plan}_${billingCycle}`;
+      const schoolPricing = SCHOOL_PRICING[priceKey];
+
+      if (!schoolPricing) {
+        console.error('Invalid school pricing key:', priceKey);
+        return res.status(400).send('Invalid school plan');
+      }
+
+      const now = new Date();
+      const periodEnd = new Date(now);
+      if (billingCycle === 'yearly') {
+        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+      } else {
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+      }
+
+      // Record payment in payment_history (with school_id)
+      await supabase.from('payment_history').insert({
+        user_id: uid,
+        school_id: schoolId,
+        payment_provider: 'paymongo',
+        payment_provider_id: paymentId,
+        checkout_session_id: checkoutSessionId,
+        amount_cents: schoolPricing.amountCents,
+        currency: 'PHP',
+        status: 'paid',
+        billing_cycle: billingCycle,
+        description: schoolPricing.description,
+        payment_method_type: paymentMethodType,
+        period_start: now.toISOString(),
+        period_end: periodEnd.toISOString(),
+        metadata: { event_type: eventType, raw_payment_id: paymentId, metadata_source: metadataSource, type: 'school' },
+      });
+
+      // Update school_subscriptions
+      const { error: subError } = await supabase
+        .from('school_subscriptions')
+        .update({
+          plan: schoolPricing.plan,
+          status: 'active',
+          ...schoolPricing.limits,
+          ...schoolPricing.features,
+          payment_provider: 'paymongo',
+          payment_provider_subscription_id: paymentId,
+          billing_cycle: billingCycle,
+          amount_cents: schoolPricing.amountCents,
+          currency: 'PHP',
+          current_period_start: now.toISOString(),
+          current_period_end: periodEnd.toISOString(),
+          subscribed_by: uid,
+          updated_at: now.toISOString(),
+        })
+        .eq('school_id', schoolId);
+
+      if (subError) {
+        console.error('Failed to update school subscription:', subError);
+        return res.status(500).send('Database error');
+      }
+
+      console.log(`School subscription upgraded: school=${schoolId}, plan=${plan}, cycle=${billingCycle}`);
+      return res.status(200).json({ received: true });
+    }
+
+    // ─── PERSONAL PRO PAYMENT ────────────────────────────────
+    const pricing = PRICING[billingCycle];
+
+    // Calculate billing period for personal subscription
+    const now = new Date();
+    const periodEnd = new Date(now);
+    if (billingCycle === 'yearly') {
+      periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+    } else {
+      periodEnd.setMonth(periodEnd.getMonth() + 1);
+    }
+
+    // Ensure user has a subscription record — create one if missing
     const { data: existingSub } = await supabase
       .from('subscriptions')
       .select('id')
@@ -308,8 +441,22 @@ exports.paymongoWebhook = functions.https.onRequest(async (req, res) => {
       .single();
 
     if (!existingSub) {
-      console.error(`Webhook: No subscription row found for user ${uid}. Cannot upgrade orphan.`);
-      return res.status(400).send('No subscription for user');
+      console.warn(`Webhook: No subscription row for user ${uid}, creating one before upgrade.`);
+      const { error: createError } = await supabase
+        .from('subscriptions')
+        .insert({
+          user_id: uid,
+          tier: 'free',
+          status: 'active',
+          max_students: 50,
+          max_teaching_sections: 1,
+          max_advisory_sections: 1,
+          max_downloads_per_day: 10,
+        });
+      if (createError) {
+        console.error('Failed to create subscription row:', createError);
+        return res.status(500).send('Failed to create subscription');
+      }
     }
 
     // 1. Record payment in payment_history
@@ -540,4 +687,261 @@ exports.expireOverdueSubscriptions = functions.pubsub
     }
 
     console.log(`[expireOverdueSubscriptions] Expired ${expired?.length || 0} subscriptions`);
+
+    // Also expire school subscriptions past their billing period
+    const { data: expiredSchools, error: schoolError } = await supabase
+      .from('school_subscriptions')
+      .update({ status: 'expired', plan: 'trial', updated_at: now })
+      .in('plan', ['starter', 'professional'])
+      .eq('status', 'active')
+      .lt('current_period_end', now)
+      .select('school_id');
+
+    if (schoolError) {
+      console.error('[expireOverdueSubscriptions] School error:', schoolError);
+    } else {
+      console.log(`[expireOverdueSubscriptions] Expired ${expiredSchools?.length || 0} school subscriptions`);
+    }
   });
+
+// ─── School Subscription Functions ───────────────────────────────
+
+/**
+ * Creates a PayMongo Checkout Session for school plan upgrade.
+ * Only school superadmins can create school checkouts.
+ */
+exports.createSchoolCheckout = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+
+  const { schoolId, plan, billingCycle } = data;
+  if (!schoolId || !plan || !billingCycle) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing required fields');
+  }
+
+  const priceKey = `${plan}_${billingCycle}`;
+  const pricing = SCHOOL_PRICING[priceKey];
+  if (!pricing) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid plan or billing cycle');
+  }
+
+  const uid = data.firebaseUid || context.auth.uid;
+  const supabase = getSupabase();
+
+  // Verify caller is admin/superadmin of this school
+  const user = await resolveSchoolUser(supabase, uid);
+
+  if (!user || (user.school_id !== schoolId && user.role !== 'superadmin') || !['superadmin', 'admin'].includes(user.role)) {
+    throw new functions.https.HttpsError('permission-denied',
+      'Only school superadmin or admin can manage subscriptions');
+  }
+
+  // Check if school already has the same active plan
+  const { data: existingSub } = await supabase
+    .from('school_subscriptions')
+    .select('plan, status')
+    .eq('school_id', schoolId)
+    .single();
+
+  if (existingSub && existingSub.plan === plan && existingSub.status === 'active') {
+    throw new functions.https.HttpsError('already-exists', `School already has an active ${plan} plan`);
+  }
+
+  // Determine redirect URLs
+  const origin = context.rawRequest?.headers?.origin || 'https://edusync-sis.web.app';
+  const successUrl = `${origin}/settings/billing?payment=success`;
+  const cancelUrl = `${origin}/settings/billing?payment=cancelled`;
+
+  // Create PayMongo checkout session
+  const result = await paymongoRequest('POST', '/checkout_sessions', {
+    data: {
+      attributes: {
+        send_email_receipt: true,
+        show_description: true,
+        show_line_items: true,
+        description: pricing.description,
+        line_items: [
+          {
+            currency: 'PHP',
+            amount: pricing.amountCents,
+            name: pricing.description,
+            quantity: 1,
+          },
+        ],
+        payment_method_types: ['card', 'gcash', 'grab_pay', 'paymaya', 'qrph'],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          firebase_uid: uid,  // real session UID for webhook lookup
+          school_id: schoolId,
+          plan: plan,
+          billing_cycle: billingCycle,
+          type: 'school',
+        },
+      },
+    },
+  });
+
+  return {
+    checkoutUrl: result.data.attributes.checkout_url,
+    sessionId: result.data.id,
+  };
+});
+
+/**
+ * Get school subscription status.
+ */
+exports.getSchoolSubscriptionStatus = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+
+  const { schoolId } = data;
+  if (!schoolId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing schoolId');
+  }
+
+  const supabase = getSupabase();
+
+  // Verify caller belongs to this school
+  const user = await resolveSchoolUser(supabase, data.firebaseUid || context.auth.uid);
+
+  if (!user || (user.school_id !== schoolId && user.role !== 'superadmin')) {
+    throw new functions.https.HttpsError('permission-denied', 'Not authorized for this school');
+  }
+
+  const { data: sub, error } = await supabase
+    .from('school_subscriptions')
+    .select('*')
+    .eq('school_id', schoolId)
+    .single();
+
+  if (error || !sub) {
+    return { plan: 'trial', status: 'trial' };
+  }
+
+  // Auto-expire if past billing period
+  if (['starter', 'professional'].includes(sub.plan) && sub.current_period_end) {
+    if (new Date(sub.current_period_end) < new Date()) {
+      await supabase
+        .from('school_subscriptions')
+        .update({ status: 'expired', plan: 'trial', updated_at: new Date().toISOString() })
+        .eq('school_id', schoolId);
+
+      return { plan: 'trial', status: 'expired' };
+    }
+  }
+
+  return {
+    plan: sub.plan,
+    status: sub.status,
+    maxStudents: sub.max_students,
+    maxTeachers: sub.max_teachers,
+    maxSections: sub.max_sections,
+    aiEnabled: sub.ai_enabled,
+    billingCycle: sub.billing_cycle,
+    currentPeriodEnd: sub.current_period_end,
+    trialEndsAt: sub.trial_ends_at,
+    amountCents: sub.amount_cents,
+  };
+});
+
+/**
+ * Cancel school subscription. Takes effect at end of billing period.
+ */
+exports.cancelSchoolSubscription = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+
+  const { schoolId } = data;
+  if (!schoolId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing schoolId');
+  }
+
+  const supabase = getSupabase();
+
+  // Verify caller is admin/superadmin
+  // Verify caller is admin/superadmin
+  const user = await resolveSchoolUser(supabase, data.firebaseUid || context.auth.uid);
+
+  if (!user || (user.school_id !== schoolId && user.role !== 'superadmin') || !['superadmin', 'admin'].includes(user.role)) {
+    throw new functions.https.HttpsError('permission-denied', 'Only school superadmin or admin can cancel subscriptions');
+  }
+
+  const { data: sub } = await supabase
+    .from('school_subscriptions')
+    .select('*')
+    .eq('school_id', schoolId)
+    .single();
+
+  if (!sub || sub.plan === 'trial') {
+    throw new functions.https.HttpsError('failed-precondition', 'No active paid subscription');
+  }
+
+  const { error } = await supabase
+    .from('school_subscriptions')
+    .update({
+      status: 'cancelled',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('school_id', schoolId);
+
+  if (error) {
+    throw new functions.https.HttpsError('internal', 'Failed to cancel subscription');
+  }
+
+  return {
+    success: true,
+    endsAt: sub.current_period_end || new Date().toISOString(),
+  };
+});
+
+/**
+ * Get billing history for a school.
+ */
+exports.getSchoolBillingHistory = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+
+  const { schoolId } = data;
+  if (!schoolId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing schoolId');
+  }
+
+  const supabase = getSupabase();
+
+  // Verify caller belongs to this school and is admin
+  const user = await resolveSchoolUser(supabase, data.firebaseUid || context.auth.uid);
+
+  if (!user || (user.school_id !== schoolId && user.role !== 'superadmin') || !['superadmin', 'admin'].includes(user.role)) {
+    throw new functions.https.HttpsError('permission-denied', 'Not authorized');
+  }
+
+  const { data: payments, error } = await supabase
+    .from('payment_history')
+    .select('id, amount_cents, currency, status, billing_cycle, description, payment_method_type, period_start, period_end, created_at')
+    .eq('school_id', schoolId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    console.error('Failed to fetch school billing history:', error);
+    return [];
+  }
+
+  return (payments || []).map(p => ({
+    id: p.id,
+    date: p.created_at,
+    amount: p.amount_cents / 100,
+    currency: p.currency || 'PHP',
+    status: p.status,
+    description: p.description,
+    billingCycle: p.billing_cycle,
+    paymentMethod: p.payment_method_type,
+    periodStart: p.period_start,
+    periodEnd: p.period_end,
+  }));
+});

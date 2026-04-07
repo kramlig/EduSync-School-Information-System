@@ -5,7 +5,9 @@ import type { UploadResult } from './DataUploader';
 import { canDownload, recordDownload, downloadsRemaining } from '../../services/tools/rateLimiter';
 import { generateSF5Standalone } from '../../services/tools/sf5StandaloneGenerator';
 import { generateSF9Standalone } from '../../services/tools/sf9StandaloneGenerator';
+import type { SF9CoreValueGrade, SF9HomeroomGuidanceGrades } from '../../services/tools/sf9StandaloneGenerator';
 import { generateSF2Standalone } from '../../services/tools/sf2StandaloneGenerator';
+import type { CoreValuesParsedRow, HomeroomGuidanceParsedRow } from '../../services/tools/csvParser';
 
 interface Props {
   formType: FormType;
@@ -56,10 +58,20 @@ export default function FormPreview({ formType, schoolInfo, uploadResult }: Prop
           addWatermark: true,
         });
       } else if (formType === 'sf9' && uploadResult.sf9Data) {
+        // Convert supplementary CSV data to SF9 generator format
+        const coreValueGrades = uploadResult.coreValuesData
+          ? convertCoreValuesToSF9Map(uploadResult.coreValuesData)
+          : undefined;
+        const homeroomGuidanceGrades = uploadResult.homeroomGuidanceData
+          ? convertHomeroomGuidanceToSF9Map(uploadResult.homeroomGuidanceData)
+          : undefined;
+
         await generateSF9Standalone({
           ...sharedInfo,
           rows: uploadResult.sf9Data,
           applyWatermark: true,
+          coreValueGrades,
+          homeroomGuidanceGrades,
         });
       } else if (formType === 'sf2' && uploadResult.sf2Data && uploadResult.reportMonth) {
         await generateSF2Standalone({
@@ -108,6 +120,12 @@ export default function FormPreview({ formType, schoolInfo, uploadResult }: Prop
         )}
         <SummaryRow label="Data File" value={uploadResult.fileName} />
         <SummaryRow label="Students" value={String(studentCount)} />
+        {uploadResult.coreValuesData && (
+          <SummaryRow label="Core Values" value={`✓ ${uploadResult.coreValuesData.length} rows uploaded`} />
+        )}
+        {uploadResult.homeroomGuidanceData && (
+          <SummaryRow label="Homeroom Guidance" value={`✓ ${uploadResult.homeroomGuidanceData.length} rows uploaded`} />
+        )}
         <SummaryRow
           label="Data Validation"
           value={uploadResult.validation.errors.length === 0 ? '✓ All valid' : `⚠ ${uploadResult.validation.errors.length} issues`}
@@ -194,4 +212,98 @@ function SummaryRow({ label, value, warn }: { label: string; value: string; warn
       <span className={warn ? 'text-yellow-600 font-medium' : 'text-gray-800'}>{value}</span>
     </div>
   );
+}
+
+/* ---------- CSV → SF9 Generator Conversion Helpers ---------- */
+
+/** Map core value name to the code used by the SF9 generator */
+const CORE_VALUE_CODE_MAP: Record<string, string> = {
+  'maka-diyos': 'MAKA_DIYOS',
+  'makatao': 'MAKATAO',
+  'makakalikasan': 'MAKAKALIKASAN',
+  'makabansa': 'MAKABANSA',
+};
+
+/**
+ * Convert flat CoreValuesParsedRow[] → Record<studentKey, SF9CoreValueGrade[]>
+ * Groups rows by student (LRN or lastName-firstName), then by core value,
+ * building the per-behavior indicatorRatings.
+ */
+function convertCoreValuesToSF9Map(rows: CoreValuesParsedRow[]): Record<string, SF9CoreValueGrade[]> {
+  const result: Record<string, Record<string, SF9CoreValueGrade>> = {};
+
+  for (const row of rows) {
+    const key = row.lrn || `${row.lastName}-${row.firstName}`;
+    const cvCode = CORE_VALUE_CODE_MAP[row.coreValue.toLowerCase()] || row.coreValue;
+
+    if (!result[key]) result[key] = {};
+
+    if (!result[key][cvCode]) {
+      result[key][cvCode] = {
+        coreValueCode: cvCode,
+        indicatorRatings: {},
+      };
+    }
+
+    const grade = result[key][cvCode];
+
+    // Set the overall quarter marking (last behavior's marking wins for the summary)
+    if (row.q1) grade.q1 = row.q1;
+    if (row.q2) grade.q2 = row.q2;
+    if (row.q3) grade.q3 = row.q3;
+    if (row.q4) grade.q4 = row.q4;
+
+    // Set per-behavior indicator ratings
+    if (row.behavior && grade.indicatorRatings) {
+      if (row.q1) grade.indicatorRatings[row.behavior] = { ...grade.indicatorRatings[row.behavior], q1: row.q1 };
+      if (row.q2) grade.indicatorRatings[row.behavior] = { ...grade.indicatorRatings[row.behavior], q2: row.q2 };
+      if (row.q3) grade.indicatorRatings[row.behavior] = { ...grade.indicatorRatings[row.behavior], q3: row.q3 };
+      if (row.q4) grade.indicatorRatings[row.behavior] = { ...grade.indicatorRatings[row.behavior], q4: row.q4 };
+    }
+  }
+
+  // Flatten: Record<key, Record<cvCode, grade>> → Record<key, grade[]>
+  const output: Record<string, SF9CoreValueGrade[]> = {};
+  for (const [key, cvMap] of Object.entries(result)) {
+    output[key] = Object.values(cvMap);
+  }
+  return output;
+}
+
+const QUARTER_KEY_MAP: Record<string, 'q1_ratings' | 'q2_ratings' | 'q3_ratings' | 'q4_ratings'> = {
+  'first quarter': 'q1_ratings',
+  'second quarter': 'q2_ratings',
+  'third quarter': 'q3_ratings',
+  'fourth quarter': 'q4_ratings',
+  '1st quarter': 'q1_ratings',
+  '2nd quarter': 'q2_ratings',
+  '3rd quarter': 'q3_ratings',
+  '4th quarter': 'q4_ratings',
+  'q1': 'q1_ratings',
+  'q2': 'q2_ratings',
+  'q3': 'q3_ratings',
+  'q4': 'q4_ratings',
+};
+
+/**
+ * Convert flat HomeroomGuidanceParsedRow[] → Record<studentKey, SF9HomeroomGuidanceGrades>
+ * Groups rows by student, maps quarter+competency+rating into the nested structure.
+ */
+function convertHomeroomGuidanceToSF9Map(rows: HomeroomGuidanceParsedRow[]): Record<string, SF9HomeroomGuidanceGrades> {
+  const result: Record<string, SF9HomeroomGuidanceGrades> = {};
+
+  for (const row of rows) {
+    const key = row.lrn || `${row.lastName}-${row.firstName}`;
+
+    if (!result[key]) {
+      result[key] = { q1_ratings: {}, q2_ratings: {}, q3_ratings: {}, q4_ratings: {} };
+    }
+
+    const qKey = QUARTER_KEY_MAP[row.quarter.toLowerCase()];
+    if (qKey && row.competency && row.rating !== null) {
+      result[key][qKey][row.competency] = row.rating;
+    }
+  }
+
+  return result;
 }

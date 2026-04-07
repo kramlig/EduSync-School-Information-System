@@ -19,6 +19,8 @@ import OfflineBanner from './components/OfflineBanner';
 import UpdateNotification from './components/UpdateNotification';
 import './src/diagnostics'; // Run Firestore diagnostics in development
 import './src/utils/logger'; // Initialize logger (disables console in production)
+import AnalyticsTrackerProvider from './src/components/analytics/AnalyticsTrackerProvider';
+import { trackEvent } from './src/services/analyticsService';
 import { getPersonalWorkspace, getUserSubscription } from './src/services/personalWorkspaceService';
 import { lazyWithRetry } from './src/utils/lazyWithRetry';
 
@@ -45,6 +47,7 @@ const LessonPlanView = lazyWithRetry(() => import('./components/LessonPlanView')
 const AnnouncementsView = lazyWithRetry(() => import('./components/AnnouncementsView'));
 const SettingsView = lazyWithRetry(() => import('./components/SettingsView'));
 const SchoolSettingsPostgreSQL = lazyWithRetry(() => import('./components/SchoolSettingsPostgreSQL'));
+const SchoolBillingSettings = lazyWithRetry(() => import('./src/components/settings/SchoolBillingSettings'));
 const CourseList = lazyWithRetry(() => import('./components/CourseList'));
 const StudentDashboard = lazyWithRetry(() => import('./components/StudentDashboard'));
 const ParentDashboard = lazyWithRetry(() => import('./components/ParentDashboard'));
@@ -104,6 +107,9 @@ const ClassRecordSelector = lazyWithRetry(() => import('./components/ClassRecord
 
 // New SuperAdmin Module
 const SuperAdminLayout = lazyWithRetry(() => import('./src/components/superadmin/SuperAdminLayout'));
+
+// Analytics Dashboard
+const AnalyticsDashboard = lazyWithRetry(() => import('./src/components/analytics/AnalyticsDashboard'));
 
 // Free Tools (public, no auth required)
 const FormGeneratorPage = lazyWithRetry(() => import('./src/components/tools/FormGeneratorPage'));
@@ -207,7 +213,7 @@ const App: React.FC = () => {
   // Special handling for /admin route
   const isAdminLoginRoute = window.location.pathname === '/admin';
   // Treat unknown routes as public so the 404 page renders instead of the login screen
-  const isKnownPrivateRoute = window.location.pathname.startsWith('/personal') || window.location.pathname.startsWith('/division') || window.location.pathname.startsWith('/dashboard') || window.location.pathname === '/admin';
+  const isKnownPrivateRoute = window.location.pathname.startsWith('/personal') || window.location.pathname.startsWith('/division') || window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/analytics') || window.location.pathname === '/admin';
   const isUnknownRoute = !isPublicRoute && !isKnownPrivateRoute && !isAdminLoginRoute;
   
   // Initialize session from localStorage BEFORE checking if we should skip Firebase operations
@@ -248,6 +254,66 @@ const App: React.FC = () => {
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [session?.user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-sync tier when returning from PayMongo checkout (?payment=success)
+  // This ensures header, sidebar, and all routes reflect the updated tier immediately
+  useEffect(() => {
+    if (!session) return;
+    const u = session.user as any;
+    if (u.workspaceType !== 'personal' || !u.firebaseUid) return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') !== 'success') return;
+
+    let cancelled = false;
+    const syncTierAfterPayment = async () => {
+      // Small delay to give webhook time to process
+      await new Promise(r => setTimeout(r, 2000));
+      if (cancelled) return;
+      try {
+        const sub = await getUserSubscription(u.firebaseUid);
+        if (cancelled || !sub?.tier || sub.tier === u.tier) return;
+        const updated = { ...session, user: { ...session.user, tier: sub.tier } };
+        localStorage.setItem('edusync_session', JSON.stringify(updated));
+        setSession(updated as any);
+        devLog('[App] ✅ Tier synced after payment:', sub.tier);
+      } catch { /* PersonalSettings handles UI feedback */ }
+    };
+    syncTierAfterPayment();
+    return () => { cancelled = true; };
+  }, [session?.user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for localStorage writes from other tabs
+  // and custom tier-changed events from child components (e.g. PersonalSettings)
+  // Re-sync App.tsx session state so header/sidebar reflect changes without page reload
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key !== 'edusync_session' || !e.newValue) return;
+      try {
+        const updated = JSON.parse(e.newValue);
+        if (updated?.user?.tier && session?.user && (session.user as any).tier !== updated.user.tier) {
+          devLog('[App] 🔄 Session tier updated via storage event:', updated.user.tier);
+          setSession(updated);
+        }
+      } catch { /* ignore parse errors */ }
+    };
+
+    const handleTierChanged = (e: Event) => {
+      const tier = (e as CustomEvent).detail?.tier;
+      if (!tier || !session?.user) return;
+      if ((session.user as any).tier === tier) return;
+      const updated = { ...session, user: { ...session.user, tier } };
+      devLog('[App] 🔄 Session tier updated via custom event:', tier);
+      setSession(updated as any);
+    };
+
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('edusync-tier-changed', handleTierChanged);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('edusync-tier-changed', handleTierChanged);
+    };
+  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh personal workspace schoolId/teacherId from DB to handle stale session after migration
   const [personalWorkspaceReady, setPersonalWorkspaceReady] = useState(false);
@@ -533,6 +599,20 @@ const App: React.FC = () => {
     // Set React state FIRST (this triggers re-render with session)
     setSession(sessionData);
     devLog('[App] âœ… Session state updated');
+    
+    // Track login event for analytics
+    trackEvent({
+      eventType: 'login',
+      userId: String(('postgresqlId' in user && user.postgresqlId) || user.id || ''),
+      userEmail: user.email || '',
+      userName: user.name || '',
+      userRole: ('role' in user ? user.role : type) || 'unknown',
+      userType: (isDivisionUser ? 'division' : type) as any,
+      schoolId: ('schoolId' in user ? user.schoolId : '') || '',
+      schoolName: ('schoolName' in user ? (user as any).schoolName : '') || '',
+      tier: ('tier' in user ? (user as any).tier : 'school') || 'school',
+      page: window.location.pathname,
+    }).catch(() => {}); // fire-and-forget
     
     // Navigate based on user type
     if (window.location.pathname === '/admin') {
@@ -917,6 +997,8 @@ const App: React.FC = () => {
   return (
     <Router key={session?.user.id || 'no-session'}>
       <DivisionContextProvider>
+      {/* Analytics: auto-track page views */}
+      <AnalyticsTrackerProvider session={session as any} schoolName={schoolData.settings?.schoolName || ''} />
       {/* PWA Update Notification */}
       <UpdateNotification />
       
@@ -1072,6 +1154,7 @@ const App: React.FC = () => {
                         
                         {/* School Settings - PostgreSQL */}
                         <Route path="/settings" element={<SchoolSettingsPostgreSQL />} />
+                        <Route path="/settings/billing" element={<SchoolBillingSettings />} />
                         
                         {/* Old Firestore Settings (deprecated - for reference only) */}
                         <Route path="/settings-legacy" element={<SettingsView schoolData={schoolData} />} />
@@ -1082,6 +1165,11 @@ const App: React.FC = () => {
                             ? <SuperAdminLayout /> 
                             : <Navigate to="/" replace />
                         } />
+                        
+                        {/* Analytics Dashboard - SuperAdmin and Admin */}
+                        {(staffSession.user.role === 'superadmin' || staffSession.user.role === 'admin') && (
+                          <Route path="/analytics" element={<AnalyticsDashboard session={staffSession} />} />
+                        )}
                         
                         {/* Financial Management Routes */}
                         {(staffSession.user.role === 'admin' || staffSession.user.role === 'registrar') && (

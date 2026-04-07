@@ -491,7 +491,7 @@ export async function getClassRecord(
 ): Promise<ECRClassRecord | null> {
   // Get section and subject info
   const [sectionResult, subjectResult] = await Promise.all([
-    supabase.from('sections').select('*, teachers(id, name), schools(id, name, school_id_number)').eq('id', sectionId).single(),
+    supabase.from('sections').select('*, teachers(id, name), schools(id, name, school_id_number, division, region, district)').eq('id', sectionId).single(),
     supabase.from('learning_areas').select('id, name, code').eq('id', learningAreaId).single()
   ]);
 
@@ -512,7 +512,7 @@ export async function getClassRecord(
   // Get students in section
   const { data: students, error: studentsError } = await supabase
     .from('students')
-    .select('id, first_name, last_name, lrn')
+    .select('id, first_name, last_name, name, lrn')
     .eq('section_id', sectionId)
     .eq('enrollment_status', 'enrolled')
     .is('deleted_at', null)
@@ -581,7 +581,9 @@ export async function getClassRecord(
 
     return {
       studentId: student.id,
-      studentName: `${student.last_name}, ${student.first_name}`,
+      studentName: (student.last_name && student.first_name)
+        ? `${student.last_name}, ${student.first_name}`
+        : (student.name || student.last_name || student.first_name || 'Unknown Student'),
       lrn: student.lrn || '',
       scores: scoresMap,
       
@@ -632,6 +634,9 @@ export async function getClassRecord(
     schoolId: section.school_id,
     schoolName: section.schools?.name || '',
     schoolIdNumber: section.schools?.school_id_number || '', // Official DepEd school ID
+    division: section.schools?.division || '',
+    region: section.schools?.region || '',
+    district: section.schools?.district || '',
     schoolYear,
     quarter,
     teacherId: section.teachers?.id || '',

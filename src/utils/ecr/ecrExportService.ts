@@ -83,7 +83,10 @@ async function loadLogos(): Promise<{ seal: HTMLImageElement; logo: HTMLImageEle
  */
 export function generateECRCSV(data: ECRExportData): string {
   const lines: string[] = [];
-  const ACTIVITY_SLOTS = 5; // Number of activity columns per component
+  // Dynamic activity slots per component — match the actual data (UI parity)
+  const csvWwSlots = Math.max(data.activities.ww.length, 1);
+  const csvPtSlots = Math.max(data.activities.pt.length, 1);
+  const csvQaSlots = Math.max(data.activities.qa.length, 1);
   
   // Header information
   lines.push('ELECTRONIC CLASS RECORD (ECR)');
@@ -103,29 +106,59 @@ export function generateECRCSV(data: ECRExportData): string {
   // Build column headers
   const headers: string[] = ['No.', 'Name'];
   
-  // WW columns (5 slots)
+  // WW columns (dynamic)
   if (data.weights.ww > 0) {
-    for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
+    for (let i = 1; i <= csvWwSlots; i++) {
       const activity = data.activities.ww.find(a => a.activityNumber === i);
-      headers.push(activity ? `WW${i}(${activity.maxScore})` : `WW${i}`);
+      if (activity) {
+        const parts = [`WW${i}`];
+        if (activity.activityName) parts.push(activity.activityName);
+        if (activity.activityDate) {
+          const d = new Date(activity.activityDate);
+          parts.push(d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }));
+        }
+        headers.push(`${parts.join('-')}(${activity.maxScore})`);
+      } else {
+        headers.push(`WW${i}`);
+      }
     }
     headers.push('WW Total', 'WW PS', 'WW WS');
   }
   
-  // PT columns (5 slots)
+  // PT columns (dynamic)
   if (data.weights.pt > 0) {
-    for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
+    for (let i = 1; i <= csvPtSlots; i++) {
       const activity = data.activities.pt.find(a => a.activityNumber === i);
-      headers.push(activity ? `PT${i}(${activity.maxScore})` : `PT${i}`);
+      if (activity) {
+        const parts = [`PT${i}`];
+        if (activity.activityName) parts.push(activity.activityName);
+        if (activity.activityDate) {
+          const d = new Date(activity.activityDate);
+          parts.push(d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }));
+        }
+        headers.push(`${parts.join('-')}(${activity.maxScore})`);
+      } else {
+        headers.push(`PT${i}`);
+      }
     }
     headers.push('PT Total', 'PT PS', 'PT WS');
   }
   
-  // QA columns (only if weight > 0)
+  // QA columns (dynamic, only if weight > 0)
   if (data.weights.qa > 0) {
-    for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
+    for (let i = 1; i <= csvQaSlots; i++) {
       const activity = data.activities.qa.find(a => a.activityNumber === i);
-      headers.push(activity ? `QA${i}(${activity.maxScore})` : `QA${i}`);
+      if (activity) {
+        const parts = [`QA${i}`];
+        if (activity.activityName) parts.push(activity.activityName);
+        if (activity.activityDate) {
+          const d = new Date(activity.activityDate);
+          parts.push(d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }));
+        }
+        headers.push(`${parts.join('-')}(${activity.maxScore})`);
+      } else {
+        headers.push(`QA${i}`);
+      }
     }
     headers.push('QA Total', 'QA PS', 'QA WS');
   }
@@ -142,7 +175,7 @@ export function generateECRCSV(data: ECRExportData): string {
     
     // WW scores
     if (data.weights.ww > 0) {
-      for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
+      for (let i = 1; i <= csvWwSlots; i++) {
         const activity = data.activities.ww.find(a => a.activityNumber === i);
         if (activity) {
           const score = student.scores[activity.id]?.rawScore;
@@ -160,7 +193,7 @@ export function generateECRCSV(data: ECRExportData): string {
     
     // PT scores
     if (data.weights.pt > 0) {
-      for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
+      for (let i = 1; i <= csvPtSlots; i++) {
         const activity = data.activities.pt.find(a => a.activityNumber === i);
         if (activity) {
           const score = student.scores[activity.id]?.rawScore;
@@ -178,7 +211,7 @@ export function generateECRCSV(data: ECRExportData): string {
     
     // QA scores (only if weight > 0)
     if (data.weights.qa > 0) {
-      for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
+      for (let i = 1; i <= csvQaSlots; i++) {
         const activity = data.activities.qa.find(a => a.activityNumber === i);
         if (activity) {
           const score = student.scores[activity.id]?.rawScore;
@@ -262,18 +295,11 @@ export async function generateECRPDF(data: ECRExportData): Promise<void> {
   const showQA = data.weights.qa > 0;
   const componentCount = (showWW ? 1 : 0) + (showPT ? 1 : 0) + (showQA ? 1 : 0);
   
-  // Dynamic activity slots - use 10 (UI default) if fits, otherwise calculate
-  // For Legal paper: we have ~340mm usable
-  // Fixed columns: No(7) + Name(40) + Grade(12) + Remarks(18) = 77mm
-  // Remaining for components: 340 - 77 = 263mm
-  // Per component with 10 activities: 10*6 + 3*10 = 90mm → 3 components = 270mm (too wide)
-  // Per component with 5 activities: 5*6 + 3*10 = 60mm → 3 components = 180mm (fits!)
-  // Per component with 3 activities: 3*6 + 3*10 = 48mm → 3 components = 144mm (fits well)
-  
-  // Calculate optimal activity slots based on component count
-  const remainingWidth = USABLE_WIDTH - 77; // Fixed columns
-  const maxActivitySlotsPerComponent = Math.floor((remainingWidth / componentCount - 30) / 6);
-  const ACTIVITY_SLOTS = Math.min(10, Math.max(3, maxActivitySlotsPerComponent));
+  // Dynamic activity slots per component — match the actual data (UI parity)
+  // Use actual activity count per component, with minimum of 1 column
+  const wwSlots = showWW ? Math.max(data.activities.ww.length, 1) : 0;
+  const ptSlots = showPT ? Math.max(data.activities.pt.length, 1) : 0;
+  const qaSlots = showQA ? Math.max(data.activities.qa.length, 1) : 0;
   
   // Column widths (tighter for better fit)
   const numColWidth = 7;
@@ -338,7 +364,7 @@ export async function generateECRPDF(data: ECRExportData): Promise<void> {
   doc.setFont('helvetica', 'normal');
   doc.text('School ID:', x, y);
   doc.setFont('helvetica', 'bold');
-  doc.text(data.schoolIdNumber || data.schoolId || '', x + 18, y);
+  doc.text(data.schoolIdNumber || '', x + 18, y);
   
   x = 200;
   doc.setFont('helvetica', 'normal');
@@ -387,22 +413,87 @@ export async function generateECRPDF(data: ECRExportData): Promise<void> {
   doc.text(data.teacherName || '', x + 15, y);
   
   // ============================================
+  // Activity Legend (maps numbers to names/dates)
+  // ============================================
+  const buildLegendEntries = (type: string, activities: ECRActivity[]): string[] => {
+    return activities
+      .filter(a => a.activityName || a.activityDate)
+      .sort((a, b) => a.activityNumber - b.activityNumber)
+      .map(a => {
+        const parts = [`${type}${a.activityNumber}`];
+        if (a.activityName) parts.push(a.activityName);
+        if (a.activityDate) {
+          const d = new Date(a.activityDate);
+          parts.push(d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }));
+        }
+        return parts.join(' - ');
+      });
+  };
+
+  const legendEntries: string[] = [
+    ...(showWW ? buildLegendEntries('WW', data.activities.ww) : []),
+    ...(showPT ? buildLegendEntries('PT', data.activities.pt) : []),
+    ...(showQA ? buildLegendEntries('QA', data.activities.qa) : []),
+  ];
+
+  if (legendEntries.length > 0) {
+    doc.setFontSize(5.5);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 116, 139); // Slate-500
+
+    // Pack entries into lines (max ~120 chars per line on legal paper)
+    const MAX_LINE_WIDTH = USABLE_WIDTH;
+    let currentLine = '';
+    const legendLines: string[] = [];
+    for (const entry of legendEntries) {
+      const separator = currentLine ? '  |  ' : '';
+      const testLine = currentLine + separator + entry;
+      if (doc.getTextWidth(testLine) > MAX_LINE_WIDTH && currentLine) {
+        legendLines.push(currentLine);
+        currentLine = entry;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (currentLine) legendLines.push(currentLine);
+
+    for (const line of legendLines) {
+      doc.text(line, MARGIN, y);
+      y += 3;
+    }
+    y += 1; // Small gap before table
+  }
+
+  // ============================================
   // Table Section
   // ============================================
-  let tableY = 49;
+  let tableY = y;
   const rowHeight = 5;
-  const headerHeight = 8;
+  const headerTopHeight = 5;    // Component label row (WW/PT/QA)
+  const headerSubHeight = 9;    // Activity sub-header (number + name + max score + date)
+  const headerHeight = headerTopHeight + headerSubHeight;
   
   // Calculate actual table width for centering
   let tableWidth = numColWidth + nameColWidth;
-  if (showWW) tableWidth += ACTIVITY_SLOTS * scoreColWidth + 3 * summaryColWidth;
-  if (showPT) tableWidth += ACTIVITY_SLOTS * scoreColWidth + 3 * summaryColWidth;
-  if (showQA) tableWidth += ACTIVITY_SLOTS * scoreColWidth + 3 * summaryColWidth;
+  if (showWW) tableWidth += wwSlots * scoreColWidth + 3 * summaryColWidth;
+  if (showPT) tableWidth += ptSlots * scoreColWidth + 3 * summaryColWidth;
+  if (showQA) tableWidth += qaSlots * scoreColWidth + 3 * summaryColWidth;
   tableWidth += initialGradeColWidth + gradeColWidth + remarksColWidth; // Initial Grade + Quarterly Grade + Remarks
   
   // Center the table
   const tableStartX = Math.max(MARGIN, (PAGE_WIDTH - tableWidth) / 2);
   
+  // Helper: get activity label for a given slot number
+  const getActivityLabel = (activities: ECRActivity[], num: number): { name: string; date: string } => {
+    const act = activities.find(a => a.activityNumber === num);
+    if (!act) return { name: '', date: '' };
+    const name = act.activityName || '';
+    const date = act.activityDate
+      ? new Date(act.activityDate).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
+      : '';
+    return { name, date };
+  };
+
   // Helper function to draw table header (reused on each page)
   const drawTableHeader = (startY: number): number => {
     let y = startY;
@@ -418,84 +509,90 @@ export async function generateECRPDF(data: ECRExportData): Promise<void> {
     
     // No. column
     doc.rect(colX, y, numColWidth, headerHeight);
-    doc.text('No.', colX + numColWidth / 2, y + 5, { align: 'center' });
+    doc.text('No.', colX + numColWidth / 2, y + headerHeight / 2 + 1, { align: 'center' });
     colX += numColWidth;
     
     // Name column
     doc.rect(colX, y, nameColWidth, headerHeight);
-    doc.text("Learner's Name", colX + nameColWidth / 2, y + 5, { align: 'center' });
+    doc.text("Learner's Name", colX + nameColWidth / 2, y + headerHeight / 2 + 1, { align: 'center' });
     colX += nameColWidth;
+    
+    // Helper to draw a component section (WW, PT, or QA)
+    const drawComponentColumns = (
+      activities: ECRActivity[],
+      slots: number,
+      weight: number,
+      label: string,
+      topColor: [number, number, number],
+      subColor: [number, number, number],
+      summaryColor: [number, number, number]
+    ) => {
+      const compWidth = slots * scoreColWidth + 3 * summaryColWidth;
+      // Top row: component label
+      doc.setFillColor(...topColor);
+      doc.rect(colX, y, compWidth, headerTopHeight, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(6);
+      doc.text(`${label} (${weight}%)`, colX + compWidth / 2, y + 3.5, { align: 'center' });
+      
+      // Sub-header row: activity columns
+      for (let i = 1; i <= slots; i++) {
+        doc.setFillColor(...subColor);
+        doc.rect(colX, y + headerTopHeight, scoreColWidth, headerSubHeight, 'F');
+        doc.setTextColor(255, 255, 255);
+        
+        // Activity number (bold, top)
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6);
+        doc.text(String(i), colX + scoreColWidth / 2, y + headerTopHeight + 3, { align: 'center' });
+        
+        // Activity name (small, middle) — truncated to fit
+        const { name, date } = getActivityLabel(activities, i);
+        if (name) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(3.5);
+          const truncName = name.length > 8 ? name.slice(0, 7) + '…' : name;
+          doc.text(truncName, colX + scoreColWidth / 2, y + headerTopHeight + 5.5, { align: 'center' });
+        }
+        
+        // Date (small, bottom)
+        if (date) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(3);
+          doc.text(date, colX + scoreColWidth / 2, y + headerTopHeight + 7.5, { align: 'center' });
+        }
+        
+        colX += scoreColWidth;
+      }
+      
+      // Summary columns
+      ['Total', 'PS', 'WS'].forEach(slabel => {
+        doc.setFillColor(...summaryColor);
+        doc.rect(colX, y + headerTopHeight, summaryColWidth, headerSubHeight, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(5);
+        doc.text(slabel, colX + summaryColWidth / 2, y + headerTopHeight + 5, { align: 'center' });
+        colX += summaryColWidth;
+      });
+    };
     
     // WW columns
     if (showWW) {
-      const wwWidth = ACTIVITY_SLOTS * scoreColWidth + 3 * summaryColWidth;
-      doc.setFillColor(37, 99, 235); // Blue-600
-      doc.rect(colX, y, wwWidth, headerHeight / 2, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.text(`Written Work (${data.weights.ww}%)`, colX + wwWidth / 2, y + 3, { align: 'center' });
-      
-      for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
-        doc.setFillColor(59, 130, 246); // Blue-500
-        doc.rect(colX, y + headerHeight / 2, scoreColWidth, headerHeight / 2, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.text(String(i), colX + scoreColWidth / 2, y + headerHeight - 1, { align: 'center' });
-        colX += scoreColWidth;
-      }
-      ['Total', 'PS', 'WS'].forEach(label => {
-        doc.setFillColor(30, 64, 175); // Blue-800
-        doc.rect(colX, y + headerHeight / 2, summaryColWidth, headerHeight / 2, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.text(label, colX + summaryColWidth / 2, y + headerHeight - 1, { align: 'center' });
-        colX += summaryColWidth;
-      });
+      drawComponentColumns(data.activities.ww, wwSlots, data.weights.ww, 'Written Work',
+        [37, 99, 235], [59, 130, 246], [30, 64, 175]);
     }
     
     // PT columns
     if (showPT) {
-      const ptWidth = ACTIVITY_SLOTS * scoreColWidth + 3 * summaryColWidth;
-      doc.setFillColor(22, 163, 74); // Green-600
-      doc.rect(colX, y, ptWidth, headerHeight / 2, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.text(`Performance Task (${data.weights.pt}%)`, colX + ptWidth / 2, y + 3, { align: 'center' });
-      
-      for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
-        doc.setFillColor(34, 197, 94); // Green-500
-        doc.rect(colX, y + headerHeight / 2, scoreColWidth, headerHeight / 2, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.text(String(i), colX + scoreColWidth / 2, y + headerHeight - 1, { align: 'center' });
-        colX += scoreColWidth;
-      }
-      ['Total', 'PS', 'WS'].forEach(label => {
-        doc.setFillColor(21, 128, 61); // Green-700
-        doc.rect(colX, y + headerHeight / 2, summaryColWidth, headerHeight / 2, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.text(label, colX + summaryColWidth / 2, y + headerHeight - 1, { align: 'center' });
-        colX += summaryColWidth;
-      });
+      drawComponentColumns(data.activities.pt, ptSlots, data.weights.pt, 'Performance Task',
+        [22, 163, 74], [34, 197, 94], [21, 128, 61]);
     }
     
     // QA columns
     if (showQA) {
-      const qaWidth = ACTIVITY_SLOTS * scoreColWidth + 3 * summaryColWidth;
-      doc.setFillColor(147, 51, 234); // Purple-600
-      doc.rect(colX, y, qaWidth, headerHeight / 2, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.text(`Quarterly Assessment (${data.weights.qa}%)`, colX + qaWidth / 2, y + 3, { align: 'center' });
-      
-      for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
-        doc.setFillColor(168, 85, 247); // Purple-500
-        doc.rect(colX, y + headerHeight / 2, scoreColWidth, headerHeight / 2, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.text(String(i), colX + scoreColWidth / 2, y + headerHeight - 1, { align: 'center' });
-        colX += scoreColWidth;
-      }
-      ['Total', 'PS', 'WS'].forEach(label => {
-        doc.setFillColor(107, 33, 168); // Purple-800
-        doc.rect(colX, y + headerHeight / 2, summaryColWidth, headerHeight / 2, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.text(label, colX + summaryColWidth / 2, y + headerHeight - 1, { align: 'center' });
-        colX += summaryColWidth;
-      });
+      drawComponentColumns(data.activities.qa, qaSlots, data.weights.qa, 'Quarterly Assessment',
+        [147, 51, 234], [168, 85, 247], [107, 33, 168]);
     }
     
     // Initial Grade column
@@ -503,8 +600,8 @@ export async function generateECRPDF(data: ECRExportData): Promise<void> {
     doc.rect(colX, y, initialGradeColWidth, headerHeight, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(5);
-    doc.text('Initial', colX + initialGradeColWidth / 2, y + 3, { align: 'center' });
-    doc.text('Grade', colX + initialGradeColWidth / 2, y + 6, { align: 'center' });
+    doc.text('Initial', colX + initialGradeColWidth / 2, y + headerHeight / 2 - 1, { align: 'center' });
+    doc.text('Grade', colX + initialGradeColWidth / 2, y + headerHeight / 2 + 2, { align: 'center' });
     doc.setFontSize(6);
     colX += initialGradeColWidth;
     
@@ -513,8 +610,8 @@ export async function generateECRPDF(data: ECRExportData): Promise<void> {
     doc.rect(colX, y, gradeColWidth, headerHeight, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(5);
-    doc.text('Quarterly', colX + gradeColWidth / 2, y + 3, { align: 'center' });
-    doc.text('Grade', colX + gradeColWidth / 2, y + 6, { align: 'center' });
+    doc.text('Quarterly', colX + gradeColWidth / 2, y + headerHeight / 2 - 1, { align: 'center' });
+    doc.text('Grade', colX + gradeColWidth / 2, y + headerHeight / 2 + 2, { align: 'center' });
     doc.setFontSize(6);
     colX += gradeColWidth;
     
@@ -522,7 +619,7 @@ export async function generateECRPDF(data: ECRExportData): Promise<void> {
     doc.setFillColor(30, 41, 59); // Slate-800
     doc.rect(colX, y, remarksColWidth, headerHeight, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.text('Remarks', colX + remarksColWidth / 2, y + 5, { align: 'center' });
+    doc.text('Remarks', colX + remarksColWidth / 2, y + headerHeight / 2 + 1, { align: 'center' });
     
     return y + headerHeight;
   };
@@ -571,7 +668,7 @@ export async function generateECRPDF(data: ECRExportData): Promise<void> {
     
     // WW scores
     if (showWW) {
-      for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
+      for (let i = 1; i <= wwSlots; i++) {
         doc.rect(colX, y, scoreColWidth, rowHeight);
         const activity = data.activities.ww.find(a => a.activityNumber === i);
         if (activity) {
@@ -598,7 +695,7 @@ export async function generateECRPDF(data: ECRExportData): Promise<void> {
     
     // PT scores
     if (showPT) {
-      for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
+      for (let i = 1; i <= ptSlots; i++) {
         doc.rect(colX, y, scoreColWidth, rowHeight);
         const activity = data.activities.pt.find(a => a.activityNumber === i);
         if (activity) {
@@ -624,7 +721,7 @@ export async function generateECRPDF(data: ECRExportData): Promise<void> {
     
     // QA scores
     if (showQA) {
-      for (let i = 1; i <= ACTIVITY_SLOTS; i++) {
+      for (let i = 1; i <= qaSlots; i++) {
         doc.rect(colX, y, scoreColWidth, rowHeight);
         const activity = data.activities.qa.find(a => a.activityNumber === i);
         if (activity) {

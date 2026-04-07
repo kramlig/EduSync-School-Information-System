@@ -72,7 +72,9 @@ const ClassRecordSelector: React.FC<ClassRecordSelectorProps> = ({ session, scho
       return learningAreas;
     }
     
-    return learningAreas.filter(la => {
+    return learningAreas
+      .filter(la => la.isActive !== false) // Exclude deactivated subjects (e.g., MTB after MATATAG)
+      .filter(la => {
       // gradeLevel is an array in LearningArea type
       if (Array.isArray(la.gradeLevel)) {
         const sectionGrade = typeof section.gradeLevel === 'number' 
@@ -220,7 +222,7 @@ const ClassRecordSelector: React.FC<ClassRecordSelectorProps> = ({ session, scho
           </li>
           <li className="flex items-start">
             <span className="mr-2">•</span>
-            <span>Quarterly grades sync to Form 137 and Form 138 automatically</span>
+            <span>Quarterly grades sync to SF10 and SF9 automatically</span>
           </li>
         </ul>
       </div>

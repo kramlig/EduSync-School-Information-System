@@ -358,7 +358,7 @@ export default function PersonalClassRecordSelector({ schoolId, teacherId, tier 
             <li>• Enter individual scores for Written Works (WW), Performance Tasks (PT), and Quarterly Assessments (QA)</li>
             <li>• Grades are automatically computed using DepEd's official transmutation formula</li>
             <li>• Default weights: WW 30%, PT 50%, QA 20%</li>
-            <li>• Quarterly grades sync to Form 137 and Form 138 automatically</li>
+            <li>• Quarterly grades sync to SF10 and SF9 automatically</li>
           </ul>
         </div>
       )}

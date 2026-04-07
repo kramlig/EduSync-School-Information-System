@@ -197,10 +197,6 @@ const PersonalSignupScreen: React.FC<Props> = ({ onLogin }) => {
       setError('Division is required.');
       return;
     }
-    if (!/^division\s+of\s+/i.test(division.trim()) && division.trim().length < 8) {
-      setError('Please enter a valid DepEd division (e.g. "Division of Zamboanga City").');
-      return;
-    }
     if (!region) {
       setError('Region is required.');
       return;
@@ -534,9 +530,9 @@ const PersonalSignupScreen: React.FC<Props> = ({ onLogin }) => {
         <div className="text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
           <p>
             Already have an account?{' '}
-            <Link to="/admin" className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
+            <a href="/admin" className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
               Sign in
-            </Link>
+            </a>
           </p>
           <p>
             Just need a form?{' '}

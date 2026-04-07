@@ -74,6 +74,8 @@ const PersonalSettings: React.FC<Props> = ({ userName, email, schoolName, tier, 
                 const session = JSON.parse(raw);
                 session.user.tier = status.tier;
                 localStorage.setItem('edusync_session', JSON.stringify(session));
+                // Notify App.tsx to re-sync session state (header, sidebar, etc.)
+                window.dispatchEvent(new CustomEvent('edusync-tier-changed', { detail: { tier: status.tier } }));
               }
             } catch { /* ignore */ }
           }
@@ -132,6 +134,8 @@ const PersonalSettings: React.FC<Props> = ({ userName, email, schoolName, tier, 
               const session = JSON.parse(raw);
               session.user.tier = status.tier;
               localStorage.setItem('edusync_session', JSON.stringify(session));
+              // Notify App.tsx to re-sync session state (header, sidebar, etc.)
+              window.dispatchEvent(new CustomEvent('edusync-tier-changed', { detail: { tier: status.tier } }));
             }
           } catch { /* ignore */ }
         }

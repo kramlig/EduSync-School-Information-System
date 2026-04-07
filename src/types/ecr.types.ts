@@ -256,6 +256,9 @@ export interface ECRClassRecord {
   schoolId: string;
   schoolName: string;
   schoolIdNumber: string; // DepEd official school ID number
+  division: string;
+  region: string;
+  district: string;
   schoolYear: string;
   quarter: ECRQuarter;
   teacherId: string;

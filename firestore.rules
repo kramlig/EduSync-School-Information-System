@@ -958,6 +958,28 @@ service cloud.firestore {
     }
     
     // ========================================
+    // ANALYTICS & MONITORING
+    // ========================================
+    
+    // Analytics Events (page views, logins, clicks, errors)
+    match /analyticsEvents/{eventId} {
+      // SuperAdmin can read all events; Admin can read events from their school
+      allow list: if isSuperAdmin() 
+                  || (isAdmin() && resource == null)
+                  || isLegacyUser();
+      
+      allow get: if isSuperAdmin() 
+                  || (isAdmin() && belongsToUserSchool(resource.data.schoolId))
+                  || isLegacyUser();
+      
+      // All authenticated users can create events (tracking is automatic)
+      allow create: if isAuthenticated();
+      
+      // Events are immutable (append-only log)
+      allow update, delete: if false;
+    }
+    
+    // ========================================
     // FALLBACK RULE - DENY ALL UNMATCHED
     // ========================================
     

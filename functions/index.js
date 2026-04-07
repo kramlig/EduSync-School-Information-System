@@ -580,3 +580,9 @@ exports.getSubscriptionStatus = payments.getSubscriptionStatus;
 exports.cancelSubscription = payments.cancelSubscription;
 exports.getBillingHistory = payments.getBillingHistory;
 exports.expireOverdueSubscriptions = payments.expireOverdueSubscriptions;
+
+// School (Institutional) Subscription Functions
+exports.createSchoolCheckout = payments.createSchoolCheckout;
+exports.getSchoolSubscriptionStatus = payments.getSchoolSubscriptionStatus;
+exports.cancelSchoolSubscription = payments.cancelSchoolSubscription;
+exports.getSchoolBillingHistory = payments.getSchoolBillingHistory;

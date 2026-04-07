@@ -23,6 +23,8 @@ import type {
   PersonalWorkspace,
   WorkspaceTier,
 } from '../services/personalWorkspaceService';
+import { getSchoolSubscription } from '../services/schoolSubscriptionService';
+import type { SchoolSubscription } from '../services/schoolSubscriptionService';
 
 // ─── Context shape ───────────────────────────────────────
 
@@ -39,6 +41,8 @@ interface WorkspaceContextData {
   subscription: Subscription | null;
   /** Personal workspace metadata (null for institutional). */
   workspace: PersonalWorkspace | null;
+  /** School subscription for institutional users (null for personal). */
+  schoolSubscription: SchoolSubscription | null;
   /** Force a refetch of subscription/workspace data. */
   refresh: () => void;
 }
@@ -57,6 +61,7 @@ const defaultValue: WorkspaceContextData = {
   },
   subscription: null,
   workspace: null,
+  schoolSubscription: null,
   refresh: () => {},
 };
 
@@ -69,6 +74,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [workspace, setWorkspace] = useState<PersonalWorkspace | null>(null);
+  const [schoolSub, setSchoolSub] = useState<SchoolSubscription | null>(null);
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   useEffect(() => {
@@ -83,6 +89,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         if (!sessionStr) {
           setWorkspace(null);
           setSubscription(null);
+          setSchoolSub(null);
           setLoading(false);
           return;
         }
@@ -91,9 +98,15 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         const firebaseUid = session.user?.firebaseUid || session.user?.firebase_uid;
 
         if (!firebaseUid) {
-          // Institutional user — no personal workspace
+          // Institutional user — no personal workspace, but may have school subscription
           setWorkspace(null);
           setSubscription(null);
+          if (schoolId && schoolId !== 'default') {
+            const ss = await getSchoolSubscription(schoolId).catch(() => null);
+            if (!cancelled) setSchoolSub(ss);
+          } else {
+            setSchoolSub(null);
+          }
           setLoading(false);
           return;
         }
@@ -105,6 +118,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
           console.warn('[WorkspaceContext] Firebase UID mismatch — session may be stale or tampered');
           setWorkspace(null);
           setSubscription(null);
+          setSchoolSub(null);
           setLoading(false);
           return;
         }
@@ -117,6 +131,14 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         if (!cancelled) {
           setWorkspace(ws);
           setSubscription(sub);
+
+          // For institutional users (no personal workspace), fetch school subscription
+          if (!ws && schoolId && schoolId !== 'default') {
+            const ss = await getSchoolSubscription(schoolId).catch(() => null);
+            if (!cancelled) setSchoolSub(ss);
+          } else {
+            setSchoolSub(null);
+          }
         }
       } catch (err) {
         console.error('[WorkspaceContext] Error loading workspace:', err);
@@ -146,9 +168,10 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       limits,
       subscription,
       workspace,
+      schoolSubscription: schoolSub,
       refresh: () => setRefreshCounter(c => c + 1),
     }),
-    [loading, isPersonal, tier, limits, subscription, workspace]
+    [loading, isPersonal, tier, limits, subscription, workspace, schoolSub]
   );
 
   return (
