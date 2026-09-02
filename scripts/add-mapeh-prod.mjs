@@ -8,7 +8,7 @@ import { getFirestore, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 // Production Firebase config (from .env.local.prod)
 const firebaseConfig = {
-  apiKey: "AIzaSyDaf1Uswbm4NWffPToe6HQhfJRxpuv8HDs",
+  apiKey: "AIzaSyAfa4UuSE22wcuJ_vtQG0ZcvVv8yM0acdc",
   authDomain: "edusync-sis.firebaseapp.com",
   projectId: "edusync-sis",
   storageBucket: "edusync-sis.firebasestorage.app",
