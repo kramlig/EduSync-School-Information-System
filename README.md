@@ -298,8 +298,8 @@ MIT License - See LICENSE file for details
 
 **Mark Gil Dotillos**
 - Email: kramlig.dotillos@gmail.com
-- LinkedIn: [Your Profile]
-- GitHub: [Your GitHub]
+- LinkedIn: https://www.linkedin.com/in/mbdotillos/
+- GitHub: https://github.com/kramlig
 
 ---
 
