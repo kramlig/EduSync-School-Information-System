@@ -297,7 +297,7 @@ MIT License - See LICENSE file for details
 ## 📧 Contact & Support
 
 **Mark Gil Dotillos**
-- Email: mg.dotillos@fujitsu.com
+- Email: kramlig.dotillos@gmail.com
 - LinkedIn: [Your Profile]
 - GitHub: [Your GitHub]
 
