@@ -10,8 +10,9 @@ setsid firebase emulators:start --only firestore --export-on-exit="./emulator_ex
 EMULATOR_PID=$!
 
 # Wait for emulator port to be open (check TCP) up to 120 seconds
+# Port must match firebase.json emulators.firestore.port
 EMULATOR_HOST="127.0.0.1"
-EMULATOR_PORT=8085
+EMULATOR_PORT=8086
 MAX_WAIT=120
 SLEEP=1
 SECONDS_WAITED=0

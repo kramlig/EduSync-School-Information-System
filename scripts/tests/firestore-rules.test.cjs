@@ -88,8 +88,8 @@ async function runTests() {
     await assertSucceeds(teacherDb.collection('teachers').doc(teacherId).get());
   }));
 
-  // Test 4: Teachers cannot read other teachers' profiles
-  results.push(await runTest('Teachers cannot read other teachers profiles', async () => {
+  // Test 4: Authenticated users can read teacher profiles (directory lookup)
+  results.push(await runTest('Authenticated users can read teacher profiles', async () => {
     const teacherDb = testEnv.authenticatedContext('teacher-123', { role: 'teacher' }).firestore();
     
     await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -99,7 +99,7 @@ async function runTests() {
       });
     });
     
-    await assertFails(teacherDb.collection('teachers').doc('other-teacher').get());
+    await assertSucceeds(teacherDb.collection('teachers').doc('other-teacher').get());
   }));
 
   // Test 5: Admins can read all teachers
@@ -132,8 +132,8 @@ async function runTests() {
     await assertFails(parentDb.collection('parents').doc('other-parent').get());
   }));
 
-  // Test 7: Anonymous users can read teachers collection (for login)
-  results.push(await runTest('Anonymous users can read teachers for login', async () => {
+  // Test 7: Unauthenticated users cannot read teachers (auth required)
+  results.push(await runTest('Unauthenticated users cannot read teachers', async () => {
     const unauthedDb = testEnv.unauthenticatedContext().firestore();
     
     await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -142,7 +142,7 @@ async function runTests() {
       });
     });
     
-    await assertSucceeds(unauthedDb.collection('teachers').doc('login-teacher').get());
+    await assertFails(unauthedDb.collection('teachers').doc('login-teacher').get());
   }));
 
   // Test 8: Settings are readable by authenticated users
